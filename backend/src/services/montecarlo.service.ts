@@ -1,0 +1,206 @@
+import crypto from 'crypto';
+import { montecarloRepository } from '../repositories/montecarlo.repository';
+import { jobService } from './job.service';
+import { ValidationError, NotFoundError } from '../utils/errors';
+import prisma from '../config/database';
+import { getSignedUrlForS3 } from '../utils/s3';
+import { config } from '../config/env';
+import { MonteCarloJob } from '@prisma/client';
+
+/**
+ * Compute deterministic paramsHash from Monte Carlo parameters
+ * Uses canonical JSON serialization with sorted keys
+ */
+export const computeParamsHash = (payload: {
+  modelId: string;
+  modelVersion?: number;
+  drivers: Record<string, any>;
+  overrides?: Record<string, any>;
+  numSimulations: number;
+  randomSeed?: number;
+  mode?: string;
+}): string => {
+  // Create canonical payload object with sorted keys
+  const canonical = {
+    modelId: payload.modelId,
+    modelVersion: payload.modelVersion || 1,
+    drivers: sortObjectKeys(payload.drivers),
+    overrides: payload.overrides ? sortObjectKeys(payload.overrides) : {},
+    numSimulations: payload.numSimulations,
+    randomSeed: payload.randomSeed || null,
+    mode: payload.mode || 'full',
+  };
+
+  // Serialize to JSON with deterministic formatting (compact, no spaces)
+  const jsonString = JSON.stringify(canonical, null, 0)
+    .replace(/\s+/g, '');
+
+  // Compute SHA256 hash
+  return crypto.createHash('sha256').update(jsonString).digest('hex');
+};
+
+/**
+ * Recursively sort object keys for deterministic hashing
+ */
+function sortObjectKeys(obj: any): any {
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(sortObjectKeys);
+  }
+
+  const sorted: Record<string, any> = {};
+  const keys = Object.keys(obj).sort();
+  for (const key of keys) {
+    sorted[key] = sortObjectKeys(obj[key]);
+  }
+  return sorted;
+}
+
+/**
+ * Check cache for existing Monte Carlo result
+ */
+export const checkCache = async (
+  orgId: string,
+  paramsHash: string,
+  ttlDays: number = config.monteCarlo.ttlDays
+): Promise<MonteCarloJob | null> => {
+  return await montecarloRepository.findByParamsHash(orgId, paramsHash, ttlDays);
+};
+
+/**
+ * Create Monte Carlo job (both monte_carlo_jobs and jobs rows)
+ */
+export const createMonteCarloJob = async (
+  modelId: string,
+  modelRunId: string,
+  orgId: string,
+  paramsHash: string,
+  numSimulations: number,
+  jobPayload: {
+    drivers: Record<string, any>;
+    overrides?: Record<string, any>;
+    randomSeed?: number;
+    mode?: string;
+  }
+): Promise<{ monteCarloJobId: string; jobId: string }> => {
+  // Create monte_carlo_jobs row
+  const mcJob = await montecarloRepository.create({
+    modelRunId,
+    orgId,
+    numSimulations,
+    paramsHash,
+    status: 'queued',
+  });
+
+  // Create jobs row
+  const job = await jobService.createJob({
+    jobType: 'monte_carlo',
+    orgId,
+    objectId: mcJob.id,
+    params: {
+      monteCarloJobId: mcJob.id,
+      modelRunId,
+      modelId,
+      numSimulations,
+      drivers: jobPayload.drivers,
+      overrides: jobPayload.overrides,
+      randomSeed: jobPayload.randomSeed,
+      mode: jobPayload.mode || 'full',
+      paramsHash,
+    },
+  });
+
+  return {
+    monteCarloJobId: mcJob.id,
+    jobId: job.id,
+  };
+};
+
+/**
+ * Get Monte Carlo job result with signed S3 URL
+ * jobId can be either jobs.id or monte_carlo_jobs.id
+ */
+export const getMonteCarloResult = async (jobId: string) => {
+  // Try to find as job first
+  let job = await prisma.job.findUnique({
+    where: { id: jobId },
+  });
+
+  let mcJob;
+  
+  if (job) {
+    // jobId is jobs.id - find associated Monte Carlo job
+    mcJob = await montecarloRepository.findById(job.objectId || '');
+  } else {
+    // jobId might be monte_carlo_jobs.id directly
+    mcJob = await montecarloRepository.findById(jobId);
+    if (mcJob) {
+      // Find associated job
+      job = await prisma.job.findFirst({
+        where: { objectId: mcJob.id },
+      });
+    }
+  }
+
+  if (!mcJob) {
+    throw new NotFoundError('Monte Carlo job not found');
+  }
+
+  if (!job) {
+    throw new NotFoundError('Job not found');
+  }
+
+  // Get signed URL for result if available
+  let resultUrl = null;
+  if (mcJob.resultS3) {
+    try {
+      resultUrl = await getSignedUrlForS3(mcJob.resultS3, 3600);
+    } catch (error) {
+      // Ignore S3 errors
+    }
+  }
+
+  // Parse percentiles JSON if available
+  let percentiles = null;
+  if (mcJob.percentilesJson && typeof mcJob.percentilesJson === 'object') {
+    percentiles = mcJob.percentilesJson;
+  }
+
+  // Extract survival probability (MVP FEATURE: Probability of survival, not point forecast)
+  let survivalProbability = null;
+  if (percentiles && typeof percentiles === 'object') {
+    const percentilesObj = percentiles as any;
+    if (percentilesObj.survival_probability) {
+      survivalProbability = percentilesObj.survival_probability;
+    } else if (percentilesObj.survivalProbability) {
+      survivalProbability = percentilesObj.survivalProbability;
+    }
+  }
+
+  return {
+    jobId: job.id,
+    monteCarloJobId: mcJob.id,
+    orgId: mcJob.orgId,
+    status: mcJob.status,
+    progress: job.progress || 0,
+    numSimulations: mcJob.numSimulations,
+    resultS3: mcJob.resultS3,
+    resultUrl,
+    percentiles,
+    survivalProbability, // MVP FEATURE: Probability of survival, not point forecast
+    cpuSecondsEstimate: mcJob.cpuSecondsEstimate,
+    createdAt: mcJob.createdAt,
+    finishedAt: mcJob.finishedAt,
+  };
+};
+
+export const montecarloService = {
+  computeParamsHash,
+  checkCache,
+  createMonteCarloJob,
+  getMonteCarloResult,
+};
+

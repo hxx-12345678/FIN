@@ -1,0 +1,20 @@
+Date,Amount,Description,Category
+2025-01-01,5000.00,Sales Revenue - Q1,Revenue
+2025-01-05,-2000.00,Office Rent,Expenses
+2025-01-10,3000.00,Product Sales,Revenue
+2025-01-15,-1500.00,Utilities,Expenses
+2025-01-20,4500.00,Service Revenue,Revenue
+2025-01-25,-800.00,Software Subscription,Expenses
+2025-02-01,5500.00,Sales Revenue - Q1,Revenue
+2025-02-05,-2000.00,Office Rent,Expenses
+2025-02-10,3500.00,Product Sales,Revenue
+2025-02-15,-1200.00,Marketing,Expenses
+2025-02-20,4800.00,Service Revenue,Revenue
+2025-02-25,-600.00,Office Supplies,Expenses
+2025-03-01,6000.00,Sales Revenue - Q1,Revenue
+2025-03-05,-2000.00,Office Rent,Expenses
+2025-03-10,4000.00,Product Sales,Revenue
+2025-03-15,-1500.00,Salaries,Expenses
+2025-03-20,5200.00,Service Revenue,Revenue
+2025-03-25,-900.00,Travel,Expenses
+

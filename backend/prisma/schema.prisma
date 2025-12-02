@@ -1,0 +1,573 @@
+// Prisma schema for FinaPilot MVP
+// Database: PostgreSQL
+// ORM: Prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String    @unique
+  name         String?
+  passwordHash String    @map("password_hash")
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastLogin    DateTime? @map("last_login") @db.Timestamptz(6)
+
+  roles              UserOrgRole[]
+  prompts            Prompt[]
+  exports            Export[]          @relation("export_createdBy")
+  auditLogs          AuditLog[]        @relation("audit_actor")
+  models             Model[]           @relation("model_createdBy")
+  shareTokens        ShareToken[]      @relation("shareToken_createdBy")
+  invitations        InvitationToken[] @relation("invitation_createdBy")
+  alertRules         AlertRule[]       @relation("alert_createdBy")
+  aiCFOPlans         AICFOPlan[]       @relation("plan_createdBy")
+  orgSettingsUpdated OrgSettings[]     @relation("settings_updatedBy")
+  budgetsCreated     Budget[]          @relation("budget_createdBy")
+  excelMappings      ExcelMapping[]    @relation("excelMapping_createdBy")
+  realtimeSimulations RealtimeSimulation[]
+  boardReportSchedulesCreated BoardReportSchedule[] @relation("boardSchedule_createdBy")
+
+  @@map("users")
+}
+
+model Org {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String
+  timezone   String   @default("UTC")
+  currency   String   @default("USD")
+  planTier   String   @default("free") @map("plan_tier")
+  dataRegion String   @default("global") @map("data_region")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  roles            UserOrgRole[]
+  connectors       Connector[]
+  rawTransactions  RawTransaction[]
+  chartOfAccounts  ChartOfAccount[]
+  models           Model[]
+  modelRuns        ModelRun[]
+  monteCarloJobs   MonteCarloJob[]
+  prompts          Prompt[]
+  provenance       ProvenanceEntry[]
+  exports          Export[]
+  jobs             Job[]
+  auditLogs        AuditLog[]
+  shareTokens      ShareToken[]
+  invitationTokens InvitationToken[]
+  billingUsage     BillingUsage[]
+  alertRules       AlertRule[]
+  aiCFOPlans       AICFOPlan[]
+  settings         OrgSettings?
+  budgets          Budget[]
+  excelSyncs       ExcelSync[]
+  excelMappings    ExcelMapping[]
+  quota            OrgQuota?
+  realtimeSimulations RealtimeSimulation[]
+  boardReportSchedules BoardReportSchedule[]
+
+  @@map("orgs")
+}
+
+model UserOrgRole {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String   @db.Uuid
+  org       Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId     String   @db.Uuid
+  role      String // admin|finance|viewer
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([userId, orgId])
+  @@index([orgId])
+  @@index([userId])
+  @@map("user_org_roles")
+}
+
+model Connector {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org                Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId              String    @db.Uuid
+  type               String // quickbooks|xero|stripe|plaid|razorpay|csv|tally
+  configJson         Json?     @map("config_json")
+  encryptedConfig    Bytes?    @map("encrypted_config")
+  status             String    @default("disconnected")
+  lastSyncedAt       DateTime? @map("last_synced_at") @db.Timestamptz(6)
+  syncFrequencyHours Int?      @default(24) @map("sync_frequency_hours") // Hours between syncs
+  autoSyncEnabled    Boolean   @default(true) @map("auto_sync_enabled") // Enable/disable auto-sync
+  lastSyncStatus     String?   @map("last_sync_status") // success|failed|partial
+  lastSyncError      String?   @map("last_sync_error")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  rawTransactions RawTransaction[]
+
+  @@index([orgId])
+  @@index([type])
+  @@index([autoSyncEnabled, lastSyncedAt])
+  @@map("connectors")
+}
+
+model RawTransaction {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org         Org        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId       String     @db.Uuid
+  connector   Connector? @relation(fields: [connectorId], references: [id], onDelete: SetNull)
+  connectorId String?    @db.Uuid
+  sourceId    String?    @map("source_id")
+  date        DateTime   @db.Date
+  amount      Decimal    @db.Decimal(20, 4)
+  currency    String     @default("USD")
+  category    String?
+  description String?
+  rawPayload  Json?      @map("raw_payload")
+  importedAt  DateTime   @default(now()) @map("imported_at") @db.Timestamptz(6)
+
+  @@index([orgId])
+  @@index([sourceId])
+  @@index([date])
+  @@index([orgId, date], name: "raw_transactions_org_date_idx")
+  @@map("raw_transactions")
+}
+
+model ChartOfAccount {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org               Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId             String   @db.Uuid
+  code              String?
+  name              String
+  mappedToModelItem String?  @map("mapped_to_model_item")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([orgId])
+  @@index([mappedToModelItem])
+  @@map("chart_of_accounts")
+}
+
+model Model {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org         Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId       String   @db.Uuid
+  name        String
+  modelJson   Json     @map("model_json")
+  createdBy   User?    @relation("model_createdBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String?  @db.Uuid
+  version     Int      @default(1)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  modelRuns ModelRun[]
+
+  @@index([orgId])
+  @@map("models")
+}
+
+model ModelRun {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  model       Model     @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  modelId     String    @db.Uuid
+  org         Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId       String    @db.Uuid
+  runType     String    @map("run_type") // baseline|scenario|adhoc
+  paramsJson  Json?     @map("params_json")
+  status      String    @default("queued") // queued|running|done|failed
+  resultS3    String?   @map("result_s3")
+  summaryJson Json?     @map("summary_json")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  finishedAt  DateTime? @map("finished_at") @db.Timestamptz(6)
+
+  monteCarloJobs MonteCarloJob[]
+  provenance     ProvenanceEntry[]
+  exports        Export[]
+  aiCFOPlans     AICFOPlan[]
+
+  @@index([orgId])
+  @@index([modelId])
+  @@index([status])
+  @@index([runType])
+  @@map("model_runs")
+}
+
+model MonteCarloJob {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  modelRun           ModelRun  @relation(fields: [modelRunId], references: [id], onDelete: Cascade)
+  modelRunId         String    @db.Uuid
+  org                Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId              String    @db.Uuid
+  numSimulations     Int       @default(2000) @map("num_simulations")
+  paramsHash         String?   @map("params_hash")
+  status             String    @default("queued") // queued|running|done|failed
+  resultS3           String?   @map("result_s3")
+  percentilesJson    Json?     @map("percentiles_json")
+  sensitivityJson    Json?     @map("sensitivity_json") // Tornado chart data
+  confidenceLevel    Decimal?  @map("confidence_level") @db.Decimal(5, 4)
+  cpuSecondsEstimate Decimal?  @map("cpu_seconds_estimate") @db.Decimal
+  cpuSecondsActual   Decimal?  @map("cpu_seconds_actual") @db.Decimal
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  finishedAt         DateTime? @map("finished_at") @db.Timestamptz(6)
+
+  @@index([orgId])
+  @@index([modelRunId])
+  @@index([status])
+  @@index([paramsHash])
+  @@map("monte_carlo_jobs")
+}
+
+model Prompt {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org            Org?     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId          String?  @db.Uuid
+  user           User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId         String?  @db.Uuid
+  promptTemplate String?  @map("prompt_template")
+  renderedPrompt String?  @map("rendered_prompt")
+  responseText   String?  @map("response_text")
+  provider       String?
+  modelUsed      String?  @map("model_used")
+  tokensUsed     Int?     @map("tokens_used")
+  cached         Boolean  @default(false)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  provenance ProvenanceEntry[]
+
+  @@index([orgId])
+  @@index([createdAt])
+  @@map("prompts")
+}
+
+model ProvenanceEntry {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  modelRun        ModelRun @relation(fields: [modelRunId], references: [id], onDelete: Cascade)
+  modelRunId      String   @db.Uuid
+  org             Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId           String   @db.Uuid
+  cellKey         String   @map("cell_key")
+  sourceType      String   @map("source_type") // txn|assumption|prompt|excel_formula
+  sourceRef       Json?    @map("source_ref")
+  prompt          Prompt?  @relation(fields: [promptId], references: [id], onDelete: SetNull)
+  promptId        String?  @db.Uuid
+  confidenceScore Decimal? @map("confidence_score") @db.Decimal(5, 4)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([modelRunId])
+  @@index([cellKey])
+  @@index([orgId])
+  @@index([modelRunId, cellKey])
+  @@map("provenance_entries")
+}
+
+// GIN index for JSONB sourceRef (requires raw SQL migration)
+
+model Export {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  modelRun           ModelRun? @relation(fields: [modelRunId], references: [id], onDelete: SetNull)
+  modelRunId         String?   @db.Uuid
+  org                Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId              String    @db.Uuid
+  type               String // pptx|pdf|memo|xlsx
+  s3Key              String?   @map("s3_key")
+  fileData           Bytes?    @map("file_data") // Fallback storage when S3 not available
+  status             String    @default("queued") // queued|processing|completed|failed
+  metaJson           Json?     @map("meta_json") // Metadata including shareable links
+  provenanceAppendix Json?     @map("provenance_appendix") // Provenance data for export
+  createdBy          User?     @relation("export_createdBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById        String?   @db.Uuid
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([orgId])
+  @@index([status])
+  @@map("exports")
+}
+
+model Job {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobType             String?   @map("job_type")
+  org                 Org?      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId               String?   @db.Uuid
+  objectId            String?   @map("object_id") @db.Uuid
+  status              String    @default("queued") // queued|running|completed|failed|retrying|cancelled|dead_letter|paused
+  progress            Decimal   @default(0) @db.Decimal(5, 2)
+  logs                Json? // Array of log entries: [{ts, level, msg, meta}]
+  priority            Int       @default(50) // 0-100, higher = more priority
+  queue               String?   @default("default") // default|exports|montecarlo|connectors
+  attempts            Int       @default(0)
+  maxAttempts         Int       @default(5) @map("max_attempts")
+  lastError           String?   @map("last_error")
+  nextRunAt           DateTime? @map("next_run_at") @db.Timestamptz(6)
+  workerId            String?   @map("worker_id")
+  runStartedAt        DateTime? @map("run_started_at") @db.Timestamptz(6)
+  visibilityExpiresAt DateTime? @map("visibility_expires_at") @db.Timestamptz(6)
+  finishedAt          DateTime? @map("finished_at") @db.Timestamptz(6)
+  cancelRequested     Boolean   @default(false) @map("cancel_requested")
+  createdByUserId     String?   @map("created_by_user_id") @db.Uuid
+  billingEstimate     Decimal?  @map("billing_estimate") @db.Decimal(10, 4) // Estimated cost in USD
+  idempotencyKey      String?   @unique @map("idempotency_key")
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([orgId])
+  @@index([jobType])
+  @@index([status])
+  @@index([status, priority, createdAt])
+  @@index([status, nextRunAt])
+  @@index([queue, status])
+  @@index([workerId])
+  @@index([idempotencyKey])
+  @@map("jobs")
+}
+
+model BoardReportSchedule {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org               Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId             String   @map("org_id") @db.Uuid
+  name              String
+  template          String
+  format            String
+  frequency         String   @default("monthly")
+  scheduleType      String   @default("single") @map("schedule_type") // single|recurring
+  timezone          String   @default("UTC")
+  distributionMethod String? @map("distribution_method")
+  recipients        String?
+  ccRecipients      String?  @map("cc_recipients")
+  status            String   @default("active") // active|paused|cancelled
+  nextRunAt         DateTime? @map("next_run_at") @db.Timestamptz(6)
+  lastRunAt         DateTime? @map("last_run_at") @db.Timestamptz(6)
+  metadata          Json?
+  createdBy         User?    @relation("boardSchedule_createdBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById       String?  @map("created_by_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([orgId])
+  @@index([status])
+  @@index([nextRunAt])
+  @@map("board_report_schedules")
+}
+
+model AuditLog {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorUser   User?    @relation("audit_actor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorUserId String?  @db.Uuid
+  org         Org?     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId       String?  @db.Uuid
+  action      String
+  objectType  String?  @map("object_type")
+  objectId    String?  @map("object_id") @db.Uuid
+  metaJson    Json?    @map("meta_json")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([actorUserId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model ShareToken {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org         Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId       String    @db.Uuid
+  token       String    @unique
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz(6)
+  scope       String    @default("read-only")
+  createdBy   User?     @relation("shareToken_createdBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String?   @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([orgId])
+  @@index([token])
+  @@map("share_tokens")
+}
+
+model InvitationToken {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org         Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId       String    @db.Uuid
+  email       String
+  token       String    @unique
+  role        String // admin|finance|viewer
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt      DateTime? @map("used_at") @db.Timestamptz(6)
+  createdBy   User?     @relation("invitation_createdBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String?   @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([orgId])
+  @@index([token])
+  @@index([email])
+  @@map("invitation_tokens")
+}
+
+model BillingUsage {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org        Org?     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId      String?  @db.Uuid
+  metric     String
+  value      Decimal? @db.Decimal
+  bucketTime DateTime @map("bucket_time") @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([orgId, metric, bucketTime])
+  @@map("billing_usage")
+}
+
+model AlertRule {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org           Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId         String    @db.Uuid
+  name          String
+  description   String?
+  metric        String // runway_months|cash_balance|burn_rate|revenue_growth
+  operator      String // <|>|<=|>=|==|!=
+  threshold     Decimal   @db.Decimal(20, 4)
+  enabled       Boolean   @default(true)
+  notifyEmail   Boolean   @default(false) @map("notify_email")
+  notifySlack   Boolean   @default(false) @map("notify_slack")
+  slackWebhook  String?   @map("slack_webhook")
+  lastTriggered DateTime? @map("last_triggered") @db.Timestamptz(6)
+  createdBy     User?     @relation("alert_createdBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById   String?   @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([orgId])
+  @@index([enabled])
+  @@map("alert_rules")
+}
+
+model AICFOPlan {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org         Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId       String    @db.Uuid
+  modelRun    ModelRun? @relation(fields: [modelRunId], references: [id], onDelete: SetNull)
+  modelRunId  String?   @db.Uuid
+  name        String
+  description String?
+  planJson    Json      @map("plan_json") // Array of staged changes
+  status      String    @default("draft") // draft|active|archived
+  createdBy   User?     @relation("plan_createdBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String?   @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([orgId])
+  @@index([status])
+  @@map("ai_cfo_plans")
+}
+
+model OrgSettings {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org               Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId             String   @unique @db.Uuid
+  dataRetentionDays Int      @default(365) @map("data_retention_days")
+  currency          String   @default("USD")
+  timezone          String   @default("UTC")
+  region            String   @default("global")
+  updatedBy         User?    @relation("settings_updatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedById       String?  @db.Uuid
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("org_settings")
+}
+
+model Budget {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org         Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId       String   @map("org_id") @db.Uuid
+  category    String // Category name (e.g., "Revenue", "Marketing", "Payroll")
+  month       String // YYYY-MM format
+  amount      Decimal  @db.Decimal(20, 4)
+  currency    String   @default("USD")
+  source      String   @default("manual") // manual|csv_upload|api
+  createdBy   User?    @relation("budget_createdBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([orgId, category, month])
+  @@index([orgId])
+  @@index([orgId, month])
+  @@index([category])
+  @@map("budgets")
+}
+
+model ExcelSync {
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org          Org           @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId        String        @db.Uuid
+  fileName     String?       @map("file_name")
+  fileHash     String?       @map("file_hash") @db.VarChar(64)
+  mapping      ExcelMapping? @relation(fields: [mappingId], references: [id], onDelete: SetNull)
+  mappingId    String?       @db.Uuid
+  status       String        @default("pending") // pending|processing|completed|failed
+  lastSyncedAt DateTime?     @map("last_synced_at") @db.Timestamptz(6)
+  errorMessage String?       @map("error_message")
+  metadata     Json? // rows_processed, formulas_detected, etc.
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([orgId])
+  @@index([status])
+  @@index([fileHash])
+  @@map("excel_syncs")
+}
+
+model ExcelMapping {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org         Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId       String   @db.Uuid
+  name        String
+  description String?
+  mappingJson Json     @map("mapping_json") // column mappings, ranges, rules
+  createdBy   User?    @relation("excelMapping_createdBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  excelSyncs ExcelSync[]
+
+  @@index([orgId])
+  @@map("excel_mappings")
+}
+
+model OrgQuota {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org                 Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId               String    @unique @db.Uuid
+  monteCarloSimsLimit Int       @default(10000) @map("monte_carlo_sims_limit")
+  monteCarloSimsUsed  Int       @default(0) @map("monte_carlo_sims_used")
+  monteCarloResetAt   DateTime? @map("monte_carlo_reset_at") @db.Timestamptz(6)
+  exportsLimit        Int       @default(100) @map("exports_limit")
+  exportsUsed         Int       @default(0) @map("exports_used")
+  exportsResetAt      DateTime? @map("exports_reset_at") @db.Timestamptz(6)
+  alertsLimit         Int       @default(10) @map("alerts_limit")
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([orgId])
+  @@map("org_quotas")
+}
+
+model RealtimeSimulation {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org          Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId        String   @map("org_id") @db.Uuid
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       String   @map("user_id") @db.Uuid
+  name         String?  @db.VarChar(255)
+  paramsJson   Json     @map("params_json")
+  resultsJson  Json     @map("results_json")
+  currentMonth Int      @default(0) @map("current_month")
+  isRunning    Boolean  @default(false) @map("is_running")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([orgId])
+  @@index([userId])
+  @@index([updatedAt(sort: Desc)])
+  @@map("realtime_simulations")
+}
