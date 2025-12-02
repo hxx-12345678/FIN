@@ -34,6 +34,7 @@ model User {
   excelMappings      ExcelMapping[]    @relation("excelMapping_createdBy")
   realtimeSimulations RealtimeSimulation[]
   boardReportSchedulesCreated BoardReportSchedule[] @relation("boardSchedule_createdBy")
+  preferences        UserPreferences?
 
   @@map("users")
 }
@@ -73,6 +74,8 @@ model Org {
   boardReportSchedules BoardReportSchedule[]
   notifications    Notification[]
   notificationChannels NotificationChannel[]
+  details         OrgDetails?
+  localizationSettings LocalizationSettings?
 
   @@map("orgs")
 }
@@ -508,11 +511,69 @@ model OrgSettings {
   currency          String   @default("USD")
   timezone          String   @default("UTC")
   region            String   @default("global")
+  complianceJson    Json?    @map("compliance_json")
+  securityControlsJson Json? @map("security_controls_json")
+  policiesJson      Json?    @map("policies_json")
   updatedBy         User?    @relation("settings_updatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   updatedById       String?  @db.Uuid
   updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("org_settings")
+}
+
+model UserPreferences {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String   @unique @db.Uuid
+  phone         String?
+  jobTitle      String?
+  bio           String?
+  avatarUrl     String?
+  appearanceJson Json?
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([userId])
+  @@map("user_preferences")
+}
+
+model OrgDetails {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org         Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId       String   @unique @db.Uuid
+  industry    String?
+  companySize String?
+  website     String?
+  address     String?
+  taxId       String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([orgId])
+  @@map("org_details")
+}
+
+model LocalizationSettings {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org                Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId              String   @unique @db.Uuid
+  baseCurrency       String   @default("USD")
+  displayCurrency   String   @default("USD")
+  language           String   @default("en")
+  dateFormat         String   @default("MM/DD/YYYY")
+  numberFormat       String   @default("1,234.56")
+  timezone           String   @default("UTC")
+  autoFxUpdate       Boolean  @default(true)
+  fxRatesJson        Json?
+  gstEnabled         Boolean  @default(false)
+  tdsEnabled         Boolean  @default(false)
+  einvoicingEnabled  Boolean  @default(false)
+  complianceJson     Json?
+  createdAt          DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@index([orgId])
+  @@map("localization_settings")
 }
 
 model Budget {

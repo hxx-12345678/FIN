@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   DollarSign,
   Calendar,
@@ -19,7 +21,36 @@ import {
   Shield,
   Building2,
   CreditCard,
+  Loader2,
 } from "lucide-react"
+import { toast } from "sonner"
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
+
+// Helper function to get auth token
+const getAuthToken = (): string | null => {
+  if (typeof window === "undefined") return null
+  const token = localStorage.getItem("auth-token")
+  if (token) return token
+  const cookies = document.cookie.split("; ")
+  const authCookie = cookies.find((row) => row.startsWith("auth-token="))
+  if (authCookie) {
+    return authCookie.split("=")[1]
+  }
+  return null
+}
+
+// Helper function to get auth headers
+const getAuthHeaders = (): HeadersInit => {
+  const token = getAuthToken()
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  }
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`
+  }
+  return headers
+}
 
 interface Currency {
   code: string
@@ -36,15 +67,40 @@ interface TaxLiability {
   description: string
 }
 
+interface LocalizationData {
+  baseCurrency: string
+  displayCurrency: string
+  language: string
+  dateFormat: string
+  numberFormat: string
+  timezone: string
+  autoFxUpdate: boolean
+  fxRates: Record<string, number>
+  gstEnabled: boolean
+  tdsEnabled: boolean
+  einvoicingEnabled: boolean
+  complianceData: any
+}
+
 export function LocalizationSettings() {
-  const [baseCurrency, setBaseCurrency] = useState("INR")
-  const [displayCurrency, setDisplayCurrency] = useState("INR")
-  const [dateFormat, setDateFormat] = useState("DD/MM/YYYY")
-  const [numberFormat, setNumberFormat] = useState("indian")
-  const [language, setLanguage] = useState("en")
-  const [autoFxUpdate, setAutoFxUpdate] = useState(true)
-  const [gstEnabled, setGstEnabled] = useState(true)
-  const [tdsEnabled, setTdsEnabled] = useState(true)
+  const [orgId, setOrgId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [updatingFxRates, setUpdatingFxRates] = useState(false)
+  const [localization, setLocalization] = useState<LocalizationData>({
+    baseCurrency: "USD",
+    displayCurrency: "USD",
+    language: "en",
+    dateFormat: "MM/DD/YYYY",
+    numberFormat: "1,234.56",
+    timezone: "UTC",
+    autoFxUpdate: true,
+    fxRates: {},
+    gstEnabled: false,
+    tdsEnabled: false,
+    einvoicingEnabled: false,
+    complianceData: {},
+  })
 
   const currencies: Currency[] = [
     { code: "INR", name: "Indian Rupee", symbol: "₹", rate: 1.0 },
@@ -52,9 +108,137 @@ export function LocalizationSettings() {
     { code: "EUR", name: "Euro", symbol: "€", rate: 0.011 },
     { code: "GBP", name: "British Pound", symbol: "£", rate: 0.0095 },
     { code: "SGD", name: "Singapore Dollar", symbol: "S$", rate: 0.016 },
+    { code: "AUD", name: "Australian Dollar", symbol: "A$", rate: 0.018 },
+    { code: "CAD", name: "Canadian Dollar", symbol: "C$", rate: 0.016 },
+    { code: "JPY", name: "Japanese Yen", symbol: "¥", rate: 1.8 },
   ]
 
-  const taxLiabilities: TaxLiability[] = [
+  // Fetch orgId
+  useEffect(() => {
+    const fetchOrgId = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/auth/me`, {
+          headers: getAuthHeaders(),
+          credentials: "include",
+        })
+        if (response.ok) {
+          const data = await response.json()
+          if (data.orgs && data.orgs.length > 0) {
+            setOrgId(data.orgs[0].id)
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch orgId:", error)
+      }
+    }
+    fetchOrgId()
+  }, [])
+
+  // Fetch localization data
+  useEffect(() => {
+    if (orgId) {
+      fetchLocalization()
+    }
+  }, [orgId])
+
+  const fetchLocalization = async () => {
+    if (!orgId) return
+    setLoading(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/localization`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
+      if (response.ok) {
+        const data = await response.json()
+        if (data.ok && data.data) {
+          setLocalization({
+            baseCurrency: data.data.baseCurrency || "USD",
+            displayCurrency: data.data.displayCurrency || "USD",
+            language: data.data.language || "en",
+            dateFormat: data.data.dateFormat || "MM/DD/YYYY",
+            numberFormat: data.data.numberFormat || "1,234.56",
+            timezone: data.data.timezone || "UTC",
+            autoFxUpdate: data.data.autoFxUpdate !== undefined ? data.data.autoFxUpdate : true,
+            fxRates: data.data.fxRates || {},
+            gstEnabled: data.data.gstEnabled !== undefined ? data.data.gstEnabled : false,
+            tdsEnabled: data.data.tdsEnabled !== undefined ? data.data.tdsEnabled : false,
+            einvoicingEnabled: data.data.einvoicingEnabled !== undefined ? data.data.einvoicingEnabled : false,
+            complianceData: data.data.complianceData || {},
+          })
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch localization:", error)
+      toast.error("Failed to load localization settings")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSave = async () => {
+    if (!orgId) return
+    setSaving(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/localization`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        credentials: "include",
+        body: JSON.stringify(localization),
+      })
+      if (response.ok) {
+        toast.success("Localization settings saved successfully")
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || "Failed to save localization settings")
+      }
+    } catch (error) {
+      toast.error("Failed to save localization settings")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdateFxRates = async () => {
+    if (!orgId) return
+    setUpdatingFxRates(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/localization/fx-rates/update`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        credentials: "include",
+        body: JSON.stringify({
+          baseCurrency: localization.baseCurrency,
+        }),
+      })
+      if (response.ok) {
+        const data = await response.json()
+        if (data.ok && data.data) {
+          const updatedRates = data.data.fxRates || {}
+          setLocalization({ 
+            ...localization, 
+            fxRates: updatedRates,
+            baseCurrency: data.data.baseCurrency || localization.baseCurrency,
+          })
+          toast.success(`Exchange rates updated successfully! Fetched ${Object.keys(updatedRates).length} currency rates.`)
+          // Refresh localization data to ensure UI is in sync
+          await fetchLocalization()
+        } else {
+          toast.error("Failed to update exchange rates")
+        }
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || "Failed to update exchange rates")
+      }
+    } catch (error) {
+      console.error("FX rate update error:", error)
+      toast.error("Failed to update exchange rates. Please try again.")
+    } finally {
+      setUpdatingFxRates(false)
+    }
+  }
+
+  const taxLiabilities: TaxLiability[] = localization.complianceData?.taxLiabilities || [
     {
       type: "GST Return (GSTR-3B)",
       amount: 145000,
@@ -69,16 +253,9 @@ export function LocalizationSettings() {
       status: "due",
       description: "TDS on salaries for December 2024",
     },
-    {
-      type: "GST Annual Return",
-      amount: 0,
-      dueDate: "2025-12-31",
-      status: "upcoming",
-      description: "Annual GST return (GSTR-9)",
-    },
   ]
 
-  const gstSummary = {
+  const gstSummary = localization.complianceData?.gstSummary || {
     totalGstCollected: 1450000,
     totalGstPaid: 890000,
     netGstLiability: 560000,
@@ -93,6 +270,15 @@ export function LocalizationSettings() {
     { name: "ClearTax", status: "available", type: "compliance" },
   ]
 
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-12 w-64" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -102,13 +288,25 @@ export function LocalizationSettings() {
           <p className="text-muted-foreground">Multi-currency support and India-specific compliance management</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Update FX Rates
+          <Button 
+            variant="outline" 
+            onClick={handleUpdateFxRates}
+            disabled={updatingFxRates}
+          >
+            {updatingFxRates ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            {updatingFxRates ? "Updating..." : "Update FX Rates"}
           </Button>
-          <Button>
-            <Download className="mr-2 h-4 w-4" />
-            Export Tax Report
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-4 w-4" />
+            )}
+            Save Changes
           </Button>
         </div>
       </div>
@@ -132,7 +330,10 @@ export function LocalizationSettings() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label>Base Currency</Label>
-                  <Select value={baseCurrency} onValueChange={setBaseCurrency}>
+                  <Select 
+                    value={localization.baseCurrency} 
+                    onValueChange={(value) => setLocalization({ ...localization, baseCurrency: value })}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -149,7 +350,10 @@ export function LocalizationSettings() {
 
                 <div className="space-y-2">
                   <Label>Display Currency</Label>
-                  <Select value={displayCurrency} onValueChange={setDisplayCurrency}>
+                  <Select 
+                    value={localization.displayCurrency} 
+                    onValueChange={(value) => setLocalization({ ...localization, displayCurrency: value })}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -169,7 +373,10 @@ export function LocalizationSettings() {
                     <Label>Auto-update FX Rates</Label>
                     <p className="text-xs text-muted-foreground">Fetch daily exchange rates automatically</p>
                   </div>
-                  <Switch checked={autoFxUpdate} onCheckedChange={setAutoFxUpdate} />
+                  <Switch 
+                    checked={localization.autoFxUpdate} 
+                    onCheckedChange={(checked) => setLocalization({ ...localization, autoFxUpdate: checked })}
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -181,68 +388,60 @@ export function LocalizationSettings() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {currencies.map((currency) => (
-                    <div key={currency.code} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10">
-                          <span className="font-bold text-primary">{currency.symbol}</span>
+                  {currencies.map((currency) => {
+                    // Get rate from fetched rates or fallback to default
+                    const rate = localization.fxRates && localization.fxRates[currency.code] 
+                      ? localization.fxRates[currency.code] 
+                      : (currency.code === localization.baseCurrency ? 1 : currency.rate)
+                    const isBaseCurrency = currency.code === localization.baseCurrency
+                    return (
+                      <div key={currency.code} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10">
+                            <span className="font-bold text-primary">{currency.symbol}</span>
+                          </div>
+                          <div>
+                            <div className="font-medium flex items-center gap-2">
+                              {currency.code}
+                              {isBaseCurrency && (
+                                <Badge variant="outline" className="text-xs">Base</Badge>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground">{currency.name}</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="font-medium">{currency.code}</div>
-                          <div className="text-xs text-muted-foreground">{currency.name}</div>
+                        <div className="text-right">
+                          <div className="font-semibold text-lg">
+                            {isBaseCurrency ? "1.0000" : rate.toFixed(4)}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {isBaseCurrency ? "Base currency" : `per ${localization.baseCurrency}`}
+                          </div>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="font-semibold">
-                          {currency.code === baseCurrency ? "1.0000" : currency.rate.toFixed(4)}
-                        </div>
-                        <div className="text-xs text-muted-foreground">per {baseCurrency}</div>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
                 <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <div className="flex items-start gap-2">
                     <AlertCircle className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
-                    <p className="text-xs text-blue-800">
-                      Exchange rates are fetched from OpenExchange API and updated daily at 00:00 UTC
-                    </p>
+                    <div className="flex-1">
+                      <p className="text-xs text-blue-800 font-medium mb-1">Live Exchange Rates</p>
+                      <p className="text-xs text-blue-700">
+                        Rates are fetched from free currency APIs (exchangerate-api.com). 
+                        Click "Update FX Rates" to refresh with latest rates. 
+                        {localization.fxRates && Object.keys(localization.fxRates).length > 0 && (
+                          <span className="block mt-1">
+                            Last updated: {new Date().toLocaleString()}
+                          </span>
+                        )}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Currency Conversion Impact</CardTitle>
-              <CardDescription>How currency conversion affects your financial metrics</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="p-4 border rounded-lg">
-                  <div className="text-sm text-muted-foreground mb-1">Total Revenue</div>
-                  <div className="text-2xl font-bold">₹84.2L</div>
-                  <div className="text-xs text-green-600 mt-1">≈ $10,104 USD</div>
-                </div>
-                <div className="p-4 border rounded-lg">
-                  <div className="text-sm text-muted-foreground mb-1">Monthly Burn</div>
-                  <div className="text-2xl font-bold">₹4.5L</div>
-                  <div className="text-xs text-orange-600 mt-1">≈ $5,400 USD</div>
-                </div>
-                <div className="p-4 border rounded-lg">
-                  <div className="text-sm text-muted-foreground mb-1">Cash Balance</div>
-                  <div className="text-2xl font-bold">₹57L</div>
-                  <div className="text-xs text-blue-600 mt-1">≈ $68,400 USD</div>
-                </div>
-                <div className="p-4 border rounded-lg">
-                  <div className="text-sm text-muted-foreground mb-1">Runway</div>
-                  <div className="text-2xl font-bold">12.7 mo</div>
-                  <div className="text-xs text-purple-600 mt-1">Currency neutral</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
 
         {/* Localization Tab */}
@@ -256,7 +455,10 @@ export function LocalizationSettings() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label>Date Format</Label>
-                  <Select value={dateFormat} onValueChange={setDateFormat}>
+                  <Select 
+                    value={localization.dateFormat} 
+                    onValueChange={(value) => setLocalization({ ...localization, dateFormat: value })}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -264,46 +466,67 @@ export function LocalizationSettings() {
                       <SelectItem value="DD/MM/YYYY">DD/MM/YYYY (31/12/2024)</SelectItem>
                       <SelectItem value="MM/DD/YYYY">MM/DD/YYYY (12/31/2024)</SelectItem>
                       <SelectItem value="YYYY-MM-DD">YYYY-MM-DD (2024-12-31)</SelectItem>
+                      <SelectItem value="DD.MM.YYYY">DD.MM.YYYY (31.12.2024)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-2">
                   <Label>Number Format</Label>
-                  <Select value={numberFormat} onValueChange={setNumberFormat}>
+                  <Select 
+                    value={localization.numberFormat} 
+                    onValueChange={(value) => setLocalization({ ...localization, numberFormat: value })}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="indian">Indian (1,00,000)</SelectItem>
                       <SelectItem value="international">International (100,000)</SelectItem>
+                      <SelectItem value="1,234.56">US Format (1,234.56)</SelectItem>
+                      <SelectItem value="1.234,56">European Format (1.234,56)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-2">
                   <Label>Language</Label>
-                  <Select value={language} onValueChange={setLanguage}>
+                  <Select 
+                    value={localization.language} 
+                    onValueChange={(value) => setLocalization({ ...localization, language: value })}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="en">English</SelectItem>
                       <SelectItem value="hi">हिन्दी (Hindi)</SelectItem>
+                      <SelectItem value="es">Español (Spanish)</SelectItem>
+                      <SelectItem value="fr">Français (French)</SelectItem>
+                      <SelectItem value="de">Deutsch (German)</SelectItem>
+                      <SelectItem value="ja">日本語 (Japanese)</SelectItem>
+                      <SelectItem value="zh">中文 (Chinese)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-2">
                   <Label>Time Zone</Label>
-                  <Select defaultValue="IST">
+                  <Select 
+                    value={localization.timezone} 
+                    onValueChange={(value) => setLocalization({ ...localization, timezone: value })}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="IST">IST (UTC+5:30)</SelectItem>
+                      <SelectItem value="Asia/Kolkata">IST (UTC+5:30)</SelectItem>
                       <SelectItem value="UTC">UTC (UTC+0:00)</SelectItem>
-                      <SelectItem value="EST">EST (UTC-5:00)</SelectItem>
+                      <SelectItem value="America/New_York">EST (UTC-5:00)</SelectItem>
+                      <SelectItem value="America/Los_Angeles">PST (UTC-8:00)</SelectItem>
+                      <SelectItem value="Europe/London">GMT (UTC+0:00)</SelectItem>
+                      <SelectItem value="Asia/Tokyo">JST (UTC+9:00)</SelectItem>
+                      <SelectItem value="Asia/Singapore">SGT (UTC+8:00)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -314,15 +537,30 @@ export function LocalizationSettings() {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Date:</span>
-                    <span className="font-medium">31/12/2024</span>
+                    <span className="font-medium">
+                      {localization.dateFormat === "DD/MM/YYYY" ? "31/12/2024" :
+                       localization.dateFormat === "MM/DD/YYYY" ? "12/31/2024" :
+                       localization.dateFormat === "YYYY-MM-DD" ? "2024-12-31" : "31.12.2024"}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Number:</span>
-                    <span className="font-medium">₹1,00,000.00</span>
+                    <span className="font-medium">
+                      {localization.numberFormat === "indian" ? "₹1,00,000.00" :
+                       localization.numberFormat === "international" ? "₹100,000.00" :
+                       localization.numberFormat === "1,234.56" ? "₹1,234.56" : "₹1.234,56"}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Language:</span>
-                    <span className="font-medium">English</span>
+                    <span className="font-medium">
+                      {localization.language === "en" ? "English" :
+                       localization.language === "hi" ? "हिन्दी" :
+                       localization.language === "es" ? "Español" :
+                       localization.language === "fr" ? "Français" :
+                       localization.language === "de" ? "Deutsch" :
+                       localization.language === "ja" ? "日本語" : "中文"}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -341,7 +579,7 @@ export function LocalizationSettings() {
                     Active
                   </Badge>
                 </div>
-                <div className="text-2xl font-bold">₹5.6L</div>
+                <div className="text-2xl font-bold">₹{(gstSummary.netGstLiability / 100000).toFixed(2)}L</div>
                 <p className="text-sm text-muted-foreground">Net GST Liability</p>
               </CardContent>
             </Card>
@@ -354,7 +592,9 @@ export function LocalizationSettings() {
                     Due Soon
                   </Badge>
                 </div>
-                <div className="text-2xl font-bold">Jan 20</div>
+                <div className="text-2xl font-bold">
+                  {new Date(gstSummary.nextFilingDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                </div>
                 <p className="text-sm text-muted-foreground">Next GST Filing</p>
               </CardContent>
             </Card>
@@ -367,7 +607,7 @@ export function LocalizationSettings() {
                     Available
                   </Badge>
                 </div>
-                <div className="text-2xl font-bold">₹1.25L</div>
+                <div className="text-2xl font-bold">₹{(gstSummary.itcAvailable / 100000).toFixed(2)}L</div>
                 <p className="text-sm text-muted-foreground">ITC Available</p>
               </CardContent>
             </Card>
@@ -383,26 +623,26 @@ export function LocalizationSettings() {
                 <div className="space-y-3">
                   <div className="flex justify-between p-3 border rounded-lg">
                     <span className="text-muted-foreground">Total GST Collected</span>
-                    <span className="font-semibold text-green-600">₹14.5L</span>
+                    <span className="font-semibold text-green-600">₹{(gstSummary.totalGstCollected / 100000).toFixed(2)}L</span>
                   </div>
                   <div className="flex justify-between p-3 border rounded-lg">
                     <span className="text-muted-foreground">Total GST Paid</span>
-                    <span className="font-semibold text-orange-600">₹8.9L</span>
+                    <span className="font-semibold text-orange-600">₹{(gstSummary.totalGstPaid / 100000).toFixed(2)}L</span>
                   </div>
                   <div className="flex justify-between p-3 border rounded-lg bg-primary/5">
                     <span className="font-medium">Net GST Liability</span>
-                    <span className="font-bold text-primary">₹5.6L</span>
+                    <span className="font-bold text-primary">₹{(gstSummary.netGstLiability / 100000).toFixed(2)}L</span>
                   </div>
                 </div>
 
                 <div className="space-y-3">
                   <div className="flex justify-between p-3 border rounded-lg">
                     <span className="text-muted-foreground">Input Tax Credit</span>
-                    <span className="font-semibold text-blue-600">₹1.25L</span>
+                    <span className="font-semibold text-blue-600">₹{(gstSummary.itcAvailable / 100000).toFixed(2)}L</span>
                   </div>
                   <div className="flex justify-between p-3 border rounded-lg">
                     <span className="text-muted-foreground">Next Filing Date</span>
-                    <span className="font-semibold">20 Jan 2025</span>
+                    <span className="font-semibold">{new Date(gstSummary.nextFilingDate).toLocaleDateString()}</span>
                   </div>
                   <div className="flex justify-between p-3 border rounded-lg">
                     <span className="text-muted-foreground">Compliance Status</span>
@@ -484,7 +724,10 @@ export function LocalizationSettings() {
                   <Label>GST Tracking</Label>
                   <p className="text-xs text-muted-foreground">Track GST collections and payments in cash flow</p>
                 </div>
-                <Switch checked={gstEnabled} onCheckedChange={setGstEnabled} />
+                <Switch 
+                  checked={localization.gstEnabled} 
+                  onCheckedChange={(checked) => setLocalization({ ...localization, gstEnabled: checked })}
+                />
               </div>
 
               <div className="flex items-center justify-between p-4 border rounded-lg">
@@ -494,7 +737,10 @@ export function LocalizationSettings() {
                     Automatically calculate TDS on applicable transactions
                   </p>
                 </div>
-                <Switch checked={tdsEnabled} onCheckedChange={setTdsEnabled} />
+                <Switch 
+                  checked={localization.tdsEnabled} 
+                  onCheckedChange={(checked) => setLocalization({ ...localization, tdsEnabled: checked })}
+                />
               </div>
 
               <div className="flex items-center justify-between p-4 border rounded-lg">
@@ -502,7 +748,10 @@ export function LocalizationSettings() {
                   <Label>E-Invoicing</Label>
                   <p className="text-xs text-muted-foreground">Enable e-invoicing for B2B transactions</p>
                 </div>
-                <Switch defaultChecked={false} />
+                <Switch 
+                  checked={localization.einvoicingEnabled} 
+                  onCheckedChange={(checked) => setLocalization({ ...localization, einvoicingEnabled: checked })}
+                />
               </div>
             </CardContent>
           </Card>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -10,118 +10,400 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Shield, Lock, FileText, CheckCircle, Download, Users, Database, Globe } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import {
+  Shield,
+  Lock,
+  FileText,
+  CheckCircle,
+  Download,
+  Users,
+  Database,
+  Globe,
+  AlertCircle,
+  RefreshCw,
+  Loader2,
+  Eye,
+  Calendar,
+  TrendingUp,
+  Edit,
+  X,
+} from "lucide-react"
+import { toast } from "sonner"
 
-const complianceFrameworks = [
-  {
-    name: "SOC 2 Type II",
-    status: "compliant",
-    lastAudit: "2024-03-15",
-    nextAudit: "2025-03-15",
-    score: 98,
-    requirements: 47,
-    completed: 46,
-  },
-  {
-    name: "GDPR",
-    status: "compliant",
-    lastAudit: "2024-05-20",
-    nextAudit: "2024-11-20",
-    score: 95,
-    requirements: 32,
-    completed: 30,
-  },
-  {
-    name: "ISO 27001",
-    status: "in-progress",
-    lastAudit: "2024-01-10",
-    nextAudit: "2024-07-10",
-    score: 78,
-    requirements: 114,
-    completed: 89,
-  },
-  {
-    name: "PCI DSS",
-    status: "pending",
-    lastAudit: "2023-12-01",
-    nextAudit: "2024-12-01",
-    score: 65,
-    requirements: 12,
-    completed: 8,
-  },
-]
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
 
-const securityControls = [
-  {
-    category: "Access Control",
-    controls: [
-      { name: "Multi-Factor Authentication", status: "enabled", coverage: 100 },
-      { name: "Role-Based Access Control", status: "enabled", coverage: 100 },
-      { name: "Single Sign-On", status: "enabled", coverage: 95 },
-      { name: "Password Policy", status: "enabled", coverage: 100 },
-    ],
-  },
-  {
-    category: "Data Protection",
-    controls: [
-      { name: "Data Encryption at Rest", status: "enabled", coverage: 100 },
-      { name: "Data Encryption in Transit", status: "enabled", coverage: 100 },
-      { name: "Data Loss Prevention", status: "enabled", coverage: 85 },
-      { name: "Backup & Recovery", status: "enabled", coverage: 100 },
-    ],
-  },
-  {
-    category: "Network Security",
-    controls: [
-      { name: "Firewall Protection", status: "enabled", coverage: 100 },
-      { name: "Intrusion Detection", status: "enabled", coverage: 90 },
-      { name: "VPN Access", status: "enabled", coverage: 100 },
-      { name: "Network Monitoring", status: "enabled", coverage: 95 },
-    ],
-  },
-]
+// Helper function to get auth token
+const getAuthToken = (): string | null => {
+  if (typeof window === "undefined") return null
+  const token = localStorage.getItem("auth-token")
+  if (token) return token
+  const cookies = document.cookie.split("; ")
+  const authCookie = cookies.find((row) => row.startsWith("auth-token="))
+  if (authCookie) {
+    return authCookie.split("=")[1]
+  }
+  return null
+}
 
-const auditLogs = [
-  {
-    id: 1,
-    timestamp: "2024-06-20 14:30:25",
-    user: "john.doe@company.com",
-    action: "Data Export",
-    resource: "Financial Reports",
-    status: "success",
-    ip: "192.168.1.100",
-  },
-  {
-    id: 2,
-    timestamp: "2024-06-20 14:25:12",
-    user: "sarah.wilson@company.com",
-    action: "User Access Granted",
-    resource: "Investor Dashboard",
-    status: "success",
-    ip: "192.168.1.105",
-  },
-  {
-    id: 3,
-    timestamp: "2024-06-20 14:20:45",
-    user: "system@finapilot.com",
-    action: "Automated Backup",
-    resource: "Database",
-    status: "success",
-    ip: "internal",
-  },
-  {
-    id: 4,
-    timestamp: "2024-06-20 14:15:33",
-    user: "mike.chen@company.com",
-    action: "Login Attempt",
-    resource: "Dashboard",
-    status: "failed",
-    ip: "203.0.113.45",
-  },
-]
+// Helper function to get auth headers
+const getAuthHeaders = (): HeadersInit => {
+  const token = getAuthToken()
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  }
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`
+  }
+  return headers
+}
+
+interface ComplianceFramework {
+  name: string
+  type: string
+  status: "compliant" | "in-progress" | "pending" | "non-compliant"
+  score: number
+  requirements: number
+  completed: number
+  lastAudit: string | null
+  nextAudit: string | null
+  certificationNumber: string | null
+  auditor: string | null
+  description: string
+}
+
+interface SecurityControl {
+  id: string
+  category: string
+  name: string
+  description: string
+  status: "enabled" | "disabled" | "partial"
+  coverage: number
+  lastTested?: string
+  nextTest?: string
+}
+
+interface AuditLog {
+  id: string
+  timestamp: string
+  user: string
+  userName: string | null
+  action: string
+  objectType: string
+  objectId: string
+  resource: string
+  status: string
+  ip: string
+}
+
+interface CompliancePolicy {
+  id: string
+  name: string
+  category: string
+  description: string
+  enabled: boolean
+  lastUpdated: string
+  version: string
+  content: string
+}
+
+interface SecurityScore {
+  overallScore: number
+  frameworkScore: number
+  controlScore: number
+  frameworksCount: number
+  controlsCount: number
+  activeControls: number
+  criticalIssues: number
+}
 
 export function CompliancePage() {
-  const [selectedFramework, setSelectedFramework] = useState("soc2")
+  const [orgId, setOrgId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [frameworks, setFrameworks] = useState<ComplianceFramework[]>([])
+  const [controls, setControls] = useState<Record<string, SecurityControl[]>>({})
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
+  const [policies, setPolicies] = useState<CompliancePolicy[]>([])
+  const [securityScore, setSecurityScore] = useState<SecurityScore | null>(null)
+  const [selectedFramework, setSelectedFramework] = useState<string | null>(null)
+  const [showFrameworkDialog, setShowFrameworkDialog] = useState(false)
+  const [editingFramework, setEditingFramework] = useState<ComplianceFramework | null>(null)
+  const [updatingFramework, setUpdatingFramework] = useState(false)
+
+  // Fetch orgId
+  useEffect(() => {
+    const fetchOrgId = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/auth/me`, {
+          headers: getAuthHeaders(),
+          credentials: "include",
+        })
+        if (response.ok) {
+          const data = await response.json()
+          if (data.orgs && data.orgs.length > 0) {
+            setOrgId(data.orgs[0].id)
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch orgId:", error)
+      }
+    }
+    fetchOrgId()
+  }, [])
+
+  // Fetch all compliance data
+  useEffect(() => {
+    if (orgId) {
+      fetchAllData()
+    }
+  }, [orgId])
+
+  const fetchAllData = async () => {
+    if (!orgId) return
+    setLoading(true)
+    try {
+      await Promise.all([
+        fetchFrameworks(),
+        fetchSecurityControls(),
+        fetchAuditLogs(),
+        fetchPolicies(),
+        fetchSecurityScore(),
+      ])
+    } catch (error) {
+      console.error("Failed to fetch compliance data:", error)
+      toast.error("Failed to load compliance data")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchFrameworks = async () => {
+    if (!orgId) return
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/compliance/frameworks`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
+      if (response.ok) {
+        const data = await response.json()
+        if (data.ok && data.data) {
+          setFrameworks(data.data)
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch frameworks:", error)
+    }
+  }
+
+  const fetchSecurityControls = async () => {
+    if (!orgId) return
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/compliance/controls`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
+      if (response.ok) {
+        const data = await response.json()
+        if (data.ok && data.data) {
+          setControls(data.data)
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch security controls:", error)
+    }
+  }
+
+  const fetchAuditLogs = async () => {
+    if (!orgId) return
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/compliance/audit-logs?limit=100`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
+      if (response.ok) {
+        const data = await response.json()
+        if (data.ok && data.data) {
+          setAuditLogs(data.data)
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch audit logs:", error)
+    }
+  }
+
+  const fetchPolicies = async () => {
+    if (!orgId) return
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/compliance/policies`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
+      if (response.ok) {
+        const data = await response.json()
+        if (data.ok && data.data) {
+          setPolicies(data.data)
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch policies:", error)
+    }
+  }
+
+  const fetchSecurityScore = async () => {
+    if (!orgId) return
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/compliance/security-score`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
+      if (response.ok) {
+        const data = await response.json()
+        if (data.ok && data.data) {
+          setSecurityScore(data.data)
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch security score:", error)
+    }
+  }
+
+  const handleExportReport = async () => {
+    if (!orgId) return
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/compliance/export`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
+      if (response.ok) {
+        const data = await response.json()
+        if (data.ok && data.data) {
+          // Download as JSON file
+          const blob = new Blob([JSON.stringify(data.data, null, 2)], { type: "application/json" })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement("a")
+          a.href = url
+          a.download = `compliance-report-${new Date().toISOString().split("T")[0]}.json`
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+          URL.revokeObjectURL(url)
+          toast.success("Compliance report exported successfully")
+        }
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || "Failed to export report")
+      }
+    } catch (error) {
+      toast.error("Failed to export compliance report")
+    }
+  }
+
+  const handleUpdateFramework = async (frameworkType: string, updates: Partial<ComplianceFramework>) => {
+    if (!orgId) return
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/compliance/frameworks/${frameworkType}`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        credentials: "include",
+        body: JSON.stringify(updates),
+      })
+      if (response.ok) {
+        toast.success("Framework updated successfully")
+        await fetchFrameworks()
+        await fetchSecurityScore()
+        return true
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || "Failed to update framework")
+        return false
+      }
+    } catch (error) {
+      toast.error("Failed to update framework")
+      return false
+    }
+  }
+
+  const handleUpdateControl = async (controlId: string, updates: Partial<SecurityControl>) => {
+    if (!orgId) return
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/compliance/controls/${controlId}`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        credentials: "include",
+        body: JSON.stringify(updates),
+      })
+      if (response.ok) {
+        toast.success("Security control updated successfully")
+        await fetchSecurityControls()
+        await fetchSecurityScore()
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || "Failed to update control")
+      }
+    } catch (error) {
+      toast.error("Failed to update security control")
+    }
+  }
+
+  const handleUpdatePolicy = async (policyId: string, updates: Partial<CompliancePolicy>) => {
+    if (!orgId) return
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/compliance/policies/${policyId}`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        credentials: "include",
+        body: JSON.stringify(updates),
+      })
+      if (response.ok) {
+        toast.success("Policy updated successfully")
+        await fetchPolicies()
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || "Failed to update policy")
+      }
+    } catch (error) {
+      toast.error("Failed to update policy")
+    }
+  }
+
+  const formatTimeAgo = (date: string | null) => {
+    if (!date) return "Never"
+    const now = new Date()
+    const then = new Date(date)
+    const diffMs = now.getTime() - then.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+
+    if (diffMins < 1) return "Just now"
+    if (diffMins < 60) return `${diffMins}m ago`
+    if (diffHours < 24) return `${diffHours}h ago`
+    if (diffDays < 30) return `${diffDays}d ago`
+    return then.toLocaleDateString()
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-6 p-4 md:p-6">
+        <Skeleton className="h-12 w-64" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    )
+  }
+
+  const overallScore = securityScore?.overallScore || 0
+  const frameworksCount = securityScore?.frameworksCount || frameworks.length
+  const controlsCount = securityScore?.controlsCount || Object.values(controls).flat().length
+  const criticalIssues = securityScore?.criticalIssues || 0
 
   return (
     <div className="space-y-6 p-4 md:p-6">
@@ -132,13 +414,22 @@ export function CompliancePage() {
           <p className="text-muted-foreground">Maintain regulatory compliance and security standards</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="bg-transparent">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="bg-transparent"
+            onClick={handleExportReport}
+          >
             <Download className="mr-2 h-4 w-4" />
             Export Report
           </Button>
-          <Button size="sm">
-            <Shield className="mr-2 h-4 w-4" />
-            Security Scan
+          <Button 
+            size="sm"
+            onClick={fetchAllData}
+            variant="outline"
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Refresh
           </Button>
         </div>
       </div>
@@ -147,7 +438,7 @@ export function CompliancePage() {
       <Card className="border-2 border-primary/20 bg-gradient-to-r from-primary/5 to-primary/10">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5 text-green-600" />
+            <Shield className={`h-5 w-5 ${overallScore >= 90 ? 'text-green-600' : overallScore >= 70 ? 'text-yellow-600' : 'text-red-600'}`} />
             Overall Security Score
           </CardTitle>
           <CardDescription>Your organization's security and compliance posture</CardDescription>
@@ -155,24 +446,32 @@ export function CompliancePage() {
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="text-center">
-              <div className="text-3xl font-bold text-green-600">92</div>
+              <div className={`text-3xl font-bold ${overallScore >= 90 ? 'text-green-600' : overallScore >= 70 ? 'text-yellow-600' : 'text-red-600'}`}>
+                {overallScore}
+              </div>
               <div className="text-sm text-muted-foreground">Security Score</div>
-              <div className="text-xs text-green-600 mt-1">Excellent</div>
+              <div className={`text-xs mt-1 ${overallScore >= 90 ? 'text-green-600' : overallScore >= 70 ? 'text-yellow-600' : 'text-red-600'}`}>
+                {overallScore >= 90 ? 'Excellent' : overallScore >= 70 ? 'Good' : 'Needs Improvement'}
+              </div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-blue-600">4</div>
+              <div className="text-3xl font-bold text-blue-600">{frameworksCount}</div>
               <div className="text-sm text-muted-foreground">Frameworks</div>
               <div className="text-xs text-blue-600 mt-1">Monitored</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-purple-600">173</div>
+              <div className="text-3xl font-bold text-purple-600">{controlsCount}</div>
               <div className="text-sm text-muted-foreground">Controls</div>
               <div className="text-xs text-purple-600 mt-1">Active</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-orange-600">0</div>
+              <div className={`text-3xl font-bold ${criticalIssues === 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {criticalIssues}
+              </div>
               <div className="text-sm text-muted-foreground">Critical Issues</div>
-              <div className="text-xs text-green-600 mt-1">All Clear</div>
+              <div className={`text-xs mt-1 ${criticalIssues === 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {criticalIssues === 0 ? 'All Clear' : 'Action Required'}
+              </div>
             </div>
           </div>
         </CardContent>
@@ -186,245 +485,496 @@ export function CompliancePage() {
           <TabsTrigger value="policies">Policies</TabsTrigger>
         </TabsList>
 
+        {/* Frameworks Tab */}
         <TabsContent value="frameworks" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {complianceFrameworks.map((framework, index) => (
-              <Card key={index}>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">{framework.name}</CardTitle>
-                    <Badge
-                      variant={
-                        framework.status === "compliant"
-                          ? "default"
-                          : framework.status === "in-progress"
-                            ? "secondary"
-                            : "outline"
-                      }
-                    >
-                      {framework.status}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Compliance Score</span>
-                    <span className="font-semibold">{framework.score}%</span>
-                  </div>
-                  <Progress value={framework.score} className="h-2" />
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <div className="text-muted-foreground">Requirements</div>
-                      <div className="font-medium">
-                        {framework.completed}/{framework.requirements}
+            {frameworks.length === 0 ? (
+              <div className="col-span-2 text-center py-8 text-muted-foreground">
+                No compliance frameworks configured
+              </div>
+            ) : (
+              frameworks.map((framework, index) => (
+                <Card key={index}>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">{framework.name}</CardTitle>
+                      <Badge
+                        variant={
+                          framework.status === "compliant"
+                            ? "default"
+                            : framework.status === "in-progress"
+                              ? "secondary"
+                              : "outline"
+                        }
+                      >
+                        {framework.status}
+                      </Badge>
+                    </div>
+                    <CardDescription className="mt-2">{framework.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Compliance Score</span>
+                      <span className="font-semibold">{framework.score}%</span>
+                    </div>
+                    <Progress value={framework.score} className="h-2" />
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <div className="text-muted-foreground">Requirements</div>
+                        <div className="font-medium">
+                          {framework.completed}/{framework.requirements}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground">Next Audit</div>
+                        <div className="font-medium">
+                          {framework.nextAudit ? new Date(framework.nextAudit).toLocaleDateString() : "Not scheduled"}
+                        </div>
                       </div>
                     </div>
-                    <div>
-                      <div className="text-muted-foreground">Next Audit</div>
-                      <div className="font-medium">{new Date(framework.nextAudit).toLocaleDateString()}</div>
+                    {framework.certificationNumber && (
+                      <div className="text-sm">
+                        <div className="text-muted-foreground">Certification</div>
+                        <div className="font-medium">{framework.certificationNumber}</div>
+                        {framework.auditor && (
+                          <div className="text-xs text-muted-foreground">Auditor: {framework.auditor}</div>
+                        )}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="flex-1 bg-transparent"
+                        onClick={() => {
+                          setEditingFramework(framework)
+                          setShowFrameworkDialog(true)
+                        }}
+                      >
+                        <FileText className="mr-2 h-4 w-4" />
+                        View Details
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          setEditingFramework(framework)
+                          setShowFrameworkDialog(true)
+                        }}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
                     </div>
-                  </div>
-                  <Button variant="outline" size="sm" className="w-full bg-transparent">
-                    <FileText className="mr-2 h-4 w-4" />
-                    View Details
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </div>
         </TabsContent>
 
+        {/* Security Controls Tab */}
         <TabsContent value="controls" className="space-y-4">
-          {securityControls.map((category, index) => (
-            <Card key={index}>
-              <CardHeader>
-                <CardTitle>{category.category}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {category.controls.map((control, controlIndex) => (
-                    <div key={controlIndex} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <CheckCircle className="h-5 w-5 text-green-500" />
-                        <div>
-                          <div className="font-medium">{control.name}</div>
-                          <div className="text-sm text-muted-foreground">Coverage: {control.coverage}%</div>
-                        </div>
-                      </div>
-                      <Badge variant="default">{control.status}</Badge>
-                    </div>
-                  ))}
-                </div>
+          {Object.keys(controls).length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground">
+                No security controls configured
               </CardContent>
             </Card>
-          ))}
+          ) : (
+            Object.entries(controls).map(([category, categoryControls]) => (
+              <Card key={category}>
+                <CardHeader>
+                  <CardTitle>{category}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {categoryControls.map((control) => (
+                      <div key={control.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                        <div className="flex items-center gap-3 flex-1">
+                          {control.status === "enabled" ? (
+                            <CheckCircle className="h-5 w-5 text-green-500" />
+                          ) : control.status === "partial" ? (
+                            <AlertCircle className="h-5 w-5 text-yellow-500" />
+                          ) : (
+                            <AlertCircle className="h-5 w-5 text-red-500" />
+                          )}
+                          <div className="flex-1">
+                            <div className="font-medium">{control.name}</div>
+                            <div className="text-sm text-muted-foreground">{control.description}</div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-xs text-muted-foreground">Coverage:</span>
+                              <Progress value={control.coverage} className="h-1 w-24" />
+                              <span className="text-xs font-medium">{control.coverage}%</span>
+                            </div>
+                            {control.lastTested && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                Last tested: {formatTimeAgo(control.lastTested)}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge 
+                            variant={
+                              control.status === "enabled" 
+                                ? "default" 
+                                : control.status === "partial"
+                                  ? "secondary"
+                                  : "outline"
+                            }
+                          >
+                            {control.status}
+                          </Badge>
+                          <Switch
+                            checked={control.status === "enabled"}
+                            onCheckedChange={(checked) => {
+                              handleUpdateControl(control.id, {
+                                status: checked ? "enabled" : "disabled",
+                              })
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
         </TabsContent>
 
+        {/* Audit Logs Tab */}
         <TabsContent value="audit" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Audit Trail</CardTitle>
-              <CardDescription>Complete log of system activities and user actions</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Audit Trail</CardTitle>
+                  <CardDescription>Complete log of system activities and user actions</CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={fetchAuditLogs}
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Refresh
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Timestamp</TableHead>
-                      <TableHead>User</TableHead>
-                      <TableHead>Action</TableHead>
-                      <TableHead>Resource</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>IP Address</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {auditLogs.map((log) => (
-                      <TableRow key={log.id}>
-                        <TableCell className="font-mono text-xs">{log.timestamp}</TableCell>
-                        <TableCell>{log.user}</TableCell>
-                        <TableCell>{log.action}</TableCell>
-                        <TableCell>{log.resource}</TableCell>
-                        <TableCell>
-                          <Badge variant={log.status === "success" ? "default" : "destructive"}>{log.status}</Badge>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">{log.ip}</TableCell>
+              {auditLogs.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No audit logs found
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Timestamp</TableHead>
+                        <TableHead>User</TableHead>
+                        <TableHead>Action</TableHead>
+                        <TableHead>Resource</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>IP Address</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {auditLogs.map((log) => (
+                        <TableRow key={log.id}>
+                          <TableCell className="font-mono text-xs">
+                            {new Date(log.timestamp).toLocaleString()}
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{log.user}</div>
+                              {log.userName && (
+                                <div className="text-xs text-muted-foreground">{log.userName}</div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>{log.action}</TableCell>
+                          <TableCell className="font-mono text-xs">{log.resource}</TableCell>
+                          <TableCell>
+                            <Badge variant={log.status === "success" ? "default" : "destructive"}>
+                              {log.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">{log.ip}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* Policies Tab */}
         <TabsContent value="policies" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Lock className="h-5 w-5" />
-                  Data Protection
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Data Encryption</Label>
-                    <p className="text-sm text-muted-foreground">AES-256 encryption for all data</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Data Retention</Label>
-                    <p className="text-sm text-muted-foreground">Automatic data purging after 7 years</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Data Anonymization</Label>
-                    <p className="text-sm text-muted-foreground">Remove PII from analytics</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="h-5 w-5" />
-                  Access Control
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Multi-Factor Authentication</Label>
-                    <p className="text-sm text-muted-foreground">Required for all users</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Session Timeout</Label>
-                    <p className="text-sm text-muted-foreground">Auto-logout after 30 minutes</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>IP Whitelisting</Label>
-                    <p className="text-sm text-muted-foreground">Restrict access by IP address</p>
-                  </div>
-                  <Switch />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Database className="h-5 w-5" />
-                  Backup & Recovery
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Backup Frequency</Label>
-                  <Input defaultValue="Daily at 2:00 AM UTC" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Retention Period</Label>
-                  <Input defaultValue="90 days" />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Automated Testing</Label>
-                    <p className="text-sm text-muted-foreground">Test backup integrity weekly</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Globe className="h-5 w-5" />
-                  Privacy Settings
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Cookie Consent</Label>
-                    <p className="text-sm text-muted-foreground">GDPR compliant cookie banner</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Data Subject Rights</Label>
-                    <p className="text-sm text-muted-foreground">Right to deletion and portability</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Privacy by Design</Label>
-                    <p className="text-sm text-muted-foreground">Default privacy settings</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-              </CardContent>
-            </Card>
+            {policies.length === 0 ? (
+              <div className="col-span-2 text-center py-8 text-muted-foreground">
+                No compliance policies configured
+              </div>
+            ) : (
+              policies.map((policy) => (
+                <Card key={policy.id}>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2 text-lg">
+                        {policy.category === 'data-protection' && <Database className="h-5 w-5" />}
+                        {policy.category === 'access-control' && <Lock className="h-5 w-5" />}
+                        {policy.category === 'backup-recovery' && <Database className="h-5 w-5" />}
+                        {policy.category === 'privacy' && <Globe className="h-5 w-5" />}
+                        {policy.category === 'incident-response' && <Shield className="h-5 w-5" />}
+                        {policy.name}
+                      </CardTitle>
+                      <Badge variant={policy.enabled ? "default" : "outline"}>
+                        {policy.enabled ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+                    <CardDescription>{policy.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="text-sm">
+                      <div className="text-muted-foreground mb-1">Policy Content</div>
+                      <div className="p-3 bg-muted rounded-lg text-xs font-mono">
+                        {policy.content}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <div>
+                        <div className="text-muted-foreground">Version</div>
+                        <div className="font-medium">{policy.version}</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground">Last Updated</div>
+                        <div className="font-medium">{formatTimeAgo(policy.lastUpdated)}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label>Enabled</Label>
+                        <p className="text-xs text-muted-foreground">Policy is active</p>
+                      </div>
+                      <Switch
+                        checked={policy.enabled}
+                        onCheckedChange={(checked) => {
+                          handleUpdatePolicy(policy.id, { enabled: checked })
+                        }}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Framework Details Dialog */}
+      <Dialog open={showFrameworkDialog} onOpenChange={setShowFrameworkDialog}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              {editingFramework?.name || "Framework Details"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingFramework?.description || "View and update compliance framework details"}
+            </DialogDescription>
+          </DialogHeader>
+
+          {editingFramework && (
+            <div className="space-y-6 py-4">
+              {/* Current Status */}
+              <div className="grid grid-cols-2 gap-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Compliance Score</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold">{editingFramework.score}%</div>
+                    <Progress value={editingFramework.score} className="mt-2" />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Requirements</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold">
+                      {editingFramework.completed}/{editingFramework.requirements}
+                    </div>
+                    <div className="text-sm text-muted-foreground mt-2">
+                      {Math.round((editingFramework.completed / editingFramework.requirements) * 100)}% Complete
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Update Form */}
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <select
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={editingFramework.status}
+                      onChange={(e) => setEditingFramework({
+                        ...editingFramework,
+                        status: e.target.value as any
+                      })}
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="in-progress">In Progress</option>
+                      <option value="compliant">Compliant</option>
+                      <option value="non-compliant">Non-Compliant</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Completed Requirements</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max={editingFramework.requirements}
+                      value={editingFramework.completed}
+                      onChange={(e) => {
+                        const completed = parseInt(e.target.value) || 0
+                        const score = editingFramework.requirements > 0
+                          ? Math.round((completed / editingFramework.requirements) * 100)
+                          : 0
+                        setEditingFramework({
+                          ...editingFramework,
+                          completed,
+                          score
+                        })
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Last Audit Date</Label>
+                    <Input
+                      type="date"
+                      value={editingFramework.lastAudit ? new Date(editingFramework.lastAudit).toISOString().split('T')[0] : ''}
+                      onChange={(e) => setEditingFramework({
+                        ...editingFramework,
+                        lastAudit: e.target.value ? new Date(e.target.value).toISOString() : null
+                      })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Next Audit Date</Label>
+                    <Input
+                      type="date"
+                      value={editingFramework.nextAudit ? new Date(editingFramework.nextAudit).toISOString().split('T')[0] : ''}
+                      onChange={(e) => setEditingFramework({
+                        ...editingFramework,
+                        nextAudit: e.target.value ? new Date(e.target.value).toISOString() : null
+                      })}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Certification Number</Label>
+                    <Input
+                      value={editingFramework.certificationNumber || ''}
+                      onChange={(e) => setEditingFramework({
+                        ...editingFramework,
+                        certificationNumber: e.target.value || null
+                      })}
+                      placeholder="Enter certification number"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Auditor</Label>
+                    <Input
+                      value={editingFramework.auditor || ''}
+                      onChange={(e) => setEditingFramework({
+                        ...editingFramework,
+                        auditor: e.target.value || null
+                      })}
+                      placeholder="Enter auditor name"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Framework Requirements Info */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">Framework Information</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <div>
+                    <span className="font-medium">Type:</span> {editingFramework.type.toUpperCase()}
+                  </div>
+                  <div>
+                    <span className="font-medium">Total Requirements:</span> {editingFramework.requirements}
+                  </div>
+                  <div>
+                    <span className="font-medium">Description:</span> {editingFramework.description}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowFrameworkDialog(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!editingFramework || !orgId) return
+                setUpdatingFramework(true)
+                try {
+                  const success = await handleUpdateFramework(editingFramework.type, {
+                    status: editingFramework.status,
+                    completed: editingFramework.completed,
+                    score: editingFramework.score,
+                    lastAudit: editingFramework.lastAudit,
+                    nextAudit: editingFramework.nextAudit,
+                    certificationNumber: editingFramework.certificationNumber,
+                    auditor: editingFramework.auditor,
+                  })
+                  if (success) {
+                    setShowFrameworkDialog(false)
+                  }
+                } catch (error) {
+                  console.error("Failed to update framework:", error)
+                } finally {
+                  setUpdatingFramework(false)
+                }
+              }}
+              disabled={updatingFramework}
+            >
+              {updatingFramework ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="mr-2 h-4 w-4" />
+                  Save Changes
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

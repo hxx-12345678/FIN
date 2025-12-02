@@ -36,6 +36,7 @@ import transactionRoutes from './routes/transaction.routes';
 import boardReportingRoutes from './routes/board-reporting.routes';
 import userManagementRoutes from './routes/user-management.routes';
 import notificationRoutes from './routes/notification.routes';
+import complianceRoutes from './routes/compliance.routes';
 
 dotenv.config();
 
@@ -150,6 +151,7 @@ app.use('/api/v1', transactionRoutes);
 app.use('/api/v1', boardReportingRoutes);
 app.use('/api/v1', userManagementRoutes);
 app.use('/api/v1', notificationRoutes);
+app.use('/api/v1', complianceRoutes);
 app.use('/api/v1/debug', debugRoutes);
 
 // 404 handler
