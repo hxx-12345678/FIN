@@ -71,6 +71,8 @@ model Org {
   quota            OrgQuota?
   realtimeSimulations RealtimeSimulation[]
   boardReportSchedules BoardReportSchedule[]
+  notifications    Notification[]
+  notificationChannels NotificationChannel[]
 
   @@map("orgs")
 }
@@ -457,6 +459,45 @@ model AICFOPlan {
   @@index([orgId])
   @@index([status])
   @@map("ai_cfo_plans")
+}
+
+model Notification {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org         Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId       String    @db.Uuid
+  userId      String?   @db.Uuid // null for org-wide notifications
+  type        String    // alert|success|warning|info
+  title       String
+  message     String
+  category    String    // financial|growth|reporting|system
+  priority    String    // high|medium|low
+  read        Boolean   @default(false)
+  readAt      DateTime? @map("read_at") @db.Timestamptz(6)
+  metadata    Json?     // Additional data
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([orgId])
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model NotificationChannel {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org         Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId       String   @db.Uuid
+  userId      String?  @db.Uuid // null for org-wide channels
+  type        String   // email|slack|sms|in-app
+  enabled     Boolean  @default(true)
+  configJson  Json?    @map("config_json") // webhook URL, phone number, etc.
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([orgId, userId, type], name: "notification_channel_unique")
+  @@index([orgId])
+  @@index([userId])
+  @@map("notification_channels")
 }
 
 model OrgSettings {

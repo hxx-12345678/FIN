@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Switch } from "@/components/ui/switch"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   Users,
   UserPlus,
@@ -24,6 +26,8 @@ import {
   Eye,
   Lock,
   Unlock,
+  Loader2,
+  AlertCircle,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -33,129 +37,514 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { PermissionMatrix } from "./auth/permission-matrix"
+import { toast } from "sonner"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
-const teamMembers = [
-  {
-    id: 1,
-    name: "John Doe",
-    email: "john@company.com",
-    role: "Owner",
-    department: "Executive",
-    status: "active",
-    lastActive: "2 minutes ago",
-    joinDate: "2023-01-15",
-    permissions: ["all"],
-    avatar: "/placeholder.svg?height=40&width=40",
-  },
-  {
-    id: 2,
-    name: "Sarah Wilson",
-    email: "sarah@company.com",
-    role: "Admin",
-    department: "Finance",
-    status: "active",
-    lastActive: "1 hour ago",
-    joinDate: "2023-02-20",
-    permissions: ["read", "write", "export"],
-    avatar: "/placeholder.svg?height=40&width=40",
-  },
-  {
-    id: 3,
-    name: "Mike Chen",
-    email: "mike@company.com",
-    role: "Editor",
-    department: "Finance",
-    status: "active",
-    lastActive: "3 hours ago",
-    joinDate: "2023-03-10",
-    permissions: ["read", "write"],
-    avatar: "/placeholder.svg?height=40&width=40",
-  },
-  {
-    id: 4,
-    name: "Emily Rodriguez",
-    email: "emily@company.com",
-    role: "Viewer",
-    department: "Operations",
-    status: "inactive",
-    lastActive: "2 days ago",
-    joinDate: "2023-04-05",
-    permissions: ["read"],
-    avatar: "/placeholder.svg?height=40&width=40",
-  },
-  {
-    id: 5,
-    name: "David Kim",
-    email: "david@company.com",
-    role: "Editor",
-    department: "Marketing",
-    status: "pending",
-    lastActive: "Never",
-    joinDate: "2024-06-15",
-    permissions: ["read", "write"],
-    avatar: "/placeholder.svg?height=40&width=40",
-  },
-]
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
 
-const rolePermissions = {
-  Owner: {
-    description: "Full access to all features and settings",
-    permissions: ["Read", "Write", "Export", "Admin", "Billing", "User Management"],
-    color: "bg-purple-100 text-purple-800",
-  },
-  Admin: {
-    description: "Manage users and access most features",
-    permissions: ["Read", "Write", "Export", "User Management"],
-    color: "bg-blue-100 text-blue-800",
-  },
-  Editor: {
-    description: "Create and edit financial models and reports",
-    permissions: ["Read", "Write", "Export"],
-    color: "bg-green-100 text-green-800",
-  },
-  Viewer: {
-    description: "View-only access to dashboards and reports",
-    permissions: ["Read"],
-    color: "bg-gray-100 text-gray-800",
-  },
+// Helper function to get auth token
+const getAuthToken = (): string | null => {
+  if (typeof window === "undefined") return null
+  // Try localStorage first
+  const token = localStorage.getItem("auth-token")
+  if (token) return token
+  // Try cookies
+  const cookies = document.cookie.split("; ")
+  const authCookie = cookies.find((row) => row.startsWith("auth-token="))
+  if (authCookie) {
+    return authCookie.split("=")[1]
+  }
+  return null
 }
 
-const invitationHistory = [
-  {
-    id: 1,
-    email: "alex@company.com",
-    role: "Editor",
-    invitedBy: "John Doe",
-    invitedAt: "2024-06-20",
-    status: "pending",
-    expiresAt: "2024-06-27",
-  },
-  {
-    id: 2,
-    email: "lisa@company.com",
-    role: "Viewer",
-    invitedBy: "Sarah Wilson",
-    invitedAt: "2024-06-18",
-    status: "accepted",
-    expiresAt: "2024-06-25",
-  },
-  {
-    id: 3,
-    email: "tom@company.com",
-    role: "Admin",
-    invitedBy: "John Doe",
-    invitedAt: "2024-06-15",
-    status: "expired",
-    expiresAt: "2024-06-22",
-  },
-]
+// Helper function to get auth headers
+const getAuthHeaders = (): HeadersInit => {
+  const token = getAuthToken()
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  }
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`
+  }
+  return headers
+}
+
+interface TeamMember {
+  id: string
+  name: string | null
+  email: string
+  role: string
+  status: "active" | "inactive" | "pending"
+  lastActive: Date | null
+  joinDate: Date
+}
+
+interface Invitation {
+  id: string
+  email: string
+  role: string
+  invitedBy: string | null
+  invitedAt: Date
+  status: "pending" | "accepted" | "expired"
+  expiresAt: Date
+}
+
+interface ActivityLogEntry {
+  id: string
+  user: string
+  action: string
+  timestamp: Date
+  type: "permission" | "invite" | "role" | "login" | "system" | "user"
+}
+
+interface Role {
+  id: string
+  name: string
+  description: string
+  permissions: string[]
+  isDefault: boolean
+  userCount: number
+}
+
+// Map backend roles to frontend display names
+const roleDisplayMap: Record<string, string> = {
+  admin: "Admin",
+  finance: "Editor",
+  viewer: "Viewer",
+}
+
+const roleColorMap: Record<string, string> = {
+  admin: "bg-blue-100 text-blue-800",
+  finance: "bg-green-100 text-green-800",
+  viewer: "bg-gray-100 text-gray-800",
+}
+
+function formatTimeAgo(date: Date | string | null): string {
+  if (!date) return "Never"
+  try {
+    const dateObj = date instanceof Date ? date : new Date(date)
+    if (isNaN(dateObj.getTime())) return "Never"
+    
+    const now = new Date()
+    const diffMs = now.getTime() - dateObj.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+
+    if (diffMins < 1) return "Just now"
+    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? "s" : ""} ago`
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`
+    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`
+    return dateObj.toLocaleDateString()
+  } catch (error) {
+    return "Unknown"
+  }
+}
 
 export function UserManagement() {
+  const [orgId, setOrgId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [selectedRole, setSelectedRole] = useState("all")
   const [inviteEmail, setInviteEmail] = useState("")
-  const [inviteRole, setInviteRole] = useState("Viewer")
+  const [inviteRole, setInviteRole] = useState("viewer")
+  const [inviteMessage, setInviteMessage] = useState("")
+  const [showInviteDialog, setShowInviteDialog] = useState(false)
+  const [showRoleDialog, setShowRoleDialog] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<TeamMember | null>(null)
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
+  const [invitations, setInvitations] = useState<Invitation[]>([])
+  const [activities, setActivities] = useState<ActivityLogEntry[]>([])
+  const [roles, setRoles] = useState<Role[]>([])
 
-  const filteredMembers = teamMembers.filter((member) => {
+  // Get orgId from user context or localStorage
+  useEffect(() => {
+    let mounted = true
+    const fetchOrgId = async () => {
+      try {
+        setError(null)
+        // Try localStorage first
+        const storedOrgId = localStorage.getItem("orgId")
+        if (storedOrgId) {
+          if (mounted) {
+            setOrgId(storedOrgId)
+          }
+          return
+        }
+
+        // Fetch from API
+        const token = getAuthToken()
+        const response = await fetch(`${API_BASE_URL}/auth/me`, { 
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        })
+        if (response.ok) {
+          const data = await response.json()
+          if (data.orgs && data.orgs.length > 0) {
+            const primaryOrgId = data.orgs[0].id
+            localStorage.setItem("orgId", primaryOrgId)
+            if (mounted) {
+              setOrgId(primaryOrgId)
+            }
+          } else {
+            if (mounted) {
+              setLoading(false)
+              setError("No organization found. Please create or join an organization.")
+            }
+          }
+        } else {
+          if (mounted) {
+            setLoading(false)
+            setError("Failed to load organization. Please try refreshing the page.")
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch orgId:", error)
+        if (mounted) {
+          setLoading(false)
+          setError("Failed to connect to server. Please check your connection.")
+        }
+      }
+    }
+    fetchOrgId()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  // Fetch all data when orgId is available
+  useEffect(() => {
+    if (orgId) {
+      fetchAllData()
+    }
+  }, [orgId])
+
+  const fetchAllData = async () => {
+    if (!orgId) {
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    setError(null)
+    try {
+      await Promise.all([
+        fetchTeamMembers(),
+        fetchInvitations(),
+        fetchActivityLog(),
+        fetchRoles(),
+      ])
+    } catch (error) {
+      console.error("Failed to fetch data:", error)
+      setError("Failed to load some data. Please try refreshing.")
+      toast.error("Failed to load data")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchTeamMembers = async () => {
+    if (!orgId) return
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/users`, {
+        credentials: "include",
+        headers: getAuthHeaders(),
+      })
+      if (response.ok) {
+        const data = await response.json()
+        const members = (data.data || []).map((member: any) => {
+          try {
+            return {
+              ...member,
+              lastActive: member.lastActive ? new Date(member.lastActive) : null,
+              joinDate: member.joinDate ? new Date(member.joinDate) : new Date(),
+            }
+          } catch (e) {
+            return {
+              ...member,
+              lastActive: null,
+              joinDate: new Date(),
+            }
+          }
+        })
+        setTeamMembers(members)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        const errorMessage = errorData.error?.message || errorData.message || response.statusText
+        console.error("Failed to fetch team members:", errorMessage)
+        if (response.status === 401) {
+          toast.error("Authentication failed. Please log in again.")
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch team members:", error)
+    }
+  }
+
+  const fetchInvitations = async () => {
+    if (!orgId) return
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/invitations`, {
+        credentials: "include",
+        headers: getAuthHeaders(),
+      })
+      if (response.ok) {
+        const data = await response.json()
+        const invs = (data.data || []).map((inv: any) => {
+          try {
+            return {
+              ...inv,
+              invitedAt: inv.invitedAt ? new Date(inv.invitedAt) : new Date(),
+              expiresAt: inv.expiresAt ? new Date(inv.expiresAt) : new Date(),
+            }
+          } catch (e) {
+            return {
+              ...inv,
+              invitedAt: new Date(),
+              expiresAt: new Date(),
+            }
+          }
+        })
+        setInvitations(invs)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        const errorMessage = errorData.error?.message || errorData.message || response.statusText
+        console.error("Failed to fetch invitations:", errorMessage)
+        if (response.status === 401) {
+          toast.error("Authentication failed. Please log in again.")
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch invitations:", error)
+    }
+  }
+
+  const fetchActivityLog = async () => {
+    if (!orgId) return
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/activity?limit=50`, {
+        credentials: "include",
+        headers: getAuthHeaders(),
+      })
+      if (response.ok) {
+        const data = await response.json()
+        const acts = (data.data || []).map((act: any) => {
+          try {
+            return {
+              ...act,
+              timestamp: act.timestamp ? new Date(act.timestamp) : new Date(),
+            }
+          } catch (e) {
+            return {
+              ...act,
+              timestamp: new Date(),
+            }
+          }
+        })
+        setActivities(acts)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        const errorMessage = errorData.error?.message || errorData.message || response.statusText
+        console.error("Failed to fetch activity log:", errorMessage)
+        if (response.status === 401) {
+          toast.error("Authentication failed. Please log in again.")
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch activity log:", error)
+    }
+  }
+
+  const fetchRoles = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/roles`, {
+        credentials: "include",
+        headers: getAuthHeaders(),
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setRoles(data.roles || [])
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        const errorMessage = errorData.error?.message || errorData.message || response.statusText
+        console.error("Failed to fetch roles:", errorMessage)
+        if (response.status === 401) {
+          toast.error("Authentication failed. Please log in again.")
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch roles:", error)
+    }
+  }
+
+  const handleInviteUser = async () => {
+    if (!orgId || !inviteEmail) return
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/users/invite`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        credentials: "include",
+        body: JSON.stringify({
+          email: inviteEmail,
+          role: inviteRole,
+          message: inviteMessage || undefined,
+        }),
+      })
+
+      if (response.ok) {
+        toast.success("Invitation sent successfully")
+        setInviteEmail("")
+        setInviteMessage("")
+        setShowInviteDialog(false)
+        fetchInvitations()
+        fetchTeamMembers()
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || "Failed to send invitation")
+      }
+    } catch (error) {
+      toast.error("Failed to send invitation")
+    }
+  }
+
+  const handleUpdateRole = async (userId: string, newRole: string) => {
+    if (!orgId) return
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/users/${userId}/role`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        credentials: "include",
+        body: JSON.stringify({ role: newRole }),
+      })
+
+      if (response.ok) {
+        toast.success("Role updated successfully")
+        setShowRoleDialog(false)
+        setSelectedUser(null)
+        fetchTeamMembers()
+        fetchActivityLog()
+      } else {
+        const error = await response.json()
+        const errorMessage = error.error?.message || error.message || "Failed to update role"
+        toast.error(errorMessage)
+        // If it's the "last admin" error, show a more helpful message
+        if (errorMessage.includes("last admin")) {
+          toast.error("Cannot remove the last admin. Please assign another admin role first.")
+        }
+      }
+    } catch (error) {
+      toast.error("Failed to update role")
+    }
+  }
+
+  const handleRemoveUser = async (userId: string) => {
+    if (!orgId) return
+    if (!confirm("Are you sure you want to remove this user?")) return
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/users/${userId}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
+
+      if (response.ok) {
+        toast.success("User removed successfully")
+        fetchTeamMembers()
+        fetchActivityLog()
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || "Failed to remove user")
+      }
+    } catch (error) {
+      toast.error("Failed to remove user")
+    }
+  }
+
+  const handleToggleStatus = async (userId: string, isActive: boolean) => {
+    if (!orgId) return
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/users/${userId}/status`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        credentials: "include",
+        body: JSON.stringify({ isActive }),
+      })
+
+      if (response.ok) {
+        toast.success(`User ${isActive ? "activated" : "deactivated"} successfully`)
+        fetchTeamMembers()
+        fetchActivityLog()
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || "Failed to update user status")
+      }
+    } catch (error) {
+      toast.error("Failed to update user status")
+    }
+  }
+
+  const handleResendInvitation = async (invitationId: string) => {
+    if (!orgId) return
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/orgs/${orgId}/invitations/${invitationId}/resend`,
+        {
+          method: "POST",
+          headers: getAuthHeaders(),
+          credentials: "include",
+        }
+      )
+
+      if (response.ok) {
+        toast.success("Invitation resent successfully")
+        fetchInvitations()
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || "Failed to resend invitation")
+      }
+    } catch (error) {
+      toast.error("Failed to resend invitation")
+    }
+  }
+
+  const handleCancelInvitation = async (invitationId: string) => {
+    if (!orgId) return
+    if (!confirm("Are you sure you want to cancel this invitation?")) return
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/invitations/${invitationId}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
+
+      if (response.ok) {
+        toast.success("Invitation cancelled successfully")
+        fetchInvitations()
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || "Failed to cancel invitation")
+      }
+    } catch (error) {
+      toast.error("Failed to cancel invitation")
+    }
+  }
+
+  const filteredMembers = (teamMembers || []).filter((member) => {
     if (selectedRole === "all") return true
     return member.role === selectedRole
   })
@@ -175,17 +564,66 @@ export function UserManagement() {
 
   const getRoleIcon = (role: string) => {
     switch (role) {
-      case "Owner":
-        return <Crown className="h-4 w-4 text-purple-600" />
-      case "Admin":
+      case "admin":
         return <Shield className="h-4 w-4 text-blue-600" />
-      case "Editor":
+      case "finance":
         return <Edit className="h-4 w-4 text-green-600" />
-      case "Viewer":
+      case "viewer":
         return <Eye className="h-4 w-4 text-gray-600" />
       default:
         return <Users className="h-4 w-4" />
     }
+  }
+
+  const activeUsers = (teamMembers || []).filter((m) => m?.status === "active").length
+  const pendingInvites = (invitations || []).filter((i) => i?.status === "pending").length
+  const adminUsers = (teamMembers || []).filter((m) => m?.role === "admin").length
+
+  if (loading) {
+    return (
+      <div className="space-y-6 p-4 md:p-6">
+        <Skeleton className="h-10 w-64" />
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-24" />
+          ))}
+        </div>
+        <Skeleton className="h-96" />
+      </div>
+    )
+  }
+
+  if (error && !orgId) {
+    return (
+      <div className="space-y-6 p-4 md:p-6">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold">User Management</h1>
+          <p className="text-muted-foreground">Manage team members, roles, and permissions</p>
+        </div>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+        <Button onClick={() => window.location.reload()}>Retry</Button>
+      </div>
+    )
+  }
+
+  if (!orgId && !loading) {
+    return (
+      <div className="space-y-6 p-4 md:p-6">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold">User Management</h1>
+          <p className="text-muted-foreground">Manage team members, roles, and permissions</p>
+        </div>
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            No organization found. Please create or join an organization to manage users.
+          </AlertDescription>
+        </Alert>
+      </div>
+    )
   }
 
   return (
@@ -197,11 +635,7 @@ export function UserManagement() {
           <p className="text-muted-foreground">Manage team members, roles, and permissions</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="bg-transparent">
-            <Settings className="mr-2 h-4 w-4" />
-            Role Settings
-          </Button>
-          <Button size="sm">
+          <Button variant="outline" size="sm" onClick={() => setShowInviteDialog(true)}>
             <UserPlus className="mr-2 h-4 w-4" />
             Invite User
           </Button>
@@ -215,7 +649,7 @@ export function UserManagement() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Total Users</p>
-                <p className="text-2xl font-bold">{teamMembers.length}</p>
+                <p className="text-2xl font-bold">{teamMembers?.length || 0}</p>
               </div>
               <Users className="h-8 w-8 text-blue-500" />
             </div>
@@ -226,7 +660,7 @@ export function UserManagement() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Active Users</p>
-                <p className="text-2xl font-bold">{teamMembers.filter((m) => m.status === "active").length}</p>
+                <p className="text-2xl font-bold">{activeUsers}</p>
               </div>
               <Shield className="h-8 w-8 text-green-500" />
             </div>
@@ -237,7 +671,7 @@ export function UserManagement() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Pending Invites</p>
-                <p className="text-2xl font-bold">{teamMembers.filter((m) => m.status === "pending").length}</p>
+                <p className="text-2xl font-bold">{pendingInvites}</p>
               </div>
               <Mail className="h-8 w-8 text-yellow-500" />
             </div>
@@ -248,9 +682,7 @@ export function UserManagement() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Admin Users</p>
-                <p className="text-2xl font-bold">
-                  {teamMembers.filter((m) => m.role === "Admin" || m.role === "Owner").length}
-                </p>
+                <p className="text-2xl font-bold">{adminUsers}</p>
               </div>
               <Crown className="h-8 w-8 text-purple-500" />
             </div>
@@ -282,10 +714,9 @@ export function UserManagement() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Roles</SelectItem>
-                      <SelectItem value="Owner">Owner</SelectItem>
-                      <SelectItem value="Admin">Admin</SelectItem>
-                      <SelectItem value="Editor">Editor</SelectItem>
-                      <SelectItem value="Viewer">Viewer</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="finance">Editor</SelectItem>
+                      <SelectItem value="viewer">Viewer</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -298,84 +729,104 @@ export function UserManagement() {
                     <TableRow>
                       <TableHead>User</TableHead>
                       <TableHead>Role</TableHead>
-                      <TableHead>Department</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Last Active</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredMembers.map((member) => (
-                      <TableRow key={member.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-8 w-8">
-                              <AvatarImage src={member.avatar || "/placeholder.svg"} />
-                              <AvatarFallback>
-                                {member.name
-                                  .split(" ")
-                                  .map((n) => n[0])
-                                  .join("")}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <div className="font-medium">{member.name}</div>
-                              <div className="text-sm text-muted-foreground">{member.email}</div>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {getRoleIcon(member.role)}
-                            <Badge className={rolePermissions[member.role as keyof typeof rolePermissions]?.color}>
-                              {member.role}
-                            </Badge>
-                          </div>
-                        </TableCell>
-                        <TableCell>{member.department}</TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(member.status)}>{member.status}</Badge>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{member.lastActive}</TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem>
-                                <Edit className="mr-2 h-4 w-4" />
-                                Edit User
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Shield className="mr-2 h-4 w-4" />
-                                Change Role
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                {member.status === "active" ? (
-                                  <>
-                                    <Lock className="mr-2 h-4 w-4" />
-                                    Deactivate
-                                  </>
-                                ) : (
-                                  <>
-                                    <Unlock className="mr-2 h-4 w-4" />
-                                    Activate
-                                  </>
-                                )}
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem className="text-red-600">
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Remove User
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                    {filteredMembers.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground">
+                          No team members found
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      filteredMembers.map((member) => {
+                        if (!member) return null
+                        return (
+                          <TableRow key={member.id}>
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                <Avatar className="h-8 w-8">
+                                  <AvatarFallback>
+                                    {(member.name || member.email)
+                                      .split(" ")
+                                      .map((n) => n[0])
+                                      .join("")
+                                      .toUpperCase()
+                                      .slice(0, 2)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <div className="font-medium">{member.name || member.email}</div>
+                                  <div className="text-sm text-muted-foreground">{member.email}</div>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                {getRoleIcon(member.role)}
+                                <Badge className={roleColorMap[member.role] || "bg-gray-100 text-gray-800"}>
+                                  {roleDisplayMap[member.role] || member.role}
+                                </Badge>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={getStatusColor(member.status)}>{member.status}</Badge>
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {formatTimeAgo(member.lastActive)}
+                            </TableCell>
+                            <TableCell>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSelectedUser(member)
+                                      setShowRoleDialog(true)
+                                    }}
+                                  >
+                                    <Shield className="mr-2 h-4 w-4" />
+                                    Change Role
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      handleToggleStatus(member.id, member.status !== "active")
+                                    }
+                                  >
+                                    {member.status === "active" ? (
+                                      <>
+                                        <Lock className="mr-2 h-4 w-4" />
+                                        Deactivate
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Unlock className="mr-2 h-4 w-4" />
+                                        Activate
+                                      </>
+                                    )}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    className="text-red-600"
+                                    onClick={() => handleRemoveUser(member.id)}
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Remove User
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })
+                    )}
                   </TableBody>
                 </Table>
               </div>
@@ -385,39 +836,50 @@ export function UserManagement() {
 
         <TabsContent value="roles" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {Object.entries(rolePermissions).map(([role, details]) => (
-              <Card key={role}>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    {getRoleIcon(role)}
-                    {role}
-                  </CardTitle>
-                  <CardDescription>{details.description}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div>
-                      <h4 className="font-medium mb-2">Permissions:</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {details.permissions.map((permission) => (
-                          <Badge key={permission} variant="outline">
-                            {permission}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between pt-2">
-                      <span className="text-sm text-muted-foreground">
-                        {teamMembers.filter((m) => m.role === role).length} users
-                      </span>
-                      <Button variant="outline" size="sm" className="bg-transparent">
-                        Edit Role
-                      </Button>
-                    </div>
-                  </div>
+            {(!roles || roles.length === 0) ? (
+              <Card>
+                <CardContent className="p-6 text-center text-muted-foreground">
+                  No roles found
                 </CardContent>
               </Card>
-            ))}
+            ) : (
+              roles.map((role) => {
+                if (!role) return null
+                return (
+                  <Card key={role.id}>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        {getRoleIcon(role.id)}
+                        {role.name}
+                      </CardTitle>
+                      <CardDescription>{role.description}</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        <div>
+                          <h4 className="font-medium mb-2">Permissions:</h4>
+                          <div className="flex flex-wrap gap-2">
+                            {role.permissions.map((permission) => (
+                              <Badge key={permission} variant="outline">
+                                {permission.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between pt-2">
+                          <span className="text-sm text-muted-foreground">{role.userCount} users</span>
+                          {!role.isDefault && (
+                            <Button variant="outline" size="sm" className="bg-transparent">
+                              Edit Role
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })
+            )}
           </div>
         </TabsContent>
 
@@ -446,23 +908,22 @@ export function UserManagement() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Viewer">Viewer</SelectItem>
-                      <SelectItem value="Editor">Editor</SelectItem>
-                      <SelectItem value="Admin">Admin</SelectItem>
+                      <SelectItem value="viewer">Viewer</SelectItem>
+                      <SelectItem value="finance">Editor</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="invite-message">Personal Message (Optional)</Label>
-                  <Input id="invite-message" placeholder="Welcome to our team!" />
+                  <Input
+                    id="invite-message"
+                    placeholder="Welcome to our team!"
+                    value={inviteMessage}
+                    onChange={(e) => setInviteMessage(e.target.value)}
+                  />
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Switch id="send-welcome" defaultChecked />
-                  <Label htmlFor="send-welcome" className="text-sm">
-                    Send welcome email with getting started guide
-                  </Label>
-                </div>
-                <Button className="w-full" disabled={!inviteEmail}>
+                <Button className="w-full" disabled={!inviteEmail} onClick={handleInviteUser}>
                   <Mail className="mr-2 h-4 w-4" />
                   Send Invitation
                 </Button>
@@ -476,52 +937,81 @@ export function UserManagement() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {invitationHistory.map((invitation) => (
-                    <div key={invitation.id} className="p-3 border rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <div>
-                          <div className="font-medium">{invitation.email}</div>
-                          <div className="text-sm text-muted-foreground">
-                            Invited by {invitation.invitedBy} • {invitation.invitedAt}
+                  {(!invitations || invitations.length === 0) ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No invitations sent yet
+                    </p>
+                  ) : (
+                    invitations.map((invitation) => {
+                      if (!invitation) return null
+                      return (
+                        <div key={invitation.id} className="p-3 border rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <div>
+                              <div className="font-medium">{invitation.email}</div>
+                              <div className="text-sm text-muted-foreground">
+                                {invitation.invitedBy && `Invited by ${invitation.invitedBy} • `}
+                                {invitation.invitedAt 
+                                  ? (invitation.invitedAt instanceof Date 
+                                      ? invitation.invitedAt.toLocaleDateString()
+                                      : new Date(invitation.invitedAt).toLocaleDateString())
+                                  : "Unknown date"}
+                              </div>
+                            </div>
+                            <Badge
+                              className={
+                                invitation.status === "accepted"
+                                  ? "bg-green-100 text-green-800"
+                                  : invitation.status === "pending"
+                                    ? "bg-yellow-100 text-yellow-800"
+                                    : "bg-red-100 text-red-800"
+                              }
+                            >
+                              {invitation.status}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              {getRoleIcon(invitation.role)}
+                              <span className="text-sm">{roleDisplayMap[invitation.role] || invitation.role}</span>
+                            </div>
+                            <div className="flex gap-1">
+                              {invitation.status === "pending" && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="bg-transparent"
+                                    onClick={() => handleResendInvitation(invitation.id)}
+                                  >
+                                    Resend
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="bg-transparent"
+                                    onClick={() => handleCancelInvitation(invitation.id)}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </>
+                              )}
+                              {invitation.status === "expired" && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="bg-transparent"
+                                  onClick={() => handleResendInvitation(invitation.id)}
+                                >
+                                  Resend
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         </div>
-                        <Badge
-                          className={
-                            invitation.status === "accepted"
-                              ? "bg-green-100 text-green-800"
-                              : invitation.status === "pending"
-                                ? "bg-yellow-100 text-yellow-800"
-                                : "bg-red-100 text-red-800"
-                          }
-                        >
-                          {invitation.status}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          {getRoleIcon(invitation.role)}
-                          <span className="text-sm">{invitation.role}</span>
-                        </div>
-                        <div className="flex gap-1">
-                          {invitation.status === "pending" && (
-                            <>
-                              <Button size="sm" variant="outline" className="bg-transparent">
-                                Resend
-                              </Button>
-                              <Button size="sm" variant="outline" className="bg-transparent">
-                                Cancel
-                              </Button>
-                            </>
-                          )}
-                          {invitation.status === "expired" && (
-                            <Button size="sm" variant="outline" className="bg-transparent">
-                              Resend
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                      )
+                    })
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -540,59 +1030,129 @@ export function UserManagement() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {[
-                  {
-                    user: "Sarah Wilson",
-                    action: "Updated financial model permissions",
-                    timestamp: "2 hours ago",
-                    type: "permission",
-                  },
-                  {
-                    user: "John Doe",
-                    action: "Invited new user alex@company.com",
-                    timestamp: "4 hours ago",
-                    type: "invite",
-                  },
-                  {
-                    user: "Mike Chen",
-                    action: "Changed role from Viewer to Editor",
-                    timestamp: "1 day ago",
-                    type: "role",
-                  },
-                  {
-                    user: "Emily Rodriguez",
-                    action: "Last login from 192.168.1.100",
-                    timestamp: "2 days ago",
-                    type: "login",
-                  },
-                  {
-                    user: "System",
-                    action: "Automated backup completed",
-                    timestamp: "3 days ago",
-                    type: "system",
-                  },
-                ].map((activity, index) => (
-                  <div key={index} className="flex items-start gap-3 p-3 border rounded-lg">
-                    <div className="flex-shrink-0 mt-1">
-                      {activity.type === "permission" && <Shield className="h-4 w-4 text-blue-500" />}
-                      {activity.type === "invite" && <Mail className="h-4 w-4 text-green-500" />}
-                      {activity.type === "role" && <Edit className="h-4 w-4 text-purple-500" />}
-                      {activity.type === "login" && <Users className="h-4 w-4 text-orange-500" />}
-                      {activity.type === "system" && <Settings className="h-4 w-4 text-gray-500" />}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm">
-                        <span className="font-medium">{activity.user}</span> {activity.action}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{activity.timestamp}</p>
-                    </div>
-                  </div>
-                ))}
+                {(!activities || activities.length === 0) ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">No activity found</p>
+                ) : (
+                  activities.map((activity) => {
+                    if (!activity) return null
+                    return (
+                      <div key={activity.id} className="flex items-start gap-3 p-3 border rounded-lg">
+                        <div className="flex-shrink-0 mt-1">
+                          {activity.type === "permission" && <Shield className="h-4 w-4 text-blue-500" />}
+                          {activity.type === "invite" && <Mail className="h-4 w-4 text-green-500" />}
+                          {activity.type === "role" && <Edit className="h-4 w-4 text-purple-500" />}
+                          {activity.type === "login" && <Users className="h-4 w-4 text-orange-500" />}
+                          {activity.type === "system" && <Settings className="h-4 w-4 text-gray-500" />}
+                          {activity.type === "user" && <UserPlus className="h-4 w-4 text-indigo-500" />}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm">
+                            <span className="font-medium">{activity.user}</span> {activity.action}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatTimeAgo(activity.timestamp)}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
               </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Invite Dialog */}
+      <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Invite User</DialogTitle>
+            <DialogDescription>Send an invitation to join your organization</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="dialog-invite-email">Email Address</Label>
+              <Input
+                id="dialog-invite-email"
+                type="email"
+                placeholder="colleague@company.com"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="dialog-invite-role">Role</Label>
+              <Select value={inviteRole} onValueChange={setInviteRole}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="viewer">Viewer</SelectItem>
+                  <SelectItem value="finance">Editor</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="dialog-invite-message">Personal Message (Optional)</Label>
+              <Input
+                id="dialog-invite-message"
+                placeholder="Welcome to our team!"
+                value={inviteMessage}
+                onChange={(e) => setInviteMessage(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowInviteDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleInviteUser} disabled={!inviteEmail}>
+              Send Invitation
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Role Change Dialog */}
+      <Dialog open={showRoleDialog} onOpenChange={setShowRoleDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Role</DialogTitle>
+            <DialogDescription>
+              Update the role for {selectedUser?.name || selectedUser?.email}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="dialog-role">New Role</Label>
+              <Select
+                value={selectedUser?.role || ""}
+                onValueChange={(value) => {
+                  if (selectedUser) {
+                    handleUpdateRole(selectedUser.id, value)
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="viewer">Viewer</SelectItem>
+                  <SelectItem value="finance">Editor</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRoleDialog(false)}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

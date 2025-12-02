@@ -35,6 +35,73 @@ type MatrixState = "loading" | "matrix-display" | "editing" | "saving" | "error"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
 
+// Helper function to get auth token
+const getAuthToken = (): string | null => {
+  if (typeof window === "undefined") return null
+  // Try localStorage first
+  const token = localStorage.getItem("auth-token")
+  if (token) return token
+  // Try cookies
+  const cookies = document.cookie.split("; ")
+  const authCookie = cookies.find((row) => row.startsWith("auth-token="))
+  if (authCookie) {
+    return authCookie.split("=")[1]
+  }
+  return null
+}
+
+// Helper function to get auth headers
+const getAuthHeaders = (): HeadersInit => {
+  const token = getAuthToken()
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  }
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`
+  }
+  return headers
+}
+
+// Refresh token if expired
+const refreshTokenIfNeeded = async (): Promise<string | null> => {
+  const token = getAuthToken()
+  if (!token) return null
+  
+  try {
+    // Try to verify token is still valid by calling /auth/me
+    const response = await fetch(`${API_BASE_URL}/auth/me`, {
+      headers: getAuthHeaders(),
+      credentials: "include",
+    })
+    
+    if (response.ok) {
+      return token
+    }
+    
+    // Token expired, try to refresh
+    const refreshToken = localStorage.getItem("refresh-token")
+    if (refreshToken) {
+      const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      })
+      
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json()
+        if (data.token) {
+          localStorage.setItem("auth-token", data.token)
+          return data.token
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Token refresh failed:", error)
+  }
+  
+  return null
+}
+
 export function PermissionMatrix({ roleId, readOnly = false }: PermissionMatrixProps) {
   const [state, setState] = useState<MatrixState>("loading")
   const [permissions, setPermissions] = useState<Permission[]>([])
@@ -53,9 +120,18 @@ export function PermissionMatrix({ roleId, readOnly = false }: PermissionMatrixP
     setError(null)
 
     try {
+      // Refresh token if needed
+      await refreshTokenIfNeeded()
+      
       const [permissionsRes, rolesRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/auth/permissions`, { credentials: "include" }),
-        fetch(`${API_BASE_URL}/auth/roles`, { credentials: "include" }),
+        fetch(`${API_BASE_URL}/auth/permissions`, { 
+          credentials: "include",
+          headers: getAuthHeaders(),
+        }),
+        fetch(`${API_BASE_URL}/auth/roles`, { 
+          credentials: "include",
+          headers: getAuthHeaders(),
+        }),
       ])
 
       if (!permissionsRes.ok || !rolesRes.ok) {
@@ -131,11 +207,12 @@ export function PermissionMatrix({ roleId, readOnly = false }: PermissionMatrixP
     setError(null)
 
     try {
+      // Refresh token if needed
+      await refreshTokenIfNeeded()
+      
       const response = await fetch(`${API_BASE_URL}/auth/roles/${selectedRole.id}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
           permissions: Array.from(editedPermissions),

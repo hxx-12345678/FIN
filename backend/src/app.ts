@@ -34,6 +34,8 @@ import realtimeSimulationRoutes from './routes/realtime-simulation.routes';
 import overviewDashboardRoutes from './routes/overview-dashboard.routes';
 import transactionRoutes from './routes/transaction.routes';
 import boardReportingRoutes from './routes/board-reporting.routes';
+import userManagementRoutes from './routes/user-management.routes';
+import notificationRoutes from './routes/notification.routes';
 
 dotenv.config();
 
@@ -146,6 +148,8 @@ app.use('/api/v1', investorDashboardRoutes);
 app.use('/api/v1', realtimeSimulationRoutes);
 app.use('/api/v1', transactionRoutes);
 app.use('/api/v1', boardReportingRoutes);
+app.use('/api/v1', userManagementRoutes);
+app.use('/api/v1', notificationRoutes);
 app.use('/api/v1/debug', debugRoutes);
 
 // 404 handler
