@@ -4,9 +4,11 @@ psycopg2-binary==2.9.9
 # AWS
 boto3==1.34.0
 
-# Scientific computing (using versions with pre-built wheels for Python 3.12)
+# Scientific computing
+# Using versions that have pre-built wheels for Python 3.11/3.12
+# For Python 3.13, we'll need to use Python 3.12 via runtime.txt
 numpy==1.26.4
-scipy==1.13.1
+scipy==1.11.4
 pandas==2.2.2
 
 # Office document processing
