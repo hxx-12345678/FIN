@@ -4,78 +4,110 @@ import { hashPassword, comparePassword } from '../utils/bcrypt';
 import { generateToken, generateRefreshToken, verifyToken } from '../utils/jwt';
 import { ValidationError, UnauthorizedError, NotFoundError } from '../utils/errors';
 import { validateEmail, validatePassword, validateOrgName, sanitizeString } from '../utils/validation';
+import { config } from '../config/env';
 import prisma from '../config/database';
 
 export const authService = {
   signup: async (email: string, password: string, orgName: string, name?: string) => {
-    // Validate inputs with proper validation
-    validateEmail(email);
-    validatePassword(password);
-    validateOrgName(orgName);
+    try {
+      // Validate inputs with proper validation
+      validateEmail(email);
+      validatePassword(password);
+      validateOrgName(orgName);
 
-    // Normalize email (lowercase, trim)
-    const normalizedEmail = email.trim().toLowerCase();
+      // Normalize email (lowercase, trim)
+      const normalizedEmail = email.trim().toLowerCase();
 
-    // Sanitize optional name
-    const sanitizedName = name ? sanitizeString(name, 255) : undefined;
+      // Sanitize optional name
+      const sanitizedName = name ? sanitizeString(name, 255) : undefined;
 
-    // Check if user already exists (use normalized email)
-    const existing = await userRepository.findByEmail(normalizedEmail);
-    if (existing) {
-      throw new ValidationError('Email already registered');
+      // Check if user already exists (use normalized email)
+      const existing = await userRepository.findByEmail(normalizedEmail);
+      if (existing) {
+        throw new ValidationError('Email already registered');
+      }
+
+      // Hash password
+      const passwordHash = await hashPassword(password);
+
+      // Create user, org, and role in a transaction
+      const result = await prisma.$transaction(async (tx) => {
+        try {
+          // Create user
+          const user = await tx.user.create({
+            data: {
+              email: normalizedEmail,
+              name: sanitizedName,
+              passwordHash,
+            },
+          });
+
+          // Create org
+          const org = await tx.org.create({
+            data: {
+              name: sanitizeString(orgName.trim(), 255),
+            },
+          });
+
+          // Create admin role
+          await tx.userOrgRole.create({
+            data: {
+              userId: user.id,
+              orgId: org.id,
+              role: 'admin',
+            },
+          });
+
+          return { user, org };
+        } catch (txError: any) {
+          // Log transaction error for debugging
+          console.error('Transaction error in signup:', txError);
+          throw txError;
+        }
+      });
+
+      // Generate tokens (check JWT_SECRET is configured)
+      if (!config.jwtSecret) {
+        throw new Error('JWT_SECRET is not configured. Please set JWT_SECRET environment variable.');
+      }
+
+      const token = generateToken({ 
+        userId: result.user.id, 
+        email: result.user.email,
+        orgId: result.org.id,
+      });
+      const refreshToken = generateRefreshToken({ 
+        userId: result.user.id, 
+        email: result.user.email,
+        orgId: result.org.id,
+      });
+
+      return { 
+        user: {
+          id: result.user.id,
+          email: result.user.email,
+          name: result.user.name,
+          isActive: result.user.isActive,
+          createdAt: result.user.createdAt,
+        }, 
+        org: {
+          id: result.org.id,
+          name: result.org.name,
+          createdAt: result.org.createdAt,
+        },
+        token, 
+        refreshToken 
+      };
+    } catch (error: any) {
+      // Re-throw ValidationError and other AppErrors as-is
+      if (error instanceof ValidationError || error instanceof UnauthorizedError || error instanceof NotFoundError) {
+        throw error;
+      }
+      
+      // Wrap unexpected errors with more context
+      console.error('Unexpected error in signup:', error);
+      throw new Error(`Signup failed: ${error.message || 'Unknown error'}`);
     }
-
-    // Hash password
-    const passwordHash = await hashPassword(password);
-
-    // Create user, org, and role in a transaction
-    const result = await prisma.$transaction(async (tx) => {
-      // Create user
-      const user = await tx.user.create({
-        data: {
-          email: normalizedEmail,
-          name: sanitizedName,
-          passwordHash,
-        },
-      });
-
-      // Create org
-      const org = await tx.org.create({
-        data: {
-          name: sanitizeString(orgName.trim(), 255),
-        },
-      });
-
-      // Create admin role
-      await tx.userOrgRole.create({
-        data: {
-          userId: user.id,
-          orgId: org.id,
-          role: 'admin',
-        },
-      });
-
-      return { user, org };
-    });
-
-    // Generate tokens
-    const token = generateToken({ 
-      userId: result.user.id, 
-      email: result.user.email,
-      orgId: result.org.id,
-    });
-    const refreshToken = generateRefreshToken({ 
-      userId: result.user.id, 
-      email: result.user.email,
-      orgId: result.org.id,
-    });
-
-    return { 
-      user: result.user, 
-      org: result.org,
-      token, 
-      refreshToken 
-    };
   },
 
   login: async (email: string, password: string) => {

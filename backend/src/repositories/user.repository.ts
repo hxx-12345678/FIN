@@ -11,7 +11,13 @@ export const userRepository = {
   },
 
   create: async (data: { email: string; name?: string; passwordHash: string }) => {
-    return await prisma.user.create({ data });
+    return await prisma.user.create({
+      data: {
+        email: data.email,
+        name: data.name,
+        passwordHash: data.passwordHash, // Prisma will map this to password_hash
+      },
+    });
   },
 
   updateLastLogin: async (id: string) => {

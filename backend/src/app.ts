@@ -93,6 +93,14 @@ if (config.nodeEnv === 'development') {
 app.get('/health', async (req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
+    
+    // Check critical environment variables
+    const envCheck = {
+      database: !!config.databaseUrl,
+      jwtSecret: !!config.jwtSecret,
+      nodeEnv: config.nodeEnv,
+    };
+    
     res.json({
       ok: true,
       status: 'healthy',
@@ -101,6 +109,7 @@ app.get('/health', async (req, res) => {
         database: 'connected',
         api: 'running',
       },
+      environment: envCheck,
       version: '1.0.0',
     });
   } catch (error) {

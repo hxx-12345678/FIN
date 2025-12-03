@@ -13,8 +13,16 @@ export const authController = {
       }
 
       const result = await authService.signup(email, password, orgName, name);
-      res.status(201).json(result);
+      res.status(201).json({
+        ok: true,
+        user: result.user,
+        org: result.org,
+        token: result.token,
+        refreshToken: result.refreshToken,
+      });
     } catch (error) {
+      // Log error for debugging
+      console.error('Signup error:', error);
       next(error);
     }
   },

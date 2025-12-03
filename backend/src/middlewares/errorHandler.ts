@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError } from '../utils/errors';
+import { AppError, ValidationError } from '../utils/errors';
 import { logger } from '../utils/logger';
 
 export const errorHandler = (
@@ -52,8 +52,8 @@ export const errorHandler = (
     }
   }
 
-  // Handle validation errors (e.g., from express-validator)
-  if (err.name === 'ValidationError' || (err as any).errors) {
+  // Handle validation errors (e.g., from express-validator or our ValidationError)
+  if (err.name === 'ValidationError' || err instanceof ValidationError || (err as any).errors) {
     return res.status(400).json({
       ok: false,
       error: {
