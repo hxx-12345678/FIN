@@ -390,7 +390,7 @@ def extend_visibility(job_id: str) -> bool:
             where_values.append(WORKER_ID)
         
         query = f"""
-            UPDATE jobs
+            UPDATE public.jobs
             SET {', '.join(set_clauses)}
             WHERE {' AND '.join(where_clauses)}
         """
@@ -438,7 +438,7 @@ def update_progress(
         # Get current logs
         cursor.execute("""
             SELECT logs
-            FROM jobs
+                FROM public.jobs
             WHERE id = %s
         """, (job_id,))
         
@@ -497,7 +497,7 @@ def update_progress(
             set_clauses.append('updated_at = NOW()')
         
         query = f"""
-            UPDATE jobs
+            UPDATE public.jobs
             SET {', '.join(set_clauses)}
             WHERE id = %s
         """
@@ -540,7 +540,7 @@ def complete_job(job_id: str, result: Optional[Dict[str, Any]] = None) -> bool:
         # Get current logs
         cursor.execute("""
             SELECT logs
-            FROM jobs
+                FROM public.jobs
             WHERE id = %s
         """, (job_id,))
         
@@ -620,7 +620,7 @@ def complete_job(job_id: str, result: Optional[Dict[str, Any]] = None) -> bool:
             set_clauses.append('updated_at = NOW()')
         
         query = f"""
-            UPDATE jobs
+            UPDATE public.jobs
             SET {', '.join(set_clauses)}
             WHERE id = %s
         """
@@ -669,7 +669,7 @@ def fail_job(
         # Get current job state
         cursor.execute("""
             SELECT attempts, max_attempts, logs
-            FROM jobs
+                FROM public.jobs
             WHERE id = %s
         """, (job_id,))
         
@@ -758,7 +758,7 @@ def fail_job(
                 set_clauses.append('updated_at = NOW()')
             
             query = f"""
-                UPDATE jobs
+                UPDATE public.jobs
                 SET {', '.join(set_clauses)}
                 WHERE id = %s
             """
@@ -790,7 +790,7 @@ def fail_job(
                 set_clauses.append('updated_at = NOW()')
             
             query = f"""
-                UPDATE jobs
+                UPDATE public.jobs
                 SET {', '.join(set_clauses)}
                 WHERE id = %s
             """
@@ -842,7 +842,7 @@ def check_cancel_requested(job_id: str) -> bool:
         
         cursor.execute("""
             SELECT cancel_requested
-            FROM jobs
+                FROM public.jobs
             WHERE id = %s
         """, (job_id,))
         
@@ -882,7 +882,7 @@ def mark_cancelled(job_id: str) -> bool:
         # Get current logs
         cursor.execute("""
             SELECT logs
-            FROM jobs
+                FROM public.jobs
             WHERE id = %s
         """, (job_id,))
         
@@ -937,7 +937,7 @@ def mark_cancelled(job_id: str) -> bool:
             set_clauses.append('updated_at = NOW()')
         
         query = f"""
-            UPDATE jobs
+            UPDATE public.jobs
             SET {', '.join(set_clauses)}
             WHERE id = %s
         """
@@ -1023,7 +1023,7 @@ def release_stuck_jobs(queue: str = 'default', timeout_minutes: int = 60) -> int
         
         # Execute query
         query = f"""
-            UPDATE jobs
+            UPDATE public.jobs
             SET {', '.join(set_clauses)}
             WHERE {' AND '.join(where_clauses)}
             RETURNING id
@@ -1130,7 +1130,7 @@ def queue_job(
         # Build query with all parameterized values
         placeholders = ['%s'] * len(values)
         query = f"""
-            INSERT INTO jobs ({', '.join(columns)})
+            INSERT INTO public.jobs ({', '.join(columns)})
             VALUES ({', '.join(placeholders)})
             RETURNING id
         """

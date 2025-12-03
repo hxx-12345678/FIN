@@ -37,8 +37,38 @@ def get_db_connection():
             cursor.execute("SET search_path TO public;")
             conn.commit()
         
-        # Verify jobs table exists
+        # Verify connection and get database info
         with conn.cursor() as cursor:
+            # Get current database name
+            cursor.execute("SELECT current_database();")
+            current_db = cursor.fetchone()[0]
+            
+            # Get current schema
+            cursor.execute("SELECT current_schema();")
+            current_schema = cursor.fetchone()[0]
+            
+            # Get all schemas
+            cursor.execute("SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('pg_catalog', 'information_schema');")
+            schemas = [row[0] for row in cursor.fetchall()]
+            
+            # List all tables in public schema
+            cursor.execute("""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = 'public'
+                ORDER BY table_name;
+            """)
+            tables = [row[0] for row in cursor.fetchall()]
+            
+            print(f"📊 Database Info:")
+            print(f"   Current Database: {current_db}")
+            print(f"   Current Schema: {current_schema}")
+            print(f"   Available Schemas: {', '.join(schemas)}")
+            print(f"   Tables in 'public' schema: {len(tables)}")
+            if len(tables) > 0:
+                print(f"   First 10 tables: {', '.join(tables[:10])}")
+            
+            # Verify jobs table exists
             cursor.execute("""
                 SELECT EXISTS (
                     SELECT FROM information_schema.tables 
@@ -47,25 +77,36 @@ def get_db_connection():
                 );
             """)
             table_exists = cursor.fetchone()[0]
+            
             if not table_exists:
-                # Try to list all tables to help debug
-                cursor.execute("""
-                    SELECT table_name 
-                    FROM information_schema.tables 
-                    WHERE table_schema = 'public'
-                    ORDER BY table_name;
-                """)
-                tables = [row[0] for row in cursor.fetchall()]
-                raise ValueError(
+                error_msg = (
                     f"❌ 'jobs' table does not exist in database!\n"
-                    f"Database: {parsed.path or 'unknown'}\n"
-                    f"Schema: public\n"
-                    f"Found {len(tables)} tables: {', '.join(tables[:10])}{'...' if len(tables) > 10 else ''}\n\n"
-                    f"Please ensure:\n"
-                    f"1. DATABASE_URL points to the correct database\n"
-                    f"2. Database migrations have been run (npx prisma migrate deploy)\n"
-                    f"3. DATABASE_URL matches the backend's DATABASE_URL"
+                    f"\nConnection Details:\n"
+                    f"   Database URL: {safe_url}\n"
+                    f"   Current Database: {current_db}\n"
+                    f"   Current Schema: {current_schema}\n"
+                    f"   Tables Found: {len(tables)}\n"
                 )
+                
+                if len(tables) > 0:
+                    error_msg += f"   Tables: {', '.join(tables[:20])}{'...' if len(tables) > 20 else ''}\n"
+                else:
+                    error_msg += "   ⚠️  No tables found in 'public' schema!\n"
+                    error_msg += "   This suggests:\n"
+                    error_msg += "   1. Wrong database (empty database)\n"
+                    error_msg += "   2. Migrations not run\n"
+                    error_msg += "   3. DATABASE_URL points to different database than backend\n"
+                
+                error_msg += (
+                    f"\n🔧 Solution:\n"
+                    f"1. Verify DATABASE_URL in Render matches backend's DATABASE_URL exactly\n"
+                    f"2. Check backend service → Environment → DATABASE_URL\n"
+                    f"3. Copy the exact DATABASE_URL to Python worker service\n"
+                    f"4. Ensure migrations are run: npx prisma migrate deploy\n"
+                    f"5. Expected database should have 32+ tables including 'jobs'\n"
+                )
+                
+                raise ValueError(error_msg)
         
         return conn
     except psycopg2.OperationalError as e:
