@@ -13,6 +13,7 @@ const router = Router();
 // Compliance frameworks
 router.get('/orgs/:orgId/compliance/frameworks', authenticate, requireOrgAccess('orgId'), complianceController.getFrameworks);
 router.put('/orgs/:orgId/compliance/frameworks/:frameworkType', authenticate, requireOrgAccess('orgId'), complianceController.updateFramework);
+router.get('/compliance/frameworks/:frameworkType/requirements', authenticate, complianceController.getFrameworkRequirements);
 
 // Security controls
 router.get('/orgs/:orgId/compliance/controls', authenticate, requireOrgAccess('orgId'), complianceController.getSecurityControls);

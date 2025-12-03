@@ -424,37 +424,37 @@ export function SettingsPage() {
         errors.push("Organization: Network error")
       }
       
-      // Save appearance
-      try {
-        const response = await fetch(`${API_BASE_URL}/users/appearance`, {
-          method: "PUT",
-          headers: getAuthHeaders(),
-          credentials: "include",
-          body: JSON.stringify(appearance),
-        })
-        if (!response.ok) {
-          const error = await response.json()
-          errors.push(`Appearance: ${error.error?.message || "Failed to save"}`)
-        }
-      } catch (error) {
-        errors.push("Appearance: Network error")
-      }
+      // Save appearance - COMMENTED OUT
+      // try {
+      //   const response = await fetch(`${API_BASE_URL}/users/appearance`, {
+      //     method: "PUT",
+      //     headers: getAuthHeaders(),
+      //     credentials: "include",
+      //     body: JSON.stringify(appearance),
+      //   })
+      //   if (!response.ok) {
+      //     const error = await response.json()
+      //     errors.push(`Appearance: ${error.error?.message || "Failed to save"}`)
+      //   }
+      // } catch (error) {
+      //   errors.push("Appearance: Network error")
+      // }
       
-      // Save notification preferences
-      try {
-        const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/notifications/preferences`, {
-          method: "PUT",
-          headers: getAuthHeaders(),
-          credentials: "include",
-          body: JSON.stringify(notificationPrefs),
-        })
-        if (!response.ok) {
-          const error = await response.json()
-          errors.push(`Notifications: ${error.error?.message || "Failed to save"}`)
-        }
-      } catch (error) {
-        errors.push("Notifications: Network error")
-      }
+      // Save notification preferences - COMMENTED OUT
+      // try {
+      //   const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/notifications/preferences`, {
+      //     method: "PUT",
+      //     headers: getAuthHeaders(),
+      //     credentials: "include",
+      //     body: JSON.stringify(notificationPrefs),
+      //   })
+      //   if (!response.ok) {
+      //     const error = await response.json()
+      //     errors.push(`Notifications: ${error.error?.message || "Failed to save"}`)
+      //   }
+      // } catch (error) {
+      //   errors.push("Notifications: Network error")
+      // }
       
       // Note: Localization is saved separately via LocalizationSettings component's own Save button
       
@@ -623,11 +623,11 @@ export function SettingsPage() {
       )}
 
       <Tabs defaultValue="profile" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 md:grid-cols-9">
+        <TabsList className="grid w-full grid-cols-4 md:grid-cols-7">
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="organization">Organization</TabsTrigger>
-          <TabsTrigger value="appearance">Appearance</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
+          {/* <TabsTrigger value="appearance">Appearance</TabsTrigger> */}
+          {/* <TabsTrigger value="notifications">Notifications</TabsTrigger> */}
           <TabsTrigger value="alerts">Alerts</TabsTrigger>
           <TabsTrigger value="localization">Localization</TabsTrigger>
           <TabsTrigger value="sync">Sync Audit</TabsTrigger>
@@ -840,8 +840,8 @@ export function SettingsPage() {
           </Card>
         </TabsContent>
 
-        {/* Appearance Tab */}
-        <TabsContent value="appearance" className="space-y-6">
+        {/* Appearance Tab - COMMENTED OUT */}
+        {/* <TabsContent value="appearance" className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -941,10 +941,10 @@ export function SettingsPage() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent> */}
 
-        {/* Notifications Tab */}
-        <TabsContent value="notifications" className="space-y-6">
+        {/* Notifications Tab - COMMENTED OUT */}
+        {/* <TabsContent value="notifications" className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -1015,7 +1015,7 @@ export function SettingsPage() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent> */}
 
         {/* Alerts Tab */}
         <TabsContent value="alerts" className="space-y-6">

@@ -31,6 +31,27 @@ export const complianceController = {
   },
 
   /**
+   * GET /api/v1/compliance/frameworks/:frameworkType/requirements - Get framework requirements
+   */
+  getFrameworkRequirements: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        throw new ValidationError('User not authenticated');
+      }
+
+      const { frameworkType } = req.params;
+      const requirements = await complianceService.getFrameworkRequirements(frameworkType);
+
+      res.json({
+        ok: true,
+        data: requirements,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  /**
    * PUT /api/v1/orgs/:orgId/compliance/frameworks/:frameworkType - Update framework
    */
   updateFramework: async (req: AuthRequest, res: Response, next: NextFunction) => {

@@ -296,7 +296,7 @@ export function LocalizationSettings() {
             {updatingFxRates ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
-              <RefreshCw className="mr-2 h-4 w-4" />
+            <RefreshCw className="mr-2 h-4 w-4" />
             )}
             {updatingFxRates ? "Updating..." : "Update FX Rates"}
           </Button>
@@ -304,7 +304,7 @@ export function LocalizationSettings() {
             {saving ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
-              <Download className="mr-2 h-4 w-4" />
+            <Download className="mr-2 h-4 w-4" />
             )}
             Save Changes
           </Button>
@@ -396,21 +396,21 @@ export function LocalizationSettings() {
                     const isBaseCurrency = currency.code === localization.baseCurrency
                     return (
                       <div key={currency.code} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
-                        <div className="flex items-center gap-3">
-                          <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10">
-                            <span className="font-bold text-primary">{currency.symbol}</span>
-                          </div>
-                          <div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10">
+                          <span className="font-bold text-primary">{currency.symbol}</span>
+                        </div>
+                        <div>
                             <div className="font-medium flex items-center gap-2">
                               {currency.code}
                               {isBaseCurrency && (
                                 <Badge variant="outline" className="text-xs">Base</Badge>
                               )}
                             </div>
-                            <div className="text-xs text-muted-foreground">{currency.name}</div>
-                          </div>
+                          <div className="text-xs text-muted-foreground">{currency.name}</div>
                         </div>
-                        <div className="text-right">
+                      </div>
+                      <div className="text-right">
                           <div className="font-semibold text-lg">
                             {isBaseCurrency ? "1.0000" : rate.toFixed(4)}
                           </div>

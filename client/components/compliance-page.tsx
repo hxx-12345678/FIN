@@ -138,6 +138,8 @@ export function CompliancePage() {
   const [showFrameworkDialog, setShowFrameworkDialog] = useState(false)
   const [editingFramework, setEditingFramework] = useState<ComplianceFramework | null>(null)
   const [updatingFramework, setUpdatingFramework] = useState(false)
+  const [frameworkRequirements, setFrameworkRequirements] = useState<Array<{ id: string; title: string; description: string; category: string }>>([])
+  const [loadingRequirements, setLoadingRequirements] = useState(false)
 
   // Fetch orgId
   useEffect(() => {
@@ -487,6 +489,26 @@ export function CompliancePage() {
 
         {/* Frameworks Tab */}
         <TabsContent value="frameworks" className="space-y-4">
+          {/* Instructions on how to increase framework scores */}
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              <div className="space-y-2">
+                <p className="font-semibold">How to Increase Framework Scores:</p>
+                <ol className="list-decimal list-inside space-y-1 text-sm">
+                  <li>Click <strong>"View Details"</strong> or the <strong>Edit</strong> button on any framework card</li>
+                  <li>In the dialog, update the <strong>"Completed Requirements"</strong> field</li>
+                  <li>The score automatically calculates as: <strong>(Completed / Total Requirements) × 100</strong></li>
+                  <li>Optionally set Status, Audit Dates, Certification Number, and Auditor</li>
+                  <li>Click <strong>"Save Changes"</strong> to update the framework</li>
+                </ol>
+                <p className="text-xs text-muted-foreground mt-2">
+                  <strong>Example:</strong> For GDPR (32 requirements), set "Completed Requirements" to 30 to achieve 94% score.
+                </p>
+              </div>
+            </AlertDescription>
+          </Alert>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {frameworks.length === 0 ? (
               <div className="col-span-2 text-center py-8 text-muted-foreground">
@@ -518,6 +540,11 @@ export function CompliancePage() {
                       <span className="font-semibold">{framework.score}%</span>
                     </div>
                     <Progress value={framework.score} className="h-2" />
+                    {framework.score === 0 && (
+                      <div className="text-xs text-muted-foreground bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded border border-yellow-200 dark:border-yellow-800">
+                        <strong>Tip:</strong> Click "View Details" to update completed requirements and increase the score.
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <div className="text-muted-foreground">Requirements</div>
@@ -546,10 +573,27 @@ export function CompliancePage() {
                         variant="outline" 
                         size="sm" 
                         className="flex-1 bg-transparent"
-                        onClick={() => {
-                          setEditingFramework(framework)
-                          setShowFrameworkDialog(true)
-                        }}
+                      onClick={async () => {
+                        setEditingFramework(framework)
+                        setShowFrameworkDialog(true)
+                        setLoadingRequirements(true)
+                        try {
+                          const response = await fetch(`${API_BASE_URL}/compliance/frameworks/${framework.type}/requirements`, {
+                            headers: getAuthHeaders(),
+                            credentials: "include",
+                          })
+                          if (response.ok) {
+                            const data = await response.json()
+                            if (data.ok && data.data) {
+                              setFrameworkRequirements(data.data)
+                            }
+                          }
+                        } catch (error) {
+                          console.error("Failed to fetch requirements:", error)
+                        } finally {
+                          setLoadingRequirements(false)
+                        }
+                      }}
                       >
                         <FileText className="mr-2 h-4 w-4" />
                         View Details
@@ -557,10 +601,27 @@ export function CompliancePage() {
                       <Button 
                         variant="outline" 
                         size="sm"
-                        onClick={() => {
-                          setEditingFramework(framework)
-                          setShowFrameworkDialog(true)
-                        }}
+                      onClick={async () => {
+                        setEditingFramework(framework)
+                        setShowFrameworkDialog(true)
+                        setLoadingRequirements(true)
+                        try {
+                          const response = await fetch(`${API_BASE_URL}/compliance/frameworks/${framework.type}/requirements`, {
+                            headers: getAuthHeaders(),
+                            credentials: "include",
+                          })
+                          if (response.ok) {
+                            const data = await response.json()
+                            if (data.ok && data.data) {
+                              setFrameworkRequirements(data.data)
+                            }
+                          }
+                        } catch (error) {
+                          console.error("Failed to fetch requirements:", error)
+                        } finally {
+                          setLoadingRequirements(false)
+                        }
+                      }}
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -908,7 +969,84 @@ export function CompliancePage() {
                 </div>
               </div>
 
-              {/* Framework Requirements Info */}
+              {/* Framework Requirements List */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">Framework Requirements</CardTitle>
+                  <CardDescription>
+                    Detailed list of all requirements for {editingFramework.name}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {loadingRequirements ? (
+                    <div className="text-center py-4">
+                      <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                      <p className="text-sm text-muted-foreground mt-2">Loading requirements...</p>
+                    </div>
+                  ) : frameworkRequirements.length > 0 ? (
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {frameworkRequirements.map((req, index) => (
+                        <div
+                          key={req.id}
+                          className="p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-xs font-mono text-muted-foreground">{req.id}</span>
+                                <Badge variant="outline" className="text-xs">
+                                  {req.category}
+                                </Badge>
+                              </div>
+                              <h4 className="font-medium text-sm">{req.title}</h4>
+                              <p className="text-xs text-muted-foreground mt-1">{req.description}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground">
+                                #{index + 1}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-muted-foreground">
+                      <p className="text-sm">No requirements found</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2"
+                        onClick={async () => {
+                          if (!editingFramework) return
+                          setLoadingRequirements(true)
+                          try {
+                            const response = await fetch(`${API_BASE_URL}/compliance/frameworks/${editingFramework.type}/requirements`, {
+                              headers: getAuthHeaders(),
+                              credentials: "include",
+                            })
+                            if (response.ok) {
+                              const data = await response.json()
+                              if (data.ok && data.data) {
+                                setFrameworkRequirements(data.data)
+                              }
+                            }
+                          } catch (error) {
+                            console.error("Failed to fetch requirements:", error)
+                            toast.error("Failed to load requirements")
+                          } finally {
+                            setLoadingRequirements(false)
+                          }
+                        }}
+                      >
+                        Load Requirements
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Framework Information */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-sm">Framework Information</CardTitle>
