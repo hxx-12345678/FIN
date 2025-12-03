@@ -49,12 +49,17 @@ def get_db_connection():
         conn = psycopg2.connect(**conn_params)
         
         # Set search_path to 'public' explicitly to ensure we're using the right schema
-        with conn.cursor() as cursor:
-            cursor.execute("SET search_path TO public;")
-            conn.commit()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("SET search_path TO public;")
+                conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise ValueError(f"Failed to set search_path: {e}")
         
         # Verify connection and get database info
-        with conn.cursor() as cursor:
+        try:
+            with conn.cursor() as cursor:
             # Get current database name
             cursor.execute("SELECT current_database();")
             current_db = cursor.fetchone()[0]
@@ -79,7 +84,10 @@ def get_db_connection():
                     ORDER BY table_name;
                 """)
                 tables = [row[0] for row in cursor.fetchall()]
+                if len(tables) > 0:
+                    print(f"✅ Found {len(tables)} tables using information_schema")
             except Exception as e:
+                conn.rollback()
                 print(f"⚠️  information_schema query failed: {e}")
             
             # Method 2: pg_tables (if information_schema doesn't work)
@@ -92,18 +100,23 @@ def get_db_connection():
                         ORDER BY tablename;
                     """)
                     tables = [row[0] for row in cursor.fetchall()]
-                    print("✅ Found tables using pg_tables")
+                    if len(tables) > 0:
+                        print(f"✅ Found {len(tables)} tables using pg_tables")
+                    else:
+                        print("⚠️  pg_tables returned 0 tables")
                 except Exception as e:
+                    conn.rollback()
                     print(f"⚠️  pg_tables query failed: {e}")
             
             # Method 3: Direct query to jobs table (test if it exists)
             if len(tables) == 0:
                 try:
-                    cursor.execute("SELECT 1 FROM jobs LIMIT 1;")
+                    cursor.execute("SELECT 1 FROM public.jobs LIMIT 1;")
                     # If this works, table exists but we can't see it in schema queries
                     tables = ['jobs (exists but not in schema queries)']
                     print("⚠️  jobs table exists but not visible in schema queries (permissions issue?)")
                 except Exception as e:
+                    conn.rollback()
                     if 'does not exist' in str(e) or 'relation' in str(e).lower():
                         pass  # Table really doesn't exist
                     else:
@@ -156,6 +169,13 @@ def get_db_connection():
                 )
                 
                 raise ValueError(error_msg)
+        except Exception as e:
+            conn.rollback()
+            raise ValueError(
+                f"❌ Error verifying database: {str(e)}\n"
+                f"Connection: {safe_url}\n"
+                f"Please check DATABASE_URL is correct."
+            ) from e
         
         return conn
     except psycopg2.OperationalError as e:
