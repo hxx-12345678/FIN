@@ -18,6 +18,11 @@ def get_db_connection():
             "DATABASE_URL=postgresql://user:password@localhost:5432/database_name"
         )
     
+    # Log the database URL (without password) for debugging
+    parsed = urlparse(database_url)
+    safe_url = f"{parsed.scheme}://{parsed.username}:***@{parsed.hostname}:{parsed.port or 5432}{parsed.path}"
+    print(f"🔌 Connecting to database: {safe_url}")
+    
     # psycopg2 requires 'postgres://' not 'postgresql://'
     # Convert if needed
     if database_url.startswith('postgresql://'):
@@ -26,6 +31,42 @@ def get_db_connection():
     # Try direct connection (psycopg2 handles connection strings well)
     try:
         conn = psycopg2.connect(database_url)
+        
+        # Set search_path to 'public' explicitly to ensure we're using the right schema
+        with conn.cursor() as cursor:
+            cursor.execute("SET search_path TO public;")
+            conn.commit()
+        
+        # Verify jobs table exists
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                    AND table_name = 'jobs'
+                );
+            """)
+            table_exists = cursor.fetchone()[0]
+            if not table_exists:
+                # Try to list all tables to help debug
+                cursor.execute("""
+                    SELECT table_name 
+                    FROM information_schema.tables 
+                    WHERE table_schema = 'public'
+                    ORDER BY table_name;
+                """)
+                tables = [row[0] for row in cursor.fetchall()]
+                raise ValueError(
+                    f"❌ 'jobs' table does not exist in database!\n"
+                    f"Database: {parsed.path or 'unknown'}\n"
+                    f"Schema: public\n"
+                    f"Found {len(tables)} tables: {', '.join(tables[:10])}{'...' if len(tables) > 10 else ''}\n\n"
+                    f"Please ensure:\n"
+                    f"1. DATABASE_URL points to the correct database\n"
+                    f"2. Database migrations have been run (npx prisma migrate deploy)\n"
+                    f"3. DATABASE_URL matches the backend's DATABASE_URL"
+                )
+        
         return conn
     except psycopg2.OperationalError as e:
         # Provide helpful error message

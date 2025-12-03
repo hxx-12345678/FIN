@@ -116,11 +116,45 @@ def poll_and_process_jobs():
     # Test database connection on startup
     try:
         test_conn = get_db_connection()
+        
+        # Verify jobs table exists before continuing
+        with test_conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                    AND table_name = 'jobs'
+                );
+            """)
+            table_exists = cursor.fetchone()[0]
+            if not table_exists:
+                # List available tables for debugging
+                cursor.execute("""
+                    SELECT table_name 
+                    FROM information_schema.tables 
+                    WHERE table_schema = 'public'
+                    ORDER BY table_name;
+                """)
+                tables = [row[0] for row in cursor.fetchall()]
+                logger.error(f"❌ 'jobs' table does not exist in database!")
+                logger.error(f"Found {len(tables)} tables: {', '.join(tables[:10])}")
+                logger.error("Please ensure:")
+                logger.error("1. DATABASE_URL is correct (same as backend)")
+                logger.error("2. Database migrations have been run")
+                logger.error("3. Run: npx prisma migrate deploy")
+                test_conn.close()
+                sys.exit(1)
+        
         test_conn.close()
         logger.info("✅ Database connection successful")
+        logger.info("✅ 'jobs' table verified")
+    except ValueError as e:
+        # This is raised by get_db_connection when table doesn't exist
+        logger.error(f"❌ Database setup error: {str(e)}")
+        sys.exit(1)
     except Exception as e:
         logger.error(f"❌ Failed to connect to database: {str(e)}")
-        logger.error("Please check your DATABASE_URL in .env file")
+        logger.error("Please check your DATABASE_URL environment variable")
         sys.exit(1)
     
     # Release stuck jobs on startup

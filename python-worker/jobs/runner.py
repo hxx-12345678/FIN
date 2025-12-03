@@ -146,13 +146,13 @@ def reserve_job(queue: str = 'default') -> Optional[Dict[str, Any]]:
         if finished_at_exists:
             returning_cols.append('finished_at')
         
-        # Execute query
+        # Execute query (explicitly use public schema)
         query = f"""
-            UPDATE jobs
+            UPDATE public.jobs
             SET {', '.join(set_clauses)}
             WHERE id = (
                 SELECT id
-                FROM jobs
+                FROM public.jobs
                 WHERE {' AND '.join(where_clauses)}
                 ORDER BY {order_by}
                 LIMIT 1
