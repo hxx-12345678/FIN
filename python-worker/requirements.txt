@@ -1,11 +1,22 @@
+# Database
 psycopg2-binary==2.9.9
+
+# AWS
 boto3==1.34.0
-numpy==1.26.2
-scipy==1.11.4
+
+# Scientific computing (using versions with pre-built wheels for Python 3.12)
+numpy==1.26.4
+scipy==1.13.1
+pandas==2.2.2
+
+# Office document processing
 python-pptx==0.6.23
+openpyxl==3.1.2
+
+# PDF generation
 reportlab==4.0.7
 weasyprint==60.1
+
+# Utilities
 python-dotenv==1.0.0
-openpyxl==3.1.2
-pandas==2.1.4
 requests==2.31.0
