@@ -10,7 +10,19 @@ import { Loader2, Mail, Lock, Eye, EyeOff } from "lucide-react"
 import { SSOLogin } from "./sso-login"
 import { toast } from "sonner"
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
+// Ensure API_BASE_URL always includes /api/v1
+const getApiBaseUrl = () => {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+  // Remove trailing slash if present
+  const cleanUrl = baseUrl.replace(/\/$/, '')
+  // Ensure /api/v1 is included
+  if (cleanUrl.endsWith('/api/v1')) {
+    return cleanUrl
+  }
+  return `${cleanUrl}/api/v1`
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 interface LoginFormProps {
   onSuccess?: () => void
