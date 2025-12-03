@@ -60,115 +60,115 @@ def get_db_connection():
         # Verify connection and get database info
         try:
             with conn.cursor() as cursor:
-            # Get current database name
-            cursor.execute("SELECT current_database();")
-            current_db = cursor.fetchone()[0]
-            
-            # Get current schema
-            cursor.execute("SELECT current_schema();")
-            current_schema = cursor.fetchone()[0]
-            
-            # Get all schemas
-            cursor.execute("SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('pg_catalog', 'information_schema');")
-            schemas = [row[0] for row in cursor.fetchall()]
-            
-            # Try multiple methods to list tables
-            tables = []
-            
-            # Method 1: information_schema
-            try:
-                cursor.execute("""
-                    SELECT table_name 
-                    FROM information_schema.tables 
-                    WHERE table_schema = 'public'
-                    ORDER BY table_name;
-                """)
-                tables = [row[0] for row in cursor.fetchall()]
-                if len(tables) > 0:
-                    print(f"✅ Found {len(tables)} tables using information_schema")
-            except Exception as e:
-                conn.rollback()
-                print(f"⚠️  information_schema query failed: {e}")
-            
-            # Method 2: pg_tables (if information_schema doesn't work)
-            if len(tables) == 0:
+                # Get current database name
+                cursor.execute("SELECT current_database();")
+                current_db = cursor.fetchone()[0]
+                
+                # Get current schema
+                cursor.execute("SELECT current_schema();")
+                current_schema = cursor.fetchone()[0]
+                
+                # Get all schemas
+                cursor.execute("SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('pg_catalog', 'information_schema');")
+                schemas = [row[0] for row in cursor.fetchall()]
+                
+                # Try multiple methods to list tables
+                tables = []
+                
+                # Method 1: information_schema
                 try:
                     cursor.execute("""
-                        SELECT tablename 
-                        FROM pg_tables 
-                        WHERE schemaname = 'public'
-                        ORDER BY tablename;
+                        SELECT table_name 
+                        FROM information_schema.tables 
+                        WHERE table_schema = 'public'
+                        ORDER BY table_name;
                     """)
                     tables = [row[0] for row in cursor.fetchall()]
                     if len(tables) > 0:
-                        print(f"✅ Found {len(tables)} tables using pg_tables")
-                    else:
-                        print("⚠️  pg_tables returned 0 tables")
+                        print(f"✅ Found {len(tables)} tables using information_schema")
                 except Exception as e:
                     conn.rollback()
-                    print(f"⚠️  pg_tables query failed: {e}")
-            
-            # Method 3: Direct query to jobs table (test if it exists)
-            if len(tables) == 0:
-                try:
-                    cursor.execute("SELECT 1 FROM public.jobs LIMIT 1;")
-                    # If this works, table exists but we can't see it in schema queries
-                    tables = ['jobs (exists but not in schema queries)']
-                    print("⚠️  jobs table exists but not visible in schema queries (permissions issue?)")
-                except Exception as e:
-                    conn.rollback()
-                    if 'does not exist' in str(e) or 'relation' in str(e).lower():
-                        pass  # Table really doesn't exist
-                    else:
-                        print(f"⚠️  Direct jobs query error: {e}")
-            
-            print(f"📊 Database Info:")
-            print(f"   Current Database: {current_db}")
-            print(f"   Current Schema: {current_schema}")
-            print(f"   Available Schemas: {', '.join(schemas)}")
-            print(f"   Tables in 'public' schema: {len(tables)}")
-            if len(tables) > 0:
-                print(f"   First 10 tables: {', '.join(tables[:10])}")
-            
-            # Verify jobs table exists
-            cursor.execute("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_schema = 'public' 
-                    AND table_name = 'jobs'
-                );
-            """)
-            table_exists = cursor.fetchone()[0]
-            
-            if not table_exists:
-                error_msg = (
-                    f"❌ 'jobs' table does not exist in database!\n"
-                    f"\nConnection Details:\n"
-                    f"   Database URL: {safe_url}\n"
-                    f"   Current Database: {current_db}\n"
-                    f"   Current Schema: {current_schema}\n"
-                    f"   Tables Found: {len(tables)}\n"
-                )
+                    print(f"⚠️  information_schema query failed: {e}")
                 
+                # Method 2: pg_tables (if information_schema doesn't work)
+                if len(tables) == 0:
+                    try:
+                        cursor.execute("""
+                            SELECT tablename 
+                            FROM pg_tables 
+                            WHERE schemaname = 'public'
+                            ORDER BY tablename;
+                        """)
+                        tables = [row[0] for row in cursor.fetchall()]
+                        if len(tables) > 0:
+                            print(f"✅ Found {len(tables)} tables using pg_tables")
+                        else:
+                            print("⚠️  pg_tables returned 0 tables")
+                    except Exception as e:
+                        conn.rollback()
+                        print(f"⚠️  pg_tables query failed: {e}")
+                
+                # Method 3: Direct query to jobs table (test if it exists)
+                if len(tables) == 0:
+                    try:
+                        cursor.execute("SELECT 1 FROM public.jobs LIMIT 1;")
+                        # If this works, table exists but we can't see it in schema queries
+                        tables = ['jobs (exists but not in schema queries)']
+                        print("⚠️  jobs table exists but not visible in schema queries (permissions issue?)")
+                    except Exception as e:
+                        conn.rollback()
+                        if 'does not exist' in str(e) or 'relation' in str(e).lower():
+                            pass  # Table really doesn't exist
+                        else:
+                            print(f"⚠️  Direct jobs query error: {e}")
+                
+                print(f"📊 Database Info:")
+                print(f"   Current Database: {current_db}")
+                print(f"   Current Schema: {current_schema}")
+                print(f"   Available Schemas: {', '.join(schemas)}")
+                print(f"   Tables in 'public' schema: {len(tables)}")
                 if len(tables) > 0:
-                    error_msg += f"   Tables: {', '.join(tables[:20])}{'...' if len(tables) > 20 else ''}\n"
-                else:
-                    error_msg += "   ⚠️  No tables found in 'public' schema!\n"
-                    error_msg += "   This suggests:\n"
-                    error_msg += "   1. Wrong database (empty database)\n"
-                    error_msg += "   2. Migrations not run\n"
-                    error_msg += "   3. DATABASE_URL points to different database than backend\n"
+                    print(f"   First 10 tables: {', '.join(tables[:10])}")
                 
-                error_msg += (
-                    f"\n🔧 Solution:\n"
-                    f"1. Verify DATABASE_URL in Render matches backend's DATABASE_URL exactly\n"
-                    f"2. Check backend service → Environment → DATABASE_URL\n"
-                    f"3. Copy the exact DATABASE_URL to Python worker service\n"
-                    f"4. Ensure migrations are run: npx prisma migrate deploy\n"
-                    f"5. Expected database should have 32+ tables including 'jobs'\n"
-                )
+                # Verify jobs table exists
+                cursor.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = 'public' 
+                        AND table_name = 'jobs'
+                    );
+                """)
+                table_exists = cursor.fetchone()[0]
                 
-                raise ValueError(error_msg)
+                if not table_exists:
+                    error_msg = (
+                        f"❌ 'jobs' table does not exist in database!\n"
+                        f"\nConnection Details:\n"
+                        f"   Database URL: {safe_url}\n"
+                        f"   Current Database: {current_db}\n"
+                        f"   Current Schema: {current_schema}\n"
+                        f"   Tables Found: {len(tables)}\n"
+                    )
+                    
+                    if len(tables) > 0:
+                        error_msg += f"   Tables: {', '.join(tables[:20])}{'...' if len(tables) > 20 else ''}\n"
+                    else:
+                        error_msg += "   ⚠️  No tables found in 'public' schema!\n"
+                        error_msg += "   This suggests:\n"
+                        error_msg += "   1. Wrong database (empty database)\n"
+                        error_msg += "   2. Migrations not run\n"
+                        error_msg += "   3. DATABASE_URL points to different database than backend\n"
+                    
+                    error_msg += (
+                        f"\n🔧 Solution:\n"
+                        f"1. Verify DATABASE_URL in Render matches backend's DATABASE_URL exactly\n"
+                        f"2. Check backend service → Environment → DATABASE_URL\n"
+                        f"3. Copy the exact DATABASE_URL to Python worker service\n"
+                        f"4. Ensure migrations are run: npx prisma migrate deploy\n"
+                        f"5. Expected database should have 32+ tables including 'jobs'\n"
+                    )
+                    
+                    raise ValueError(error_msg)
         except Exception as e:
             conn.rollback()
             raise ValueError(
