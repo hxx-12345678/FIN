@@ -30,7 +30,23 @@ def get_db_connection():
     
     # Try direct connection (psycopg2 handles connection strings well)
     try:
-        conn = psycopg2.connect(database_url)
+        # Parse connection parameters for better error handling
+        conn_params = {
+            'host': parsed.hostname,
+            'port': parsed.port or 5432,
+            'database': parsed.path.lstrip('/') if parsed.path else 'postgres',
+            'user': parsed.username,
+            'password': unquote(parsed.password) if parsed.password else None,
+        }
+        
+        print(f"🔌 Connection parameters:")
+        print(f"   Host: {conn_params['host']}")
+        print(f"   Port: {conn_params['port']}")
+        print(f"   Database: {conn_params['database']}")
+        print(f"   User: {conn_params['user']}")
+        
+        # Try connecting with explicit parameters
+        conn = psycopg2.connect(**conn_params)
         
         # Set search_path to 'public' explicitly to ensure we're using the right schema
         with conn.cursor() as cursor:
@@ -51,14 +67,47 @@ def get_db_connection():
             cursor.execute("SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('pg_catalog', 'information_schema');")
             schemas = [row[0] for row in cursor.fetchall()]
             
-            # List all tables in public schema
-            cursor.execute("""
-                SELECT table_name 
-                FROM information_schema.tables 
-                WHERE table_schema = 'public'
-                ORDER BY table_name;
-            """)
-            tables = [row[0] for row in cursor.fetchall()]
+            # Try multiple methods to list tables
+            tables = []
+            
+            # Method 1: information_schema
+            try:
+                cursor.execute("""
+                    SELECT table_name 
+                    FROM information_schema.tables 
+                    WHERE table_schema = 'public'
+                    ORDER BY table_name;
+                """)
+                tables = [row[0] for row in cursor.fetchall()]
+            except Exception as e:
+                print(f"⚠️  information_schema query failed: {e}")
+            
+            # Method 2: pg_tables (if information_schema doesn't work)
+            if len(tables) == 0:
+                try:
+                    cursor.execute("""
+                        SELECT tablename 
+                        FROM pg_tables 
+                        WHERE schemaname = 'public'
+                        ORDER BY tablename;
+                    """)
+                    tables = [row[0] for row in cursor.fetchall()]
+                    print("✅ Found tables using pg_tables")
+                except Exception as e:
+                    print(f"⚠️  pg_tables query failed: {e}")
+            
+            # Method 3: Direct query to jobs table (test if it exists)
+            if len(tables) == 0:
+                try:
+                    cursor.execute("SELECT 1 FROM jobs LIMIT 1;")
+                    # If this works, table exists but we can't see it in schema queries
+                    tables = ['jobs (exists but not in schema queries)']
+                    print("⚠️  jobs table exists but not visible in schema queries (permissions issue?)")
+                except Exception as e:
+                    if 'does not exist' in str(e) or 'relation' in str(e).lower():
+                        pass  # Table really doesn't exist
+                    else:
+                        print(f"⚠️  Direct jobs query error: {e}")
             
             print(f"📊 Database Info:")
             print(f"   Current Database: {current_db}")
