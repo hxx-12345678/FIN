@@ -48,13 +48,14 @@ def get_db_connection():
         # Try connecting with explicit parameters first (more reliable)
         conn = psycopg2.connect(**conn_params)
         
+        # Set autocommit to avoid transaction issues
+        conn.set_session(autocommit=True)
+        
         # Set search_path to 'public' explicitly to ensure we're using the right schema
         try:
             with conn.cursor() as cursor:
                 cursor.execute("SET search_path TO public;")
-                conn.commit()
         except Exception as e:
-            conn.rollback()
             raise ValueError(f"Failed to set search_path: {e}")
         
         # Verify connection and get database info
@@ -64,22 +65,44 @@ def get_db_connection():
                 cursor.execute("SELECT current_database();")
                 current_db = cursor.fetchone()[0]
                 
+                # Get current user and permissions
+                cursor.execute("SELECT current_user, session_user;")
+                current_user, session_user = cursor.fetchone()
+                
                 # Get current schema
                 cursor.execute("SELECT current_schema();")
                 current_schema = cursor.fetchone()[0]
                 
+                # Check if user has USAGE permission on public schema
+                cursor.execute("""
+                    SELECT has_schema_privilege(current_user, 'public', 'USAGE') as has_usage,
+                           has_schema_privilege(current_user, 'public', 'CREATE') as has_create;
+                """)
+                has_usage, has_create = cursor.fetchone()
+                
+                print(f"Database Info:")
+                print(f"   Current Database: {current_db}")
+                print(f"   Current User: {current_user}")
+                print(f"   Session User: {session_user}")
+                print(f"   Current Schema: {current_schema}")
+                print(f"   Has USAGE on public: {has_usage}")
+                print(f"   Has CREATE on public: {has_create}")
+                
                 # Get all schemas
                 cursor.execute("SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('pg_catalog', 'information_schema');")
                 schemas = [row[0] for row in cursor.fetchall()]
+                print(f"   Available Schemas: {', '.join(schemas)}")
                 
-                # CRITICAL FIX: Try direct query to jobs table FIRST
-                # This bypasses any schema visibility issues
+                # CRITICAL: Check if jobs table exists using direct query
+                # This is the most reliable method
                 jobs_table_exists = False
+                jobs_error = None
                 try:
                     cursor.execute("SELECT 1 FROM public.jobs LIMIT 1;")
                     jobs_table_exists = True
                     print("SUCCESS: Direct query to public.jobs works!")
                 except Exception as e:
+                    jobs_error = str(e)
                     if 'does not exist' in str(e) or 'relation' in str(e).lower():
                         jobs_table_exists = False
                         print(f"ERROR: public.jobs table does not exist: {e}")
@@ -87,7 +110,7 @@ def get_db_connection():
                         # Permission error or other issue
                         print(f"WARNING: Cannot query public.jobs: {e}")
                 
-                # Try multiple methods to list tables
+                # Try multiple methods to list tables (with proper error handling)
                 tables = []
                 
                 # Method 1: information_schema (most reliable)
@@ -102,7 +125,6 @@ def get_db_connection():
                     if len(tables) > 0:
                         print(f"Found {len(tables)} tables using information_schema")
                 except Exception as e:
-                    conn.rollback()
                     print(f"WARNING: information_schema query failed: {e}")
                 
                 # Method 2: pg_tables (if information_schema doesn't work)
@@ -120,7 +142,6 @@ def get_db_connection():
                         else:
                             print("WARNING: pg_tables returned 0 tables")
                     except Exception as e:
-                        conn.rollback()
                         print(f"WARNING: pg_tables query failed: {e}")
                 
                 # Method 3: Direct query to pg_class (system catalog)
@@ -137,13 +158,8 @@ def get_db_connection():
                         if len(tables) > 0:
                             print(f"Found {len(tables)} tables using pg_class")
                     except Exception as e:
-                        conn.rollback()
                         print(f"WARNING: pg_class query failed: {e}")
                 
-                print(f"Database Info:")
-                print(f"   Current Database: {current_db}")
-                print(f"   Current Schema: {current_schema}")
-                print(f"   Available Schemas: {', '.join(schemas)}")
                 print(f"   Tables in 'public' schema: {len(tables)}")
                 if len(tables) > 0:
                     print(f"   First 10 tables: {', '.join(tables[:10])}")
@@ -157,37 +173,40 @@ def get_db_connection():
                     print("SUCCESS: jobs table verified via direct query")
                 else:
                     # Check 2: information_schema
-                    try:
-                        cursor.execute("""
-                            SELECT EXISTS (
-                                SELECT FROM information_schema.tables 
-                                WHERE table_schema = 'public' 
-                                AND table_name = 'jobs'
-                            );
-                        """)
-                        table_exists_check = cursor.fetchone()[0]
-                        if table_exists_check:
-                            print("SUCCESS: jobs table verified via information_schema")
-                    except Exception as e:
-                        conn.rollback()
-                        print(f"WARNING: information_schema check failed: {e}")
-                    
-                    # Check 3: pg_tables
-                    if not table_exists_check:
+                    if len(tables) > 0 and 'jobs' in tables:
+                        table_exists_check = True
+                        print("SUCCESS: jobs table found in table list")
+                    else:
+                        # Check 3: information_schema EXISTS query
                         try:
                             cursor.execute("""
                                 SELECT EXISTS (
-                                    SELECT FROM pg_tables 
-                                    WHERE schemaname = 'public' 
-                                    AND tablename = 'jobs'
+                                    SELECT FROM information_schema.tables 
+                                    WHERE table_schema = 'public' 
+                                    AND table_name = 'jobs'
                                 );
                             """)
                             table_exists_check = cursor.fetchone()[0]
                             if table_exists_check:
-                                print("SUCCESS: jobs table verified via pg_tables")
+                                print("SUCCESS: jobs table verified via information_schema EXISTS")
                         except Exception as e:
-                            conn.rollback()
-                            print(f"WARNING: pg_tables check failed: {e}")
+                            print(f"WARNING: information_schema EXISTS check failed: {e}")
+                        
+                        # Check 4: pg_tables
+                        if not table_exists_check:
+                            try:
+                                cursor.execute("""
+                                    SELECT EXISTS (
+                                        SELECT FROM pg_tables 
+                                        WHERE schemaname = 'public' 
+                                        AND tablename = 'jobs'
+                                    );
+                                """)
+                                table_exists_check = cursor.fetchone()[0]
+                                if table_exists_check:
+                                    print("SUCCESS: jobs table verified via pg_tables")
+                            except Exception as e:
+                                print(f"WARNING: pg_tables EXISTS check failed: {e}")
                 
                 if not table_exists_check:
                     # Get all databases for debugging
@@ -198,6 +217,16 @@ def get_db_connection():
                     except:
                         pass
                     
+                    # Check if we're in the right database by checking for other expected tables
+                    expected_tables = ['users', 'orgs', 'models', 'exports']
+                    found_expected = []
+                    for table in expected_tables:
+                        try:
+                            cursor.execute(f"SELECT 1 FROM public.{table} LIMIT 1;")
+                            found_expected.append(table)
+                        except:
+                            pass
+                    
                     # Try external URL format
                     external_host = f"{parsed.hostname}.oregon-postgres.render.com"
                     
@@ -206,42 +235,57 @@ def get_db_connection():
                         f"\nConnection Details:\n"
                         f"   Database URL: {safe_url}\n"
                         f"   Current Database: {current_db}\n"
+                        f"   Current User: {current_user}\n"
                         f"   Current Schema: {current_schema}\n"
+                        f"   Has USAGE permission: {has_usage}\n"
                         f"   Tables Found: {len(tables)}\n"
                         f"   All Databases on Server: {', '.join(all_databases[:5])}{'...' if len(all_databases) > 5 else ''}\n"
                     )
+                    
+                    if len(found_expected) > 0:
+                        error_msg += f"   Found expected tables: {', '.join(found_expected)}\n"
+                        error_msg += f"   This suggests we're in the RIGHT database but jobs table is missing!\n"
+                    else:
+                        error_msg += f"   No expected tables found (users, orgs, models, exports)\n"
                     
                     if len(tables) > 0:
                         error_msg += f"   Tables Found: {', '.join(tables[:20])}{'...' if len(tables) > 20 else ''}\n"
                     else:
                         error_msg += "   WARNING: No tables found in 'public' schema!\n"
                         error_msg += "\nDIAGNOSIS:\n"
-                        error_msg += "   This database appears to be EMPTY or WRONG database.\n"
-                        error_msg += "   Backend can see 32 tables, but worker sees 0.\n"
+                        if not has_usage:
+                            error_msg += "   User does NOT have USAGE permission on 'public' schema!\n"
+                            error_msg += "   This prevents seeing tables even if they exist.\n"
+                        else:
+                            error_msg += "   This database appears to be EMPTY or WRONG database.\n"
+                            error_msg += "   Backend can see 32 tables, but worker sees 0.\n"
                         error_msg += "\nPOSSIBLE FIXES:\n"
-                        error_msg += "   1. Try EXTERNAL Database URL instead:\n"
-                        error_msg += f"      postgresql://{parsed.username}:***@{external_host}:{port}/{database_name}\n"
-                        error_msg += "   2. Verify backend DATABASE_URL and copy EXACTLY\n"
-                        error_msg += "   3. Check if backend uses different connection string\n"
-                        error_msg += "   4. Internal URL might be routing to empty replica\n"
+                        error_msg += "   1. Verify DATABASE_URL matches backend EXACTLY\n"
+                        error_msg += "   2. Check if backend uses different connection string\n"
+                        error_msg += "   3. Grant USAGE permission: GRANT USAGE ON SCHEMA public TO finapilot_user;\n"
+                        error_msg += "   4. Grant SELECT permission: GRANT SELECT ON ALL TABLES IN SCHEMA public TO finapilot_user;\n"
                     
                     error_msg += (
                         f"\nIMMEDIATE ACTION:\n"
                         f"1. Go to Render -> PostgreSQL Database -> Info tab\n"
                         f"2. Copy EXTERNAL Database URL (not Internal)\n"
                         f"3. Update Python Worker DATABASE_URL with External URL\n"
-                        f"4. Save and redeploy\n"
+                        f"4. If still fails, check database permissions\n"
+                        f"5. Save and redeploy\n"
                     )
                     
+                    conn.close()
                     raise ValueError(error_msg)
         except Exception as e:
-            conn.rollback()
+            conn.close()
             raise ValueError(
                 f"ERROR: Error verifying database: {str(e)}\n"
                 f"Connection: {safe_url}\n"
                 f"Please check DATABASE_URL is correct."
             ) from e
         
+        # Set back to transaction mode for normal operations
+        conn.set_session(autocommit=False)
         return conn
     except psycopg2.OperationalError as e:
         # Provide helpful error message
