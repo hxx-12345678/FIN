@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse, unquote, urlencode
 
 # Load environment variables from .env file
 load_dotenv()
@@ -21,27 +21,44 @@ def get_db_connection():
     # Log the database URL (without password) for debugging
     parsed = urlparse(database_url)
     
-    # Ensure port is included (default 5432 for PostgreSQL)
-    port = parsed.port or 5432
+    # CRITICAL FIX: Remove explicit port if it's 5432 (default)
+    # Render's connection pooler might route differently with explicit port
+    # Backend doesn't use explicit port, so we shouldn't either
+    port = parsed.port
+    if port == 5432:
+        # Don't include port in connection - let PostgreSQL use default
+        # This matches backend behavior
+        port = None
+    
+    # Ensure port is included (default 5432 for PostgreSQL) only if not default
+    port = port or 5432
     database_name = parsed.path.lstrip('/') if parsed.path else 'postgres'
     
     safe_url = f"{parsed.scheme}://{parsed.username}:***@{parsed.hostname}:{port}/{database_name}"
     print(f"Connecting to database: {safe_url}")
     
     # Parse connection parameters for better error handling
+    # CRITICAL: Don't include port if it's 5432 (default) to match backend
     conn_params = {
         'host': parsed.hostname,
-        'port': port,
         'database': database_name,
         'user': parsed.username,
         'password': unquote(parsed.password) if parsed.password else None,
-        # CRITICAL: Add connection options to ensure we connect to the right database
+        # Add connection options to ensure we connect to the right database
         'options': '-c search_path=public'
     }
     
-    print(f"Connection parameters:")
-    print(f"   Host: {conn_params['host']}")
-    print(f"   Port: {conn_params['port']}")
+    # Only add port if it's not the default 5432
+    if parsed.port and parsed.port != 5432:
+        conn_params['port'] = parsed.port
+        print(f"Connection parameters:")
+        print(f"   Host: {conn_params['host']}")
+        print(f"   Port: {conn_params['port']}")
+    else:
+        print(f"Connection parameters:")
+        print(f"   Host: {conn_params['host']}")
+        print(f"   Port: 5432 (default, not specified)")
+    
     print(f"   Database: {conn_params['database']}")
     print(f"   User: {conn_params['user']}")
     
@@ -75,6 +92,18 @@ def get_db_connection():
                 cursor.execute("SELECT current_schema();")
                 current_schema = cursor.fetchone()[0]
                 
+                # Get connection info
+                cursor.execute("""
+                    SELECT 
+                        inet_server_addr() as server_ip,
+                        inet_server_port() as server_port,
+                        version() as pg_version;
+                """)
+                server_info = cursor.fetchone()
+                server_ip = server_info[0] if server_info[0] else 'N/A'
+                server_port = server_info[1] if server_info[1] else 'N/A'
+                pg_version = server_info[2][:50] if server_info[2] else 'N/A'
+                
                 # Check if user has USAGE permission on public schema
                 cursor.execute("""
                     SELECT has_schema_privilege(current_user, 'public', 'USAGE') as has_usage,
@@ -95,7 +124,19 @@ def get_db_connection():
                 """)
                 schema_table_counts = cursor.fetchall()
                 
-                # Check ALL schemas for tables
+                # Check ALL schemas for tables using information_schema
+                cursor.execute("""
+                    SELECT 
+                        table_schema,
+                        COUNT(*) as table_count
+                    FROM information_schema.tables 
+                    WHERE table_schema NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+                    GROUP BY table_schema
+                    ORDER BY table_schema;
+                """)
+                info_schema_counts = cursor.fetchall()
+                
+                # Check ALL schemas
                 cursor.execute("""
                     SELECT schema_name 
                     FROM information_schema.schemata 
@@ -106,15 +147,30 @@ def get_db_connection():
                 
                 print(f"Database Info:")
                 print(f"   Current Database: {current_db} (OID: {db_oid})")
+                print(f"   Server IP: {server_ip}")
+                print(f"   Server Port: {server_port}")
+                print(f"   PostgreSQL Version: {pg_version}")
                 print(f"   Current User: {current_user}")
                 print(f"   Session User: {session_user}")
                 print(f"   Current Schema: {current_schema}")
                 print(f"   Has USAGE on public: {has_usage}")
                 print(f"   Has CREATE on public: {has_create}")
                 print(f"   All Schemas: {', '.join(all_schemas)}")
-                print(f"   Tables by Schema:")
-                for schema, count in schema_table_counts:
-                    print(f"      {schema}: {count} tables")
+                
+                # Show table counts from both methods
+                print(f"   Tables by Schema (pg_tables):")
+                if len(schema_table_counts) > 0:
+                    for schema, count in schema_table_counts:
+                        print(f"      {schema}: {count} tables")
+                else:
+                    print(f"      (no tables found)")
+                
+                print(f"   Tables by Schema (information_schema):")
+                if len(info_schema_counts) > 0:
+                    for schema, count in info_schema_counts:
+                        print(f"      {schema}: {count} tables")
+                else:
+                    print(f"      (no tables found)")
                 
                 # CRITICAL: Try to find tables in ALL schemas, not just public
                 all_tables = []
@@ -196,24 +252,15 @@ def get_db_connection():
                 
                 # If no tables found anywhere, this is a real problem
                 if len(all_tables) == 0 and not jobs_table_exists:
-                    # Get connection info to compare with backend
-                    cursor.execute("""
-                        SELECT 
-                            inet_server_addr() as server_ip,
-                            inet_server_port() as server_port,
-                            version() as pg_version;
-                    """)
-                    server_info = cursor.fetchone()
-                    
                     error_msg = (
                         f"ERROR: No tables found in database!\n"
                         f"\nConnection Details:\n"
                         f"   Database URL: {safe_url}\n"
                         f"   Database Name: {current_db}\n"
                         f"   Database OID: {db_oid}\n"
-                        f"   Server IP: {server_info[0] if server_info[0] else 'N/A'}\n"
-                        f"   Server Port: {server_info[1] if server_info[1] else 'N/A'}\n"
-                        f"   PostgreSQL Version: {server_info[2][:50] if server_info[2] else 'N/A'}\n"
+                        f"   Server IP: {server_ip}\n"
+                        f"   Server Port: {server_port}\n"
+                        f"   PostgreSQL Version: {pg_version}\n"
                         f"   Current User: {current_user}\n"
                         f"   Current Schema: {current_schema}\n"
                         f"   Has USAGE permission: {has_usage}\n"
@@ -230,19 +277,21 @@ def get_db_connection():
                         f"\nDIAGNOSIS:\n"
                         f"   This database is COMPLETELY EMPTY - no tables in any schema.\n"
                         f"   Backend sees 32 tables, but worker sees 0.\n"
-                        f"   This suggests they are connecting to DIFFERENT databases.\n"
+                        f"   Database OID: {db_oid}\n"
+                        f"   Server IP: {server_ip}\n"
                         f"\nPOSSIBLE CAUSES:\n"
-                        f"   1. Backend uses different DATABASE_URL (check backend env vars)\n"
-                        f"   2. Connection pooling/routing issue (different endpoints)\n"
-                        f"   3. Backend connects to different database instance\n"
-                        f"   4. Database migrations not run on this database\n"
+                        f"   1. Connection routing issue - explicit port :5432 routes to different endpoint\n"
+                        f"   2. Backend uses different DATABASE_URL (check backend env vars)\n"
+                        f"   3. Connection pooler routing to read replica or empty database\n"
+                        f"   4. Database migrations not run on this database instance\n"
                         f"\nIMMEDIATE ACTION:\n"
                         f"1. Go to Render -> Backend Service -> Environment tab\n"
-                        f"2. Copy EXACT DATABASE_URL from backend\n"
-                        f"3. Compare character-by-character with worker DATABASE_URL\n"
-                        f"4. Ensure they are IDENTICAL (including port, host, database name)\n"
-                        f"5. If different, update worker to match backend EXACTLY\n"
-                        f"6. Save and redeploy\n"
+                        f"2. Copy EXACT DATABASE_URL from backend (check format)\n"
+                        f"3. Remove :5432 from worker DATABASE_URL if backend doesn't have it\n"
+                        f"4. Ensure worker DATABASE_URL matches backend EXACTLY (character by character)\n"
+                        f"5. Save and redeploy\n"
+                        f"\nNOTE: If backend URL has NO port, worker should also have NO port.\n"
+                        f"PostgreSQL defaults to 5432, so explicit port might route differently.\n"
                     )
                     
                     conn.close()
@@ -264,6 +313,8 @@ def get_db_connection():
                         f"ERROR: 'jobs' table does not exist in any schema!\n"
                         f"\nConnection Details:\n"
                         f"   Database: {current_db} (OID: {db_oid})\n"
+                        f"   Server IP: {server_ip}\n"
+                        f"   Server Port: {server_port}\n"
                         f"   User: {current_user}\n"
                         f"   Schemas Checked: {', '.join(all_schemas)}\n"
                         f"   Tables Found: {len(all_tables)} (across all schemas)\n"
