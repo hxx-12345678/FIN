@@ -21,24 +21,23 @@ def get_db_connection():
     # Log the database URL (without password) for debugging
     parsed = urlparse(database_url)
     
-    # CRITICAL FIX: Remove explicit port if it's 5432 (default)
-    # Render's connection pooler might route differently with explicit port
-    # Backend doesn't use explicit port, so we shouldn't either
-    port = parsed.port
-    if port == 5432:
-        # Don't include port in connection - let PostgreSQL use default
-        # This matches backend behavior
-        port = None
-    
-    # Ensure port is included (default 5432 for PostgreSQL) only if not default
-    port = port or 5432
+    # CRITICAL FIX: For Render internal URLs, don't add port at all
+    # Internal URL format: postgresql://user:pass@dpg-XXXXX-a/database (no port, no domain)
+    # If URL has no port, keep it as None - don't default to 5432
+    # This matches backend (Prisma) behavior and ensures correct routing
+    port = parsed.port  # Will be None if not in URL
     database_name = parsed.path.lstrip('/') if parsed.path else 'postgres'
     
-    safe_url = f"{parsed.scheme}://{parsed.username}:***@{parsed.hostname}:{port}/{database_name}"
+    # Build display URL - only show port if it was in original URL
+    if port:
+        safe_url = f"{parsed.scheme}://{parsed.username}:***@{parsed.hostname}:{port}/{database_name}"
+    else:
+        safe_url = f"{parsed.scheme}://{parsed.username}:***@{parsed.hostname}/{database_name}"
     print(f"Connecting to database: {safe_url}")
     
     # Parse connection parameters for better error handling
-    # CRITICAL: Don't include port if it's 5432 (default) to match backend
+    # CRITICAL: Only add port if explicitly in URL AND it's not 5432
+    # For internal Render URLs (no port), omit port completely
     conn_params = {
         'host': parsed.hostname,
         'database': database_name,
@@ -48,16 +47,23 @@ def get_db_connection():
         'options': '-c search_path=public'
     }
     
-    # Only add port if it's not the default 5432
-    if parsed.port and parsed.port != 5432:
-        conn_params['port'] = parsed.port
+    # Only add port parameter if explicitly specified in URL and not default 5432
+    # For internal Render URLs (no port), this will be omitted
+    if port and port != 5432:
+        conn_params['port'] = port
         print(f"Connection parameters:")
         print(f"   Host: {conn_params['host']}")
-        print(f"   Port: {conn_params['port']}")
+        print(f"   Port: {conn_params['port']} (explicit)")
+    elif port == 5432:
+        # Port is 5432 but was in URL - still omit it to match backend behavior
+        print(f"Connection parameters:")
+        print(f"   Host: {conn_params['host']}")
+        print(f"   Port: omitted (was 5432 in URL, using default)")
     else:
+        # No port in URL - this is internal Render format
         print(f"Connection parameters:")
         print(f"   Host: {conn_params['host']}")
-        print(f"   Port: 5432 (default, not specified)")
+        print(f"   Port: omitted (internal URL, using default)")
     
     print(f"   Database: {conn_params['database']}")
     print(f"   User: {conn_params['user']}")
