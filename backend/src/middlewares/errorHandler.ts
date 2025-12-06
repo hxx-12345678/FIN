@@ -50,6 +50,15 @@ export const errorHandler = (
         },
       });
     }
+    if (prismaError.code === 'P2023') {
+      return res.status(400).json({
+        ok: false,
+        error: {
+          code: 'INVALID_UUID',
+          message: 'Invalid UUID format provided',
+        },
+      });
+    }
   }
 
   // Handle validation errors (e.g., from express-validator or our ValidationError)

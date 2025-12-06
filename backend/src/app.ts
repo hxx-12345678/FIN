@@ -37,6 +37,14 @@ import boardReportingRoutes from './routes/board-reporting.routes';
 import userManagementRoutes from './routes/user-management.routes';
 import notificationRoutes from './routes/notification.routes';
 import complianceRoutes from './routes/compliance.routes';
+import aiSummariesRoutes from './routes/ai-summaries.routes';
+import aiAnomalyDetectionRoutes from './routes/ai-anomaly-detection.routes';
+import reportApprovalRoutes from './routes/report-approval.routes';
+import formulaAutocompleteRoutes from './routes/formula-autocomplete.routes';
+import slackIntegrationRoutes from './routes/slack-integration.routes';
+import drillDownRoutes from './routes/drill-down.routes';
+import dataTransformationRoutes from './routes/data-transformation.routes';
+import headcountPlanningRoutes from './routes/headcount-planning.routes';
 
 dotenv.config();
 
@@ -151,6 +159,8 @@ app.get('/api/v1', (req, res) => {
         risk: '/api/v1/montecarlo/:jobId/risk',
         shareTokens: '/api/v1/orgs/:orgId/share-tokens',
         budgetActual: '/api/v1/orgs/:orgId/models/:modelId/budget-actual',
+        aiSummaries: '/api/v1/orgs/:orgId/ai-summaries',
+        anomalyDetection: '/api/v1/orgs/:orgId/anomalies',
       },
   });
 });
@@ -185,6 +195,14 @@ app.use('/api/v1', boardReportingRoutes);
 app.use('/api/v1', userManagementRoutes);
 app.use('/api/v1', notificationRoutes);
 app.use('/api/v1', complianceRoutes);
+app.use('/api/v1', aiSummariesRoutes);
+app.use('/api/v1', aiAnomalyDetectionRoutes);
+app.use('/api/v1', reportApprovalRoutes);
+app.use('/api/v1', formulaAutocompleteRoutes);
+app.use('/api/v1', slackIntegrationRoutes);
+app.use('/api/v1', drillDownRoutes);
+app.use('/api/v1', dataTransformationRoutes);
+app.use('/api/v1', headcountPlanningRoutes);
 app.use('/api/v1/debug', debugRoutes);
 
 // 404 handler

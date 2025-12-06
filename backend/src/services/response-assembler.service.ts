@@ -73,12 +73,44 @@ export const responseAssembler = {
     // Extract calculations from execution results
     const calculations: Record<string, any> = {};
     for (const result of results) {
-      if (result.result !== undefined) {
-        calculations[result.operation || 'calculation'] = result.result;
-      } else if (result.params?.result !== undefined) {
+      if (result.result !== undefined && typeof result.result === 'number') {
+        const operation = result.operation || 'calculation';
+        // Use more specific keys for better extraction
+        if (operation.includes('burn_rate') || operation.includes('calculate_burn_rate')) {
+          calculations.burnRate = result.result;
+          calculations[operation] = result.result; // Also keep operation name
+        } else if (operation.includes('runway') || operation.includes('calculate_runway')) {
+          calculations.runway = result.result;
+          calculations[operation] = result.result;
+        } else if (operation.includes('revenue') || operation.includes('forecast_revenue')) {
+          calculations.futureRevenue = result.result;
+          calculations[operation] = result.result;
+        } else if (operation.includes('hire') || operation.includes('calculate_hire_impact')) {
+          calculations.monthlyCost = result.result;
+          calculations[operation] = result.result;
+        } else {
+          calculations[operation] = result.result;
+        }
+      } else if (result.params?.result !== undefined && typeof result.params.result === 'number') {
         // Handle action results with params.result
         const operation = result.params.operation || result.operation || 'calculation';
-        calculations[operation] = result.params.result;
+        if (operation.includes('burn_rate') || operation.includes('calculate_burn_rate')) {
+          // For burn rate, prioritize calculated_monthly_burn if available
+          const burnValue = result.params.calculated_monthly_burn !== undefined ? result.params.calculated_monthly_burn : result.params.result;
+          calculations.burnRate = burnValue;
+          calculations[operation] = burnValue;
+        } else if (operation.includes('runway') || operation.includes('calculate_runway')) {
+          calculations.runway = result.params.result;
+          calculations[operation] = result.params.result;
+        } else if (operation.includes('revenue') || operation.includes('forecast_revenue')) {
+          calculations.futureRevenue = result.params.result;
+          calculations[operation] = result.params.result;
+        } else if (operation.includes('hire') || operation.includes('calculate_hire_impact')) {
+          calculations.monthlyCost = result.params.result;
+          calculations[operation] = result.params.result;
+        } else {
+          calculations[operation] = result.params.result;
+        }
       }
     }
 

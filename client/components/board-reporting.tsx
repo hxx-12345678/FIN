@@ -35,6 +35,7 @@ import {
 } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ExportProgressModal } from "./exports/export-progress-modal"
+import { ReportApprovalManager } from "./reports/report-approval-manager"
 import { toast } from "sonner"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
@@ -658,11 +659,12 @@ export function BoardReporting() {
       </Card>
 
       <Tabs defaultValue="content" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="content">Content</TabsTrigger>
           <TabsTrigger value="metrics">Metrics</TabsTrigger>
           <TabsTrigger value="preview">Preview</TabsTrigger>
           <TabsTrigger value="distribution">Distribution</TabsTrigger>
+          <TabsTrigger value="approval">Approval</TabsTrigger>
         </TabsList>
 
         <TabsContent value="content" className="space-y-4">
@@ -1002,6 +1004,10 @@ export function BoardReporting() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="approval" className="space-y-4">
+          {orgId && <ReportApprovalManager orgId={orgId} />}
         </TabsContent>
       </Tabs>
 

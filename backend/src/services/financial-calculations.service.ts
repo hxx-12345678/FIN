@@ -255,6 +255,65 @@ export const financialCalculations = {
   },
 
   /**
+   * Calculate future revenue with compound growth
+   * Formula: Future Revenue = Base Revenue × (1 + Growth Rate)^Months
+   */
+  calculateFutureRevenue: (baseRevenue: number, growthRate: number, months: number): CalculationResult => {
+    const warnings: string[] = [];
+    const errors: string[] = [];
+    const assumptions: string[] = [];
+
+    if (baseRevenue < 0) errors.push('Base revenue cannot be negative');
+    if (growthRate < -1 || growthRate > 1) warnings.push('Growth rate typically between -1 (100% decline) and 1 (100% growth)');
+    if (months < 0) errors.push('Months cannot be negative');
+
+    if (errors.length > 0) return { valid: false, result: null, formula: 'Future Revenue = Base * (1 + Growth Rate)^Months', assumptions, warnings, errors };
+
+    const futureRevenue = baseRevenue * Math.pow(1 + growthRate, months);
+
+    assumptions.push(`Constant growth rate of ${(growthRate * 100).toFixed(1)}% per month`);
+    assumptions.push(`No external market shocks or changes in strategy`);
+
+    return {
+      valid: true,
+      result: futureRevenue,
+      formula: `Future Revenue = $${baseRevenue.toLocaleString()} * (1 + ${(growthRate * 100).toFixed(1)}%)^${months} months`,
+      assumptions,
+      warnings,
+      errors,
+    };
+  },
+
+  /**
+   * Calculate monthly cost impact of hiring
+   * Formula: Monthly Cost = (Annual Salary × Quantity) / 12
+   */
+  calculateHireImpact: (quantity: number, annualSalary: number): CalculationResult => {
+    const warnings: string[] = [];
+    const errors: string[] = [];
+    const assumptions: string[] = [];
+
+    if (quantity <= 0) errors.push('Quantity of hires must be positive');
+    if (annualSalary <= 0) errors.push('Annual salary must be positive');
+
+    if (errors.length > 0) return { valid: false, result: null, formula: 'Monthly Cost = (Annual Salary * Quantity) / 12', assumptions, warnings, errors };
+
+    const monthlyCost = (annualSalary * quantity) / 12;
+
+    assumptions.push(`Average annual salary of $${annualSalary.toLocaleString()}`);
+    assumptions.push(`No additional hiring costs (e.g., recruitment fees, benefits) included`);
+
+    return {
+      valid: true,
+      result: monthlyCost,
+      formula: `Monthly Cost = ($${annualSalary.toLocaleString()} * ${quantity}) / 12`,
+      assumptions,
+      warnings,
+      errors,
+    };
+  },
+
+  /**
    * Validate financial metrics for consistency
    */
   validateMetrics: (metrics: FinancialMetrics): {

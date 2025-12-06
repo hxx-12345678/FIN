@@ -33,7 +33,12 @@ def get_db_connection():
         safe_url = f"{parsed.scheme}://{parsed.username}:***@{parsed.hostname}:{port}/{database_name}"
     else:
         safe_url = f"{parsed.scheme}://{parsed.username}:***@{parsed.hostname}/{database_name}"
-    print(f"Connecting to database: {safe_url}")
+    
+    # Only log connection details in debug mode or on first connection
+    # This prevents spam in production logs
+    debug_mode = os.getenv('DB_DEBUG', 'false').lower() == 'true'
+    if debug_mode:
+        print(f"Connecting to database: {safe_url}")
     
     # Parse connection parameters for better error handling
     # CRITICAL: Only add port if explicitly in URL AND it's not 5432
@@ -51,22 +56,7 @@ def get_db_connection():
     # For internal Render URLs (no port), this will be omitted
     if port and port != 5432:
         conn_params['port'] = port
-        print(f"Connection parameters:")
-        print(f"   Host: {conn_params['host']}")
-        print(f"   Port: {conn_params['port']} (explicit)")
-    elif port == 5432:
-        # Port is 5432 but was in URL - still omit it to match backend behavior
-        print(f"Connection parameters:")
-        print(f"   Host: {conn_params['host']}")
-        print(f"   Port: omitted (was 5432 in URL, using default)")
-    else:
-        # No port in URL - this is internal Render format
-        print(f"Connection parameters:")
-        print(f"   Host: {conn_params['host']}")
-        print(f"   Port: omitted (internal URL, using default)")
-    
-    print(f"   Database: {conn_params['database']}")
-    print(f"   User: {conn_params['user']}")
+    # Note: Removed verbose connection parameter logging - only log in debug mode
     
     # Try direct connection (psycopg2 handles connection strings well)
     try:
@@ -151,32 +141,34 @@ def get_db_connection():
                 """)
                 all_schemas = [row[0] for row in cursor.fetchall()]
                 
-                print(f"Database Info:")
-                print(f"   Current Database: {current_db} (OID: {db_oid})")
-                print(f"   Server IP: {server_ip}")
-                print(f"   Server Port: {server_port}")
-                print(f"   PostgreSQL Version: {pg_version}")
-                print(f"   Current User: {current_user}")
-                print(f"   Session User: {session_user}")
-                print(f"   Current Schema: {current_schema}")
-                print(f"   Has USAGE on public: {has_usage}")
-                print(f"   Has CREATE on public: {has_create}")
-                print(f"   All Schemas: {', '.join(all_schemas)}")
-                
-                # Show table counts from both methods
-                print(f"   Tables by Schema (pg_tables):")
-                if len(schema_table_counts) > 0:
-                    for schema, count in schema_table_counts:
-                        print(f"      {schema}: {count} tables")
-                else:
-                    print(f"      (no tables found)")
-                
-                print(f"   Tables by Schema (information_schema):")
-                if len(info_schema_counts) > 0:
-                    for schema, count in info_schema_counts:
-                        print(f"      {schema}: {count} tables")
-                else:
-                    print(f"      (no tables found)")
+                # Only print verbose database info in debug mode
+                if debug_mode:
+                    print(f"Database Info:")
+                    print(f"   Current Database: {current_db} (OID: {db_oid})")
+                    print(f"   Server IP: {server_ip}")
+                    print(f"   Server Port: {server_port}")
+                    print(f"   PostgreSQL Version: {pg_version}")
+                    print(f"   Current User: {current_user}")
+                    print(f"   Session User: {session_user}")
+                    print(f"   Current Schema: {current_schema}")
+                    print(f"   Has USAGE on public: {has_usage}")
+                    print(f"   Has CREATE on public: {has_create}")
+                    print(f"   All Schemas: {', '.join(all_schemas)}")
+                    
+                    # Show table counts from both methods
+                    print(f"   Tables by Schema (pg_tables):")
+                    if len(schema_table_counts) > 0:
+                        for schema, count in schema_table_counts:
+                            print(f"      {schema}: {count} tables")
+                    else:
+                        print(f"      (no tables found)")
+                    
+                    print(f"   Tables by Schema (information_schema):")
+                    if len(info_schema_counts) > 0:
+                        for schema, count in info_schema_counts:
+                            print(f"      {schema}: {count} tables")
+                    else:
+                        print(f"      (no tables found)")
                 
                 # CRITICAL: Try to find tables in ALL schemas, not just public
                 all_tables = []
@@ -193,9 +185,10 @@ def get_db_connection():
                         for schema_name, table_name in schema_tables:
                             all_tables.append(f"{schema_name}.{table_name}")
                     except Exception as e:
-                        print(f"WARNING: Could not query schema {schema}: {e}")
+                        if debug_mode:
+                            print(f"WARNING: Could not query schema {schema}: {e}")
                 
-                if len(all_tables) > 0:
+                if debug_mode and len(all_tables) > 0:
                     print(f"   Found {len(all_tables)} tables across all schemas:")
                     print(f"      {', '.join(all_tables[:20])}")
                 
@@ -209,7 +202,8 @@ def get_db_connection():
                     cursor.execute("SELECT 1 FROM public.jobs LIMIT 1;")
                     jobs_table_exists = True
                     jobs_location = "public.jobs"
-                    print(f"SUCCESS: Found jobs table at {jobs_location}!")
+                    if debug_mode:
+                        print(f"SUCCESS: Found jobs table at {jobs_location}!")
                 except Exception as e:
                     jobs_error = str(e)
                     # Try other schemas
@@ -220,7 +214,8 @@ def get_db_connection():
                             cursor.execute(f"SELECT 1 FROM {schema}.jobs LIMIT 1;")
                             jobs_table_exists = True
                             jobs_location = f"{schema}.jobs"
-                            print(f"SUCCESS: Found jobs table at {jobs_location}!")
+                            if debug_mode:
+                                print(f"SUCCESS: Found jobs table at {jobs_location}!")
                             break
                         except:
                             pass

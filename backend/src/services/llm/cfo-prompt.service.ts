@@ -150,12 +150,23 @@ OUTPUT JSON SCHEMA:
   "naturalLanguage": "string (CFO-style explanation in natural language)"
 }
 
-CRITICAL: 
+CRITICAL ANTI-HALLUCINATION RULES: 
 - Do NOT repeat recommendations
-- Do NOT invent numbers
+- Do NOT invent numbers - ONLY use numbers from provided data
 - Do NOT use generic responses
+- If data is insufficient, explicitly state that and recommend connecting accounting system
+- EVERY number in your response MUST be traceable to the provided data or calculations
+- If you cannot calculate something from provided data, say "Insufficient data" rather than guessing
+- Include evidence references for every numeric claim
 - Think strategically like a CFO
-- Ground everything in data`;
+- Ground everything in data
+- Be transparent about data limitations
+
+TRANSPARENCY REQUIREMENTS:
+- Cite the source of every number used
+- Show calculation steps for any computed values
+- Indicate confidence levels
+- List assumptions made`;
 }
 
 /**
