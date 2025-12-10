@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react"
 import { toast } from "sonner"
+import { API_BASE_URL } from "@/lib/api-config"
 
 interface StagedChange {
   id: string
@@ -29,8 +30,6 @@ interface UseStagedChangesReturn {
   isLoading: boolean
   error: string | null
 }
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
 
 export function useStagedChanges(statusFilter?: string): UseStagedChangesReturn {
   const [changes, setChanges] = useState<StagedChange[]>([])

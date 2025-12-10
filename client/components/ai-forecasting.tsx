@@ -12,8 +12,7 @@ import { Brain, TrendingUp, Zap, Download, RefreshCw, AlertTriangle, CheckCircle
 import { MonteCarloForecasting } from "./monte-carlo-forecasting"
 import { toast } from "sonner"
 import Link from "next/link"
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
+import { API_BASE_URL } from "@/lib/api-config"
 
 // All data is now fetched dynamically from backend - no static fallbacks
 

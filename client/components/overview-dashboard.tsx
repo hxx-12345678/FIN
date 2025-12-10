@@ -34,8 +34,7 @@ import {
   Loader2,
 } from "lucide-react"
 import { toast } from "sonner"
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
+import { API_BASE_URL } from "@/lib/api-config"
 
 interface OverviewData {
   healthScore: number
@@ -113,9 +112,15 @@ export function OverviewDashboard() {
         .find((row) => row.startsWith("auth-token="))
         ?.split("=")[1]
 
-      if (!token) return null
+      if (!token) {
+        console.warn("[Overview] No token found for fetchOrgId")
+        return null
+      }
 
-      const response = await fetch(`${API_BASE_URL}/auth/me`, {
+      const url = `${API_BASE_URL}/auth/me`
+      console.log("[Overview] Fetching orgId from:", url)
+
+      const response = await fetch(url, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
@@ -123,17 +128,49 @@ export function OverviewDashboard() {
         credentials: "include",
       })
 
+      console.log("[Overview] Auth me response status:", response.status)
+
       if (response.ok) {
-        const userData = await response.json()
-        if (userData.orgs && userData.orgs.length > 0) {
-          const primaryOrgId = userData.orgs[0].id
-          localStorage.setItem("orgId", primaryOrgId)
-          setOrgId(primaryOrgId)
-          return primaryOrgId
+        const responseData = await response.json()
+        console.log("[Overview] Auth me response:", responseData)
+        
+        // Handle different response formats (wrapped in ok: true or direct data)
+        const userData = responseData.ok ? responseData : responseData.data || responseData
+        
+        // Handle different response formats
+        let orgIdToUse: string | null = null
+        
+        if (userData?.orgs && Array.isArray(userData.orgs) && userData.orgs.length > 0) {
+          // Response has orgs array
+          orgIdToUse = userData.orgs[0].id
+        } else if (userData?.org && userData.org.id) {
+          // Response has single org object
+          orgIdToUse = userData.org.id
+        } else if (responseData?.orgs && Array.isArray(responseData.orgs) && responseData.orgs.length > 0) {
+          // Response at top level has orgs array
+          orgIdToUse = responseData.orgs[0].id
+        } else if (responseData?.org && responseData.org.id) {
+          // Response at top level has single org object
+          orgIdToUse = responseData.org.id
+        } else if (responseData?.orgId) {
+          // Direct orgId in response
+          orgIdToUse = responseData.orgId
         }
+        
+        if (orgIdToUse) {
+          console.log("[Overview] Found orgId:", orgIdToUse)
+          localStorage.setItem("orgId", orgIdToUse)
+          setOrgId(orgIdToUse)
+          return orgIdToUse
+        } else {
+          console.warn("[Overview] No orgId found in response:", responseData)
+        }
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        console.error("[Overview] Auth me failed:", response.status, errorData)
       }
     } catch (error) {
-      console.error("Failed to fetch orgId:", error)
+      console.error("[Overview] Failed to fetch orgId:", error)
     }
 
     return null
@@ -146,10 +183,16 @@ export function OverviewDashboard() {
     try {
       const currentOrgId = await fetchOrgId()
       if (!currentOrgId) {
-        throw new Error("Organization ID not found. Please ensure you're logged in.")
+        const errorMsg = "Organization ID not found. Please ensure you're logged in."
+        console.error("[Overview] No orgId found:", errorMsg)
+        setError(errorMsg)
+        toast.error(errorMsg)
+        setLoading(false)
+        return
       }
 
       setOrgId(currentOrgId)
+      console.log("[Overview] Fetching data for orgId:", currentOrgId)
 
       const token = localStorage.getItem("auth-token") || document.cookie
         .split("; ")
@@ -157,10 +200,18 @@ export function OverviewDashboard() {
         ?.split("=")[1]
 
       if (!token) {
-        throw new Error("Authentication token not found. Please log in.")
+        const errorMsg = "Authentication token not found. Please log in."
+        console.error("[Overview] No token found:", errorMsg)
+        setError(errorMsg)
+        toast.error(errorMsg)
+        setLoading(false)
+        return
       }
 
-      const response = await fetch(`${API_BASE_URL}/orgs/${currentOrgId}/overview`, {
+      const url = `${API_BASE_URL}/orgs/${currentOrgId}/overview`
+      console.log("[Overview] Fetching from URL:", url)
+
+      const response = await fetch(url, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
@@ -168,25 +219,45 @@ export function OverviewDashboard() {
         credentials: "include",
       })
 
+      console.log("[Overview] Response status:", response.status, response.statusText)
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error?.message || `Failed to fetch overview data: ${response.statusText}`)
+        let errorData = {}
+        try {
+          errorData = await response.json()
+        } catch (e) {
+          console.error("[Overview] Failed to parse error response:", e)
+        }
+        const errorMsg = errorData.error?.message || errorData.message || `Failed to fetch overview data: ${response.statusText}`
+        console.error("[Overview] API Error:", errorMsg, errorData)
+        throw new Error(errorMsg)
       }
 
       const result = await response.json()
+      console.log("[Overview] Response received:", {
+        ok: result.ok,
+        hasData: !!result.data,
+        dataKeys: result.data ? Object.keys(result.data) : [],
+      })
+
       if (result.ok && result.data) {
+        console.log("[Overview] Setting data:", {
+          healthScore: result.data.healthScore,
+          monthlyRevenue: result.data.monthlyRevenue,
+          revenueDataLength: result.data.revenueData?.length,
+        })
         setData(result.data)
+        setError(null) // Clear any previous errors
       } else {
-        throw new Error("Invalid response format")
+        console.error("[Overview] Invalid response format:", result)
+        throw new Error("Invalid response format - missing ok or data")
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to load overview data"
+      console.error("[Overview] Error fetching overview data:", err)
       setError(errorMessage)
-      console.error("Error fetching overview data:", err)
-      // Don't show toast for 404s (expected for new users)
-      if (!errorMessage.includes("404")) {
-        toast.error(errorMessage)
-      }
+      // Always show error toast to help with debugging
+      toast.error(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -207,140 +278,6 @@ export function OverviewDashboard() {
       window.removeEventListener('csv-import-completed', handleImportComplete)
     }
   }, [])
-
-  const handleGenerateReport = async () => {
-    if (!orgId) {
-      toast.error("Organization ID not found. Please ensure you're logged in.")
-      return
-    }
-
-    try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        toast.error("Authentication token not found. Please log in.")
-        return
-      }
-
-      toast.info("Generating financial overview report...")
-
-      // Create investor export (PDF format for overview report)
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/investor-export`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          format: "pdf",
-          includeMonteCarlo: false,
-          includeRecommendations: true,
-        }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error?.message || `Failed to generate report: ${response.statusText}`)
-      }
-
-      const result = await response.json()
-      
-      if (result.ok && result.export) {
-        const exportId = result.export.id || result.export.exportId
-        const jobId = result.export.jobId
-
-        toast.success("Report generation started. This may take a few moments...")
-
-        // Poll for export completion
-        const pollExportStatus = async () => {
-          const maxAttempts = 60
-          let attempts = 0
-
-          const poll = async () => {
-            if (attempts >= maxAttempts) {
-              toast.warning("Report generation is taking longer than expected. Please check back later.")
-              return
-            }
-
-            try {
-              // Re-fetch token on each poll attempt to handle token refresh
-              const currentToken = localStorage.getItem("auth-token") || document.cookie
-                .split("; ")
-                .find((row) => row.startsWith("auth-token="))
-                ?.split("=")[1] || token
-
-              const statusResponse = await fetch(`${API_BASE_URL}/exports/${exportId}/status`, {
-                headers: {
-                  Authorization: `Bearer ${currentToken}`,
-                  "Content-Type": "application/json",
-                },
-                credentials: "include",
-              })
-
-              if (statusResponse.ok) {
-                const statusData = await statusResponse.json()
-                
-                // Handle both response formats
-                const exportData = statusData.export || statusData
-                const exportStatus = exportData?.status || statusData.status
-                const downloadUrl = exportData?.downloadUrl || statusData.downloadUrl
-                const filename = exportData?.filename || statusData.filename || `financial-overview-report-${new Date().toISOString().split('T')[0]}.pdf`
-                
-                if (exportStatus === 'done' && downloadUrl) {
-                  // Download the report with proper filename
-                  const fullUrl = downloadUrl.startsWith('http') ? downloadUrl : `${API_BASE_URL}${downloadUrl}`
-                  
-                  // Create a temporary link to trigger download
-                  const link = document.createElement('a')
-                  link.href = fullUrl
-                  link.download = filename
-                  link.target = '_blank'
-                  document.body.appendChild(link)
-                  link.click()
-                  document.body.removeChild(link)
-                  
-                  toast.success(`Report "${filename}" downloaded successfully!`)
-                  return
-                } else if (exportStatus === 'failed') {
-                  toast.error("Report generation failed. Please try again.")
-                  return
-                }
-              } else if (statusResponse.status === 401) {
-                // Token expired or invalid - stop polling
-                toast.error("Authentication expired. Please log in again.")
-                return
-              }
-
-              attempts++
-              if (attempts < maxAttempts) {
-                setTimeout(poll, 2000)
-              }
-            } catch (error) {
-              console.error("Error polling export status:", error)
-              attempts++
-              if (attempts < maxAttempts) {
-                setTimeout(poll, 2000)
-              }
-            }
-          }
-
-          poll()
-        }
-
-        pollExportStatus()
-      } else {
-        throw new Error(result.error?.message || "Invalid response from server")
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to generate report"
-      toast.error(errorMessage)
-      console.error("Error generating report:", error)
-    }
-  }
 
   const { chartData: paginatedRevenueData, hasMore: hasMoreRevenue, loadMore: loadMoreRevenue, initializeData: initRevenue } = useChartPagination({
     defaultMonths: 36,
@@ -423,7 +360,7 @@ export function OverviewDashboard() {
             <Calendar className="mr-2 h-4 w-4" />
             Last 30 days
           </Button>
-          <Button onClick={handleGenerateReport} disabled={!orgId}>
+          <Button>
             <Zap className="mr-2 h-4 w-4" />
             Generate Report
           </Button>

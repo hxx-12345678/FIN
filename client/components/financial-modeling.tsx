@@ -25,8 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { generateFinancialModelingTemplate, downloadCSV } from "@/utils/csv-template-generator"
 import { OneClickExportButton } from "./one-click-export-button"
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
+import { API_BASE_URL } from "@/lib/api-config"
 
 const defaultFinancialData = [
   {

@@ -15,8 +15,7 @@ import { Loader2, RefreshCw, X, RotateCw, Eye, Filter, Calendar, BarChart3, Aler
 import { JobProgressIndicator } from "./job-progress-indicator"
 import { JobDetailsModal } from "./job-details-modal"
 import { toast } from "sonner"
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
+import { API_BASE_URL } from "@/lib/api-config"
 
 interface Job {
   id: string

@@ -29,8 +29,7 @@ import {
 import { TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Target, Download, Upload, Loader2, FileDown, Plus, FileSpreadsheet } from "lucide-react"
 import { toast } from "sonner"
 import { generateBudgetActualTemplate, generateBudgetTemplate, downloadCSV } from "@/utils/csv-template-generator"
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
+import { API_BASE_URL } from "@/lib/api-config"
 
 interface BudgetActualPeriod {
   period: string
