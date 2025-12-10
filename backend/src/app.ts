@@ -45,6 +45,13 @@ import slackIntegrationRoutes from './routes/slack-integration.routes';
 import drillDownRoutes from './routes/drill-down.routes';
 import dataTransformationRoutes from './routes/data-transformation.routes';
 import headcountPlanningRoutes from './routes/headcount-planning.routes';
+import industryTemplatesRoutes from './routes/industry-templates.routes';
+import quotaRoutes from './routes/quota.routes';
+import csvTemplateRoutes from './routes/csv-template.routes';
+import csvMappingRoutes from './routes/csv-mapping.routes';
+import onboardingRoutes from './routes/onboarding.routes';
+import pricingRoutes from './routes/pricing.routes';
+import usageRoutes from './routes/usage.routes';
 
 dotenv.config();
 
@@ -203,6 +210,13 @@ app.use('/api/v1', slackIntegrationRoutes);
 app.use('/api/v1', drillDownRoutes);
 app.use('/api/v1', dataTransformationRoutes);
 app.use('/api/v1', headcountPlanningRoutes);
+app.use('/api/v1', industryTemplatesRoutes);
+app.use('/api/v1', quotaRoutes);
+app.use('/api/v1', csvTemplateRoutes);
+app.use('/api/v1', csvMappingRoutes);
+app.use('/api/v1', onboardingRoutes);
+app.use('/api/v1', pricingRoutes);
+app.use('/api/v1', usageRoutes);
 app.use('/api/v1/debug', debugRoutes);
 
 // 404 handler
@@ -220,37 +234,39 @@ app.use((req, res) => {
 // Error handler (must be last)
 app.use(errorHandler);
 
-// Start server
-async function startServer() {
-  try {
-    await prisma.$connect();
-    logger.info('✅ Database connected successfully');
+// Start server (only if not in test mode and file is run directly)
+if (require.main === module && process.env.NODE_ENV !== 'test') {
+  async function startServer() {
+    try {
+      await prisma.$connect();
+      logger.info('✅ Database connected successfully');
 
-    app.listen(config.port, () => {
-      logger.info(`🚀 Server running on http://localhost:${config.port}`);
-      logger.info(`📊 Health check: http://localhost:${config.port}/health`);
-      logger.info(`🔧 Environment: ${config.nodeEnv}`);
-    });
-  } catch (error) {
-    logger.error('❌ Failed to start server:', error);
-    process.exit(1);
+      app.listen(config.port, () => {
+        logger.info(`🚀 Server running on http://localhost:${config.port}`);
+        logger.info(`📊 Health check: http://localhost:${config.port}/health`);
+        logger.info(`🔧 Environment: ${config.nodeEnv}`);
+      });
+    } catch (error) {
+      logger.error('❌ Failed to start server:', error);
+      process.exit(1);
+    }
   }
+
+  // Graceful shutdown
+  process.on('SIGINT', async () => {
+    logger.info('\n🛑 Shutting down gracefully...');
+    await prisma.$disconnect();
+    process.exit(0);
+  });
+
+  process.on('SIGTERM', async () => {
+    logger.info('\n🛑 Shutting down gracefully...');
+    await prisma.$disconnect();
+    process.exit(0);
+  });
+
+  startServer();
 }
-
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  logger.info('\n🛑 Shutting down gracefully...');
-  await prisma.$disconnect();
-  process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-  logger.info('\n🛑 Shutting down gracefully...');
-  await prisma.$disconnect();
-  process.exit(0);
-});
-
-startServer();
 
 export default app;
 

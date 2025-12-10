@@ -711,22 +711,26 @@ def compute_percentiles(results: np.ndarray, month_keys: List[str]) -> dict:
             for m, month_key in enumerate(month_keys)
         }
         
-        # Build series format
+        # Build series format - Include P10 and P90
         series = {
             'p5': percentile_values[0, :].tolist(),
+            'p10': percentile_values[1, :].tolist(),  # P10 added
             'p25': percentile_values[2, :].tolist(),
             'p50': percentile_values[3, :].tolist(),
             'p75': percentile_values[4, :].tolist(),
+            'p90': percentile_values[5, :].tolist(),  # P90 added
             'p95': percentile_values[6, :].tolist(),
         }
         
-        # Build percentiles_table format
+        # Build percentiles_table format - Include P10 and P90
         percentiles_table = {
             'months': month_keys,
             'p5': percentile_values[0, :].tolist(),
+            'p10': percentile_values[1, :].tolist(),  # P10 added
             'p25': percentile_values[2, :].tolist(),
             'p50': percentile_values[3, :].tolist(),
             'p75': percentile_values[4, :].tolist(),
+            'p90': percentile_values[5, :].tolist(),  # P90 added
             'p95': percentile_values[6, :].tolist(),
         }
         

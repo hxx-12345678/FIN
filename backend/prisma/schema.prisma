@@ -36,6 +36,7 @@ model User {
   boardReportSchedulesCreated BoardReportSchedule[] @relation("boardSchedule_createdBy")
   preferences        UserPreferences?
   reportApprovals    ReportApprovalHistory[]
+  usageRecords       UserUsage[]
 
   @@map("users")
 }
@@ -77,6 +78,7 @@ model Org {
   notificationChannels NotificationChannel[]
   details         OrgDetails?
   localizationSettings LocalizationSettings?
+  usageRecords    UserUsage[]
 
   @@map("orgs")
 }
@@ -710,4 +712,26 @@ model RealtimeSimulation {
   @@index([userId])
   @@index([updatedAt(sort: Desc)])
   @@map("realtime_simulations")
+}
+
+model UserUsage {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org               Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId             String    @db.Uuid
+  user              User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId            String?   @db.Uuid
+  simulationRunId   String?   @map("simulation_run_id") @db.Uuid // MonteCarloJob.id or ModelRun.id
+  monteCarloJobId   String?   @map("monte_carlo_job_id") @db.Uuid // Specific Monte Carlo job
+  creditsUsed       Int       @default(0) @map("credits_used")
+  creditType        String    @default("simulation") @map("credit_type") // simulation|export|alert
+  description       String?
+  metadata          Json?     // Additional data (numSimulations, etc.)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([orgId])
+  @@index([userId])
+  @@index([orgId, createdAt])
+  @@index([simulationRunId])
+  @@index([monteCarloJobId])
+  @@map("user_usage")
 }

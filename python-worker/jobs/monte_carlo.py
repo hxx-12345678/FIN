@@ -1036,21 +1036,27 @@ def compute_percentiles(results: np.ndarray, month_keys: List[str]) -> dict:
         }
         
         # Build series format (vectorized conversion - much faster than list comprehension)
+        # Include P10 and P90 for frontend display
         series = {
             'p5': percentile_values[0, :].tolist(),
+            'p10': percentile_values[1, :].tolist(),  # P10 added
             'p25': percentile_values[2, :].tolist(),
             'p50': percentile_values[3, :].tolist(),
             'p75': percentile_values[4, :].tolist(),
+            'p90': percentile_values[5, :].tolist(),  # P90 added
             'p95': percentile_values[6, :].tolist(),
         }
         
         # Build percentiles_table format
+        # Include P10 and P90 for frontend display
         percentiles_table = {
             'months': month_keys,
             'p5': percentile_values[0, :].tolist(),
+            'p10': percentile_values[1, :].tolist(),  # P10 added
             'p25': percentile_values[2, :].tolist(),
             'p50': percentile_values[3, :].tolist(),
             'p75': percentile_values[4, :].tolist(),
+            'p90': percentile_values[5, :].tolist(),  # P90 added
             'p95': percentile_values[6, :].tolist(),
         }
         

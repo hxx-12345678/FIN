@@ -147,6 +147,21 @@ export const financialModelService = {
       throw new ValidationError('start_month must be in YYYY-MM format');
     }
 
+    // Apply industry template if provided
+    let templateAssumptions: any = {};
+    if (request.industry && ['SaaS', 'E-commerce', 'Services'].includes(request.industry)) {
+      try {
+        const { industryTemplatesService } = await import('./industry-templates.service');
+        const template = industryTemplatesService.getTemplateByIndustry(request.industry);
+        if (template) {
+          templateAssumptions = template.assumptions;
+        }
+      } catch (error) {
+        // Template service not available, continue without template
+        logger.warn('Industry template service not available', { error });
+      }
+    }
+
     // Build modelJson structure
     const modelJson: any = {
       metadata: {
@@ -161,7 +176,10 @@ export const financialModelService = {
         description: request.description,
         createdAt: new Date().toISOString(),
       },
-      assumptions: {},
+      assumptions: {
+        ...templateAssumptions,
+        ...(request.assumptions || {}),
+      },
       projections: {},
       sensitivity: {},
     };

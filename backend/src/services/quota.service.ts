@@ -14,35 +14,54 @@ export const quotaService = {
    * Get or create quota for an org
    */
   async getOrCreateOrgQuota(orgId: string) {
-    let quota = await prisma.orgQuota.findUnique({
-      where: { orgId },
-    });
-
-    if (!quota) {
-      // Get org plan tier to set appropriate limits
-      const org = await prisma.org.findUnique({
-        where: { id: orgId },
-        select: { planTier: true },
+    try {
+      let quota = await prisma.orgQuota.findUnique({
+        where: { orgId },
       });
 
-      const planTier = org?.planTier || 'free';
+      if (!quota) {
+        // Get org plan tier to set appropriate limits
+        const org = await prisma.org.findUnique({
+          where: { id: orgId },
+          select: { planTier: true },
+        });
 
-      // Set limits based on plan tier
-      const limits = this.getLimitsByPlan(planTier);
+        const planTier = org?.planTier || 'free';
 
-      quota = await prisma.orgQuota.create({
-        data: {
-          orgId,
-          monteCarloSimsLimit: limits.monteCarlo,
-          exportsLimit: limits.exports,
-          alertsLimit: limits.alerts,
-          monteCarloResetAt: this.getNextResetDate(),
-          exportsResetAt: this.getNextResetDate(),
-        },
-      });
+        // Set limits based on plan tier
+        const limits = this.getLimitsByPlan(planTier);
+
+        quota = await prisma.orgQuota.create({
+          data: {
+            orgId,
+            monteCarloSimsLimit: limits.monteCarlo,
+            exportsLimit: limits.exports,
+            alertsLimit: limits.alerts,
+            monteCarloResetAt: this.getNextResetDate(),
+            exportsResetAt: this.getNextResetDate(),
+          },
+        });
+      }
+
+      return quota;
+    } catch (error: any) {
+      // If table doesn't exist or there's a Prisma error, return default quota
+      console.warn('Error accessing orgQuota table, using defaults:', error.message);
+      const limits = this.getLimitsByPlan('free');
+      return {
+        id: 'default',
+        orgId,
+        monteCarloSimsLimit: limits.monteCarlo,
+        monteCarloSimsUsed: 0,
+        monteCarloResetAt: this.getNextResetDate(),
+        exportsLimit: limits.exports,
+        exportsUsed: 0,
+        exportsResetAt: this.getNextResetDate(),
+        alertsLimit: limits.alerts,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
     }
-
-    return quota;
   },
 
   /**
@@ -75,14 +94,20 @@ export const quotaService = {
 
     // Check if quota needs reset
     if (quota.monteCarloResetAt && new Date() >= quota.monteCarloResetAt) {
-      await prisma.orgQuota.update({
-        where: { orgId },
-        data: {
-          monteCarloSimsUsed: 0,
-          monteCarloResetAt: this.getNextResetDate(),
-        },
-      });
-      quota.monteCarloSimsUsed = 0;
+      try {
+        await prisma.orgQuota.update({
+          where: { orgId },
+          data: {
+            monteCarloSimsUsed: 0,
+            monteCarloResetAt: this.getNextResetDate(),
+          },
+        });
+        quota.monteCarloSimsUsed = 0;
+      } catch (error: any) {
+        // If update fails, just reset in memory
+        console.warn('Error resetting quota, using in-memory value:', error.message);
+        quota.monteCarloSimsUsed = 0;
+      }
     }
 
     const remaining = quota.monteCarloSimsLimit - quota.monteCarloSimsUsed;
@@ -103,14 +128,19 @@ export const quotaService = {
    * Consume Monte Carlo quota
    */
   async consumeMonteCarloQuota(orgId: string, numSims: number): Promise<void> {
-    await prisma.orgQuota.update({
-      where: { orgId },
-      data: {
-        monteCarloSimsUsed: {
-          increment: numSims,
+    try {
+      await prisma.orgQuota.update({
+        where: { orgId },
+        data: {
+          monteCarloSimsUsed: {
+            increment: numSims,
+          },
         },
-      },
-    });
+      });
+    } catch (error: any) {
+      // If update fails (table doesn't exist), just log and continue
+      console.warn('Error consuming quota, continuing without tracking:', error.message);
+    }
   },
 
   /**
@@ -121,14 +151,19 @@ export const quotaService = {
 
     // Check if quota needs reset
     if (quota.exportsResetAt && new Date() >= quota.exportsResetAt) {
-      await prisma.orgQuota.update({
-        where: { orgId },
-        data: {
-          exportsUsed: 0,
-          exportsResetAt: this.getNextResetDate(),
-        },
-      });
-      quota.exportsUsed = 0;
+      try {
+        await prisma.orgQuota.update({
+          where: { orgId },
+          data: {
+            exportsUsed: 0,
+            exportsResetAt: this.getNextResetDate(),
+          },
+        });
+        quota.exportsUsed = 0;
+      } catch (error: any) {
+        console.warn('Error resetting export quota, using in-memory value:', error.message);
+        quota.exportsUsed = 0;
+      }
     }
 
     const remaining = quota.exportsLimit - quota.exportsUsed;
@@ -149,14 +184,18 @@ export const quotaService = {
    * Consume export quota
    */
   async consumeExportQuota(orgId: string): Promise<void> {
-    await prisma.orgQuota.update({
-      where: { orgId },
-      data: {
-        exportsUsed: {
-          increment: 1,
+    try {
+      await prisma.orgQuota.update({
+        where: { orgId },
+        data: {
+          exportsUsed: {
+            increment: 1,
+          },
         },
-      },
-    });
+      });
+    } catch (error: any) {
+      console.warn('Error consuming export quota, continuing without tracking:', error.message);
+    }
   },
 
   /**

@@ -33,10 +33,21 @@ export const monteCarloController = {
         throw new NotFoundError('Model not found');
       }
 
-      // Check quota
+      // Check quota (legacy check)
       const quotaCheck = await quotaService.checkMonteCarloQuota(model.orgId, numSimulations);
       if (!quotaCheck.allowed) {
         throw new ForbiddenError(quotaCheck.message || 'Monte Carlo quota exceeded');
+      }
+
+      // Check credit balance (new credit metering system)
+      const simulationCreditService = (await import('../services/simulation-credit.service')).simulationCreditService;
+      const creditCheck = await simulationCreditService.checkCreditBalance(
+        model.orgId,
+        req.user.id,
+        Math.ceil(numSimulations / 1000) // 1 credit = 1000 simulations
+      );
+      if (!creditCheck.allowed) {
+        throw new ForbiddenError(creditCheck.message || 'Insufficient simulation credits');
       }
 
       // Verify user has access to model's org
@@ -134,6 +145,20 @@ export const monteCarloController = {
       // Consume quota (will be refunded if job fails)
       await quotaService.consumeMonteCarloQuota(model.orgId, numSimulations);
 
+      // Deduct simulation credits (new credit metering system)
+      const creditUsage = await simulationCreditService.deductCredits(
+        model.orgId,
+        req.user.id,
+        modelRun.id,
+        monteCarloJobId,
+        numSimulations,
+        false, // adminOverride
+        `Monte Carlo simulation: ${numSimulations} simulations`
+      );
+
+      // Get updated credit balance
+      const updatedBalance = await simulationCreditService.getCreditBalance(model.orgId);
+
       res.status(201).json({
         ok: true,
         jobId,
@@ -143,6 +168,12 @@ export const monteCarloController = {
           remaining: quotaCheck.remaining - numSimulations,
           limit: quotaCheck.limit,
           resetAt: quotaCheck.resetAt,
+        },
+        credits: {
+          used: creditUsage.creditsUsed,
+          remaining: updatedBalance.remainingCredits,
+          total: updatedBalance.totalCredits,
+          resetAt: updatedBalance.resetAt,
         },
       });
     } catch (error) {

@@ -33,7 +33,7 @@ router.post(
 router.post(
   '/orgs/:orgId/import/csv/automap',
   authenticate,
-  requireOrgAccess,
+  requireOrgAccess('orgId'),
   csvController.autoMap
 );
 

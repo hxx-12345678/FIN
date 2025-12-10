@@ -19,6 +19,15 @@ export const config = {
       clientId: process.env.GOOGLE_CLIENT_ID || '',
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
     },
+    microsoft: {
+      clientId: process.env.MICROSOFT_CLIENT_ID || '',
+      clientSecret: process.env.MICROSOFT_CLIENT_SECRET || '',
+    },
+    okta: {
+      domain: process.env.OKTA_DOMAIN || '',
+      clientId: process.env.OKTA_CLIENT_ID || '',
+      clientSecret: process.env.OKTA_CLIENT_SECRET || '',
+    },
     quickbooks: {
       clientId: process.env.QUICKBOOKS_CLIENT_ID || '',
       clientSecret: process.env.QUICKBOOKS_CLIENT_SECRET || '',

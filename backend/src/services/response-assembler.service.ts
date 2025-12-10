@@ -109,7 +109,7 @@ export const responseAssembler = {
           calculations.monthlyCost = result.params.result;
           calculations[operation] = result.params.result;
         } else {
-          calculations[operation] = result.params.result;
+        calculations[operation] = result.params.result;
         }
       }
     }

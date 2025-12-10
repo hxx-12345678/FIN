@@ -181,9 +181,11 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
          return {
            month: months[monthIndex],
            p5: percentiles.percentiles_table.p5[i],
+           p10: percentiles.percentiles_table.p10?.[i] ?? percentiles.percentiles_table.p5[i], // P10 with fallback
            p25: percentiles.percentiles_table.p25[i],
            median: percentiles.percentiles_table.p50[i],
            p75: percentiles.percentiles_table.p75[i],
+           p90: percentiles.percentiles_table.p90?.[i] ?? percentiles.percentiles_table.p95[i], // P90 with fallback
            p95: percentiles.percentiles_table.p95[i],
            deterministic: percentiles.percentiles_table.p50[i] // Fallback for deterministic line
          };
@@ -954,15 +956,15 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                   <Tooltip formatter={(value) => [`$${value?.toLocaleString()}`, ""]} />
                   <Legend />
 
-                  {/* 90% Confidence Band (5th-95th percentile) */}
+                  {/* 80% Confidence Band (P10-P90) - Primary visualization */}
                   <Area
                     type="monotone"
-                    dataKey="p95"
+                    dataKey="p90"
                     stackId="1"
                     stroke="none"
-                    fill="#e0e7ff"
-                    fillOpacity={0.3}
-                    name="95th Percentile"
+                    fill="#d1fae5"
+                    fillOpacity={0.4}
+                    name="P90 (90th Percentile)"
                   />
                   <Area
                     type="monotone"
@@ -971,7 +973,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                     stroke="none"
                     fill="#c7d2fe"
                     fillOpacity={0.4}
-                    name="75th Percentile"
+                    name="P75 (75th Percentile)"
                   />
                   <Area
                     type="monotone"
@@ -980,7 +982,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                     stroke="none"
                     fill="#a5b4fc"
                     fillOpacity={0.5}
-                    name="Median"
+                    name="P50 (Median)"
                   />
                   <Area
                     type="monotone"
@@ -989,16 +991,35 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                     stroke="none"
                     fill="#c7d2fe"
                     fillOpacity={0.4}
-                    name="25th Percentile"
+                    name="P25 (25th Percentile)"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="p10"
+                    stackId="5"
+                    stroke="none"
+                    fill="#fee2e2"
+                    fillOpacity={0.4}
+                    name="P10 (10th Percentile)"
+                  />
+                  {/* Extended 90% Confidence Band (P5-P95) - Lighter overlay */}
+                  <Area
+                    type="monotone"
+                    dataKey="p95"
+                    stackId="6"
+                    stroke="none"
+                    fill="#e0e7ff"
+                    fillOpacity={0.2}
+                    name="P95 (95th Percentile)"
                   />
                   <Area
                     type="monotone"
                     dataKey="p5"
-                    stackId="5"
+                    stackId="7"
                     stroke="none"
-                    fill="#e0e7ff"
-                    fillOpacity={0.3}
-                    name="5th Percentile"
+                    fill="#fee2e2"
+                    fillOpacity={0.2}
+                    name="P5 (5th Percentile)"
                   />
 
                   {/* Median Line */}
@@ -1035,7 +1056,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                 <div className="p-3 border rounded-lg">
                   <div className="text-sm text-muted-foreground mb-1">90% Confidence Range</div>
                   <div className="text-xl font-bold">$36K - $106K</div>
-                  <div className="text-xs text-muted-foreground">5th to 95th percentile</div>
+                  <div className="text-xs text-muted-foreground">P10 (conservative) to P90 (optimistic) with P50 (median)</div>
                 </div>
                 <div className="p-3 border rounded-lg">
                   <div className="text-sm text-muted-foreground mb-1">Uncertainty Spread</div>
