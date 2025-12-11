@@ -78,7 +78,7 @@ function fallbackIntentClassifier(input: string): IntentClassification {
   } else if (lower.includes('₹') || lower.includes('inr') || lower.includes('rupee')) {
     currency = 'INR';
   }
-  
+
   // Enhanced entity extraction - extract specific financial values
   // Extract runway months (e.g., "12 months", "12-month", "12m")
   const runwayMatch = lower.match(/(\d+)\s*(?:months?|month|m)\s*(?:runway|of runway)/i);
@@ -245,7 +245,7 @@ function fallbackIntentClassifier(input: string): IntentClassification {
   // Intent classification via keywords - ENHANCED for 90%+ confidence
   let intent = 'strategy_recommendation'; // default
   let confidence = 0.5;
-  
+
   // Calculate confidence boost based on slot extraction quality - ENHANCED for 90%+ target
   let slotConfidenceBoost = 0;
   const extractedSlotsCount = Object.keys(slots).length;
@@ -317,9 +317,9 @@ function fallbackIntentClassifier(input: string): IntentClassification {
         slots.runway_months = { value: amounts[0], normalized_value: amounts[0], confidence: 0.6 };
         slots.cash = { value: amounts[1], normalized_value: amounts[1], currency, confidence: 0.6 };
       } else {
-        slots.cash = { value: amounts[0], normalized_value: amounts[0], currency, confidence: 0.6 };
-        slots.burn_rate = { value: amounts[1], normalized_value: amounts[1], currency, confidence: 0.6 };
-      }
+      slots.cash = { value: amounts[0], normalized_value: amounts[0], currency, confidence: 0.6 };
+      slots.burn_rate = { value: amounts[1], normalized_value: amounts[1], currency, confidence: 0.6 };
+    }
     } else if (amounts.length >= 1 && slots.cash) {
       // Already extracted cash
     } else if (amounts.length >= 1) {
@@ -339,7 +339,7 @@ function fallbackIntentClassifier(input: string): IntentClassification {
     ];
     patternStrength = burnIndicators.filter(Boolean).length;
     if (patternStrength >= 1) {
-      intent = 'burn_rate_calculation';
+    intent = 'burn_rate_calculation';
       confidence = Math.min(0.98, 0.82 + baseConfidenceBoost + (patternStrength * 0.04) + slotConfidenceBoost);
       // Boost if we have runway and cash (can calculate burn from these)
       if (slots.runway_months && slots.cash) {
@@ -379,7 +379,7 @@ function fallbackIntentClassifier(input: string): IntentClassification {
           ];
           patternStrength = revenueForecastIndicators.filter(Boolean).length;
           if (patternStrength >= 1) {
-            intent = 'revenue_forecast';
+    intent = 'revenue_forecast';
             confidence = Math.min(0.98, 0.87 + baseConfidenceBoost + (patternStrength * 0.04) + slotConfidenceBoost);
             if (slots.base_revenue || slots.revenue_growth || slots.months) {
               confidence = Math.min(0.98, confidence + 0.12);
@@ -400,7 +400,7 @@ function fallbackIntentClassifier(input: string): IntentClassification {
         ];
         patternStrength = hireIndicators.filter(Boolean).length;
         if (patternStrength >= 1) {
-          intent = 'hire_impact';
+    intent = 'hire_impact';
           confidence = Math.min(0.98, 0.82 + (patternStrength * 0.04) + slotConfidenceBoost);
           if (slots.hire_count || slots.salary) {
             confidence = Math.min(0.98, confidence + 0.15); // Higher boost for hire_impact
@@ -418,7 +418,7 @@ function fallbackIntentClassifier(input: string): IntentClassification {
           ];
           patternStrength = monteCarloIndicators.filter(Boolean).length;
           if (patternStrength >= 1) {
-            intent = 'monte_carlo';
+    intent = 'monte_carlo';
             confidence = Math.min(0.98, 0.88 + (patternStrength * 0.05) + slotConfidenceBoost);
             if (patternStrength >= 2) {
               confidence = Math.max(0.90, confidence);
@@ -456,7 +456,7 @@ function fallbackIntentClassifier(input: string): IntentClassification {
                 confidence = Math.max(0.90, confidence);
               } else {
                 // "What if" → scenario_simulation
-                intent = 'scenario_simulation';
+    intent = 'scenario_simulation';
                 confidence = Math.min(0.98, 0.87 + baseConfidenceBoost + (patternStrength * 0.04) + slotConfidenceBoost);
                 if (slots.revenue_growth || slots.expense_change) {
                   confidence = Math.min(0.98, confidence + 0.12);
@@ -471,7 +471,7 @@ function fallbackIntentClassifier(input: string): IntentClassification {
               ];
               patternStrength = varianceIndicators.filter(Boolean).length;
               if (patternStrength >= 1) {
-                intent = 'variance_analysis';
+    intent = 'variance_analysis';
                 confidence = Math.min(0.98, 0.82 + (patternStrength * 0.04) + slotConfidenceBoost);
                 if (patternStrength >= 2) {
                   confidence = Math.max(0.90, confidence);
@@ -487,7 +487,7 @@ function fallbackIntentClassifier(input: string): IntentClassification {
                 ];
                 patternStrength = fundraisingIndicators.filter(Boolean).length;
                 if (patternStrength >= 1) {
-                  intent = 'fundraising_readiness';
+    intent = 'fundraising_readiness';
                   confidence = Math.min(0.98, 0.87 + baseConfidenceBoost + (patternStrength * 0.04) + slotConfidenceBoost);
                   confidence = Math.max(0.90, confidence); // Ensure 90%+
                 } else {

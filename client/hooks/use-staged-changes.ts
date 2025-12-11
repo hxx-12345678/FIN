@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react"
 import { toast } from "sonner"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthToken, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface StagedChange {
   id: string
@@ -60,12 +60,9 @@ export function useStagedChanges(statusFilter?: string): UseStagedChangesReturn 
         return
       }
 
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
+      const token = getAuthToken()
 
-      if (!token || token.trim().length === 0) {
+      if (!token) {
         // For unauthenticated users, return empty array
         setChanges([])
         setIsLoading(false)
@@ -74,10 +71,7 @@ export function useStagedChanges(statusFilter?: string): UseStagedChangesReturn 
 
       // Fetch AI plans and extract staged changes
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/ai-plans`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
 
@@ -91,6 +85,7 @@ export function useStagedChanges(statusFilter?: string): UseStagedChangesReturn 
         // Handle 401/403 (unauthorized) gracefully
         if (response.status === 401 || response.status === 403) {
           console.warn("Unauthorized access to AI plans")
+          handleUnauthorized()
           setChanges([])
           setIsLoading(false)
           return

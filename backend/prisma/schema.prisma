@@ -640,11 +640,11 @@ model Budget {
 model ExcelSync {
   id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   org          Org           @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  orgId        String        @db.Uuid
+  orgId        String        @map("org_id") @db.Uuid
   fileName     String?       @map("file_name")
   fileHash     String?       @map("file_hash") @db.VarChar(64)
   mapping      ExcelMapping? @relation(fields: [mappingId], references: [id], onDelete: SetNull)
-  mappingId    String?       @db.Uuid
+  mappingId    String?       @map("mapping_id") @db.Uuid
   status       String        @default("pending") // pending|processing|completed|failed
   lastSyncedAt DateTime?     @map("last_synced_at") @db.Timestamptz(6)
   errorMessage String?       @map("error_message")
@@ -661,12 +661,12 @@ model ExcelSync {
 model ExcelMapping {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   org         Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  orgId       String   @db.Uuid
+  orgId       String   @map("org_id") @db.Uuid
   name        String
   description String?
   mappingJson Json     @map("mapping_json") // column mappings, ranges, rules
   createdBy   User?    @relation("excelMapping_createdBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdById String?  @db.Uuid
+  createdById String?  @map("created_by") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -679,7 +679,7 @@ model ExcelMapping {
 model OrgQuota {
   id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   org                 Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  orgId               String    @unique @db.Uuid
+  orgId               String    @unique @map("org_id") @db.Uuid
   monteCarloSimsLimit Int       @default(10000) @map("monte_carlo_sims_limit")
   monteCarloSimsUsed  Int       @default(0) @map("monte_carlo_sims_used")
   monteCarloResetAt   DateTime? @map("monte_carlo_reset_at") @db.Timestamptz(6)

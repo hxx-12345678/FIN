@@ -34,7 +34,7 @@ import {
   Loader2,
 } from "lucide-react"
 import { toast } from "sonner"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthToken, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface OverviewData {
   healthScore: number
@@ -194,16 +194,14 @@ export function OverviewDashboard() {
       setOrgId(currentOrgId)
       console.log("[Overview] Fetching data for orgId:", currentOrgId)
 
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
+      const token = getAuthToken()
 
       if (!token) {
         const errorMsg = "Authentication token not found. Please log in."
         console.error("[Overview] No token found:", errorMsg)
         setError(errorMsg)
         toast.error(errorMsg)
+        handleUnauthorized()
         setLoading(false)
         return
       }
@@ -212,16 +210,24 @@ export function OverviewDashboard() {
       console.log("[Overview] Fetching from URL:", url)
 
       const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
 
       console.log("[Overview] Response status:", response.status, response.statusText)
 
       if (!response.ok) {
+        // Handle 401 Unauthorized
+        if (response.status === 401) {
+          const errorMsg = "Your session has expired. Please log in again."
+          console.error("[Overview] Unauthorized:", errorMsg)
+          setError(errorMsg)
+          toast.error(errorMsg)
+          handleUnauthorized()
+          setLoading(false)
+          return
+        }
+        
         let errorData = {}
         try {
           errorData = await response.json()

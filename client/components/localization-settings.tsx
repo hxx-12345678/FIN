@@ -24,33 +24,7 @@ import {
   Loader2,
 } from "lucide-react"
 import { toast } from "sonner"
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
-
-// Helper function to get auth token
-const getAuthToken = (): string | null => {
-  if (typeof window === "undefined") return null
-  const token = localStorage.getItem("auth-token")
-  if (token) return token
-  const cookies = document.cookie.split("; ")
-  const authCookie = cookies.find((row) => row.startsWith("auth-token="))
-  if (authCookie) {
-    return authCookie.split("=")[1]
-  }
-  return null
-}
-
-// Helper function to get auth headers
-const getAuthHeaders = (): HeadersInit => {
-  const token = getAuthToken()
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  }
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`
-  }
-  return headers
-}
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface Currency {
   code: string
@@ -121,14 +95,23 @@ export function LocalizationSettings() {
           headers: getAuthHeaders(),
           credentials: "include",
         })
+        
+        if (response.status === 401) {
+          console.warn("[Localization] Unauthorized - token expired or invalid")
+          handleUnauthorized()
+          return
+        }
+        
         if (response.ok) {
           const data = await response.json()
           if (data.orgs && data.orgs.length > 0) {
             setOrgId(data.orgs[0].id)
           }
+        } else {
+          console.error(`[Localization] Failed to fetch orgId: ${response.status} ${response.statusText}`)
         }
       } catch (error) {
-        console.error("Failed to fetch orgId:", error)
+        console.error("[Localization] Failed to fetch orgId:", error)
       }
     }
     fetchOrgId()

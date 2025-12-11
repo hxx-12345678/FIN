@@ -19,7 +19,25 @@ export const authenticate = async (
     }
 
     const token = authHeader.substring(7);
-    const payload = verifyToken(token);
+    
+    if (!token || token.trim().length === 0) {
+      throw new UnauthorizedError('Token is empty');
+    }
+
+    // Check if JWT_SECRET is configured
+    if (!process.env.JWT_SECRET) {
+      console.error('[Auth] JWT_SECRET is not configured');
+      throw new UnauthorizedError('Server configuration error');
+    }
+
+    let payload: JWTPayload;
+    try {
+      payload = verifyToken(token);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Token verification failed';
+      console.error('[Auth] Token verification failed:', errorMessage);
+      throw new UnauthorizedError(errorMessage.includes('expired') ? 'Token expired' : 'Invalid token');
+    }
 
     // Verify user exists and is active
     const user = await prisma.user.findUnique({
@@ -27,8 +45,14 @@ export const authenticate = async (
       select: { id: true, email: true, isActive: true },
     });
 
-    if (!user || !user.isActive) {
-      throw new UnauthorizedError('User not found or inactive');
+    if (!user) {
+      console.error('[Auth] User not found:', payload.userId);
+      throw new UnauthorizedError('User not found');
+    }
+
+    if (!user.isActive) {
+      console.error('[Auth] User is inactive:', payload.userId);
+      throw new UnauthorizedError('User account is inactive');
     }
 
     req.user = {
@@ -38,7 +62,14 @@ export const authenticate = async (
 
     next();
   } catch (error) {
-    next(new UnauthorizedError('Invalid token'));
+    // If it's already an UnauthorizedError, pass it through
+    if (error instanceof UnauthorizedError) {
+      next(error);
+    } else {
+      // Log unexpected errors for debugging
+      console.error('[Auth] Unexpected error:', error);
+      next(new UnauthorizedError('Authentication failed'));
+    }
   }
 };
 
