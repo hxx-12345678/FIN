@@ -599,27 +599,30 @@ export function BoardReporting() {
   const activeSections = useMemo(() => Object.entries(includeSections).filter(([, value]) => value).map(([key]) => key), [includeSections])
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
+    <div className="space-y-4 md:space-y-6 p-4 md:p-0 overflow-x-hidden">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Board Reporting</h1>
-          <p className="text-muted-foreground">Generate scheduled board packs, investor updates, and stakeholder reports.</p>
+          <h1 className="text-2xl md:text-3xl font-bold">Board Reporting</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Generate scheduled board packs, investor updates, and stakeholder reports.</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setScheduleDialogOpen(true)}>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <Button variant="outline" onClick={() => setScheduleDialogOpen(true)} className="w-full sm:w-auto">
             <Calendar className="mr-2 h-4 w-4" />
-            Schedule Report
+            <span className="hidden sm:inline">Schedule Report</span>
+            <span className="sm:hidden">Schedule</span>
           </Button>
-          <Button onClick={handleGenerateReport} disabled={isGenerating}>
+          <Button onClick={handleGenerateReport} disabled={isGenerating} className="w-full sm:w-auto">
             {isGenerating ? (
               <>
                 <Zap className="mr-2 h-4 w-4 animate-spin" />
-                Generating...
+                <span className="hidden sm:inline">Generating...</span>
+                <span className="sm:hidden">Generating</span>
               </>
             ) : (
               <>
                 <Presentation className="mr-2 h-4 w-4" />
-                Generate Report
+                <span className="hidden sm:inline">Generate Report</span>
+                <span className="sm:hidden">Generate</span>
               </>
             )}
           </Button>
@@ -658,16 +661,18 @@ export function BoardReporting() {
       </Card>
 
       <Tabs defaultValue="content" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="content">Content</TabsTrigger>
-          <TabsTrigger value="metrics">Metrics</TabsTrigger>
-          <TabsTrigger value="preview">Preview</TabsTrigger>
-          <TabsTrigger value="distribution">Distribution</TabsTrigger>
-          <TabsTrigger value="approval">Approval</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto">
+          <TabsList className="grid w-full grid-cols-5 min-w-[500px]">
+            <TabsTrigger value="content" className="text-xs sm:text-sm">Content</TabsTrigger>
+            <TabsTrigger value="metrics" className="text-xs sm:text-sm">Metrics</TabsTrigger>
+            <TabsTrigger value="preview" className="text-xs sm:text-sm">Preview</TabsTrigger>
+            <TabsTrigger value="distribution" className="text-xs sm:text-sm">Distribution</TabsTrigger>
+            <TabsTrigger value="approval" className="text-xs sm:text-sm">Approval</TabsTrigger>
+          </TabsList>
+        </div>
 
-        <TabsContent value="content" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TabsContent value="content" className="space-y-4 overflow-x-auto overflow-y-visible">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
             <Card>
               <CardHeader>
                 <CardTitle>Report Configuration</CardTitle>
@@ -786,7 +791,7 @@ export function BoardReporting() {
           </div>
         </TabsContent>
 
-        <TabsContent value="metrics" className="space-y-4">
+        <TabsContent value="metrics" className="space-y-4 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
               <CardTitle>Select Key Metrics</CardTitle>
@@ -832,7 +837,7 @@ export function BoardReporting() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="preview" className="space-y-4">
+        <TabsContent value="preview" className="space-y-4 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
               <CardTitle>Report Preview</CardTitle>
@@ -879,7 +884,7 @@ export function BoardReporting() {
                       <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                     </div>
                   ) : chartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={200}>
+                    <ResponsiveContainer width="100%" height={200} className="min-h-[200px] sm:min-h-[250px]">
                       <LineChart data={chartData}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="month" />
@@ -901,7 +906,7 @@ export function BoardReporting() {
                       <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                     </div>
                   ) : chartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={200}>
+                    <ResponsiveContainer width="100%" height={200} className="min-h-[200px] sm:min-h-[250px]">
                       <BarChart data={chartData}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="month" />
@@ -921,8 +926,8 @@ export function BoardReporting() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="distribution" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TabsContent value="distribution" className="space-y-4 overflow-x-auto overflow-y-visible">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
             <Card>
               <CardHeader>
                 <CardTitle>Distribution Settings</CardTitle>

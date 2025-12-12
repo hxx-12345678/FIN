@@ -228,13 +228,13 @@ export function OverviewDashboard() {
           return
         }
         
-        let errorData = {}
+        let errorData: any = {}
         try {
           errorData = await response.json()
         } catch (e) {
           console.error("[Overview] Failed to parse error response:", e)
         }
-        const errorMsg = errorData.error?.message || errorData.message || `Failed to fetch overview data: ${response.statusText}`
+        const errorMsg = errorData?.error?.message || errorData?.message || `Failed to fetch overview data: ${response.statusText}`
         console.error("[Overview] API Error:", errorMsg, errorData)
         throw new Error(errorMsg)
       }
@@ -306,15 +306,15 @@ export function OverviewDashboard() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="space-y-4 md:space-y-6 p-4 md:p-0 overflow-x-hidden">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <Skeleton className="h-10 w-64" />
-          <div className="flex gap-2">
-            <Skeleton className="h-10 w-32" />
-            <Skeleton className="h-10 w-32" />
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+            <Skeleton className="h-10 w-full sm:w-32" />
+            <Skeleton className="h-10 w-full sm:w-32" />
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
           {[1, 2, 3, 4].map((i) => (
             <Skeleton key={i} className="h-32" />
           ))}
@@ -325,10 +325,10 @@ export function OverviewDashboard() {
 
   if (error && !data) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4 md:space-y-6 p-4 md:p-0 overflow-x-hidden">
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className="text-sm">{error}</AlertDescription>
         </Alert>
       </div>
     )
@@ -354,21 +354,23 @@ export function OverviewDashboard() {
   const expenseBreakdown = overviewData.expenseBreakdown
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6 p-4 md:p-0 overflow-x-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Financial Overview</h1>
-          <p className="text-muted-foreground">AI-powered insights for your business performance</p>
+          <h1 className="text-2xl md:text-3xl font-bold">Financial Overview</h1>
+          <p className="text-sm md:text-base text-muted-foreground">AI-powered insights for your business performance</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <Button variant="outline" className="w-full sm:w-auto">
             <Calendar className="mr-2 h-4 w-4" />
-            Last 30 days
+            <span className="hidden sm:inline">Last 30 days</span>
+            <span className="sm:hidden">30d</span>
           </Button>
-          <Button>
+          <Button className="w-full sm:w-auto">
             <Zap className="mr-2 h-4 w-4" />
-            Generate Report
+            <span className="hidden sm:inline">Generate Report</span>
+            <span className="sm:hidden">Report</span>
           </Button>
         </div>
       </div>
@@ -485,7 +487,7 @@ export function OverviewDashboard() {
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         <Card>
           <CardHeader>
             <CardTitle>Revenue vs Forecast</CardTitle>
@@ -493,7 +495,7 @@ export function OverviewDashboard() {
           </CardHeader>
           <CardContent>
             {revenueData && revenueData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
                 <LineChart data={revenueData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
@@ -511,7 +513,7 @@ export function OverviewDashboard() {
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+              <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground text-sm px-4 text-center">
                 No revenue data available
               </div>
             )}
@@ -525,7 +527,7 @@ export function OverviewDashboard() {
           </CardHeader>
           <CardContent>
             {burnRateData && burnRateData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
                 <AreaChart data={burnRateData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
@@ -543,7 +545,7 @@ export function OverviewDashboard() {
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+              <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground text-sm px-4 text-center">
                 No burn rate data available
               </div>
             )}
@@ -552,14 +554,14 @@ export function OverviewDashboard() {
       </div>
 
       {/* Expense Breakdown and Alerts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         <Card>
           <CardHeader>
             <CardTitle>Expense Breakdown</CardTitle>
             <CardDescription>Current month expense distribution</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
               <PieChart>
                 <Pie
                   data={expenseBreakdown}

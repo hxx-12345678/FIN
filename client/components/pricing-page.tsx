@@ -100,7 +100,7 @@ export function PricingPage() {
   const [selectedRegion, setSelectedRegion] = useState("US")
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 md:space-y-8 p-4 md:p-0 overflow-x-hidden">
       {/* Header */}
       <div className="text-center space-y-4">
         <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
@@ -121,7 +121,7 @@ export function PricingPage() {
           <CardDescription>Your current plan usage and limits</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
             {usageStats.map((stat) => (
               <div key={stat.label} className="space-y-2">
                 <div className="flex justify-between text-sm">
@@ -218,7 +218,7 @@ export function PricingPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="India" className="space-y-6">
+        <TabsContent value="India" className="space-y-6 overflow-x-auto overflow-y-visible">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {regionalPlans[0].plans.map((plan, index) => (
               <Card key={plan.name} className={`relative ${index === 1 ? "border-blue-500 shadow-lg" : ""}`}>

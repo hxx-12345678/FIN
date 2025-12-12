@@ -100,25 +100,27 @@ export function AuditabilityModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh]">
+      <DialogContent className="max-w-[95vw] sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
             <FileText className="h-5 w-5" />
-            AI-CFO Auditability — No Black Box
+            <span className="text-sm sm:text-base">AI-CFO Auditability — No Black Box</span>
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs sm:text-sm">
             Every recommendation is linked to exact data sources and prompts for full transparency
           </DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="recommendation" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="recommendation">Recommendation</TabsTrigger>
-            <TabsTrigger value="prompt">Prompt & Model</TabsTrigger>
-            <TabsTrigger value="data">Data Sources</TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto">
+            <TabsList className="grid w-full grid-cols-3 min-w-[300px]">
+              <TabsTrigger value="recommendation" className="text-xs sm:text-sm">Recommendation</TabsTrigger>
+              <TabsTrigger value="prompt" className="text-xs sm:text-sm">Prompt & Model</TabsTrigger>
+              <TabsTrigger value="data" className="text-xs sm:text-sm">Data Sources</TabsTrigger>
+            </TabsList>
+          </div>
 
-          <TabsContent value="recommendation" className="space-y-4">
+          <TabsContent value="recommendation" className="space-y-4 overflow-x-auto overflow-y-visible">
             {recommendation ? (
               <Card>
                 <CardHeader>

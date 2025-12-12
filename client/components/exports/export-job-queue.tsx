@@ -520,18 +520,19 @@ export function ExportJobQueue() {
               <p className="text-muted-foreground">No export jobs found</p>
             </div>
           ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Progress</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead>Size</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
+            <div className="overflow-x-auto">
+              <div className="rounded-md border min-w-full inline-block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Progress</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead>Size</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
                 <TableBody>
                   {filteredAndSortedJobs.map((job) => (
                     <TableRow key={job.id}>
@@ -609,6 +610,7 @@ export function ExportJobQueue() {
                   ))}
                 </TableBody>
               </Table>
+              </div>
             </div>
           )}
         </CardContent>

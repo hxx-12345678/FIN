@@ -95,8 +95,8 @@ function SessionManagementButton() {
         Manage Sessions
       </Button>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm" onClick={() => setOpen(false)}>
-          <div className="max-w-4xl w-full mx-4" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4" onClick={() => setOpen(false)}>
+          <div className="max-w-[95vw] sm:max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <SessionManagement />
           </div>
         </div>
@@ -580,34 +580,37 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="space-y-4 md:space-y-6 p-4 md:p-6 overflow-x-hidden">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Settings</h1>
-          <p className="text-muted-foreground">Manage your account and workspace preferences</p>
+          <p className="text-sm md:text-base text-muted-foreground">Manage your account and workspace preferences</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <Button 
             variant="outline" 
             size="sm" 
-            className="bg-transparent"
+            className="bg-transparent w-full sm:w-auto"
             onClick={handleExportData}
           >
             <Download className="mr-2 h-4 w-4" />
-            Export Data
+            <span className="hidden sm:inline">Export Data</span>
+            <span className="sm:hidden">Export</span>
           </Button>
           <Button 
             size="sm"
             onClick={handleSaveAll}
             disabled={saving || !hasChanges}
+            className="w-full sm:w-auto"
           >
             {saving ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <Save className="mr-2 h-4 w-4" />
             )}
-            Save Changes
+            <span className="hidden sm:inline">Save Changes</span>
+            <span className="sm:hidden">Save</span>
           </Button>
         </div>
       </div>
@@ -635,7 +638,7 @@ export function SettingsPage() {
         </TabsList>
 
         {/* Profile Tab */}
-        <TabsContent value="profile" className="space-y-6">
+        <TabsContent value="profile" className="space-y-6 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -664,7 +667,7 @@ export function SettingsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="name">Full Name</Label>
                   <Input 
@@ -735,7 +738,7 @@ export function SettingsPage() {
         </TabsContent>
 
         {/* Organization Tab */}
-        <TabsContent value="organization" className="space-y-6">
+        <TabsContent value="organization" className="space-y-6 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -745,7 +748,7 @@ export function SettingsPage() {
               <CardDescription>Manage your organization settings and information</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="companyName">Company Name</Label>
                   <Input 
@@ -778,7 +781,7 @@ export function SettingsPage() {
                     value={organization.companySize}
                     onValueChange={(value) => setOrganization({ ...organization, companySize: value })}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select size" />
                     </SelectTrigger>
                     <SelectContent>
@@ -859,7 +862,7 @@ export function SettingsPage() {
                   value={appearance.theme}
                   onValueChange={(value: "light" | "dark" | "auto") => setAppearance({ ...appearance, theme: value })}
                 >
-                  <SelectTrigger className="w-32">
+                  <SelectTrigger className="w-full sm:w-32">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1017,17 +1020,17 @@ export function SettingsPage() {
         </TabsContent> */}
 
         {/* Alerts Tab */}
-        <TabsContent value="alerts" className="space-y-6">
+        <TabsContent value="alerts" className="space-y-6 overflow-x-auto overflow-y-visible">
           <AlertsManagement />
         </TabsContent>
 
         {/* Localization Tab */}
-        <TabsContent value="localization" className="space-y-6">
+        <TabsContent value="localization" className="space-y-6 overflow-x-auto overflow-y-visible">
           <LocalizationSettings />
         </TabsContent>
 
         {/* Sync Audit Tab */}
-        <TabsContent value="sync" className="space-y-6">
+        <TabsContent value="sync" className="space-y-6 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -1080,7 +1083,7 @@ export function SettingsPage() {
         </TabsContent>
 
         {/* Security Tab */}
-        <TabsContent value="security" className="space-y-6">
+        <TabsContent value="security" className="space-y-6 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -1125,7 +1128,7 @@ export function SettingsPage() {
         </TabsContent>
 
         {/* API Tab */}
-        <TabsContent value="api" className="space-y-6">
+        <TabsContent value="api" className="space-y-6 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">

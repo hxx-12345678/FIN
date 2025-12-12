@@ -690,15 +690,17 @@ export function UserManagement() {
       </div>
 
       <Tabs defaultValue="members" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5">
-          <TabsTrigger value="members">Team Members</TabsTrigger>
-          <TabsTrigger value="roles">Roles & Permissions</TabsTrigger>
-          <TabsTrigger value="permissions">Permission Matrix</TabsTrigger>
-          <TabsTrigger value="invitations">Invitations</TabsTrigger>
-          <TabsTrigger value="activity">Activity Log</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 min-w-[500px]">
+            <TabsTrigger value="members" className="text-xs sm:text-sm">Team Members</TabsTrigger>
+            <TabsTrigger value="roles" className="text-xs sm:text-sm">Roles & Permissions</TabsTrigger>
+            <TabsTrigger value="permissions" className="text-xs sm:text-sm">Permission Matrix</TabsTrigger>
+            <TabsTrigger value="invitations" className="text-xs sm:text-sm">Invitations</TabsTrigger>
+            <TabsTrigger value="activity" className="text-xs sm:text-sm">Activity Log</TabsTrigger>
+          </TabsList>
+        </div>
 
-        <TabsContent value="members" className="space-y-4">
+        <TabsContent value="members" className="space-y-4 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -708,7 +710,7 @@ export function UserManagement() {
                 </div>
                 <div className="flex gap-2">
                   <Select value={selectedRole} onValueChange={setSelectedRole}>
-                    <SelectTrigger className="w-32">
+                    <SelectTrigger className="w-full sm:w-32">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -784,7 +786,7 @@ export function UserManagement() {
                                     <MoreHorizontal className="h-4 w-4" />
                                   </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
+                                <DropdownMenuContent align="end" className="w-48" collisionPadding={16}>
                                   <DropdownMenuItem
                                     onClick={() => {
                                       setSelectedUser(member)

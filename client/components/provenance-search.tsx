@@ -459,12 +459,14 @@ export function ProvenanceSearch({ onSelectMetric }: ProvenanceSearchProps) {
 
   return (
     <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "search" | "saved")}>
-      <TabsList className="grid w-full grid-cols-2">
-        <TabsTrigger value="search">Search</TabsTrigger>
-        <TabsTrigger value="saved">Saved Searches ({savedSearches.length})</TabsTrigger>
-      </TabsList>
+      <div className="overflow-x-auto">
+        <TabsList className="grid w-full grid-cols-2 min-w-[300px]">
+          <TabsTrigger value="search" className="text-xs sm:text-sm">Search</TabsTrigger>
+          <TabsTrigger value="saved" className="text-xs sm:text-sm">Saved Searches ({savedSearches.length})</TabsTrigger>
+        </TabsList>
+      </div>
 
-      <TabsContent value="search" className="space-y-4">
+      <TabsContent value="search" className="space-y-4 overflow-x-auto overflow-y-visible">
       {/* Search Hints */}
       {showHints && !searchQuery && (
         <Card className="bg-blue-50/50 border-blue-200">

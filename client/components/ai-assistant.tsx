@@ -708,11 +708,11 @@ export function AIAssistant() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="chat" className="space-y-6">
+        <TabsContent value="chat" className="space-y-6 overflow-x-auto overflow-y-visible">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Chat Interface */}
             <div className="lg:col-span-2">
-              <Card className="h-[600px] flex flex-col">
+              <Card className="h-[400px] sm:h-[500px] lg:h-[600px] flex flex-col">
                 <CardHeader className="border-b">
                   <CardTitle className="flex items-center gap-2">
                     <MessageSquare className="h-5 w-5" />
@@ -981,34 +981,36 @@ export function AIAssistant() {
 
       {/* Task Creation Dialog */}
       <Dialog open={showTaskDialog} onOpenChange={setShowTaskDialog}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="max-w-[95vw] sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Create Task from AI Recommendation</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-lg sm:text-xl">Create Task from AI Recommendation</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
               Convert this AI CFO insight into an actionable task and optionally export to your tools
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="title">Task Title</Label>
+              <Label htmlFor="title" className="text-sm">Task Title</Label>
               <Input
                 id="title"
                 value={taskForm.title}
                 onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
                 placeholder="Enter task title"
+                className="w-full"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
+              <Label htmlFor="description" className="text-sm">Description</Label>
               <Textarea
                 id="description"
                 value={taskForm.description}
                 onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
                 placeholder="Add task details and context"
                 rows={3}
+                className="w-full"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="priority">Priority</Label>
                 <Select

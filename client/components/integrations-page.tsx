@@ -593,22 +593,30 @@ export function IntegrationsPage() {
       {/* CSV Import Templates */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex-1">
               <CardTitle>CSV Import Templates</CardTitle>
               <CardDescription>
                 Download CSV templates for different accounting systems and payment processors
               </CardDescription>
             </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline">
-                  <FileDown className="mr-2 h-4 w-4" />
-                  Download Template
-                  <ChevronDown className="ml-2 h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
+            <div className="relative w-full sm:w-auto">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="w-full sm:w-auto">
+                    <FileDown className="mr-2 h-4 w-4" />
+                    Download Template
+                    <ChevronDown className="ml-2 h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent 
+                  align="end" 
+                  side="bottom"
+                  sideOffset={8}
+                  className="w-[280px] max-h-[60vh] overflow-y-auto"
+                  collisionPadding={{ top: 8, bottom: 8, left: 16, right: 16 }}
+                  onCloseAutoFocus={(e) => e.preventDefault()}
+                >
                 <DropdownMenuLabel>Select Template Type</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -711,6 +719,7 @@ export function IntegrationsPage() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            </div>
           </div>
         </CardHeader>
         <CardContent>

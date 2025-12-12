@@ -309,25 +309,27 @@ export function JobQueue() {
   const jobTypes = Array.from(new Set(jobs.map(j => j.jobType))).sort()
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 md:space-y-6 p-4 md:p-0 overflow-x-hidden">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Job Queue</h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm md:text-base text-muted-foreground">
             Monitor and manage all background jobs: Monte Carlo simulations, model runs, CSV imports, exports, and more
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={fetchJobs} disabled={isLoading}>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <Button variant="outline" onClick={fetchJobs} disabled={isLoading} className="w-full sm:w-auto">
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Refreshing...
+                <span className="hidden sm:inline">Refreshing...</span>
+                <span className="sm:hidden">Refreshing</span>
               </>
             ) : (
               <>
                 <RefreshCw className="mr-2 h-4 w-4" />
-                Refresh
+                <span className="hidden sm:inline">Refresh</span>
+                <span className="sm:hidden">Refresh</span>
               </>
             )}
           </Button>
@@ -448,7 +450,7 @@ export function JobQueue() {
               <TabsTrigger value="failed">Failed</TabsTrigger>
             </TabsList>
 
-            <TabsContent value={activeTab} className="space-y-4">
+            <TabsContent value={activeTab} className="space-y-4 overflow-x-auto overflow-y-visible">
               {isLoading ? (
                 <div className="space-y-2">
                   {[1, 2, 3, 4, 5].map((i) => (
@@ -461,20 +463,21 @@ export function JobQueue() {
                   <p className="text-muted-foreground">No jobs found</p>
                 </div>
               ) : (
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Job Type</TableHead>
-                        <TableHead>Job ID</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Progress</TableHead>
-                        <TableHead>Started</TableHead>
-                        <TableHead>Duration</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
+                <div className="overflow-x-auto">
+                  <div className="rounded-md border min-w-full inline-block">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Job Type</TableHead>
+                          <TableHead>Job ID</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Progress</TableHead>
+                          <TableHead>Started</TableHead>
+                          <TableHead>Duration</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
                       {filteredJobs.map((job) => {
                         const started = job.startedAt ? new Date(job.startedAt).getTime() : 0
                         const now = Date.now()
@@ -543,8 +546,9 @@ export function JobQueue() {
                           </TableRow>
                         )
                       })}
-                    </TableBody>
-                  </Table>
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
               )}
             </TabsContent>

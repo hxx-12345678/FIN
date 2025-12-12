@@ -276,7 +276,7 @@ export function BudgetPlanner({ orgId, onSave }: { orgId: string; onSave?: () =>
               <TabsTrigger value="grid">Grid View</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="manual" className="space-y-4">
+            <TabsContent value="manual" className="space-y-4 overflow-x-auto overflow-y-visible">
               <div className="grid grid-cols-4 gap-4">
                 <div>
                   <Label htmlFor="category">Category</Label>
@@ -366,7 +366,7 @@ export function BudgetPlanner({ orgId, onSave }: { orgId: string; onSave?: () =>
               </div>
             </TabsContent>
 
-            <TabsContent value="grid" className="space-y-4">
+            <TabsContent value="grid" className="space-y-4 overflow-x-auto overflow-y-visible">
               <Alert>
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription>

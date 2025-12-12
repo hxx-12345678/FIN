@@ -155,7 +155,7 @@ export function AdminDashboard() {
             <CardTitle>User Activity (Last 30 Days)</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
               <LineChart data={userActivity}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="date" />
@@ -172,7 +172,7 @@ export function AdminDashboard() {
             <CardTitle>Organization Growth</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
               <BarChart data={orgGrowth}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />

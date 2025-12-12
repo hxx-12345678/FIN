@@ -307,21 +307,22 @@ export function AlertsManagement() {
   ).length
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6 p-4 md:p-0 overflow-x-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Custom Alerts & Triggers</h1>
-          <p className="text-muted-foreground">Create automated alerts for key financial metrics</p>
+          <h1 className="text-2xl md:text-3xl font-bold">Custom Alerts & Triggers</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Create automated alerts for key financial metrics</p>
         </div>
-        <Button onClick={() => setShowCreateDialog(true)}>
+        <Button onClick={() => setShowCreateDialog(true)} className="w-full sm:w-auto">
           <Plus className="mr-2 h-4 w-4" />
-          Create Alert
+          <span className="hidden sm:inline">Create Alert</span>
+          <span className="sm:hidden">Create</span>
         </Button>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -384,7 +385,7 @@ export function AlertsManagement() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="alerts" className="space-y-4">
+        <TabsContent value="alerts" className="space-y-4 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
               <CardTitle>Your Alert Rules</CardTitle>
@@ -496,7 +497,7 @@ export function AlertsManagement() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="history" className="space-y-4">
+        <TabsContent value="history" className="space-y-4 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
               <CardTitle>Alert History</CardTitle>

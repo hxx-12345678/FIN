@@ -414,20 +414,22 @@ export function CompliancePage() {
           <h1 className="text-2xl md:text-3xl font-bold">Compliance & Security</h1>
           <p className="text-muted-foreground">Maintain regulatory compliance and security standards</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <Button 
             variant="outline" 
             size="sm" 
-            className="bg-transparent"
+            className="bg-transparent w-full sm:w-auto"
             onClick={handleExportReport}
           >
             <Download className="mr-2 h-4 w-4" />
-            Export Report
+            <span className="hidden sm:inline">Export Report</span>
+            <span className="sm:hidden">Export</span>
           </Button>
           <Button 
             size="sm"
             onClick={fetchAllData}
             variant="outline"
+            className="w-full sm:w-auto"
           >
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
@@ -479,15 +481,17 @@ export function CompliancePage() {
       </Card>
 
       <Tabs defaultValue="frameworks" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
-          <TabsTrigger value="frameworks">Frameworks</TabsTrigger>
-          <TabsTrigger value="controls">Security Controls</TabsTrigger>
-          <TabsTrigger value="audit">Audit Logs</TabsTrigger>
-          <TabsTrigger value="policies">Policies</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 min-w-[400px]">
+            <TabsTrigger value="frameworks" className="text-xs sm:text-sm">Frameworks</TabsTrigger>
+            <TabsTrigger value="controls" className="text-xs sm:text-sm">Security Controls</TabsTrigger>
+            <TabsTrigger value="audit" className="text-xs sm:text-sm">Audit Logs</TabsTrigger>
+            <TabsTrigger value="policies" className="text-xs sm:text-sm">Policies</TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* Frameworks Tab */}
-        <TabsContent value="frameworks" className="space-y-4">
+        <TabsContent value="frameworks" className="space-y-4 overflow-x-auto overflow-y-visible">
           {/* Instructions on how to increase framework scores */}
           <Alert>
             <AlertCircle className="h-4 w-4" />
@@ -837,13 +841,13 @@ export function CompliancePage() {
 
       {/* Framework Details Dialog */}
       <Dialog open={showFrameworkDialog} onOpenChange={setShowFrameworkDialog}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
               <Shield className="h-5 w-5" />
-              {editingFramework?.name || "Framework Details"}
+              <span className="text-sm sm:text-base">{editingFramework?.name || "Framework Details"}</span>
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-xs sm:text-sm">
               {editingFramework?.description || "View and update compliance framework details"}
             </DialogDescription>
           </DialogHeader>
@@ -851,7 +855,7 @@ export function CompliancePage() {
           {editingFramework && (
             <div className="space-y-6 py-4">
               {/* Current Status */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-sm">Compliance Score</CardTitle>

@@ -703,7 +703,7 @@ export function RealtimeSimulations() {
       <div className="space-y-6">
         <Skeleton className="h-12 w-64" />
         <Skeleton className="h-48 w-full" />
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
           <Skeleton className="h-96" />
           <Skeleton className="h-96 lg:col-span-2" />
         </div>
@@ -727,34 +727,36 @@ export function RealtimeSimulations() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6 p-4 md:p-0 overflow-x-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Real-time Simulations</h1>
-          <p className="text-muted-foreground">Interactive financial modeling with live parameter adjustments</p>
+          <h1 className="text-2xl md:text-3xl font-bold">Real-time Simulations</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Interactive financial modeling with live parameter adjustments</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           {saving && (
             <Badge variant="secondary" className="flex items-center gap-1">
               <Loader2 className="h-3 w-3 animate-spin" />
               Saving...
             </Badge>
           )}
-          <Button variant="outline" onClick={resetSimulation} disabled={saving}>
+          <Button variant="outline" onClick={resetSimulation} disabled={saving} className="w-full sm:w-auto">
             <RotateCcw className="mr-2 h-4 w-4" />
             Reset
           </Button>
-          <Button onClick={handleToggleRun} disabled={saving}>
+          <Button onClick={handleToggleRun} disabled={saving} className="w-full sm:w-auto">
             {isRunning ? (
               <>
                 <Pause className="mr-2 h-4 w-4" />
-                Pause
+                <span className="hidden sm:inline">Pause</span>
+                <span className="sm:hidden">Pause</span>
               </>
             ) : (
               <>
                 <Play className="mr-2 h-4 w-4" />
-                Run Simulation
+                <span className="hidden sm:inline">Run Simulation</span>
+                <span className="sm:hidden">Run</span>
               </>
             )}
           </Button>
@@ -803,7 +805,7 @@ export function RealtimeSimulations() {
               </div>
 
               {/* Metrics Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 pt-2">
                 <div className="text-center transition-all duration-300">
                   <div className="text-3xl font-bold text-blue-600 transition-all duration-300">
                     {currentData.customers || 0}
@@ -940,14 +942,16 @@ export function RealtimeSimulations() {
         {/* Simulation Results */}
         <div className="lg:col-span-2 space-y-6">
           <Tabs defaultValue="revenue" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="revenue">Revenue</TabsTrigger>
-              <TabsTrigger value="customers">Customers</TabsTrigger>
-              <TabsTrigger value="runway">Runway</TabsTrigger>
-              <TabsTrigger value="unit-economics">Unit Economics</TabsTrigger>
-            </TabsList>
+            <div className="overflow-x-auto">
+              <TabsList className="grid w-full grid-cols-4 min-w-[400px]">
+                <TabsTrigger value="revenue" className="text-xs sm:text-sm">Revenue</TabsTrigger>
+                <TabsTrigger value="customers" className="text-xs sm:text-sm">Customers</TabsTrigger>
+                <TabsTrigger value="runway" className="text-xs sm:text-sm">Runway</TabsTrigger>
+                <TabsTrigger value="unit-economics" className="text-xs sm:text-sm">Unit Economics</TabsTrigger>
+              </TabsList>
+            </div>
 
-            <TabsContent value="revenue" className="space-y-4">
+            <TabsContent value="revenue" className="space-y-4 overflow-x-auto overflow-y-visible">
               <Card>
                 <CardHeader>
                   <CardTitle>Revenue Projection</CardTitle>
@@ -955,7 +959,7 @@ export function RealtimeSimulations() {
                 </CardHeader>
                 <CardContent>
                   {simulationData && simulationData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={300}>
+                    <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
                       <AreaChart data={simulationData}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis 
@@ -1006,7 +1010,7 @@ export function RealtimeSimulations() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="customers" className="space-y-4">
+            <TabsContent value="customers" className="space-y-4 overflow-x-auto overflow-y-visible">
               <Card>
                 <CardHeader>
                   <CardTitle>Customer Growth</CardTitle>
@@ -1014,7 +1018,7 @@ export function RealtimeSimulations() {
                 </CardHeader>
                 <CardContent>
                   {simulationData && simulationData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={300}>
+                    <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
                       <LineChart data={simulationData}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis 
@@ -1083,7 +1087,7 @@ export function RealtimeSimulations() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="runway" className="space-y-4">
+            <TabsContent value="runway" className="space-y-4 overflow-x-auto overflow-y-visible">
               <Card>
                 <CardHeader>
                   <CardTitle>Cash Runway</CardTitle>
@@ -1091,7 +1095,7 @@ export function RealtimeSimulations() {
                 </CardHeader>
                 <CardContent>
                   {simulationData && simulationData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={300}>
+                    <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
                       <BarChart data={simulationData}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis 
@@ -1140,7 +1144,7 @@ export function RealtimeSimulations() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="unit-economics" className="space-y-4">
+            <TabsContent value="unit-economics" className="space-y-4 overflow-x-auto overflow-y-visible">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Card>
                   <CardContent className="p-6">

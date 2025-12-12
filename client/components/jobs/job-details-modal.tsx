@@ -419,7 +419,7 @@ export function JobDetailsModal({ jobId, open, onClose }: JobDetailsModalProps) 
             <div>
               <h4 className="font-semibold mb-3 text-sm">Revenue vs Expenses Trend</h4>
               <div className="border rounded p-4">
-                <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
                   <AreaChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="month" />
@@ -648,10 +648,10 @@ export function JobDetailsModal({ jobId, open, onClose }: JobDetailsModalProps) 
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-[95vw] sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Job Details</DialogTitle>
-          <DialogDescription>Job ID: {jobId}</DialogDescription>
+          <DialogTitle className="text-lg sm:text-xl">Job Details</DialogTitle>
+          <DialogDescription className="text-xs sm:text-sm break-all">Job ID: {jobId}</DialogDescription>
         </DialogHeader>
 
         {isLoading && !job ? (
@@ -662,17 +662,19 @@ export function JobDetailsModal({ jobId, open, onClose }: JobDetailsModalProps) 
         ) : error ? (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription className="text-xs sm:text-sm">{error}</AlertDescription>
           </Alert>
         ) : job ? (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="details">Details</TabsTrigger>
-              <TabsTrigger value="logs">Logs</TabsTrigger>
-              <TabsTrigger value="results">Results</TabsTrigger>
-            </TabsList>
+            <div className="overflow-x-auto">
+              <TabsList className="grid w-full grid-cols-3 min-w-[300px]">
+                <TabsTrigger value="details" className="text-xs sm:text-sm">Details</TabsTrigger>
+                <TabsTrigger value="logs" className="text-xs sm:text-sm">Logs</TabsTrigger>
+                <TabsTrigger value="results" className="text-xs sm:text-sm">Results</TabsTrigger>
+              </TabsList>
+            </div>
 
-            <TabsContent value="details" className="space-y-4">
+            <TabsContent value="details" className="space-y-4 overflow-x-auto overflow-y-visible">
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>

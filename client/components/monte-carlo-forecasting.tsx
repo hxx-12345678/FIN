@@ -518,26 +518,27 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6 p-4 md:p-0 overflow-x-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Monte Carlo Forecasting</h1>
-          <p className="text-muted-foreground">Probabilistic financial modeling with uncertainty quantification</p>
+          <h1 className="text-2xl md:text-3xl font-bold">Monte Carlo Forecasting</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Probabilistic financial modeling with uncertainty quantification</p>
         </div>
-        <div className="flex gap-2">
-          <LinkButton variant="outline" asChild>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <LinkButton variant="outline" asChild className="w-full sm:w-auto">
             <Link href="#job-queue">
               <ListTodo className="mr-2 h-4 w-4" />
-              View Job Queue
+              <span className="hidden sm:inline">View Job Queue</span>
+              <span className="sm:hidden">Queue</span>
             </Link>
           </LinkButton>
         </div>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2 w-full sm:w-auto">
         <Select value={forecastMode} onValueChange={(v: any) => setForecastMode(v)}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-full sm:w-48">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -545,13 +546,15 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
             <SelectItem value="montecarlo">Monte Carlo Forecast</SelectItem>
           </SelectContent>
         </Select>
-        <Button variant="outline">
+        <Button variant="outline" className="w-full sm:w-auto">
           <Save className="mr-2 h-4 w-4" />
-          Save Snapshot
+          <span className="hidden sm:inline">Save Snapshot</span>
+          <span className="sm:hidden">Save</span>
         </Button>
-        <Button variant="outline">
+        <Button variant="outline" className="w-full sm:w-auto">
           <Download className="mr-2 h-4 w-4" />
-          Export Results
+          <span className="hidden sm:inline">Export Results</span>
+          <span className="sm:hidden">Export</span>
         </Button>
       </div>
 
@@ -575,16 +578,18 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
       </Card>
 
       <Tabs defaultValue="drivers" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="drivers">Drivers & Distributions</TabsTrigger>
-          <TabsTrigger value="results">Simulation Results</TabsTrigger>
-          <TabsTrigger value="fanChart">Fan Chart</TabsTrigger>
-          <TabsTrigger value="sensitivity">Sensitivity Analysis</TabsTrigger>
-          <TabsTrigger value="explainability">Explainability</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto">
+          <TabsList className="grid w-full grid-cols-5 min-w-[500px]">
+            <TabsTrigger value="drivers" className="text-xs sm:text-sm">Drivers & Distributions</TabsTrigger>
+            <TabsTrigger value="results" className="text-xs sm:text-sm">Simulation Results</TabsTrigger>
+            <TabsTrigger value="fanChart" className="text-xs sm:text-sm">Fan Chart</TabsTrigger>
+            <TabsTrigger value="sensitivity" className="text-xs sm:text-sm">Sensitivity Analysis</TabsTrigger>
+            <TabsTrigger value="explainability" className="text-xs sm:text-sm">Explainability</TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* Drivers Configuration */}
-        <TabsContent value="drivers" className="space-y-4">
+        <TabsContent value="drivers" className="space-y-4 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
               <CardTitle>Configure Key Drivers</CardTitle>
@@ -725,7 +730,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
         </TabsContent>
 
         {/* Simulation Results */}
-        <TabsContent value="results" className="space-y-4">
+        <TabsContent value="results" className="space-y-4 overflow-x-auto overflow-y-visible">
           {!simulationComplete ? (
             <Card>
               <CardContent className="p-12 text-center">
@@ -911,7 +916,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                   <CardDescription>Histogram showing likelihood of different runway outcomes</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <ResponsiveContainer width="100%" height={350}>
+                  <ResponsiveContainer width="100%" height={300} className="min-h-[300px] sm:min-h-[350px]">
                     <BarChart data={runwayHistogram}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis
@@ -939,7 +944,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
         </TabsContent>
 
         {/* Fan Chart */}
-        <TabsContent value="fanChart" className="space-y-4">
+        <TabsContent value="fanChart" className="space-y-4 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
               <CardTitle>Cash Flow Fan Chart</CardTitle>
@@ -948,7 +953,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={400}>
+              <ResponsiveContainer width="100%" height={300} className="min-h-[300px] sm:min-h-[400px]">
                 <AreaChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
@@ -1069,14 +1074,14 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
         </TabsContent>
 
         {/* Sensitivity Analysis */}
-        <TabsContent value="sensitivity" className="space-y-4">
+        <TabsContent value="sensitivity" className="space-y-4 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
               <CardTitle>Tornado Chart - Sensitivity Analysis</CardTitle>
               <CardDescription>Impact of each driver on forecast uncertainty (sorted by magnitude)</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={400}>
+              <ResponsiveContainer width="100%" height={300} className="min-h-[300px] sm:min-h-[400px]">
                 <BarChart data={tornadoData} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis type="number" />
@@ -1108,7 +1113,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
         </TabsContent>
 
         {/* Explainability */}
-        <TabsContent value="explainability" className="space-y-4">
+        <TabsContent value="explainability" className="space-y-4 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
               <CardTitle>Top Uncertainty Drivers</CardTitle>

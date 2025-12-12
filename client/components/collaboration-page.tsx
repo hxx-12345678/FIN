@@ -148,21 +148,23 @@ export function CollaborationPage() {
   const [newComment, setNewComment] = useState("")
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="space-y-4 md:space-y-6 p-4 md:p-6 overflow-x-hidden">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Team Collaboration</h1>
-          <p className="text-muted-foreground">Work together on financial models and reports in real-time</p>
+          <p className="text-sm md:text-base text-muted-foreground">Work together on financial models and reports in real-time</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="bg-transparent">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <Button variant="outline" size="sm" className="bg-transparent w-full sm:w-auto">
             <Video className="mr-2 h-4 w-4" />
-            Start Meeting
+            <span className="hidden sm:inline">Start Meeting</span>
+            <span className="sm:hidden">Meeting</span>
           </Button>
-          <Button size="sm">
+          <Button size="sm" className="w-full sm:w-auto">
             <Share className="mr-2 h-4 w-4" />
-            Share Workspace
+            <span className="hidden sm:inline">Share Workspace</span>
+            <span className="sm:hidden">Share</span>
           </Button>
         </div>
       </div>
@@ -212,14 +214,16 @@ export function CollaborationPage() {
       </Card>
 
       <Tabs defaultValue="activity" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
-          <TabsTrigger value="activity">Recent Activity</TabsTrigger>
-          <TabsTrigger value="documents">Shared Documents</TabsTrigger>
-          <TabsTrigger value="comments">Comments</TabsTrigger>
-          <TabsTrigger value="meetings">Meetings</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 min-w-[400px]">
+            <TabsTrigger value="activity" className="text-xs sm:text-sm">Recent Activity</TabsTrigger>
+            <TabsTrigger value="documents" className="text-xs sm:text-sm">Shared Documents</TabsTrigger>
+            <TabsTrigger value="comments" className="text-xs sm:text-sm">Comments</TabsTrigger>
+            <TabsTrigger value="meetings" className="text-xs sm:text-sm">Meetings</TabsTrigger>
+          </TabsList>
+        </div>
 
-        <TabsContent value="activity" className="space-y-4">
+        <TabsContent value="activity" className="space-y-4 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
               <CardTitle>Recent Activity</CardTitle>
@@ -375,7 +379,7 @@ export function CollaborationPage() {
         </TabsContent>
 
         <TabsContent value="meetings" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">

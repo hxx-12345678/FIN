@@ -627,19 +627,19 @@ export function BudgetActual() {
   }))
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6 p-4 md:p-0">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Budget vs Actual</h1>
-          <p className="text-muted-foreground">Track performance against your financial plans</p>
+          <h1 className="text-2xl md:text-3xl font-bold">Budget vs Actual</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Track performance against your financial plans</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <Select 
             value={selectedPeriod} 
             onValueChange={(value) => setSelectedPeriod(value as "current" | "previous" | "ytd")}
           >
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-full sm:w-40">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -653,7 +653,7 @@ export function BudgetActual() {
               value={selectedModelId || ""} 
               onValueChange={(value) => setSelectedModelId(value)}
             >
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="w-full sm:w-48">
                 <SelectValue placeholder="Select Model" />
               </SelectTrigger>
               <SelectContent>
@@ -672,32 +672,40 @@ export function BudgetActual() {
               downloadCSV(csvContent, 'budget-actual-template.csv')
               toast.success('Template downloaded successfully!')
             }}
+            className="w-full sm:w-auto"
           >
             <FileDown className="mr-2 h-4 w-4" />
-            Download Template
+            <span className="hidden sm:inline">Download Template</span>
+            <span className="sm:hidden">Template</span>
           </Button>
           <Button 
             variant="outline"
             onClick={handleImportBudget}
+            className="w-full sm:w-auto"
           >
             <Upload className="mr-2 h-4 w-4" />
-            Import Actuals
+            <span className="hidden sm:inline">Import Actuals</span>
+            <span className="sm:hidden">Import</span>
           </Button>
           <Button 
             variant="outline"
             onClick={() => handleExportReport('pdf')}
             disabled={!data || !selectedModelId}
+            className="w-full sm:w-auto"
           >
             <Download className="mr-2 h-4 w-4" />
-            Export PDF
+            <span className="hidden sm:inline">Export PDF</span>
+            <span className="sm:hidden">PDF</span>
           </Button>
           <Button 
             variant="outline"
             onClick={() => handleExportReport('xlsx')}
             disabled={!data || !selectedModelId}
+            className="w-full sm:w-auto"
           >
             <FileSpreadsheet className="mr-2 h-4 w-4" />
-            Export Excel
+            <span className="hidden sm:inline">Export Excel</span>
+            <span className="sm:hidden">Excel</span>
           </Button>
         </div>
       </div>
@@ -775,23 +783,25 @@ export function BudgetActual() {
 
       {/* Main Content Tabs */}
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="categories">By Category</TabsTrigger>
-          <TabsTrigger value="trends">Trends</TabsTrigger>
-          <TabsTrigger value="alerts">Alerts</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto">
+          <TabsList className="grid w-full grid-cols-4 min-w-[400px]">
+            <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
+            <TabsTrigger value="categories" className="text-xs sm:text-sm">By Category</TabsTrigger>
+            <TabsTrigger value="trends" className="text-xs sm:text-sm">Trends</TabsTrigger>
+            <TabsTrigger value="alerts" className="text-xs sm:text-sm">Alerts</TabsTrigger>
+          </TabsList>
+        </div>
 
-        <TabsContent value="overview" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TabsContent value="overview" className="space-y-4 overflow-x-auto overflow-y-visible">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
             <Card>
               <CardHeader>
-                <CardTitle>Budget vs Actual Comparison</CardTitle>
-                <CardDescription>Monthly budget performance tracking</CardDescription>
+                <CardTitle className="text-base sm:text-lg">Budget vs Actual Comparison</CardTitle>
+                <CardDescription className="text-xs sm:text-sm">Monthly budget performance tracking</CardDescription>
               </CardHeader>
               <CardContent>
                 {chartData && chartData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={300}>
+                  <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
                     <ComposedChart data={chartData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="month" />
@@ -803,7 +813,7 @@ export function BudgetActual() {
                     </ComposedChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                  <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground text-xs sm:text-sm px-4 text-center">
                     {loading ? "Loading..." : "No budget vs actual data available. Run a model and import transactions to see data."}
                   </div>
                 )}
@@ -812,12 +822,12 @@ export function BudgetActual() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Variance Analysis</CardTitle>
-                <CardDescription>Percentage variance from budget</CardDescription>
+                <CardTitle className="text-base sm:text-lg">Variance Analysis</CardTitle>
+                <CardDescription className="text-xs sm:text-sm">Percentage variance from budget</CardDescription>
               </CardHeader>
               <CardContent>
                 {chartData && chartData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={300}>
+                  <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
                     <BarChart data={chartData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="month" />

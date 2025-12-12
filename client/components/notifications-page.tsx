@@ -500,19 +500,21 @@ export function NotificationsPage() {
       </div>
 
       <Tabs defaultValue="notifications" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          <TabsTrigger value="rules">Alert Rules</TabsTrigger>
-          <TabsTrigger value="channels">Channels</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto">
+          <TabsList className="grid w-full grid-cols-3 min-w-[300px]">
+            <TabsTrigger value="notifications" className="text-xs sm:text-sm">Notifications</TabsTrigger>
+            <TabsTrigger value="rules" className="text-xs sm:text-sm">Alert Rules</TabsTrigger>
+            <TabsTrigger value="channels" className="text-xs sm:text-sm">Channels</TabsTrigger>
+          </TabsList>
+        </div>
 
-        <TabsContent value="notifications" className="space-y-4">
+        <TabsContent value="notifications" className="space-y-4 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Recent Notifications</CardTitle>
                 <Select value={selectedFilter} onValueChange={setSelectedFilter}>
-                  <SelectTrigger className="w-40">
+                  <SelectTrigger className="w-full sm:w-40">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -776,14 +778,14 @@ export function NotificationsPage() {
                 placeholder="Alert when revenue is more than 10% below target"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="rule-metric">Metric *</Label>
                 <Select
                   value={newRule.metric}
                   onValueChange={(value) => setNewRule({ ...newRule, metric: value })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -802,7 +804,7 @@ export function NotificationsPage() {
                   value={newRule.operator}
                   onValueChange={(value) => setNewRule({ ...newRule, operator: value })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

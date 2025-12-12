@@ -710,15 +710,16 @@ export function ReportsAnalytics() {
           <h1 className="text-2xl md:text-3xl font-bold">Reports & Analytics</h1>
           <p className="text-muted-foreground">Generate insights and reports from your financial data</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" asChild>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <Button variant="outline" asChild className="w-full sm:w-auto">
             <Link href="#export-queue">
               <ListTodo className="mr-2 h-4 w-4" />
-              Export Queue
+              <span className="hidden sm:inline">Export Queue</span>
+              <span className="sm:hidden">Queue</span>
             </Link>
           </Button>
           <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-full sm:w-40">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -728,20 +729,23 @@ export function ReportsAnalytics() {
               <SelectItem value="ytd">Year to date</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" className="bg-transparent">
+          <Button variant="outline" size="sm" className="bg-transparent w-full sm:w-auto">
             <Filter className="mr-2 h-4 w-4" />
-            Filters
+            <span className="hidden sm:inline">Filters</span>
+            <span className="sm:hidden">Filter</span>
           </Button>
-          <Button size="sm" onClick={handleGenerateReport} disabled={isGenerating}>
+          <Button size="sm" onClick={handleGenerateReport} disabled={isGenerating} className="w-full sm:w-auto">
             {isGenerating ? (
               <>
                 <Zap className="mr-2 h-4 w-4 animate-spin" />
-                Generating...
+                <span className="hidden sm:inline">Generating...</span>
+                <span className="sm:hidden">Generating</span>
               </>
             ) : (
               <>
                 <FileText className="mr-2 h-4 w-4" />
-                Generate Report
+                <span className="hidden sm:inline">Generate Report</span>
+                <span className="sm:hidden">Generate</span>
               </>
             )}
           </Button>
@@ -750,7 +754,7 @@ export function ReportsAnalytics() {
 
       {/* Key Metrics Overview */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <Card key={i}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -829,15 +833,17 @@ export function ReportsAnalytics() {
       )}
 
       <Tabs defaultValue="templates" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
-          <TabsTrigger value="templates">Report Templates</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
-          <TabsTrigger value="custom">Custom Reports</TabsTrigger>
-          <TabsTrigger value="scheduled">Scheduled Reports</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 min-w-[400px]">
+            <TabsTrigger value="templates" className="text-xs sm:text-sm">Report Templates</TabsTrigger>
+            <TabsTrigger value="analytics" className="text-xs sm:text-sm">Analytics</TabsTrigger>
+            <TabsTrigger value="custom" className="text-xs sm:text-sm">Custom Reports</TabsTrigger>
+            <TabsTrigger value="scheduled" className="text-xs sm:text-sm">Scheduled Reports</TabsTrigger>
+          </TabsList>
+        </div>
 
-        <TabsContent value="templates" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <TabsContent value="templates" className="space-y-4 overflow-x-auto overflow-y-visible">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
             {reportTemplates.map((template) => (
               <Card
                 key={template.id}
@@ -904,7 +910,7 @@ export function ReportsAnalytics() {
         </TabsContent>
 
         <TabsContent value="analytics" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
             <Card>
               <CardHeader>
                 <CardTitle>Revenue Performance</CardTitle>
@@ -916,7 +922,7 @@ export function ReportsAnalytics() {
                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                   </div>
                 ) : revenueData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
                   <LineChart data={revenueData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="month" />
@@ -934,7 +940,7 @@ export function ReportsAnalytics() {
                   </LineChart>
                 </ResponsiveContainer>
                 ) : (
-                  <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                  <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground text-sm px-4 text-center">
                     <p>No revenue data available</p>
                   </div>
                 )}
@@ -948,11 +954,11 @@ export function ReportsAnalytics() {
               </CardHeader>
               <CardContent>
                 {loading ? (
-                  <div className="flex items-center justify-center h-[300px]">
+                  <div className="flex items-center justify-center h-[250px] sm:h-[300px]">
                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                   </div>
                 ) : revenueData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
                   <AreaChart data={revenueData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="month" />
@@ -969,7 +975,7 @@ export function ReportsAnalytics() {
                   </AreaChart>
                 </ResponsiveContainer>
                 ) : (
-                  <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                  <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground text-sm px-4 text-center">
                     <p>No customer data available</p>
                   </div>
                 )}
@@ -983,11 +989,11 @@ export function ReportsAnalytics() {
               </CardHeader>
               <CardContent>
                 {loading ? (
-                  <div className="flex items-center justify-center h-[300px]">
+                  <div className="flex items-center justify-center h-[250px] sm:h-[300px]">
                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                   </div>
                 ) : expenseBreakdown.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
                   <PieChart>
                     <Pie
                       data={expenseBreakdown}
@@ -1029,7 +1035,7 @@ export function ReportsAnalytics() {
                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                   </div>
                 ) : revenueData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
                   <BarChart data={revenueData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="month" />
@@ -1163,7 +1169,7 @@ export function ReportsAnalytics() {
         </TabsContent>
 
         <TabsContent value="scheduled" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
             <Card>
               <CardHeader>
                 <CardTitle>Schedule New Report</CardTitle>

@@ -218,25 +218,28 @@ export function InvestorDashboard() {
     )
   }
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6 p-4 md:p-0">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Investor Dashboard</h1>
-          <p className="text-muted-foreground">Real-time insights for stakeholders and investors</p>
+          <h1 className="text-2xl md:text-3xl font-bold">Investor Dashboard</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Real-time insights for stakeholders and investors</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <Button variant="outline" className="w-full sm:w-auto">
             <MessageSquare className="mr-2 h-4 w-4" />
-            Add Comment
+            <span className="hidden sm:inline">Add Comment</span>
+            <span className="sm:hidden">Comment</span>
           </Button>
-          <Button variant="outline">
+          <Button variant="outline" className="w-full sm:w-auto">
             <Share className="mr-2 h-4 w-4" />
-            Share Dashboard
+            <span className="hidden sm:inline">Share Dashboard</span>
+            <span className="sm:hidden">Share</span>
           </Button>
-          <Button>
+          <Button className="w-full sm:w-auto">
             <Download className="mr-2 h-4 w-4" />
-            Export Report
+            <span className="hidden sm:inline">Export Report</span>
+            <span className="sm:hidden">Export</span>
           </Button>
         </div>
       </div>
@@ -324,7 +327,7 @@ export function InvestorDashboard() {
           </CardHeader>
           <CardContent>
             {monthlyMetrics.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
                 <AreaChart data={monthlyMetrics}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
@@ -341,7 +344,7 @@ export function InvestorDashboard() {
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+              <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground text-sm px-4 text-center">
                 No revenue data available
               </div>
             )}
@@ -355,7 +358,7 @@ export function InvestorDashboard() {
           </CardHeader>
           <CardContent>
             {monthlyMetrics.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
                 <LineChart data={monthlyMetrics}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
@@ -365,7 +368,7 @@ export function InvestorDashboard() {
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+              <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground text-sm px-4 text-center">
                 No customer data available
               </div>
             )}
@@ -381,7 +384,7 @@ export function InvestorDashboard() {
         </CardHeader>
           <CardContent>
             {monthlyMetrics.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
                 <BarChart data={monthlyMetrics}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
@@ -391,7 +394,7 @@ export function InvestorDashboard() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+              <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground text-sm px-4 text-center">
                 No burn rate data available
               </div>
             )}

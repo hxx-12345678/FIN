@@ -277,14 +277,16 @@ export function MonteCarloJobQueue() {
         </CardHeader>
         <CardContent>
           <Tabs value={activeTab} onValueChange={handleTabChange}>
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="all">All Jobs</TabsTrigger>
-              <TabsTrigger value="running">Running</TabsTrigger>
-              <TabsTrigger value="completed">Completed</TabsTrigger>
-              <TabsTrigger value="failed">Failed</TabsTrigger>
-            </TabsList>
+            <div className="overflow-x-auto">
+              <TabsList className="grid w-full grid-cols-4 min-w-[400px]">
+                <TabsTrigger value="all" className="text-xs sm:text-sm">All Jobs</TabsTrigger>
+                <TabsTrigger value="running" className="text-xs sm:text-sm">Running</TabsTrigger>
+                <TabsTrigger value="completed" className="text-xs sm:text-sm">Completed</TabsTrigger>
+                <TabsTrigger value="failed" className="text-xs sm:text-sm">Failed</TabsTrigger>
+              </TabsList>
+            </div>
 
-            <TabsContent value={activeTab} className="space-y-4">
+            <TabsContent value={activeTab} className="space-y-4 overflow-x-auto overflow-y-visible">
               {isLoading ? (
                 <div className="space-y-2">
                   {[1, 2, 3, 4, 5].map((i) => (

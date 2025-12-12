@@ -295,15 +295,17 @@ export function LocalizationSettings() {
       </div>
 
       <Tabs defaultValue="currency" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="currency">Multi-Currency</TabsTrigger>
-          <TabsTrigger value="localization">Localization</TabsTrigger>
-          <TabsTrigger value="compliance">India Compliance</TabsTrigger>
-          <TabsTrigger value="integrations">Integrations</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto">
+          <TabsList className="grid w-full grid-cols-4 min-w-[400px]">
+            <TabsTrigger value="currency" className="text-xs sm:text-sm">Multi-Currency</TabsTrigger>
+            <TabsTrigger value="localization" className="text-xs sm:text-sm">Localization</TabsTrigger>
+            <TabsTrigger value="compliance" className="text-xs sm:text-sm">India Compliance</TabsTrigger>
+            <TabsTrigger value="integrations" className="text-xs sm:text-sm">Integrations</TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* Multi-Currency Tab */}
-        <TabsContent value="currency" className="space-y-4">
+        <TabsContent value="currency" className="space-y-4 overflow-x-auto overflow-y-visible">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card>
               <CardHeader>

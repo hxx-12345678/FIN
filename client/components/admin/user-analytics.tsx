@@ -72,7 +72,7 @@ export function UserAnalytics() {
           <CardTitle>Conversion Funnel</CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
             <BarChart data={funnel}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="stage" />
@@ -89,7 +89,7 @@ export function UserAnalytics() {
           <CardTitle>User Retention</CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
             <LineChart data={retention}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />

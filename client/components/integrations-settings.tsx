@@ -147,21 +147,22 @@ export function IntegrationsSettings() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6 p-4 md:p-0 overflow-x-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Integrations & Settings</h1>
-          <p className="text-muted-foreground">Connect your business tools and configure automation</p>
+          <h1 className="text-2xl md:text-3xl font-bold">Integrations & Settings</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Connect your business tools and configure automation</p>
         </div>
-        <Button>
+        <Button className="w-full sm:w-auto">
           <Plus className="mr-2 h-4 w-4" />
-          Request Integration
+          <span className="hidden sm:inline">Request Integration</span>
+          <span className="sm:hidden">Request</span>
         </Button>
       </div>
 
       {/* Integration Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -209,13 +210,15 @@ export function IntegrationsSettings() {
       </div>
 
       <Tabs defaultValue="integrations" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="integrations">Integrations</TabsTrigger>
-          <TabsTrigger value="automation">Automation</TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto">
+          <TabsList className="grid w-full grid-cols-3 min-w-[300px]">
+            <TabsTrigger value="integrations" className="text-xs sm:text-sm">Integrations</TabsTrigger>
+            <TabsTrigger value="automation" className="text-xs sm:text-sm">Automation</TabsTrigger>
+            <TabsTrigger value="settings" className="text-xs sm:text-sm">Settings</TabsTrigger>
+          </TabsList>
+        </div>
 
-        <TabsContent value="integrations" className="space-y-4">
+        <TabsContent value="integrations" className="space-y-4 overflow-x-auto overflow-y-visible">
           {/* Category Filter */}
           <div className="flex gap-2 flex-wrap">
             {categories.map((category) => (
@@ -231,7 +234,7 @@ export function IntegrationsSettings() {
           </div>
 
           {/* Integrations Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
             {filteredIntegrations.map((integration) => (
               <Card key={integration.id} className="relative">
                 <CardHeader>
@@ -329,7 +332,7 @@ export function IntegrationsSettings() {
         </TabsContent>
 
         <TabsContent value="settings" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
             <Card>
               <CardHeader>
                 <CardTitle>Data Sync Settings</CardTitle>

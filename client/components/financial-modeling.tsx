@@ -1508,7 +1508,7 @@ export function FinancialModeling() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4 md:space-y-6 p-4 md:p-0 overflow-x-hidden">
         <Skeleton className="h-12 w-64" />
         <Skeleton className="h-96 w-full" />
       </div>
@@ -1517,12 +1517,12 @@ export function FinancialModeling() {
 
   if (error && financialData.length === 0) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4 md:space-y-6 p-4 md:p-0 overflow-x-hidden">
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className="text-sm">{error}</AlertDescription>
         </Alert>
-        <Button onClick={fetchOrgIdAndModels} variant="outline">
+        <Button onClick={fetchOrgIdAndModels} variant="outline" className="w-full sm:w-auto">
           <Loader2 className="mr-2 h-4 w-4" />
           Retry
         </Button>
@@ -1531,48 +1531,54 @@ export function FinancialModeling() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6 p-4 md:p-0 overflow-x-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Financial Modeling</h1>
-          <p className="text-muted-foreground">AI-powered financial models and projections</p>
+          <h1 className="text-2xl md:text-3xl font-bold">Financial Modeling</h1>
+          <p className="text-sm md:text-base text-muted-foreground">AI-powered financial models and projections</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           {selectedModel && (
             <Button 
               onClick={handleRunModel} 
               disabled={runningModel}
+              className="w-full sm:w-auto"
             >
               {runningModel ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Running...
+                  <span className="hidden sm:inline">Running...</span>
+                  <span className="sm:hidden">Running</span>
                 </>
               ) : (
                 <>
                   <Play className="mr-2 h-4 w-4" />
-                  Run Model
+                  <span className="hidden sm:inline">Run Model</span>
+                  <span className="sm:hidden">Run</span>
                 </>
               )}
             </Button>
           )}
-          <ModelVersionRollback
-            modelId={selectedModel}
-            orgId={orgId}
-            onVersionRollback={(versionId) => {
-              console.log("Rolling back to version:", versionId)
-              toast.success("Model version rolled back successfully")
-            }}
-          />
+          <div className="w-full sm:w-auto">
+            <ModelVersionRollback
+              modelId={selectedModel}
+              orgId={orgId}
+              onVersionRollback={(versionId) => {
+                console.log("Rolling back to version:", versionId)
+                toast.success("Model version rolled back successfully")
+              }}
+            />
+          </div>
           <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
             <DialogTrigger asChild>
-              <Button variant="outline">
+              <Button variant="outline" className="w-full sm:w-auto">
                 <Upload className="mr-2 h-4 w-4" />
-                Import Data
+                <span className="hidden sm:inline">Import Data</span>
+                <span className="sm:hidden">Import</span>
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-[95vw] sm:max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Import Financial Data</DialogTitle>
                 <DialogDescription>
@@ -1709,15 +1715,17 @@ export function FinancialModeling() {
 
       {/* Financial Model Tabs */}
       <Tabs defaultValue="statements" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="statements">Financial Statements</TabsTrigger>
-          <TabsTrigger value="assumptions">Assumptions</TabsTrigger>
-          <TabsTrigger value="projections">Projections</TabsTrigger>
-          <TabsTrigger value="sensitivity">Sensitivity</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto">
+          <TabsList className="grid w-full grid-cols-4 min-w-[400px]">
+            <TabsTrigger value="statements" className="text-xs sm:text-sm">Financial Statements</TabsTrigger>
+            <TabsTrigger value="assumptions" className="text-xs sm:text-sm">Assumptions</TabsTrigger>
+            <TabsTrigger value="projections" className="text-xs sm:text-sm">Projections</TabsTrigger>
+            <TabsTrigger value="sensitivity" className="text-xs sm:text-sm">Sensitivity</TabsTrigger>
+          </TabsList>
+        </div>
 
-        <TabsContent value="statements" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TabsContent value="statements" className="space-y-4 overflow-x-auto overflow-y-visible">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
             <Card>
               <CardHeader>
                 <CardTitle>Profit & Loss Statement</CardTitle>
@@ -1836,7 +1844,7 @@ export function FinancialModeling() {
             </CardHeader>
               <CardContent>
                 {financialData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={300}>
+                  <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
                     <BarChart data={paginatedChartData.length > 0 ? paginatedChartData : financialData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="month" />
@@ -1861,7 +1869,7 @@ export function FinancialModeling() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="assumptions" className="space-y-4">
+        <TabsContent value="assumptions" className="space-y-4 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
               <CardTitle>Model Assumptions</CardTitle>
@@ -1904,7 +1912,7 @@ export function FinancialModeling() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="projections" className="space-y-4">
+        <TabsContent value="projections" className="space-y-4 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -1995,7 +2003,7 @@ export function FinancialModeling() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="sensitivity" className="space-y-4">
+        <TabsContent value="sensitivity" className="space-y-4 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
               <CardTitle>Sensitivity Analysis</CardTitle>
@@ -2003,7 +2011,7 @@ export function FinancialModeling() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                   <div>
                     <Label>Revenue Growth Rate</Label>
                     <div className="mt-2 space-y-2">

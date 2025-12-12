@@ -434,21 +434,23 @@ export function ScenarioPlanning() {
   }
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="space-y-4 md:space-y-6 p-4 md:p-6 overflow-x-hidden">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">AI Scenario Planning</h1>
           <p className="text-muted-foreground">Natural language scenario modeling and what-if analysis</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="bg-transparent">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <Button variant="outline" size="sm" className="bg-transparent w-full sm:w-auto">
             <Share className="mr-2 h-4 w-4" />
-            Share Scenarios
+            <span className="hidden sm:inline">Share Scenarios</span>
+            <span className="sm:hidden">Share</span>
           </Button>
-          <Button size="sm">
+          <Button size="sm" className="w-full sm:w-auto">
             <Save className="mr-2 h-4 w-4" />
-            Save Analysis
+            <span className="hidden sm:inline">Save Analysis</span>
+            <span className="sm:hidden">Save</span>
           </Button>
         </div>
       </div>
@@ -457,10 +459,10 @@ export function ScenarioPlanning() {
       {models.length > 0 && (
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <Label htmlFor="model-select">Select Model:</Label>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <Label htmlFor="model-select" className="whitespace-nowrap">Select Model:</Label>
               <Select value={selectedModelId} onValueChange={setSelectedModelId}>
-                <SelectTrigger id="model-select" className="w-[300px]">
+                <SelectTrigger id="model-select" className="w-full sm:w-[300px]">
                   <SelectValue placeholder="Select a model" />
                 </SelectTrigger>
                 <SelectContent>
@@ -549,16 +551,18 @@ export function ScenarioPlanning() {
       </Card>
 
       <Tabs defaultValue="scenarios" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-6">
-          <TabsTrigger value="scenarios">Scenarios</TabsTrigger>
-          <TabsTrigger value="snapshots">Snapshots</TabsTrigger>
-          <TabsTrigger value="comparison">Comparison</TabsTrigger>
-          <TabsTrigger value="history">Version History</TabsTrigger>
-          <TabsTrigger value="sensitivity">Sensitivity</TabsTrigger>
-          <TabsTrigger value="transparency">Data Sources</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-6 min-w-[600px]">
+            <TabsTrigger value="scenarios" className="text-xs sm:text-sm">Scenarios</TabsTrigger>
+            <TabsTrigger value="snapshots" className="text-xs sm:text-sm">Snapshots</TabsTrigger>
+            <TabsTrigger value="comparison" className="text-xs sm:text-sm">Comparison</TabsTrigger>
+            <TabsTrigger value="history" className="text-xs sm:text-sm">Version History</TabsTrigger>
+            <TabsTrigger value="sensitivity" className="text-xs sm:text-sm">Sensitivity</TabsTrigger>
+            <TabsTrigger value="transparency" className="text-xs sm:text-sm">Data Sources</TabsTrigger>
+          </TabsList>
+        </div>
 
-        <TabsContent value="scenarios" className="space-y-4">
+        <TabsContent value="scenarios" className="space-y-4 overflow-x-auto overflow-y-visible">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -581,7 +585,7 @@ export function ScenarioPlanning() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
               {/* Scenario Templates */}
               <div className="lg:col-span-1">
                 <Card>
@@ -802,14 +806,15 @@ export function ScenarioPlanning() {
                       </div>
                     </div>
 
-                    <div className="flex gap-2">
-                      <Button onClick={handleRunScenario} disabled={!selectedModelId || !scenarioName.trim()}>
+                    <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                      <Button onClick={handleRunScenario} disabled={!selectedModelId || !scenarioName.trim()} className="w-full sm:w-auto">
                         <Play className="mr-2 h-4 w-4" />
-                        Run Scenario
+                        <span className="hidden sm:inline">Run Scenario</span>
+                        <span className="sm:hidden">Run</span>
                       </Button>
                       <Button 
                         variant="outline" 
-                        className="bg-transparent"
+                        className="bg-transparent w-full sm:w-auto"
                         onClick={() => {
                           // Duplicate current scenario
                           const template = scenarioTemplates.find(t => t.id === selectedScenario)
@@ -820,7 +825,8 @@ export function ScenarioPlanning() {
                         }}
                       >
                         <Copy className="mr-2 h-4 w-4" />
-                        Duplicate
+                        <span className="hidden sm:inline">Duplicate</span>
+                        <span className="sm:hidden">Copy</span>
                       </Button>
                     </div>
                   </CardContent>
@@ -831,26 +837,26 @@ export function ScenarioPlanning() {
         </TabsContent>
 
         {/* Snapshots tab */}
-        <TabsContent value="snapshots" className="space-y-4">
+        <TabsContent value="snapshots" className="space-y-4 overflow-x-auto overflow-y-visible">
           <ScenarioSnapshotManager modelId={selectedModelId} orgId={orgId} />
         </TabsContent>
 
         {/* Comparison tab */}
-        <TabsContent value="comparison" className="space-y-4">
+        <TabsContent value="comparison" className="space-y-4 overflow-x-auto overflow-y-visible">
           <ScenarioComparisonView modelId={selectedModelId} orgId={orgId} scenarios={scenarios} />
         </TabsContent>
 
         {/* Version History tab */}
-        <TabsContent value="history" className="space-y-4">
+        <TabsContent value="history" className="space-y-4 overflow-x-auto overflow-y-visible">
           <ScenarioVersionHistory modelId={selectedModelId} orgId={orgId} />
         </TabsContent>
 
         {/* Data Transparency tab */}
-        <TabsContent value="transparency" className="space-y-4">
+        <TabsContent value="transparency" className="space-y-4 overflow-x-auto overflow-y-visible">
           <ScenarioDataTransparency modelId={selectedModelId} orgId={orgId} />
         </TabsContent>
 
-        <TabsContent value="sensitivity" className="space-y-4">
+        <TabsContent value="sensitivity" className="space-y-4 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
               <CardTitle>Sensitivity Analysis</CardTitle>

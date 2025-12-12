@@ -946,7 +946,7 @@ export function CSVImportWizard() {
                 <TabsTrigger value="templates">Saved Templates</TabsTrigger>
               </TabsList>
 
-              <TabsContent value="mapping" className="space-y-4">
+              <TabsContent value="mapping" className="space-y-4 overflow-x-auto overflow-y-visible">
                 <Card>
                   <CardHeader>
                     <div className="flex items-center justify-between">
@@ -1172,7 +1172,7 @@ export function CSVImportWizard() {
                 </div>
               </TabsContent>
 
-              <TabsContent value="templates" className="space-y-4">
+              <TabsContent value="templates" className="space-y-4 overflow-x-auto overflow-y-visible">
                 <Card>
                   <CardHeader>
                     <CardTitle>Saved Mapping Templates</CardTitle>

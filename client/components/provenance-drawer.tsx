@@ -328,14 +328,16 @@ export function ProvenanceDrawer({
                 )}
 
                 <Tabs defaultValue="sources" className="w-full">
-                  <TabsList className="grid w-full grid-cols-4 mb-4">
-                    <TabsTrigger value="sources">Transactions</TabsTrigger>
-                    <TabsTrigger value="assumptions">Assumptions</TabsTrigger>
-                    <TabsTrigger value="audit">History</TabsTrigger>
-                    <TabsTrigger value="integrations">Sources</TabsTrigger>
-                  </TabsList>
+                  <div className="overflow-x-auto mb-4">
+                    <TabsList className="grid w-full grid-cols-4 min-w-[400px]">
+                      <TabsTrigger value="sources" className="text-xs sm:text-sm">Transactions</TabsTrigger>
+                      <TabsTrigger value="assumptions" className="text-xs sm:text-sm">Assumptions</TabsTrigger>
+                      <TabsTrigger value="audit" className="text-xs sm:text-sm">History</TabsTrigger>
+                      <TabsTrigger value="integrations" className="text-xs sm:text-sm">Sources</TabsTrigger>
+                    </TabsList>
+                  </div>
 
-                  <TabsContent value="sources" className="space-y-4 mt-0">
+                  <TabsContent value="sources" className="space-y-4 mt-0 overflow-x-auto overflow-y-visible">
                     <Card>
                       <CardHeader className="pb-3">
                         <CardTitle className="text-base font-medium flex items-center gap-2">

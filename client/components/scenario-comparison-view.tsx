@@ -292,16 +292,16 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6 p-4 md:p-0 overflow-x-hidden">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold">Scenario Comparison</h2>
-          <p className="text-muted-foreground">Side-by-side analysis of selected scenarios</p>
+          <p className="text-sm md:text-base text-muted-foreground">Side-by-side analysis of selected scenarios</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <Select value={baseScenario} onValueChange={setBaseScenario}>
-            <SelectTrigger className="w-[200px]">
+            <SelectTrigger className="w-full sm:w-[200px]">
               <SelectValue placeholder="Select base scenario" />
             </SelectTrigger>
             <SelectContent>
@@ -312,15 +312,16 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
               ))}
             </SelectContent>
           </Select>
-        <Button onClick={handleExportComparison}>
+        <Button onClick={handleExportComparison} className="w-full sm:w-auto">
           <Download className="mr-2 h-4 w-4" />
-          Export to PDF
+          <span className="hidden sm:inline">Export to PDF</span>
+          <span className="sm:hidden">Export</span>
         </Button>
         </div>
       </div>
 
       {/* Side-by-Side Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         <Card>
           <CardHeader>
             <CardTitle>Revenue Comparison</CardTitle>
@@ -328,7 +329,7 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
           </CardHeader>
           <CardContent>
             {monthlyData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
               <LineChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
@@ -351,7 +352,7 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
               </LineChart>
             </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+              <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground text-sm px-4 text-center">
                 <p>No monthly data available</p>
               </div>
             )}
@@ -365,7 +366,7 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
           </CardHeader>
           <CardContent>
             {monthlyData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
               <LineChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
@@ -388,7 +389,7 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
               </LineChart>
             </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+              <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground text-sm px-4 text-center">
                 <p>No monthly data available</p>
               </div>
             )}
