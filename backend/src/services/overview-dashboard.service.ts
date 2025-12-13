@@ -205,7 +205,12 @@ export const overviewDashboardService = {
     if (anyModelRun && anyModelRun.summaryJson) {
       const summary = anyModelRun.summaryJson as any;
       cashBalance = Number(summary.cashBalance || 0);
-      activeCustomers = Number(summary.activeCustomers || summary.customerCount || summary.customers || 0);
+      // Get active customers from model run - if 0 or missing, don't use fallback (let it stay 0)
+      // Only use model run data if it's a real value (> 0)
+      const modelCustomers = Number(summary.activeCustomers || summary.customerCount || summary.customers || 0);
+      if (modelCustomers > 0) {
+        activeCustomers = modelCustomers;
+      }
     }
     
     if (investorData) {
@@ -218,14 +223,17 @@ export const overviewDashboardService = {
     
     // Calculate cash runway using proper financial formula: Runway (months) = Cash Balance / Monthly Burn Rate
     // This is the industry-standard formula used by financial teams
-    if (runwayMonths === 0) {
+    // IMPORTANT: If burn rate exists (> 0), we MUST calculate runway, never set to 999
+    if (runwayMonths === 0 || (monthlyBurnRate > 0 && runwayMonths >= 999)) {
       if (cashBalance > 0 && monthlyBurnRate > 0) {
         // Standard formula: Cash Runway = Cash Balance / Monthly Burn Rate
         runwayMonths = cashBalance / monthlyBurnRate;
         console.log(`[Overview] Calculated runway: ${runwayMonths.toFixed(2)} months = $${cashBalance.toLocaleString()} / $${monthlyBurnRate.toLocaleString()}/month`);
       } else if (cashBalance > 0 && monthlyBurnRate === 0) {
         // If no burn rate, runway is effectively infinite (or very large)
-        runwayMonths = 999; // Cap at 999 for display purposes
+        // Only set to 999 if there's truly no burn rate (no expenses)
+        runwayMonths = 999; // Cap at 999 for display purposes - indicates infinite runway when burn rate is 0
+        console.log(`[Overview] Runway set to 999 months (infinite) - cash balance exists but no burn rate`);
       } else if (monthlyBurnRate > 0) {
         // If no cash balance but we have burn rate, estimate from transactions
         // Sum all positive transactions as estimated cash
@@ -235,15 +243,34 @@ export const overviewDashboardService = {
         if (totalCash > 0) {
           runwayMonths = totalCash / monthlyBurnRate;
           console.log(`[Overview] Estimated runway from transactions: ${runwayMonths.toFixed(2)} months`);
+        } else {
+          // If we have burn rate but no cash, runway is 0
+          runwayMonths = 0;
+          console.log(`[Overview] Runway is 0 - burn rate exists but no cash balance`);
         }
+      } else {
+        // No cash and no burn rate - runway is undefined/0
+        runwayMonths = 0;
+        console.log(`[Overview] Runway is 0 - no cash balance and no burn rate`);
       }
     }
     
     // Ensure runway is never negative and cap at reasonable maximum
+    // IMPORTANT: If burn rate > 0, runway should be calculated, not capped at 999
+    // Only cap at 999 if there's truly no burn rate (infinite runway)
     if (runwayMonths < 0) {
       runwayMonths = 0;
-    } else if (runwayMonths > 999) {
-      runwayMonths = 999; // Cap at 999 months for display
+    } else if (runwayMonths > 999 && monthlyBurnRate === 0) {
+      // Only cap at 999 if there's no burn rate (infinite runway scenario)
+      runwayMonths = 999;
+    } else if (runwayMonths > 999 && monthlyBurnRate > 0) {
+      // If burn rate exists but runway is > 999, something is wrong - recalculate
+      if (cashBalance > 0) {
+        runwayMonths = cashBalance / monthlyBurnRate;
+        console.log(`[Overview] Recalculated runway from >999 to ${runwayMonths.toFixed(2)} months (burn rate exists)`);
+      } else {
+        runwayMonths = 0;
+      }
     }
     
     // Calculate health score based on available metrics

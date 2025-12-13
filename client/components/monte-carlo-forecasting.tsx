@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { toast } from "sonner"
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
+import { API_BASE_URL } from "@/lib/api-config"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -272,7 +272,16 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
       // Create Monte Carlo job via backend
       if (modelId && orgId) {
         try {
-          const response = await fetch(`${API_BASE_URL}/models/${modelId}/montecarlo`, {
+          // Ensure API_BASE_URL includes /api/v1
+          let baseUrl = API_BASE_URL
+          if (!baseUrl.endsWith('/api/v1')) {
+            baseUrl = baseUrl.replace(/\/$/, '') + '/api/v1'
+          }
+          const monteCarloUrl = `${baseUrl}/models/${modelId}/montecarlo`
+          console.log("📤 API_BASE_URL:", API_BASE_URL)
+          console.log("📤 Corrected baseUrl:", baseUrl)
+          console.log("📤 Full Monte Carlo URL:", monteCarloUrl)
+          const response = await fetch(monteCarloUrl, {
             method: "POST",
             headers: {
               Authorization: `Bearer ${token}`,
@@ -302,12 +311,36 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
               return
             }
           } else {
+            // Handle different error status codes
             const errorData = await response.json().catch(() => ({}))
-            throw new Error(errorData.error?.message || "Failed to start Monte Carlo simulation")
+            const errorMsg = errorData.error?.message || errorData.message || "Failed to start Monte Carlo simulation"
+            
+            // Handle quota/credit errors (403) with helpful message
+            if (response.status === 403) {
+              throw new Error(errorMsg + " Please upgrade your plan or wait for your quota to reset.")
+            } else if (response.status === 401) {
+              throw new Error("Your session has expired. Please log in again.")
+            } else {
+              throw new Error(errorMsg)
+            }
           }
         } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : "Failed to start simulation"
+          const isNetworkError = 
+            errorMessage.includes("Failed to fetch") ||
+            errorMessage.includes("NetworkError") ||
+            errorMessage.includes("ERR_NETWORK") ||
+            errorMessage.includes("ERR_CONNECTION_REFUSED") ||
+            (error instanceof TypeError && error.message.includes("fetch"))
+          
           console.error("Error starting Monte Carlo:", error)
-          toast.error(error instanceof Error ? error.message : "Failed to start simulation")
+          
+          if (isNetworkError) {
+            toast.error("Cannot connect to server. Please ensure the backend server is running.")
+          } else {
+            toast.error(errorMessage)
+          }
+          
           clearInterval(progressInterval)
           setIsSimulating(false)
           return
@@ -365,15 +398,20 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
 
       try {
         // Poll both jobs endpoint and monte carlo endpoint for accurate status
+        // Ensure API_BASE_URL includes /api/v1
+        let baseUrl = API_BASE_URL
+        if (!baseUrl.endsWith('/api/v1')) {
+          baseUrl = baseUrl.replace(/\/$/, '') + '/api/v1'
+        }
         const [jobResponse, mcResponse] = await Promise.all([
-          fetch(`${API_BASE_URL}/jobs/${jobId}`, {
+          fetch(`${baseUrl}/jobs/${jobId}`, {
             headers: {
               Authorization: `Bearer ${token}`,
               "Content-Type": "application/json",
             },
             credentials: "include",
           }),
-          fetch(`${API_BASE_URL}/montecarlo/${jobId}`, {
+          fetch(`${baseUrl}/montecarlo/${jobId}`, {
             headers: {
               Authorization: `Bearer ${token}`,
               "Content-Type": "application/json",

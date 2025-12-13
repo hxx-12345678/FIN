@@ -92,8 +92,11 @@ export const quotaService = {
   async checkMonteCarloQuota(orgId: string, requestedSims: number): Promise<QuotaCheckResult> {
     const quota = await this.getOrCreateOrgQuota(orgId);
 
-    // Check if quota needs reset
-    if (quota.monteCarloResetAt && new Date() >= quota.monteCarloResetAt) {
+    // Check for unlimited quota (very high limit, typically 999999999)
+    const isUnlimited = quota.monteCarloSimsLimit >= 999999999;
+
+    // Check if quota needs reset (only if not unlimited)
+    if (!isUnlimited && quota.monteCarloResetAt && new Date() >= quota.monteCarloResetAt) {
       try {
         await prisma.orgQuota.update({
           where: { orgId },
@@ -110,8 +113,8 @@ export const quotaService = {
       }
     }
 
-    const remaining = quota.monteCarloSimsLimit - quota.monteCarloSimsUsed;
-    const allowed = remaining >= requestedSims;
+    const remaining = isUnlimited ? 999999999 : (quota.monteCarloSimsLimit - quota.monteCarloSimsUsed);
+    const allowed = isUnlimited || remaining >= requestedSims;
 
     return {
       allowed,

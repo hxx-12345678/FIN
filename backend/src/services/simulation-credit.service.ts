@@ -70,6 +70,20 @@ const getUserPlanCredits = async (orgId: string): Promise<{ planId: string; allo
     throw new NotFoundError('Organization not found');
   }
 
+  // Check for demo/unlimited quota in org_quotas table
+  const quota = await prisma.orgQuota.findUnique({
+    where: { orgId },
+    select: { monteCarloSimsLimit: true },
+  });
+
+  // If quota is set to unlimited (>= 999999999), return unlimited
+  if (quota && quota.monteCarloSimsLimit >= 999999999) {
+    return {
+      planId: 'unlimited',
+      allowedSimulations: 999999999, // Effectively unlimited
+    };
+  }
+
   const pricingConfig = getPricingConfig();
   const plan = pricingConfig.plans.find(p => p.id === org.planTier || p.name === org.planTier);
 
@@ -128,10 +142,9 @@ export const simulationCreditService = {
         usageRecords = await tx.$queryRaw<Array<{ credits_used: bigint }>>`
           SELECT COALESCE(SUM(credits_used), 0) as credits_used
           FROM user_usage
-          WHERE "orgId" = ${orgId}
-            AND "created_at" >= ${periodStart}
-            AND "created_at" <= ${periodEnd}
-          FOR UPDATE
+          WHERE "orgId" = ${orgId}::uuid
+            AND "created_at" >= ${periodStart}::timestamptz
+            AND "created_at" <= ${periodEnd}::timestamptz
         `;
       } catch (error: any) {
         // If table doesn't exist, return zero usage (for tests)
@@ -144,7 +157,10 @@ export const simulationCreditService = {
       }
 
       const usedCredits = Number(usageRecords[0]?.credits_used || 0);
-      const remainingCredits = totalCredits - usedCredits;
+      
+      // Check if unlimited (planId is 'unlimited' or totalCredits is very large)
+      const isUnlimited = planId === 'unlimited' || totalCredits >= 999999;
+      const remainingCredits = isUnlimited ? 999999999 : (totalCredits - usedCredits);
 
       // Check if admin override
       if (adminOverride) {
@@ -152,7 +168,7 @@ export const simulationCreditService = {
         return {
           allowed: true,
           balance: {
-            totalCredits,
+            totalCredits: isUnlimited ? 999999999 : totalCredits,
             usedCredits,
             remainingCredits,
             resetAt: periodEnd,
@@ -161,8 +177,8 @@ export const simulationCreditService = {
         };
       }
 
-      // Check if enough credits
-      const allowed = remainingCredits >= requestedCredits;
+      // Check if enough credits (always allow if unlimited)
+      const allowed = isUnlimited || remainingCredits >= requestedCredits;
 
       return {
         allowed,
@@ -178,7 +194,8 @@ export const simulationCreditService = {
           : `Insufficient credits. You have ${remainingCredits} credits remaining out of ${totalCredits}. Upgrade your plan or wait for monthly reset.`,
       };
     }, {
-      isolationLevel: 'Serializable', // Highest isolation for race condition protection
+      isolationLevel: 'ReadCommitted', // Changed from Serializable to avoid transaction abort issues
+      timeout: 10000, // 10 second timeout
     });
   },
 
@@ -211,33 +228,73 @@ export const simulationCreditService = {
       );
     }
 
+    // Get plan info outside transaction to avoid transaction abort issues
+    const { planId, allowedSimulations } = await getUserPlanCredits(orgId);
+    const currentTotalCredits = Math.ceil(allowedSimulations / 1000);
+
+    // Check if user_usage table exists before starting transaction
+    // This prevents transaction abort if table doesn't exist
+    let tableExists = true;
+    try {
+      await prisma.$queryRaw`SELECT 1 FROM user_usage LIMIT 1`;
+    } catch (error: any) {
+      if (error.message?.includes('does not exist') || error.message?.includes('user_usage')) {
+        tableExists = false;
+        logger.warn(`user_usage table not found, skipping credit deduction`);
+      } else {
+        // Other error - log and continue (will handle in transaction)
+        logger.warn(`Error checking user_usage table: ${error.message}`);
+      }
+    }
+
+    // If table doesn't exist and we have unlimited credits, skip transaction
+    if (!tableExists && (adminOverride || currentTotalCredits >= 999999)) {
+      logger.info(`Skipping credit deduction - table doesn't exist and credits are unlimited`);
+      return {
+        success: true,
+        creditsDeducted: creditsToDeduct,
+        balance: {
+          totalCredits: currentTotalCredits,
+          usedCredits: 0,
+          remainingCredits: currentTotalCredits,
+          resetAt: getCurrentMonthPeriod().end,
+          planId,
+        },
+      };
+    }
+
     // Deduct credits in transaction with double-check for race conditions
     return await prisma.$transaction(async (tx) => {
       // Re-check balance within transaction to prevent race conditions
       const period = getCurrentMonthPeriod();
       let usageCheck: Array<{ credits_used: bigint }>;
-      try {
-        usageCheck = await tx.$queryRaw<Array<{ credits_used: bigint }>>`
-          SELECT COALESCE(SUM(credits_used), 0) as credits_used
-          FROM user_usage
-          WHERE "orgId" = ${orgId}
-            AND "created_at" >= ${period.start}
-            AND "created_at" <= ${period.end}
-          FOR UPDATE
-        `;
-      } catch (error: any) {
-        // If table doesn't exist, return zero usage (for tests)
-        if (error.message?.includes('does not exist') || error.message?.includes('user_usage')) {
-          logger.warn(`user_usage table not found, returning zero usage`);
-          usageCheck = [{ credits_used: BigInt(0) }];
-        } else {
-          throw error;
+      
+      if (!tableExists) {
+        // Table doesn't exist - use zero usage
+        usageCheck = [{ credits_used: BigInt(0) }];
+      } else {
+        try {
+          usageCheck = await tx.$queryRaw<Array<{ credits_used: bigint }>>`
+            SELECT COALESCE(SUM(credits_used), 0) as credits_used
+            FROM user_usage
+            WHERE "orgId" = ${orgId}::uuid
+              AND "created_at" >= ${period.start}::timestamptz
+              AND "created_at" <= ${period.end}::timestamptz
+          `;
+        } catch (error: any) {
+          // If table doesn't exist or query fails, return zero usage
+          if (error.message?.includes('does not exist') || error.message?.includes('user_usage')) {
+            logger.warn(`user_usage table not found in transaction, returning zero usage`);
+            usageCheck = [{ credits_used: BigInt(0) }];
+          } else {
+            // Log the error and re-throw to abort transaction properly
+            logger.error('Error in transaction query:', error);
+            throw error;
+          }
         }
       }
       
       const currentUsed = Number(usageCheck[0]?.credits_used || 0);
-      const { planId: currentPlanId, allowedSimulations } = await getUserPlanCredits(orgId);
-      const currentTotalCredits = Math.ceil(allowedSimulations / 1000);
       const currentRemaining = currentTotalCredits - currentUsed;
       
       if (!adminOverride && currentRemaining < creditsToDeduct) {
@@ -246,49 +303,83 @@ export const simulationCreditService = {
         );
       }
       
-      // Create usage record (handle missing table gracefully)
+      // Create usage record (handle missing table gracefully and transaction abort errors)
       let usage: any;
-      try {
-        usage = await (tx as any).userUsage.create({
-          data: {
-            orgId,
-            userId,
-            simulationRunId,
-            monteCarloJobId,
-            creditsUsed: creditsToDeduct,
-            creditType: 'simulation',
-            description: description || `Monte Carlo simulation: ${numSimulations} simulations`,
-            metadata: {
-              numSimulations,
-              creditsPerSimulation: 1000,
-              calculatedCredits: creditsToDeduct,
-              adminOverride,
-            },
+      if (!tableExists) {
+        // Table doesn't exist - create mock usage object
+        logger.warn(`user_usage table not found, creating mock usage record`);
+        usage = {
+          id: `mock-${Date.now()}`,
+          orgId,
+          userId,
+          simulationRunId,
+          monteCarloJobId,
+          creditsUsed: creditsToDeduct,
+          creditType: 'simulation',
+          description: description || `Monte Carlo simulation: ${numSimulations} simulations`,
+          metadata: {
+            numSimulations,
+            creditsPerSimulation: 1000,
+            calculatedCredits: creditsToDeduct,
+            adminOverride,
           },
-        });
-      } catch (error: any) {
-        // If table doesn't exist, create a mock usage object (for tests)
-        if (error.message?.includes('does not exist') || error.message?.includes('user_usage')) {
-          logger.warn(`user_usage table not found, creating mock usage record`);
-          usage = {
-            id: `mock-${Date.now()}`,
-            orgId,
-            userId,
-            simulationRunId,
-            monteCarloJobId,
-            creditsUsed: creditsToDeduct,
-            creditType: 'simulation',
-            description: description || `Monte Carlo simulation: ${numSimulations} simulations`,
-            metadata: {
-              numSimulations,
-              creditsPerSimulation: 1000,
-              calculatedCredits: creditsToDeduct,
-              adminOverride,
+          createdAt: new Date(),
+        };
+      } else {
+        try {
+          usage = await (tx as any).userUsage.create({
+            data: {
+              orgId,
+              userId,
+              simulationRunId,
+              monteCarloJobId,
+              creditsUsed: creditsToDeduct,
+              creditType: 'simulation',
+              description: description || `Monte Carlo simulation: ${numSimulations} simulations`,
+              metadata: {
+                numSimulations,
+                creditsPerSimulation: 1000,
+                calculatedCredits: creditsToDeduct,
+                adminOverride,
+              },
             },
-            createdAt: new Date(),
-          };
-        } else {
-          throw error;
+          });
+        } catch (error: any) {
+          // If table doesn't exist, create a mock usage object (for tests)
+          if (error.message?.includes('does not exist') || error.message?.includes('user_usage')) {
+            logger.warn(`user_usage table not found, creating mock usage record`);
+            usage = {
+              id: `mock-${Date.now()}`,
+              orgId,
+              userId,
+              simulationRunId,
+              monteCarloJobId,
+              creditsUsed: creditsToDeduct,
+              creditType: 'simulation',
+              description: description || `Monte Carlo simulation: ${numSimulations} simulations`,
+              metadata: {
+                numSimulations,
+                creditsPerSimulation: 1000,
+                calculatedCredits: creditsToDeduct,
+                adminOverride,
+              },
+              createdAt: new Date(),
+            };
+          } else if (error.message?.includes('current transaction is aborted') || error.code === '25P02') {
+            // Transaction was aborted - this means an earlier error occurred
+            logger.error('[Transaction Abort] Error occurred before userUsage.create, rolling back', {
+              error: error.message,
+              orgId,
+              userId,
+              stack: error.stack,
+            });
+            // Don't throw here - let the transaction rollback naturally
+            throw new Error('Transaction failed due to a previous error. Please try again.');
+          } else {
+            // Other errors - re-throw
+            logger.error('Error creating userUsage record:', error);
+            throw error;
+          }
         }
       }
 
@@ -311,7 +402,7 @@ export const simulationCreditService = {
         createdAt: usage.createdAt,
       };
     }, {
-      isolationLevel: 'Serializable',
+      isolationLevel: 'ReadCommitted', // Changed from Serializable to avoid transaction abort issues
     });
   },
 

@@ -179,7 +179,17 @@ export function IntegrationsPage() {
         }
       }
     } catch (error) {
-      console.error("Failed to fetch import history:", error)
+      // Silently handle network errors for import history - don't show errors if backend is down
+      const errorMessage = error instanceof Error ? error.message : "Failed to fetch import history"
+      const isNetworkError = 
+        errorMessage.includes("Failed to fetch") ||
+        errorMessage.includes("NetworkError") ||
+        errorMessage.includes("ERR_NETWORK") ||
+        (error instanceof TypeError && error.message.includes("fetch"))
+      
+      if (!isNetworkError) {
+        console.error("Failed to fetch import history:", error)
+      }
     } finally {
       setLoadingHistory(false)
     }
@@ -319,6 +329,15 @@ export function IntegrationsPage() {
       const errorMessage = err instanceof Error ? err.message : "Failed to load connectors"
       console.error("Error fetching connectors:", err)
       
+      // Check if it's a network error (backend not running)
+      const isNetworkError = 
+        errorMessage.includes("Failed to fetch") ||
+        errorMessage.includes("NetworkError") ||
+        errorMessage.includes("ERR_NETWORK") ||
+        errorMessage.includes("ERR_INTERNET_DISCONNECTED") ||
+        errorMessage.includes("ERR_NETWORK_IO_SUSPENDED") ||
+        (err instanceof TypeError && err.message.includes("fetch"))
+      
       // On error, still set empty arrays to prevent undefined errors
       setConnectors([])
       setIntegrations((prev) =>
@@ -328,8 +347,14 @@ export function IntegrationsPage() {
         }))
       )
       
-      // Only show error for non-404 errors
-      if (errorMessage && !errorMessage.includes("404") && !errorMessage.includes("not found")) {
+      // Only show error for non-network errors and non-404 errors
+      if (isNetworkError) {
+        // Network errors are expected when backend is not running - don't show error toast
+        // Just log it for debugging
+        console.warn("Backend server appears to be unavailable. Connectors will not be loaded until server is running.")
+        setError(null) // Don't show error in UI for network issues
+      } else if (errorMessage && !errorMessage.includes("404") && !errorMessage.includes("not found")) {
+        // Show error for actual API errors (not 404, not network)
         setError(errorMessage)
         toast.error(errorMessage)
       } else {
@@ -387,7 +412,17 @@ export function IntegrationsPage() {
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to connect integration"
-      toast.error(errorMessage)
+      const isNetworkError = 
+        errorMessage.includes("Failed to fetch") ||
+        errorMessage.includes("NetworkError") ||
+        errorMessage.includes("ERR_NETWORK") ||
+        (err instanceof TypeError && err.message.includes("fetch"))
+      
+      if (isNetworkError) {
+        toast.error("Cannot connect to server. Please ensure the backend server is running.")
+      } else {
+        toast.error(errorMessage)
+      }
       setShowConnectDialog(false)
     }
   }
@@ -452,11 +487,26 @@ export function IntegrationsPage() {
       }, 3000)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to sync"
-      toast.error(errorMessage)
+      const isNetworkError = 
+        errorMessage.includes("Failed to fetch") ||
+        errorMessage.includes("NetworkError") ||
+        errorMessage.includes("ERR_NETWORK") ||
+        (err instanceof TypeError && err.message.includes("fetch"))
+      
+      if (isNetworkError) {
+        toast.error("Cannot connect to server. Please ensure the backend server is running.")
+      } else {
+        toast.error(errorMessage)
+      }
       setSyncing((prev) => {
         const newSet = new Set(prev)
         newSet.delete(connectorId)
         return newSet
+      })
+      setSyncProgress((prev) => {
+        const newProgress = { ...prev }
+        delete newProgress[connectorId]
+        return newProgress
       })
     }
   }
@@ -489,7 +539,18 @@ export function IntegrationsPage() {
       toast.success(`Auto-sync ${enabled ? "enabled" : "disabled"}`)
       fetchConnectors()
     } catch (err) {
-      toast.error("Failed to update auto-sync settings")
+      const errorMessage = err instanceof Error ? err.message : "Failed to update auto-sync settings"
+      const isNetworkError = 
+        errorMessage.includes("Failed to fetch") ||
+        errorMessage.includes("NetworkError") ||
+        errorMessage.includes("ERR_NETWORK") ||
+        (err instanceof TypeError && err.message.includes("fetch"))
+      
+      if (isNetworkError) {
+        toast.error("Cannot connect to server. Please ensure the backend server is running.")
+      } else {
+        toast.error("Failed to update auto-sync settings")
+      }
     }
   }
 
@@ -715,6 +776,19 @@ export function IntegrationsPage() {
                   <div className="flex flex-col">
                     <span className="font-medium">Generic Accounting</span>
                     <span className="text-xs text-muted-foreground">For any accounting system</span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => {
+                    const csvContent = integrationTemplates.test.generator()
+                    downloadCSV(csvContent, integrationTemplates.test.filename)
+                    toast.success('Comprehensive test data downloaded! Perfect for testing all features.')
+                  }}
+                >
+                  <div className="flex flex-col">
+                    <span className="font-medium">Comprehensive Test Data</span>
+                    <span className="text-xs text-muted-foreground">6 months of realistic transactions for testing</span>
                   </div>
                 </DropdownMenuItem>
               </DropdownMenuContent>

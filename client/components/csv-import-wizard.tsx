@@ -42,7 +42,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
+import { API_BASE_URL } from "@/lib/api-config"
 
 interface CSVRow {
   [key: string]: string
@@ -236,7 +236,23 @@ export function CSVImportWizard() {
       }
 
       const headers = parseCSVLine(lines[0])
-      setCsvHeaders(headers)
+      console.log("📋 Parsed headers:", headers)
+      
+      if (headers.length === 0 || headers.every(h => !h.trim())) {
+        toast.error("CSV file has no headers. Please check the file format.")
+        return
+      }
+      
+      // Clean headers - remove empty strings and trim
+      const cleanHeaders = headers.filter(h => h.trim().length > 0).map(h => h.trim())
+      
+      if (cleanHeaders.length === 0) {
+        toast.error("CSV file has no valid headers. Please check the file format.")
+        return
+      }
+      
+      setCsvHeaders(cleanHeaders)
+      console.log("✅ Headers set:", cleanHeaders.length)
 
       const data: CSVRow[] = []
       const startIndex = skipFirstRow ? 1 : 0
@@ -245,17 +261,25 @@ export function CSVImportWizard() {
       for (let i = startIndex; i < lines.length; i++) {
         const values = parseCSVLine(lines[i])
         const row: CSVRow = {}
-        headers.forEach((header, index) => {
+        cleanHeaders.forEach((header, index) => {
           row[header] = values[index] || ""
         })
         data.push(row)
+      }
+
+      console.log("📊 Parsed data rows:", data.length)
+      
+      if (data.length === 0) {
+        toast.error("CSV file has no data rows. Please check the file.")
+        return
       }
 
       setCsvData(data)
       setPreviewRows(data.slice(0, 10)) // Show first 10 rows for preview
 
       // Auto-map fields
-      const autoMappings = autoMapFields(headers)
+      const autoMappings = autoMapFields(cleanHeaders)
+      console.log("🗺️ Auto-mapped fields:", autoMappings.length)
       setFieldMappings(autoMappings)
 
       setStep("preview")
@@ -422,10 +446,12 @@ export function CSVImportWizard() {
       const formData = new FormData()
       formData.append("file", csvFile)
 
-      console.log("📤 Sending upload request to:", `${API_BASE_URL}/orgs/${orgId}/import/csv/upload`)
+      const uploadUrl = `${API_BASE_URL}/orgs/${orgId}/import/csv/upload`
+      console.log("📤 API_BASE_URL:", API_BASE_URL)
+      console.log("📤 Full upload URL:", uploadUrl)
       console.log("📤 Upload file size:", formData.get('file') instanceof File ? (formData.get('file') as File).size : 'unknown')
       
-      const uploadResponse = await fetch(`${API_BASE_URL}/orgs/${orgId}/import/csv/upload`, {
+      const uploadResponse = await fetch(uploadUrl, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -932,14 +958,36 @@ export function CSVImportWizard() {
                   <p className="text-sm text-muted-foreground">
                     Showing {previewRows.length} of {csvData.length} rows
                   </p>
-                  <Button onClick={() => setStep("mapping")}>Continue to Mapping</Button>
+                  <Button 
+                    onClick={() => {
+                      console.log("🔄 Continue to Mapping clicked")
+                      console.log("📊 Current state:", {
+                        step,
+                        csvHeadersCount: csvHeaders.length,
+                        csvDataCount: csvData.length,
+                        fieldMappingsCount: fieldMappings.length
+                      })
+                      if (csvHeaders.length === 0) {
+                        toast.error("No CSV headers detected. Please check your file format.")
+                        return
+                      }
+                      if (csvData.length === 0) {
+                        toast.error("No CSV data detected. Please check your file.")
+                        return
+                      }
+                      setStep("mapping")
+                      console.log("✅ Step set to mapping")
+                    }}
+                  >
+                    Continue to Mapping
+                  </Button>
                 </div>
               </CardContent>
             </Card>
           )}
 
           {/* Step 3: Mapping */}
-          {step === "mapping" && (
+          {step === "mapping" && csvHeaders.length > 0 && (
             <Tabs defaultValue="mapping" className="w-full">
               <TabsList>
                 <TabsTrigger value="mapping">Field Mapping</TabsTrigger>
@@ -1084,7 +1132,11 @@ export function CSVImportWizard() {
                       <div className="mt-6 p-4 border rounded-lg space-y-3 bg-muted/20">
                         <h4 className="font-medium text-sm">Additional Model Parameters (Optional)</h4>
                         <p className="text-xs text-muted-foreground">
-                          These values are optional and help improve model accuracy. Leave as 0 if unknown.
+                          These values are optional and help improve model accuracy. They are used when auto-generating financial models after CSV import.
+                          <br />
+                          <strong>Initial Cash on Hand:</strong> Used as starting cash balance in financial projections.
+                          <br />
+                          <strong>Active Customers Count:</strong> Used for customer-based revenue calculations and unit economics.
                         </p>
                         <div className="grid grid-cols-2 gap-3">
                           <div>
@@ -1234,6 +1286,26 @@ export function CSVImportWizard() {
                 </Card>
               </TabsContent>
             </Tabs>
+          )}
+
+          {/* Show error if mapping step is selected but no headers */}
+          {step === "mapping" && csvHeaders.length === 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-destructive">
+                  <AlertCircle className="h-5 w-5" />
+                  No CSV Data Available
+                </CardTitle>
+                <CardDescription>
+                  Please upload a CSV file first before proceeding to mapping.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button onClick={() => setStep("upload")}>
+                  Go Back to Upload
+                </Button>
+              </CardContent>
+            </Card>
           )}
 
           {/* Step 4: Review & Import - Show if step is review OR if we have a job ID */}

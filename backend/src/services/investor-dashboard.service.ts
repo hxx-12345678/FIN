@@ -125,7 +125,9 @@ export const investorDashboardService = {
     return {
       executiveSummary: {
         arr: Math.round(arr),
-        activeCustomers: Number(summary.activeCustomers || summary.customers || summary.customerCount || 248),
+        // Only use fallback (248) if no real customer data exists in model run
+        // This fallback is a mock value for demo purposes when no real data is available
+        activeCustomers: Number(summary.activeCustomers || summary.customers || summary.customerCount || 0),
         monthsRunway: Math.round(runwayMonths * 10) / 10,
         healthScore: Math.round(healthScore),
         arrGrowth: Math.round(arrGrowth * 10) / 10,

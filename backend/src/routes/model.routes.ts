@@ -19,5 +19,22 @@ router.get('/models/:model_id/snapshots', authenticate, modelController.getSnaps
 router.delete('/models/:model_id/snapshots/:run_id', authenticate, modelController.deleteSnapshot);
 router.get('/models/:model_id/compare', authenticate, modelController.compareRuns);
 
+// Provenance route (matches frontend expected path)
+router.get('/orgs/:org_id/models/:model_id/runs/:run_id/provenance/:cell', authenticate, async (req, res, next) => {
+  try {
+    const { run_id, cell } = req.params;
+    // Redirect to the provenance controller with query parameters
+    req.query = {
+      model_run_id: run_id,
+      cell: decodeURIComponent(cell),
+      ...req.query,
+    };
+    const { provenanceController } = await import('../controllers/provenance.controller');
+    return provenanceController.getProvenance(req as any, res, next);
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;
 

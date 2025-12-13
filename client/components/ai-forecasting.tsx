@@ -442,8 +442,21 @@ export function AIForecasting() {
         }
       }
     } catch (error) {
-      console.error("Failed to fetch models:", error)
-      toast.error("Failed to load models")
+      const errorMessage = error instanceof Error ? error.message : "Failed to fetch models"
+      const isNetworkError = 
+        errorMessage.includes("Failed to fetch") ||
+        errorMessage.includes("NetworkError") ||
+        errorMessage.includes("ERR_NETWORK") ||
+        errorMessage.includes("ERR_CONNECTION_REFUSED") ||
+        (error instanceof TypeError && error.message.includes("fetch"))
+      
+      if (isNetworkError) {
+        // Network errors are expected when backend is not running - don't show error toast
+        console.warn("Backend server appears to be unavailable. Models will not be loaded until server is running.")
+      } else {
+        console.error("Failed to fetch models:", error)
+        toast.error("Failed to load models")
+      }
     } finally {
       setLoading(false)
     }

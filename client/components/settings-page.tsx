@@ -95,8 +95,8 @@ function SessionManagementButton() {
         Manage Sessions
       </Button>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4" onClick={() => setOpen(false)}>
-          <div className="max-w-[95vw] sm:max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-2 sm:p-4" onClick={() => setOpen(false)}>
+          <div className="max-w-[95vw] sm:max-w-4xl w-full max-h-[90vh] overflow-y-auto rounded-lg" onClick={(e) => e.stopPropagation()}>
             <SessionManagement />
           </div>
         </div>
@@ -624,18 +624,20 @@ export function SettingsPage() {
         </Alert>
       )}
 
-      <Tabs defaultValue="profile" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 md:grid-cols-7">
-          <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="organization">Organization</TabsTrigger>
-          {/* <TabsTrigger value="appearance">Appearance</TabsTrigger> */}
-          {/* <TabsTrigger value="notifications">Notifications</TabsTrigger> */}
-          <TabsTrigger value="alerts">Alerts</TabsTrigger>
-          <TabsTrigger value="localization">Localization</TabsTrigger>
-          <TabsTrigger value="sync">Sync Audit</TabsTrigger>
-          <TabsTrigger value="security">Security</TabsTrigger>
-          <TabsTrigger value="api">API</TabsTrigger>
-        </TabsList>
+      <Tabs defaultValue="profile" className="space-y-4 w-full">
+        <div className="overflow-x-auto overflow-y-visible -mx-4 px-4 md:mx-0 md:px-0">
+          <TabsList className="inline-flex w-full min-w-[600px] md:min-w-0 md:grid md:grid-cols-7 h-auto p-1 gap-1">
+            <TabsTrigger value="profile" className="text-xs sm:text-sm whitespace-nowrap flex-shrink-0">Profile</TabsTrigger>
+            <TabsTrigger value="organization" className="text-xs sm:text-sm whitespace-nowrap flex-shrink-0">Organization</TabsTrigger>
+            {/* <TabsTrigger value="appearance">Appearance</TabsTrigger> */}
+            {/* <TabsTrigger value="notifications">Notifications</TabsTrigger> */}
+            <TabsTrigger value="alerts" className="text-xs sm:text-sm whitespace-nowrap flex-shrink-0">Alerts</TabsTrigger>
+            <TabsTrigger value="localization" className="text-xs sm:text-sm whitespace-nowrap flex-shrink-0">Localization</TabsTrigger>
+            <TabsTrigger value="sync" className="text-xs sm:text-sm whitespace-nowrap flex-shrink-0">Sync Audit</TabsTrigger>
+            <TabsTrigger value="security" className="text-xs sm:text-sm whitespace-nowrap flex-shrink-0">Security</TabsTrigger>
+            <TabsTrigger value="api" className="text-xs sm:text-sm whitespace-nowrap flex-shrink-0">API</TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* Profile Tab */}
         <TabsContent value="profile" className="space-y-6 overflow-x-auto overflow-y-visible">
@@ -648,19 +650,19 @@ export function SettingsPage() {
               <CardDescription>Update your personal details and profile information</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex items-center gap-6">
-                <Avatar className="h-20 w-20">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
+                <Avatar className="h-20 w-20 flex-shrink-0">
                   <AvatarImage src="/placeholder.svg?height=80&width=80" />
                   <AvatarFallback className="text-lg">
                     {profile.name ? profile.name.substring(0, 2).toUpperCase() : "U"}
                   </AvatarFallback>
                 </Avatar>
-                <div className="space-y-2">
-                  <Button variant="outline" size="sm" className="bg-transparent">
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                  <Button variant="outline" size="sm" className="bg-transparent w-full sm:w-auto">
                     <Upload className="mr-2 h-4 w-4" />
                     Change Photo
                   </Button>
-                  <Button variant="outline" size="sm" className="bg-transparent">
+                  <Button variant="outline" size="sm" className="bg-transparent w-full sm:w-auto">
                     <Trash2 className="mr-2 h-4 w-4" />
                     Remove
                   </Button>
@@ -707,7 +709,7 @@ export function SettingsPage() {
                     value={profile.timezone}
                     onValueChange={(value) => setProfile({ ...profile, timezone: value })}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -763,7 +765,7 @@ export function SettingsPage() {
                     value={organization.industry}
                     onValueChange={(value) => setOrganization({ ...organization, industry: value })}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select industry" />
                     </SelectTrigger>
                     <SelectContent>
@@ -815,7 +817,7 @@ export function SettingsPage() {
                     value={organization.currency}
                     onValueChange={(value) => setOrganization({ ...organization, currency: value })}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1064,14 +1066,14 @@ export function SettingsPage() {
               ) : (
                 <div className="space-y-2">
                   {syncAuditLog.map((sync) => (
-                    <div key={sync.id} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <div className="font-medium">{sync.fileName || "Unknown"}</div>
-                        <div className="text-sm text-muted-foreground">
+                    <div key={sync.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-4 p-3 border rounded-lg">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate">{sync.fileName || "Unknown"}</div>
+                        <div className="text-xs sm:text-sm text-muted-foreground break-words">
                           Status: {sync.status} | Last synced: {sync.lastSyncedAt ? new Date(sync.lastSyncedAt).toLocaleString() : "Never"}
                         </div>
                       </div>
-                      <Badge variant={sync.status === "completed" ? "default" : sync.status === "failed" ? "destructive" : "secondary"}>
+                      <Badge variant={sync.status === "completed" ? "default" : sync.status === "failed" ? "destructive" : "secondary"} className="flex-shrink-0">
                         {sync.status}
                       </Badge>
                     </div>
@@ -1094,33 +1096,35 @@ export function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 p-4 border rounded-lg">
+                  <div className="flex-1 min-w-0">
                     <div className="font-medium">Two-Factor Authentication</div>
                     <div className="text-sm text-muted-foreground">Add an extra layer of security</div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="default">Enabled</Badge>
+                  <div className="flex items-center gap-2 w-full sm:w-auto flex-shrink-0">
+                    <Badge variant="default" className="whitespace-nowrap">Enabled</Badge>
                     <MFASetupButton />
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 p-4 border rounded-lg">
+                  <div className="flex-1 min-w-0">
                     <div className="font-medium">Password</div>
                     <div className="text-sm text-muted-foreground">Last changed recently</div>
                   </div>
-                  <Button variant="outline" size="sm" className="bg-transparent" onClick={() => setShowChangePasswordDialog(true)}>
+                  <Button variant="outline" size="sm" className="bg-transparent w-full sm:w-auto flex-shrink-0" onClick={() => setShowChangePasswordDialog(true)}>
                     Change Password
                   </Button>
                 </div>
 
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 p-4 border rounded-lg">
+                  <div className="flex-1 min-w-0">
                     <div className="font-medium">Active Sessions</div>
                     <div className="text-sm text-muted-foreground">Manage your active sessions</div>
                   </div>
-                  <SessionManagementButton />
+                  <div className="w-full sm:w-auto flex-shrink-0">
+                    <SessionManagementButton />
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -1140,12 +1144,12 @@ export function SettingsPage() {
             <CardContent className="space-y-6">
               <div className="space-y-4">
                 <div className="p-4 border rounded-lg">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mb-4">
+                    <div className="flex-1 min-w-0">
                       <div className="font-medium">API Key</div>
                       <div className="text-sm text-muted-foreground">Use this key to access the FinaPilot API</div>
                     </div>
-                    <Button variant="outline" size="sm" className="bg-transparent" onClick={handleRegenerateApiKey}>
+                    <Button variant="outline" size="sm" className="bg-transparent w-full sm:w-auto flex-shrink-0" onClick={handleRegenerateApiKey}>
                       Regenerate
                     </Button>
                   </div>
@@ -1154,13 +1158,13 @@ export function SettingsPage() {
                       type={showApiKey ? "text" : "password"}
                       value={apiKey}
                       readOnly
-                      className="font-mono"
+                      className="font-mono flex-1 min-w-0 text-xs sm:text-sm"
                     />
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => setShowApiKey(!showApiKey)}
-                      className="bg-transparent"
+                      className="bg-transparent flex-shrink-0"
                     >
                       {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
@@ -1174,7 +1178,7 @@ export function SettingsPage() {
 
       {/* Change Password Dialog */}
       <Dialog open={showChangePasswordDialog} onOpenChange={setShowChangePasswordDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-[95vw] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Change Password</DialogTitle>
             <DialogDescription>Enter your current password and choose a new one</DialogDescription>

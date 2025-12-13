@@ -7,11 +7,17 @@ export const getApiBaseUrl = (): string => {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
   // Remove trailing slash if present
   const cleanUrl = baseUrl.replace(/\/$/, '')
-  // Ensure /api/v1 is included
+  // Ensure /api/v1 is included - check both with and without trailing slash
   if (cleanUrl.endsWith('/api/v1')) {
     return cleanUrl
   }
-  return `${cleanUrl}/api/v1`
+  // Always append /api/v1 if not present
+  const apiUrl = `${cleanUrl}/api/v1`
+  // Debug log in development
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+    console.log('🔧 API Config:', { baseUrl, cleanUrl, apiUrl })
+  }
+  return apiUrl
 }
 
 export const API_BASE_URL = getApiBaseUrl()
