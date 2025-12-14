@@ -1,7 +1,7 @@
 """Model Run Job Handler - Deterministic scenario computation with summary_json generator"""
 import json
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional
 from utils.db import get_db_connection
 from utils.s3 import upload_bytes_to_s3
@@ -516,6 +516,51 @@ def handle_model_run(job_id: str, org_id: str, object_id: str, logs: dict):
                                 },
                                 'confidence_score': 0.85,
                             })
+                        
+                        # COGS provenance
+                        if 'cogs' in month_data:
+                            cogs_value = month_data['cogs']
+                            if cogs_value > 0:
+                                # COGS is typically calculated from revenue or is an assumption
+                                provenance_entries.append({
+                                    'cell_key': create_cell_key(year, month, 'cogs'),
+                                    'source_type': 'assumption',
+                                    'source_ref': {
+                                        'assumption_id': 'cogsPercentage',
+                                        'value': cogs_value,
+                                        'calculated_from': ['revenue'],
+                                        'formula': 'cogs = revenue * cogsPercentage',
+                                    },
+                                    'confidence_score': 0.8,
+                                })
+                        
+                        # Gross Profit provenance
+                        if 'grossProfit' in month_data:
+                            gross_profit_value = month_data['grossProfit']
+                            if gross_profit_value != 0:
+                                provenance_entries.append({
+                                    'cell_key': create_cell_key(year, month, 'grossProfit'),
+                                    'source_type': 'assumption',
+                                    'source_ref': {
+                                        'calculated_from': ['revenue', 'cogs'],
+                                        'formula': 'grossProfit = revenue - cogs',
+                                    },
+                                    'confidence_score': 0.9,
+                                })
+                        
+                        # Net Income provenance
+                        if 'netIncome' in month_data:
+                            net_income_value = month_data['netIncome']
+                            if net_income_value != 0:
+                                provenance_entries.append({
+                                    'cell_key': create_cell_key(year, month, 'netIncome'),
+                                    'source_type': 'assumption',
+                                    'source_ref': {
+                                        'calculated_from': ['revenue', 'cogs', 'expenses'],
+                                        'formula': 'netIncome = revenue - cogs - opex',
+                                    },
+                                    'confidence_score': 0.9,
+                                })
                     except Exception as e:
                         logger.warning(f"Error creating provenance for month {month_key}: {str(e)}")
                         continue
@@ -724,7 +769,16 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
         baseline_monthly_expenses = {}
         total_revenue = 0
         total_expenses = 0
-        initial_cash = float(final_assumptions.get('initialCash', 500000))
+        # Get initial cash from assumptions, with proper fallback
+        # Priority: assumptions.cash.initialCash > assumptions.initialCash > default
+        cash_assumptions = final_assumptions.get('cash', {})
+        if isinstance(cash_assumptions, dict):
+            initial_cash = float(cash_assumptions.get('initialCash', final_assumptions.get('initialCash', 500000)))
+        else:
+            initial_cash = float(final_assumptions.get('initialCash', 500000))
+        
+        # Log the source of initial cash for transparency
+        logger.info(f"Initial cash: ${initial_cash:,.2f} (from assumptions)")
         
         for tx in transactions:
             tx_date = tx[0]
@@ -742,6 +796,62 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                 # Expenses
                 baseline_monthly_expenses[month_key] = baseline_monthly_expenses.get(month_key, 0) + abs(tx_amount)
                 total_expenses += abs(tx_amount)
+        
+        # Get start month from model metadata (CRITICAL: Use model's start month, not current month)
+        metadata = model_json.get('metadata', {}) if isinstance(model_json, dict) else {}
+        start_month_str = metadata.get('startMonth') or metadata.get('start_month')
+        
+        if start_month_str:
+            try:
+                year, month = map(int, start_month_str.split('-'))
+                current_month = datetime(year, month, 1, tzinfo=timezone.utc)
+                logger.info(f"Using model start month: {start_month_str}")
+            except (ValueError, AttributeError):
+                logger.warning(f"Invalid start month format: {start_month_str}, using current month")
+                current_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        else:
+            logger.warning("No start month in model metadata, using current month")
+            current_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        
+        # Filter transactions to use most recent data available
+        # Prefer last 12 months before start, but use all available if that's all we have
+        cutoff_date = current_month.replace(day=1) - timedelta(days=365)  # 12 months before start
+        recent_transactions = [tx for tx in transactions if tx[0] >= cutoff_date]
+        
+        # If no recent transactions, use all available (but warn)
+        if len(recent_transactions) == 0 and len(transactions) > 0:
+            logger.warning(f"No transactions in last 12 months before start ({start_month_str}). Using all available transactions (may be outdated).")
+            recent_transactions = transactions
+            # Find the date range of available transactions
+            if transactions:
+                oldest_date = min(tx[0] for tx in transactions)
+                newest_date = max(tx[0] for tx in transactions)
+                days_old = (current_month - newest_date).days
+                if days_old > 180:  # More than 6 months old
+                    logger.warning(f"Transaction data is {days_old} days old (newest: {newest_date.date()}, oldest: {oldest_date.date()}). Consider importing recent data.")
+        elif len(recent_transactions) < len(transactions):
+            logger.info(f"Filtered transactions: {len(transactions)} -> {len(recent_transactions)} (using last 12 months before start)")
+        
+        # Recalculate baseline from filtered transactions
+        if len(recent_transactions) != len(transactions):
+            baseline_monthly_revenue = {}
+            baseline_monthly_expenses = {}
+            total_revenue = 0
+            total_expenses = 0
+            
+            for tx in recent_transactions:
+                tx_date = tx[0]
+                tx_amount = float(tx[1]) if tx[1] else 0
+                month_key = f"{tx_date.year}-{str(tx_date.month).zfill(2)}"
+                
+                if tx_amount > 0:
+                    baseline_monthly_revenue[month_key] = baseline_monthly_revenue.get(month_key, 0) + tx_amount
+                    total_revenue += tx_amount
+                else:
+                    baseline_monthly_expenses[month_key] = baseline_monthly_expenses.get(month_key, 0) + abs(tx_amount)
+                    total_expenses += abs(tx_amount)
+            
+            logger.info(f"Baseline calculated from {len(recent_transactions)} transactions: Revenue=${total_revenue:,.2f}, Expenses=${total_expenses:,.2f}")
         
         # Calculate average monthly revenue/expenses from historical data
         if baseline_monthly_revenue:
@@ -814,7 +924,22 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
         
         # STEP 2: Generate forward projections
         monthly_data = {}
-        current_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        # CRITICAL: Use start month from model metadata, not current date
+        # This ensures models start from the correct date (user-specified or model default)
+        metadata = model_json.get('metadata', {}) if isinstance(model_json, dict) else {}
+        start_month_str = metadata.get('startMonth') or metadata.get('start_month')
+        
+        if start_month_str:
+            try:
+                year, month = map(int, start_month_str.split('-'))
+                current_month = datetime(year, month, 1, tzinfo=timezone.utc)
+                logger.info(f"Using model start month for projections: {start_month_str}")
+            except (ValueError, AttributeError):
+                logger.warning(f"Invalid start month format: {start_month_str}, using current month")
+                current_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        else:
+            logger.warning("No start month in model metadata, using current month")
+            current_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         
         # Use latest month's actuals as starting point
         starting_revenue = baseline_monthly_revenue[max(baseline_monthly_revenue.keys())] if baseline_monthly_revenue else avg_monthly_revenue
@@ -898,10 +1023,28 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
         arr = mrr * 12  # Standard formula: ARR = MRR * 12
         
         # STEP 4: Calculate unit economics (Industry Standard: CAC, LTV, Payback)
+        # Get customer count from assumptions - prioritize actual data over defaults
+        revenue_assumptions = final_assumptions.get('revenue', {})
+        if isinstance(revenue_assumptions, dict):
+            customer_count = int(revenue_assumptions.get('customerCount', final_assumptions.get('customerCount', 0)))
+        else:
+            customer_count = int(final_assumptions.get('customerCount', 0))
+        
+        # If no customer count provided, estimate from revenue (for transparency)
+        if customer_count == 0 and latest_month_data['revenue'] > 0:
+            # Estimate: assume average revenue per customer of $200/month (industry standard for SaaS)
+            estimated_customers = int(latest_month_data['revenue'] / 200)
+            logger.info(f"No customer count provided, estimating {estimated_customers} customers from revenue")
+            customer_count = estimated_customers
+        
+        # Use defaults only if absolutely no data available
+        if customer_count == 0:
+            customer_count = 100  # Default fallback
+            logger.warning("Using default customer count (100) - no actual data available")
+        
         cac = float(final_assumptions.get('cac', 125))
         ltv = float(final_assumptions.get('ltv', 2400))
         churn_rate = float(final_assumptions.get('churnRate', 0.05))
-        customer_count = int(final_assumptions.get('customerCount', 100))
         
         # Industry Standard: LTV:CAC Ratio = LTV / CAC
         ltv_cac_ratio = ltv / cac if cac > 0 else 0
@@ -929,9 +1072,17 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             starting_revenue or avg_monthly_revenue or 1.0,
         )
         
+        # Log data sources for transparency
         logger.info(
             f"Computed {model_type} model: Revenue=${annual_revenue:,.0f}, "
             f"Expenses=${annual_expenses:,.0f}, Runway={runway_months:.1f} months"
+        )
+        logger.info(
+            f"Data sources: Start month={start_month_str}, "
+            f"Transactions used={len(recent_transactions)}, "
+            f"Initial cash=${initial_cash:,.2f}, "
+            f"Customer count={customer_count}, "
+            f"Baseline revenue=${avg_monthly_revenue:,.2f}/month"
         )
         
         return {

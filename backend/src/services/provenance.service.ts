@@ -39,6 +39,15 @@ export interface ProvenanceEntryResponse {
     cellRef: string;
     calculatedValue?: number | null;
   };
+  assumptionRef?: {
+    assumption_id?: string;
+    name?: string;
+    value?: any;
+    assumption_value?: any;
+    growth_rate?: number;
+    calculated_from?: string[];
+    [key: string]: any;
+  };
   links?: {
     downloadTransactionsUrl?: string;
     openPromptUrl?: string;
@@ -152,9 +161,15 @@ export const provenanceService = {
         // Add transaction details if sourceType is 'txn'
         if (entry.sourceType === 'txn' && entry.sourceRef) {
           const ref = entry.sourceRef as any;
-          const txnIds: string[] = Array.isArray(ref)
-            ? ref.filter((id: any) => typeof id === 'string')
-            : [];
+          // Handle both formats: direct array or object with transaction_ids
+          let txnIds: string[] = [];
+          if (Array.isArray(ref)) {
+            txnIds = ref.filter((id: any) => typeof id === 'string');
+          } else if (ref.transaction_ids && Array.isArray(ref.transaction_ids)) {
+            txnIds = ref.transaction_ids.filter((id: any) => typeof id === 'string');
+          } else if (typeof ref === 'string') {
+            txnIds = [ref];
+          }
 
           if (txnIds.length > 0) {
             const transactions = await prisma.rawTransaction.findMany({
@@ -191,6 +206,19 @@ export const provenanceService = {
               };
             }
           }
+        }
+
+        // Add assumption details if sourceType is 'assumption'
+        if (entry.sourceType === 'assumption' && entry.sourceRef) {
+          const ref = entry.sourceRef as any;
+          // Ensure assumption data is properly structured in the response
+          response.assumptionRef = {
+            assumption_id: ref.assumption_id || ref.name || 'Assumption',
+            value: ref.value !== undefined ? ref.value : (ref.assumption_value !== undefined ? ref.assumption_value : null),
+            growth_rate: ref.growth_rate,
+            calculated_from: ref.calculated_from,
+            ...ref, // Include all other fields
+          };
         }
 
         // Add Excel formula details if sourceType is 'excel'

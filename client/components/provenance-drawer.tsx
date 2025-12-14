@@ -152,12 +152,12 @@ export function ProvenanceDrawer({
         })
       }
 
-      if (entry.sourceType === 'assumption' && entry.sourceRef) {
-        const ref = entry.sourceRef
+      if (entry.sourceType === 'assumption' && (entry.sourceRef || entry.assumptionRef)) {
+        const ref = entry.assumptionRef || entry.sourceRef || {}
         assumptions.push({
           id: entry.id,
           name: ref.name || ref.assumption_id || 'Assumption',
-          value: String(ref.value || ref.assumption_value || 'N/A'),
+          value: String(ref.value !== undefined ? ref.value : (ref.assumption_value !== undefined ? ref.assumption_value : 'N/A')),
           lastModified: new Date(entry.createdAt).toLocaleDateString(),
         })
       }
@@ -191,10 +191,45 @@ export function ProvenanceDrawer({
     const parts = cellKey.split(':')
     const metricName = parts.length > 1 ? `${parts[1]}${parts[2] ? ` - ${parts[2]}` : ''}` : cellKey
 
+    // Try to extract value from entries if available
+    let cellValue = 'N/A'
+    if (apiData.entries && apiData.entries.length > 0) {
+      // Try to get value from summary or sourceRef
+      const firstEntry = apiData.entries[0]
+      
+      // Priority 1: Check summary.totalAmount (for transaction-based entries)
+      if (firstEntry.summary && firstEntry.summary.totalAmount !== undefined) {
+        cellValue = `$${Number(firstEntry.summary.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      } 
+      // Priority 2: Check assumptionRef.value (for assumption-based entries)
+      else if (firstEntry.assumptionRef && firstEntry.assumptionRef.value !== undefined) {
+        const val = firstEntry.assumptionRef.value
+        if (typeof val === 'number') {
+          cellValue = `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        } else {
+          cellValue = String(val)
+        }
+      }
+      // Priority 3: Check sourceRef.value
+      else if (firstEntry.sourceRef && typeof firstEntry.sourceRef === 'object') {
+        const ref = firstEntry.sourceRef
+        if (ref.value !== undefined) {
+          const val = ref.value
+          if (typeof val === 'number') {
+            cellValue = `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          } else {
+            cellValue = String(val)
+          }
+        } else if (ref.total_amount !== undefined) {
+          cellValue = `$${Number(ref.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        }
+      }
+    }
+
     return {
       cellId: cellKey,
       metricName,
-      value: 'N/A', 
+      value: cellValue, 
       sourceTransactions: transactions,
       assumptionRefs: assumptions,
       generatedBy,

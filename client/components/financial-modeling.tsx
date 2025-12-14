@@ -404,6 +404,7 @@ export function FinancialModeling() {
                 const monthData = summary.monthly[monthKey]
                 monthlyData.push({
                   month: formatMonth(monthKey),
+                  monthKey: monthKey, // Store original YYYY-MM format for cell key construction
                   revenue: Number(monthData.revenue || monthData.mrr || 0),
                   cogs: Number(monthData.cogs || 0),
                   grossProfit: Number(monthData.grossProfit || (monthData.revenue - monthData.cogs) || 0),
@@ -1376,11 +1377,41 @@ export function FinancialModeling() {
     return Math.round(Math.min(Math.max(avgConfidence, 50), 99))
   }
 
-  const handleCellClick = async (cellId: string, metricName: string, value: string) => {
+  const handleCellClick = async (cellId: string, metricName: string, value: string, monthKey?: string) => {
     // Calculate confidence from current model run
     let confidenceScore = 70 // Default
     let aiExplanation: string | undefined
     let generatedBy: "user" | "ai" = "ai"
+
+    // Construct proper cell key: YYYY-MM:metric format
+    // If monthKey is provided, use it; otherwise try to find it from financialData
+    let actualCellKey = cellId
+    if (monthKey) {
+      // Map cellId to the metric name used in provenance
+      const metricMap: Record<string, string> = {
+        revenue: 'revenue',
+        cogs: 'cogs',
+        gross_profit: 'grossProfit',
+        net_income: 'netIncome',
+      }
+      const provenanceMetric = metricMap[cellId] || cellId
+      actualCellKey = `${monthKey}:${provenanceMetric}`
+    } else {
+      // Try to find the most recent month from financialData
+      if (financialData.length > 0) {
+        const lastRow = financialData[financialData.length - 1]
+        if (lastRow.monthKey) {
+          const metricMap: Record<string, string> = {
+            revenue: 'revenue',
+            cogs: 'cogs',
+            gross_profit: 'grossProfit',
+            net_income: 'netIncome',
+          }
+          const provenanceMetric = metricMap[cellId] || cellId
+          actualCellKey = `${lastRow.monthKey}:${provenanceMetric}`
+        }
+      }
+    }
 
     if (currentRun && currentRun.summaryJson) {
       const summary = typeof currentRun.summaryJson === 'string' 
@@ -1416,51 +1447,110 @@ export function FinancialModeling() {
           ?.split("=")[1]
 
         if (token) {
-          const response = await fetch(
-            `${API_BASE_URL}/orgs/${orgId}/models/${selectedModel}/runs/${currentRun.id}/provenance/${encodeURIComponent(cellId)}`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-              },
-              credentials: "include",
-            }
-          )
-
-          if (response.ok) {
-            const result = await response.json()
-            if (result.ok && result.entries && result.entries.length > 0) {
-              // Use real provenance data
-              provenanceData = {
-                cellId,
-                metricName,
-                value,
-                sourceTransactions: result.entries
-                  .filter((e: any) => e.sourceType === 'txn' && e.sampleTransactions)
-                  .flatMap((e: any) => e.sampleTransactions.map((txn: any) => ({
-                    id: txn.id,
-                    date: new Date(txn.date).toISOString().split('T')[0],
-                    description: txn.description || 'Transaction',
-                    amount: txn.amount,
-                    category: txn.category || 'Uncategorized',
-                  }))),
-                assumptionRefs: result.entries
-                  .filter((e: any) => e.sourceType === 'assumption' && e.sourceRef)
-                  .map((e: any) => ({
-                    id: e.id,
-                    name: e.sourceRef.name || e.sourceRef.assumption_id || 'Assumption',
-                    value: String(e.sourceRef.value || e.sourceRef.assumption_value || 'N/A'),
-                    lastModified: new Date(e.createdAt).toLocaleDateString(),
-                  })),
-                generatedBy: result.entries.some((e: any) => e.promptPreview) ? "ai" : "user",
-                confidenceScore: confidenceScore, // Use calculated confidence
-                aiExplanation: aiExplanation || result.entries.find((e: any) => e.promptPreview)?.promptPreview?.responseText,
-                auditTrail: result.entries.map((e: any) => ({
-                  timestamp: new Date(e.createdAt).toLocaleString(),
-                  action: `Provenance entry (${e.sourceType})`,
-                  user: 'System',
-                })),
+          // Try the actual cell key first, then fallback to the simple cellId
+          const cellKeysToTry = [actualCellKey, cellId]
+          let result: any = null
+          
+          for (const keyToTry of cellKeysToTry) {
+            const response = await fetch(
+              `${API_BASE_URL}/orgs/${orgId}/models/${selectedModel}/runs/${currentRun.id}/provenance/${encodeURIComponent(keyToTry)}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": "application/json",
+                },
+                credentials: "include",
               }
+            )
+
+            if (response.ok) {
+              const responseData = await response.json()
+              if (responseData.ok && responseData.entries && responseData.entries.length > 0) {
+                result = responseData
+                break // Found data, stop trying other keys
+              }
+            }
+          }
+          
+          if (result && result.entries && result.entries.length > 0) {
+            // CRITICAL: Use the value from the table (passed as parameter) as it's the actual cell value
+            // The API summary.totalAmount might be an aggregate, not the specific cell value
+            // Only use API value as fallback if no value was passed
+            let actualValue = value // Always prefer the passed value (from table cell)
+            
+            // If no value was passed, try to extract from API response
+            if (!actualValue || actualValue === 'N/A' || actualValue === '$0') {
+              const firstEntry = result.entries[0]
+              
+              // Try to get value from summary (for transaction-based) - but this might be aggregate
+              if (firstEntry.summary && firstEntry.summary.totalAmount !== undefined) {
+                actualValue = `$${Number(firstEntry.summary.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              }
+              // Try to get value from assumptionRef (for assumption-based)
+              else if (firstEntry.assumptionRef && firstEntry.assumptionRef.value !== undefined) {
+                const val = firstEntry.assumptionRef.value
+                if (typeof val === 'number') {
+                  actualValue = `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                } else {
+                  actualValue = String(val)
+                }
+              }
+              // Try to get value from sourceRef
+              else if (firstEntry.sourceRef && typeof firstEntry.sourceRef === 'object' && firstEntry.sourceRef.value !== undefined) {
+                const val = firstEntry.sourceRef.value
+                if (typeof val === 'number') {
+                  actualValue = `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                } else {
+                  actualValue = String(val)
+                }
+              }
+            }
+            
+            // Use real provenance data
+            provenanceData = {
+              cellId: actualCellKey,
+              metricName,
+              value: actualValue, // Use table value (preferred) or API fallback
+              sourceTransactions: result.entries
+                .filter((e: any) => e.sourceType === 'txn' && e.sampleTransactions)
+                .flatMap((e: any) => e.sampleTransactions.map((txn: any) => ({
+                  id: txn.id,
+                  date: new Date(txn.date).toISOString().split('T')[0],
+                  description: txn.description || 'Transaction',
+                  amount: txn.amount,
+                  category: txn.category || 'Uncategorized',
+                }))),
+              assumptionRefs: result.entries
+                .filter((e: any) => e.sourceType === 'assumption' && (e.sourceRef || e.assumptionRef))
+                .map((e: any) => {
+                  const ref = e.assumptionRef || e.sourceRef || {}
+                  // Extract assumption name properly
+                  const assumptionName = ref.name || ref.assumption_id || 'Assumption'
+                  // Extract assumption value properly
+                  const assumptionValue = ref.value !== undefined 
+                    ? (typeof ref.value === 'number' 
+                        ? `$${ref.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        : String(ref.value))
+                    : (ref.assumption_value !== undefined 
+                        ? (typeof ref.assumption_value === 'number'
+                            ? `$${ref.assumption_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : String(ref.assumption_value))
+                        : 'N/A')
+                  return {
+                    id: e.id,
+                    name: assumptionName,
+                    value: assumptionValue,
+                    lastModified: new Date(e.createdAt).toLocaleDateString(),
+                  }
+                }),
+              generatedBy: result.entries.some((e: any) => e.promptPreview) ? "ai" : "user",
+              confidenceScore: confidenceScore, // Use calculated confidence
+              aiExplanation: aiExplanation || result.entries.find((e: any) => e.promptPreview)?.promptPreview?.responseText,
+              auditTrail: result.entries.map((e: any) => ({
+                timestamp: new Date(e.createdAt).toLocaleString(),
+                action: `Provenance entry (${e.sourceType})`,
+                user: 'System',
+              })),
             }
           }
         }
@@ -1471,11 +1561,33 @@ export function FinancialModeling() {
 
     // Use real provenance data if available, otherwise use fallback
     if (!provenanceData) {
+      // Try to get value from summary if available
+      let fallbackValue = value
+      if (currentRun && currentRun.summaryJson) {
+        const summary = typeof currentRun.summaryJson === 'string' 
+          ? JSON.parse(currentRun.summaryJson) 
+          : currentRun.summaryJson
+        
+        if (summary.monthly && monthKey) {
+          const monthData = summary.monthly[monthKey]
+          if (monthData) {
+            if (cellId === 'revenue') fallbackValue = `$${(monthData.revenue || 0).toLocaleString()}`
+            else if (cellId === 'cogs') fallbackValue = `$${(monthData.cogs || 0).toLocaleString()}`
+            else if (cellId === 'gross_profit') fallbackValue = `$${(monthData.grossProfit || 0).toLocaleString()}`
+            else if (cellId === 'net_income') fallbackValue = `$${(monthData.netIncome || 0).toLocaleString()}`
+          }
+        }
+      }
+
       provenanceData = {
-        cellId,
+        cellId: actualCellKey,
         metricName,
-        value,
-        formula: cellId === "revenue" ? "SUM(transactions) * (1 + growth_rate)" : undefined,
+        value: fallbackValue,
+        formula: cellId === "revenue" ? "SUM(transactions) * (1 + growth_rate)" 
+          : cellId === "cogs" ? "revenue * cogsPercentage"
+          : cellId === "gross_profit" ? "revenue - cogs"
+          : cellId === "net_income" ? "revenue - cogs - opex"
+          : undefined,
         sourceTransactions: [],
         assumptionRefs: [],
         generatedBy,
@@ -1750,7 +1862,7 @@ export function FinancialModeling() {
                           <TableCell className="font-medium">{row.month}</TableCell>
                           <TableCell className="text-right">
                             <button
-                              onClick={() => handleCellClick("revenue", "Revenue", `$${row.revenue.toLocaleString()}`)}
+                              onClick={() => handleCellClick("revenue", "Revenue", `$${row.revenue.toLocaleString()}`, row.monthKey)}
                               className="inline-flex items-center gap-1 hover:text-primary transition-colors group"
                             >
                               ${row.revenue.toLocaleString()}
@@ -1760,7 +1872,7 @@ export function FinancialModeling() {
                           <TableCell className="text-right">
                             <button
                               onClick={() =>
-                                handleCellClick("cogs", "Cost of Goods Sold", `$${row.cogs.toLocaleString()}`)
+                                handleCellClick("cogs", "Cost of Goods Sold", `$${row.cogs.toLocaleString()}`, row.monthKey)
                               }
                               className="inline-flex items-center gap-1 hover:text-primary transition-colors group"
                             >
@@ -1771,7 +1883,7 @@ export function FinancialModeling() {
                           <TableCell className="text-right">
                             <button
                               onClick={() =>
-                                handleCellClick("gross_profit", "Gross Profit", `$${row.grossProfit.toLocaleString()}`)
+                                handleCellClick("gross_profit", "Gross Profit", `$${row.grossProfit.toLocaleString()}`, row.monthKey)
                               }
                               className="inline-flex items-center gap-1 hover:text-primary transition-colors group"
                             >
@@ -1782,7 +1894,7 @@ export function FinancialModeling() {
                           <TableCell className="text-right">
                             <button
                               onClick={() =>
-                                handleCellClick("net_income", "Net Income", `$${row.netIncome.toLocaleString()}`)
+                                handleCellClick("net_income", "Net Income", `$${row.netIncome.toLocaleString()}`, row.monthKey)
                               }
                               className="inline-flex items-center gap-1 hover:text-primary transition-colors group"
                             >
@@ -2112,6 +2224,8 @@ export function FinancialModeling() {
       <ProvenanceDrawer
         open={provenanceModalOpen}
         onOpenChange={setProvenanceModalOpen}
+        modelRunId={currentRun?.id}
+        cellKey={selectedCellData?.cellId}
         provenanceData={selectedCellData}
       />
 

@@ -281,7 +281,12 @@ export const financialModelService = {
     }
 
     // Fetch transactions from raw_transactions
-    const transactions = await prisma.$queryRaw`
+    // CRITICAL: Use most recent transactions available (prefer last 12 months, but use all if needed)
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+    
+    // Try to get recent transactions first
+    let transactions = await prisma.$queryRaw`
       SELECT 
         date,
         amount,
@@ -289,12 +294,38 @@ export const financialModelService = {
         description
       FROM raw_transactions
       WHERE "orgId" = ${orgId}
+        AND date >= ${twelveMonthsAgo}
       ORDER BY date ASC
     ` as Array<{ date: Date; amount: number; category: string | null; description: string | null }>;
 
     if (transactions.length === 0) {
-      logger.warn(`No transactions found for org ${orgId}, using defaults`);
-      return financialModelService.generateAssumptionsFromData(orgId, modelId, 'blank');
+      logger.warn(`No recent transactions found for org ${orgId} (last 12 months), trying all available transactions`);
+      // Get all transactions as fallback (even if old)
+      transactions = await prisma.$queryRaw`
+        SELECT 
+          date,
+          amount,
+          category,
+          description
+        FROM raw_transactions
+        WHERE "orgId" = ${orgId}
+        ORDER BY date DESC
+      ` as Array<{ date: Date; amount: number; category: string | null; description: string | null }>;
+      
+      if (transactions.length === 0) {
+        logger.warn(`No transactions found at all for org ${orgId}, using defaults`);
+        return financialModelService.generateAssumptionsFromData(orgId, modelId, 'blank');
+      }
+      
+      // Warn about old data
+      const oldestDate = transactions[transactions.length - 1].date;
+      const newestDate = transactions[0].date;
+      const daysOld = Math.floor((new Date().getTime() - newestDate.getTime()) / (1000 * 60 * 60 * 24));
+      logger.warn(`Using older transactions (${transactions.length} found, ${daysOld} days old)`);
+      logger.warn(`Transaction date range: ${oldestDate.toISOString().split('T')[0]} to ${newestDate.toISOString().split('T')[0]}`);
+      logger.warn(`⚠️ Consider importing recent transaction data for accurate assumptions`);
+    } else {
+      logger.info(`Using ${transactions.length} recent transactions (last 12 months) for assumptions`);
     }
 
     // Calculate revenue and expenses
