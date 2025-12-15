@@ -76,7 +76,11 @@ export const investorDashboardService = {
     const expenses = Number(summary.expenses || 0);
     const burnRate = Number(summary.burnRate || expenses || 0);
     const cashBalance = Number(summary.cashBalance || 0);
-    const runwayMonths = Number(summary.runwayMonths || (cashBalance > 0 && burnRate > 0 ? cashBalance / burnRate : 0));
+    
+    // Use standardized runway calculation
+    const { runwayCalculationService } = await import('./runway-calculation.service');
+    const runwayData = await runwayCalculationService.calculateRunway(orgId);
+    const runwayMonths = runwayData.runwayMonths;
 
     // Calculate ARR from monthly data if available
     let arr = revenue;

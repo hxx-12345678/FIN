@@ -55,13 +55,13 @@ export const overviewDashboardService = {
    */
   getOverviewData: async (orgId: string): Promise<OverviewDashboardData> => {
     // Get actual transaction data from raw_transactions
-    // Query last 12 months to include recent data regardless of year
+    // First, try last 12 months, but if no data, use ALL available transactions
     const now = new Date();
     const startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1); // Last 12 months
     const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0); // End of current month
     
-    // Fetch transactions from database
-    const transactions = await prisma.rawTransaction.findMany({
+    // Fetch transactions from database (last 12 months first)
+    let transactions = await prisma.rawTransaction.findMany({
       where: {
         orgId,
         date: {
@@ -73,6 +73,20 @@ export const overviewDashboardService = {
         date: 'desc',
       },
     });
+    
+    // If no recent transactions, get ALL transactions (for orgs with old data)
+    if (transactions.length === 0) {
+      console.log(`[Overview] No transactions in last 12 months, fetching ALL transactions`);
+      transactions = await prisma.rawTransaction.findMany({
+        where: {
+          orgId,
+        },
+        orderBy: {
+          date: 'desc',
+        },
+        take: 1000, // Limit to prevent performance issues
+      });
+    }
     
     // Calculate revenue and expenses from transactions
     const monthlyRevenueMap = new Map<string, number>();
@@ -221,39 +235,16 @@ export const overviewDashboardService = {
       }
     }
     
-    // Calculate cash runway using proper financial formula: Runway (months) = Cash Balance / Monthly Burn Rate
-    // This is the industry-standard formula used by financial teams
-    // IMPORTANT: If burn rate exists (> 0), we MUST calculate runway, never set to 999
-    if (runwayMonths === 0 || (monthlyBurnRate > 0 && runwayMonths >= 999)) {
-      if (cashBalance > 0 && monthlyBurnRate > 0) {
-        // Standard formula: Cash Runway = Cash Balance / Monthly Burn Rate
-        runwayMonths = cashBalance / monthlyBurnRate;
-        console.log(`[Overview] Calculated runway: ${runwayMonths.toFixed(2)} months = $${cashBalance.toLocaleString()} / $${monthlyBurnRate.toLocaleString()}/month`);
-      } else if (cashBalance > 0 && monthlyBurnRate === 0) {
-        // If no burn rate, runway is effectively infinite (or very large)
-        // Only set to 999 if there's truly no burn rate (no expenses)
-        runwayMonths = 999; // Cap at 999 for display purposes - indicates infinite runway when burn rate is 0
-        console.log(`[Overview] Runway set to 999 months (infinite) - cash balance exists but no burn rate`);
-      } else if (monthlyBurnRate > 0) {
-        // If no cash balance but we have burn rate, estimate from transactions
-        // Sum all positive transactions as estimated cash
-        const totalCash = transactions
-          .filter(t => Number(t.amount) > 0)
-          .reduce((sum, t) => sum + Number(t.amount), 0);
-        if (totalCash > 0) {
-          runwayMonths = totalCash / monthlyBurnRate;
-          console.log(`[Overview] Estimated runway from transactions: ${runwayMonths.toFixed(2)} months`);
-        } else {
-          // If we have burn rate but no cash, runway is 0
-          runwayMonths = 0;
-          console.log(`[Overview] Runway is 0 - burn rate exists but no cash balance`);
-        }
-      } else {
-        // No cash and no burn rate - runway is undefined/0
-        runwayMonths = 0;
-        console.log(`[Overview] Runway is 0 - no cash balance and no burn rate`);
-      }
+    // Use standardized runway calculation service
+    const { runwayCalculationService } = await import('./runway-calculation.service');
+    const runwayData = await runwayCalculationService.calculateRunway(orgId);
+    runwayMonths = runwayData.runwayMonths;
+    cashBalance = runwayData.cashBalance;
+    // Update monthlyBurnRate if we got a better value from runway service
+    if (runwayData.monthlyBurnRate > 0 && monthlyBurnRate === 0) {
+      monthlyBurnRate = runwayData.monthlyBurnRate;
     }
+    console.log(`[Overview] Using standardized runway: ${runwayMonths.toFixed(2)} months (source: ${runwayData.source})`);
     
     // Ensure runway is never negative and cap at reasonable maximum
     // IMPORTANT: If burn rate > 0, runway should be calculated, not capped at 999

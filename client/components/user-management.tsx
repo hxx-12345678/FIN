@@ -697,7 +697,7 @@ export function UserManagement() {
             <TabsTrigger value="permissions" className="text-xs sm:text-sm">Permission Matrix</TabsTrigger>
             <TabsTrigger value="invitations" className="text-xs sm:text-sm">Invitations</TabsTrigger>
             <TabsTrigger value="activity" className="text-xs sm:text-sm">Activity Log</TabsTrigger>
-          </TabsList>
+        </TabsList>
         </div>
 
         <TabsContent value="members" className="space-y-4 overflow-x-auto overflow-y-visible">

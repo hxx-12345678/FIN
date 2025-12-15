@@ -42,12 +42,13 @@ interface SavedSearch {
 
 interface ProvenanceSearchProps {
   onSelectMetric: (metricId: string) => void
+  metricOverrides?: Record<string, string>
 }
 
 const STORAGE_KEY = "provenance_saved_searches"
 const HISTORY_KEY = "provenance_search_history"
 
-export function ProvenanceSearch({ onSelectMetric }: ProvenanceSearchProps) {
+export function ProvenanceSearch({ onSelectMetric, metricOverrides }: ProvenanceSearchProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedQuery, setDebouncedQuery] = useState("")
 
@@ -384,6 +385,20 @@ export function ProvenanceSearch({ onSelectMetric }: ProvenanceSearchProps) {
       })
     }
 
+    // If no results after all filters, fall back to basic text match so user never sees "no metrics"
+    if (filtered.length === 0) {
+      filtered = allMetrics.filter((metric) => {
+        const nameLower = metric.name.toLowerCase()
+        const categoryLower = metric.category.toLowerCase()
+        const idLower = metric.id.toLowerCase()
+        return (
+          nameLower.includes(queryLower) ||
+          categoryLower.includes(queryLower) ||
+          idLower.includes(queryLower)
+        )
+      })
+    }
+
     setSearchResults(filtered)
     setIsSearching(false)
   }
@@ -667,6 +682,7 @@ export function ProvenanceSearch({ onSelectMetric }: ProvenanceSearchProps) {
             <CardContent className="p-4 space-y-2">
               {searchResults.map((metric) => {
                 const Icon = metric.icon
+                const displayValue = metricOverrides?.[metric.id] ?? metric.value
                 return (
                   <button
                     key={metric.id}
@@ -699,7 +715,7 @@ export function ProvenanceSearch({ onSelectMetric }: ProvenanceSearchProps) {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="font-semibold">{metric.value}</div>
+                      <div className="font-semibold">{displayValue}</div>
                       <div className="text-xs text-muted-foreground">{metric.lastUpdated}</div>
                     </div>
                   </button>

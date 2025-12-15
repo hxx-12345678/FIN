@@ -985,9 +985,18 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             cash_balance = previous_cash + projected_net_income
             
             if projected_burn_rate > 0:
-                runway_months = max(0.0, cash_balance / projected_burn_rate) if projected_burn_rate else float('inf')
+                # Calculate runway: Cash Balance / Monthly Burn Rate
+                if projected_burn_rate > 0:
+                    runway_months = max(0.0, cash_balance / projected_burn_rate)
+                elif projected_burn_rate == 0:
+                    # No burn rate means infinite runway (cap at 999 for display)
+                    runway_months = 999
+                else:
+                    # Negative burn rate (profit) means infinite runway
+                    runway_months = 999
             else:
-                runway_months = 999
+                # No cash balance - runway is 0
+                runway_months = 0
             
             confidence_for_month = max(60.0, min(99.0, model_profile['confidence'] - i * 0.5))
             
@@ -1029,6 +1038,13 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             customer_count = int(revenue_assumptions.get('customerCount', final_assumptions.get('customerCount', 0)))
         else:
             customer_count = int(final_assumptions.get('customerCount', 0))
+        
+        # If no customer count in assumptions, check params_json for startingCustomers (from CSV import)
+        if customer_count == 0 and isinstance(params_json, dict):
+            starting_customers = params_json.get('startingCustomers')
+            if starting_customers and int(starting_customers) > 0:
+                customer_count = int(starting_customers)
+                logger.info(f"Using startingCustomers from params_json: {customer_count}")
         
         # If no customer count provided, estimate from revenue (for transparency)
         if customer_count == 0 and latest_month_data['revenue'] > 0:

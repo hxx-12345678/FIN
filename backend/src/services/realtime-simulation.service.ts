@@ -49,6 +49,14 @@ export const realtimeSimulationService = {
    * Generate simulation results based on parameters
    */
   generateSimulation: (params: SimulationParams, initialCustomers: number = 248, initialRevenue: number = 67000, initialExpenses: number = 49000, cashBalance: number = 570000): SimulationResult[] => {
+    // Log initial values for debugging
+    console.log(`[RealtimeSim] Generating simulation with initial values:`, {
+      customers: initialCustomers,
+      revenue: initialRevenue,
+      expenses: initialExpenses,
+      cashBalance: cashBalance,
+    });
+    
     const data: SimulationResult[] = [];
     let customers = initialCustomers;
     let revenue = initialRevenue;
@@ -72,7 +80,20 @@ export const realtimeSimulationService = {
 
       const netIncome = revenue - expenses;
       const burnRate = expenses - revenue;
-      const runway = burnRate > 0 ? Math.max(0, cashBalance / burnRate) : 999;
+      // Calculate runway: Cash Balance / Monthly Burn Rate
+      // Only set to 999 if burn rate is 0 or negative (infinite runway - company is profitable)
+      // If burn rate > 0, calculate actual runway
+      let runway: number;
+      if (burnRate <= 0) {
+        // Company is profitable (no burn) or break-even - infinite runway
+        runway = 999;
+      } else if (cashBalance > 0) {
+        // Calculate actual runway
+        runway = Math.max(0, cashBalance / burnRate);
+      } else {
+        // No cash balance - runway is 0
+        runway = 0;
+      }
 
       data.push({
         month: `Month ${month + 1}`,
@@ -81,7 +102,9 @@ export const realtimeSimulationService = {
         expenses: Math.round(expenses),
         netIncome: Math.round(netIncome),
         burnRate: Math.max(0, Math.round(burnRate)),
-        runway: Math.min(999, Math.round(runway * 10) / 10),
+        // Only cap runway at 999 if burn rate is 0 (infinite runway)
+        // Otherwise, use calculated runway (which can be any positive number)
+        runway: burnRate === 0 ? 999 : Math.max(0, Math.round(runway * 10) / 10),
         newCustomers,
         churnedCustomers,
         ltv: params.customerLifetimeValue,
@@ -146,7 +169,17 @@ export const realtimeSimulationService = {
       marketingSpend: 8000,
     };
 
-    const results = realtimeSimulationService.generateSimulation(defaultParams);
+    // Get initial values from actual user data (model run or transactions)
+    const initialValues = await realtimeSimulationService.getInitialValuesFromModel(orgId);
+    
+    // Generate simulation using actual user data as starting point
+    const results = realtimeSimulationService.generateSimulation(
+      defaultParams,
+      initialValues.customers,
+      initialValues.revenue,
+      initialValues.expenses,
+      initialValues.cashBalance
+    );
 
     // Generate a proper UUID for new simulations
     const newId = randomUUID();
@@ -326,22 +359,118 @@ export const realtimeSimulationService = {
       },
     });
 
-    if (!latestRun || !latestRun.summaryJson) {
-      return {
-        customers: 248,
-        revenue: 67000,
-        expenses: 49000,
-        cashBalance: 570000,
-      };
+    let customers = 0;
+    let revenue = 0;
+    let expenses = 0;
+    let cashBalance = 0;
+
+    // Try to get from model run first
+    if (latestRun && latestRun.summaryJson) {
+      const summary = latestRun.summaryJson as any;
+      customers = Number(summary.activeCustomers || summary.customerCount || summary.customers || 0);
+      revenue = Number(summary.revenue || summary.mrr || 0);
+      expenses = Number(summary.expenses || summary.burnRate || 0);
+      cashBalance = Number(summary.cashBalance || 0);
     }
 
-    const summary = latestRun.summaryJson as any;
+    // If no model data or missing values, calculate from actual transactions
+    if (revenue === 0 || expenses === 0) {
+      console.log(`[RealtimeSim] No model data, calculating from transactions`);
+      
+      // Get all transactions
+      const transactions = await prisma.rawTransaction.findMany({
+        where: {
+          orgId,
+        },
+        orderBy: {
+          date: 'desc',
+        },
+        take: 1000,
+      });
 
+      if (transactions.length > 0) {
+        // Calculate average monthly revenue and expenses from last 6 months
+        const now = new Date();
+        const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 6, 1);
+        
+        const recentTransactions = transactions.filter(tx => tx.date >= sixMonthsAgo);
+        
+        if (recentTransactions.length > 0) {
+          let totalRevenue = 0;
+          let totalExpenses = 0;
+          
+          for (const tx of recentTransactions) {
+            const amount = Number(tx.amount) || 0;
+            if (amount > 0) {
+              totalRevenue += amount;
+            } else {
+              totalExpenses += Math.abs(amount);
+            }
+          }
+          
+          // Average per month (assuming 6 months of data)
+          const months = Math.max(1, Math.ceil((now.getTime() - sixMonthsAgo.getTime()) / (1000 * 60 * 60 * 24 * 30)));
+          revenue = revenue || Math.round(totalRevenue / months);
+          expenses = expenses || Math.round(totalExpenses / months);
+        } else {
+          // Use all transactions if no recent data
+          let totalRevenue = 0;
+          let totalExpenses = 0;
+          
+          for (const tx of transactions) {
+            const amount = Number(tx.amount) || 0;
+            if (amount > 0) {
+              totalRevenue += amount;
+            } else {
+              totalExpenses += Math.abs(amount);
+            }
+          }
+          
+          // Estimate monthly (divide by number of months in data range)
+          if (transactions.length > 0) {
+            const firstDate = transactions[transactions.length - 1].date;
+            const lastDate = transactions[0].date;
+            const months = Math.max(1, Math.ceil((lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24 * 30)));
+            revenue = revenue || Math.round(totalRevenue / months);
+            expenses = expenses || Math.round(totalExpenses / months);
+          }
+        }
+      }
+    }
+
+    // If still no customers, check CSV import jobs for startingCustomers
+    if (customers === 0) {
+      const csvJob = await prisma.job.findFirst({
+        where: {
+          orgId,
+          jobType: 'csv_import',
+          status: 'done',
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+
+      if (csvJob && csvJob.logs) {
+        const logs = typeof csvJob.logs === 'string' ? JSON.parse(csvJob.logs) : csvJob.logs;
+        if (Array.isArray(logs)) {
+          for (const entry of logs) {
+            if (entry.meta?.params?.initialCustomers) {
+              customers = Number(entry.meta.params.initialCustomers);
+              console.log(`[RealtimeSim] Using initialCustomers from CSV import: ${customers}`);
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // Use defaults only if absolutely no data available
     return {
-      customers: Number(summary.activeCustomers || summary.customers || 248),
-      revenue: Number(summary.revenue || summary.mrr || 67000),
-      expenses: Number(summary.expenses || summary.burnRate || 49000),
-      cashBalance: Number(summary.cashBalance || 570000),
+      customers: customers || 248,
+      revenue: revenue || 67000,
+      expenses: expenses || 49000,
+      cashBalance: cashBalance || 570000,
     };
   },
 };

@@ -64,10 +64,21 @@ def handle_auto_model(job_id: str, org_id: str, object_id: str, logs: dict):
         
         update_progress(job_id, 10, {'status': 'fetching_data'})
         
-        # Get params
-        params = logs.get('params', {})
+        # Get params - handle both array and dict log structures
+        params = {}
+        if isinstance(logs, list):
+            # Logs is an array, extract params from meta.params
+            for entry in logs:
+                if isinstance(entry, dict) and entry.get('meta', {}).get('params'):
+                    params = {**params, **entry['meta']['params']}
+        elif isinstance(logs, dict):
+            # Logs is a dict, extract params directly
+            params = logs.get('params', {})
+        
         data_source_type = params.get('dataSourceType', 'blank')
         trigger_type = params.get('triggerType', 'model_creation')
+        
+        logger.info(f"Extracted params: startingCustomers={params.get('startingCustomers')}, cashOnHand={params.get('cashOnHand')}")
         
         # STEP 1: Fetch transaction data
         logger.info(f"Fetching transactions for org {org_id}, data source: {data_source_type}")

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -327,8 +327,7 @@ export function FinancialModeling() {
       const errorMessage = err instanceof Error ? err.message : "Failed to load financial models"
       setError(errorMessage)
       toast.error(errorMessage)
-      // Use default data as fallback
-      setFinancialData(defaultFinancialData)
+      // Leave existing financialData untouched on error
     } finally {
       setLoading(false)
     }
@@ -351,29 +350,31 @@ export function FinancialModeling() {
           const runs = result.runs
           setModelRuns(runs)
           
-          // Get the latest completed run
+          // Get the latest completed run (or most recent run)
           const latestRun = runs.find((r: ModelRun) => r.status === "done") || runs[0]
           if (latestRun) {
             setCurrentRun(latestRun)
             await fetchModelRunDetails(orgId, modelId, latestRun.id, token)
           } else {
-            // No runs yet, use default data
-            setFinancialData(defaultFinancialData)
+            // No completed runs yet for this model
+            setCurrentRun(null)
+            setFinancialData([])
           }
           // Always fetch model details for assumptions/projections/sensitivity
           await fetchModelDetails(orgId, modelId, token)
         } else {
-          // No runs yet, use default data
-          setFinancialData(defaultFinancialData)
+          // No runs yet for this model; clear run-specific state so UI shows correct "no data" message
+          setModelRuns([])
+          setCurrentRun(null)
+          setFinancialData([])
+          await fetchModelDetails(orgId, modelId, token)
         }
       } else {
-        // No runs yet, use default data
-        setFinancialData(defaultFinancialData)
+        // Request failed; do not overwrite existing data
       }
     } catch (error) {
       console.error("Failed to fetch model runs:", error)
-      // Use default data on error
-      setFinancialData(defaultFinancialData)
+      // Leave existing data as-is on error
     }
   }
 
@@ -417,25 +418,20 @@ export function FinancialModeling() {
 
             if (monthlyData.length > 0) {
               setFinancialData(monthlyData)
-            } else {
-              // Fallback to default data if no monthly data
-              setFinancialData(defaultFinancialData)
             }
+            // If no monthly data, keep existing financialData so previous run remains visible
           } else {
-            // No summary data, use default
-            setFinancialData(defaultFinancialData)
+            // No summary data; keep existing financialData
           }
         } else {
-          // Invalid response, use default
-          setFinancialData(defaultFinancialData)
+          // Invalid response; keep existing financialData
         }
       } else {
-        // Request failed, use default
-        setFinancialData(defaultFinancialData)
+        // Request failed; keep existing financialData
       }
     } catch (error) {
       console.error("Failed to fetch model run details:", error)
-      setFinancialData(defaultFinancialData)
+      // Keep existing financialData on error
     }
   }
 
@@ -959,18 +955,17 @@ export function FinancialModeling() {
             const runResult = await runResponse.json()
             const jobId = runResult.jobId || runResult.modelRun?.jobId || runResult.job?.id
             if (jobId) {
-              toast.info("Processing financial data...")
-              // Start polling for the new run
-              pollModelRunStatus(targetOrgId, result.model.id, jobId, authToken, runResult.modelRun?.id)
+              toast.info("Processing financial data for AI model...")
+              // IMPORTANT: Wait for the baseline run to complete so UI has real data
+              await pollModelRunStatus(targetOrgId, result.model.id, jobId, authToken, runResult.modelRun?.id)
             }
           }
         } catch (runError) {
           console.error("Failed to start initial model run:", runError)
         }
 
-        // Refresh models list
+        // Refresh models list and select the newly created model
         await fetchOrgIdAndModels()
-        // Select the newly created model
         if (result.model.id) {
           setSelectedModel(result.model.id)
           setCurrentModel(result.model)
@@ -1601,21 +1596,84 @@ export function FinancialModeling() {
     setProvenanceModalOpen(true)
   }
 
+  const metricOverrides = useMemo(() => {
+    if (!currentRun || !currentRun.summaryJson) return {}
+
+    const summary = typeof currentRun.summaryJson === "string"
+      ? JSON.parse(currentRun.summaryJson)
+      : currentRun.summaryJson
+
+    const mrr = Number(summary.mrr ?? summary.revenue ?? 0)
+    const arr = mrr * 12
+    const burn = Number(summary.monthlyBurn ?? summary.monthlyBurnRate ?? summary.burnRate ?? 0)
+    const runway = Number(summary.runwayMonths ?? summary.runway ?? 0)
+    const cac = Number(summary.cac ?? 0)
+    const ltv = Number(summary.ltv ?? 0)
+
+    const formatCurrency = (v: number) =>
+      v ? `$${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "N/A"
+
+    return {
+      mrr: formatCurrency(mrr),
+      arr: formatCurrency(arr),
+      burn_rate: formatCurrency(burn),
+      runway: runway ? `${runway.toFixed(1)} months` : "N/A",
+      cac: cac ? formatCurrency(cac) : "N/A",
+      ltv: ltv ? formatCurrency(ltv) : "N/A",
+    } as Record<string, string>
+  }, [currentRun])
+
   const handleMetricSearch = (metricId: string) => {
-    // Map metric IDs to display data
-    const metricMap: Record<string, any> = {
-      mrr: { name: "Monthly Recurring Revenue", value: "$67,000" },
-      arr: { name: "Annual Recurring Revenue", value: "$804,000" },
-      burn_rate: { name: "Monthly Burn Rate", value: "$45,000" },
-      runway: { name: "Cash Runway", value: "12.7 months" },
-      cac: { name: "Customer Acquisition Cost", value: "$125" },
-      ltv: { name: "Customer Lifetime Value", value: "$2,400" },
+    if (!currentRun || !currentRun.summaryJson) {
+      toast.error("No model run data available for metric lineage.")
+      return
+    }
+
+    const summary = typeof currentRun.summaryJson === "string"
+      ? JSON.parse(currentRun.summaryJson)
+      : currentRun.summaryJson
+
+    // Derive live metric values from the actual model summary (no hardcoded numbers)
+    const mrr = Number(summary.mrr ?? summary.revenue ?? 0)
+    const arr = mrr * 12
+    const burn =
+      Number(summary.monthlyBurn ?? summary.monthlyBurnRate ?? summary.burnRate ?? 0)
+    const runway = Number(summary.runwayMonths ?? summary.runway ?? 0)
+    const cac = Number(summary.cac ?? 0)
+    const ltv = Number(summary.ltv ?? 0)
+
+    const metricMap: Record<string, { name: string; value: string; cellId: string }> = {
+      // Treat MRR/ARR as revenue lineage (so provenance shows real transactions/assumptions)
+      mrr: { name: "Monthly Recurring Revenue", value: metricOverrides.mrr ?? "N/A", cellId: "revenue" },
+      arr: { name: "Annual Recurring Revenue", value: metricOverrides.arr ?? "N/A", cellId: "revenue" },
+      burn_rate: { name: "Monthly Burn Rate", value: metricOverrides.burn_rate ?? "N/A", cellId: "net_income" },
+      runway: {
+        name: "Cash Runway",
+        value: metricOverrides.runway ?? (runway ? `${runway.toFixed(1)} months` : "N/A"),
+        cellId: "runwayMonths",
+      },
+      cac: {
+        name: "Customer Acquisition Cost",
+        value: metricOverrides.cac ?? (cac ? `$${cac.toLocaleString()}` : "N/A"),
+        cellId: "revenue", // derived from revenue & customers
+      },
+      ltv: {
+        name: "Customer Lifetime Value",
+        value: metricOverrides.ltv ?? (ltv ? `$${ltv.toLocaleString()}` : "N/A"),
+        cellId: "revenue", // derived from revenue & churn
+      },
     }
 
     const metric = metricMap[metricId]
-    if (metric) {
-      handleCellClick(metricId, metric.name, metric.value)
+    if (!metric) {
+      toast.error("Metric not recognized for provenance search.")
+      return
     }
+
+    // IMPORTANT:
+    // - Use underlying cellId (e.g. "revenue") so provenance API finds the correct entries
+    // - Pass the live metric value derived from the current model run
+    handleCellClick(metric.cellId, metric.name, metric.value)
   }
 
   if (loading) {
@@ -1770,7 +1828,7 @@ export function FinancialModeling() {
           <CardDescription>Search any metric to view its complete data provenance and lineage path</CardDescription>
         </CardHeader>
         <CardContent>
-          <ProvenanceSearch onSelectMetric={handleMetricSearch} />
+          <ProvenanceSearch onSelectMetric={handleMetricSearch} metricOverrides={metricOverrides} />
         </CardContent>
       </Card>
 
@@ -1857,7 +1915,7 @@ export function FinancialModeling() {
                     </TableHeader>
                     <TableBody>
                       {financialData.length > 0 ? (
-                        financialData.slice(-3).map((row) => (
+                        financialData.map((row) => (
                         <TableRow key={row.month}>
                           <TableCell className="font-medium">{row.month}</TableCell>
                           <TableCell className="text-right">

@@ -273,23 +273,23 @@ export const simulationCreditService = {
         // Table doesn't exist - use zero usage
         usageCheck = [{ credits_used: BigInt(0) }];
       } else {
-        try {
-          usageCheck = await tx.$queryRaw<Array<{ credits_used: bigint }>>`
-            SELECT COALESCE(SUM(credits_used), 0) as credits_used
-            FROM user_usage
+      try {
+        usageCheck = await tx.$queryRaw<Array<{ credits_used: bigint }>>`
+          SELECT COALESCE(SUM(credits_used), 0) as credits_used
+          FROM user_usage
             WHERE "orgId" = ${orgId}::uuid
               AND "created_at" >= ${period.start}::timestamptz
               AND "created_at" <= ${period.end}::timestamptz
-          `;
-        } catch (error: any) {
+        `;
+      } catch (error: any) {
           // If table doesn't exist or query fails, return zero usage
-          if (error.message?.includes('does not exist') || error.message?.includes('user_usage')) {
+        if (error.message?.includes('does not exist') || error.message?.includes('user_usage')) {
             logger.warn(`user_usage table not found in transaction, returning zero usage`);
-            usageCheck = [{ credits_used: BigInt(0) }];
-          } else {
+          usageCheck = [{ credits_used: BigInt(0) }];
+        } else {
             // Log the error and re-throw to abort transaction properly
             logger.error('Error in transaction query:', error);
-            throw error;
+          throw error;
           }
         }
       }
@@ -326,45 +326,45 @@ export const simulationCreditService = {
           createdAt: new Date(),
         };
       } else {
-        try {
-          usage = await (tx as any).userUsage.create({
-            data: {
-              orgId,
-              userId,
-              simulationRunId,
-              monteCarloJobId,
-              creditsUsed: creditsToDeduct,
-              creditType: 'simulation',
-              description: description || `Monte Carlo simulation: ${numSimulations} simulations`,
-              metadata: {
-                numSimulations,
-                creditsPerSimulation: 1000,
-                calculatedCredits: creditsToDeduct,
-                adminOverride,
-              },
+      try {
+        usage = await (tx as any).userUsage.create({
+          data: {
+            orgId,
+            userId,
+            simulationRunId,
+            monteCarloJobId,
+            creditsUsed: creditsToDeduct,
+            creditType: 'simulation',
+            description: description || `Monte Carlo simulation: ${numSimulations} simulations`,
+            metadata: {
+              numSimulations,
+              creditsPerSimulation: 1000,
+              calculatedCredits: creditsToDeduct,
+              adminOverride,
             },
-          });
-        } catch (error: any) {
-          // If table doesn't exist, create a mock usage object (for tests)
-          if (error.message?.includes('does not exist') || error.message?.includes('user_usage')) {
-            logger.warn(`user_usage table not found, creating mock usage record`);
-            usage = {
-              id: `mock-${Date.now()}`,
-              orgId,
-              userId,
-              simulationRunId,
-              monteCarloJobId,
-              creditsUsed: creditsToDeduct,
-              creditType: 'simulation',
-              description: description || `Monte Carlo simulation: ${numSimulations} simulations`,
-              metadata: {
-                numSimulations,
-                creditsPerSimulation: 1000,
-                calculatedCredits: creditsToDeduct,
-                adminOverride,
-              },
-              createdAt: new Date(),
-            };
+          },
+        });
+      } catch (error: any) {
+        // If table doesn't exist, create a mock usage object (for tests)
+        if (error.message?.includes('does not exist') || error.message?.includes('user_usage')) {
+          logger.warn(`user_usage table not found, creating mock usage record`);
+          usage = {
+            id: `mock-${Date.now()}`,
+            orgId,
+            userId,
+            simulationRunId,
+            monteCarloJobId,
+            creditsUsed: creditsToDeduct,
+            creditType: 'simulation',
+            description: description || `Monte Carlo simulation: ${numSimulations} simulations`,
+            metadata: {
+              numSimulations,
+              creditsPerSimulation: 1000,
+              calculatedCredits: creditsToDeduct,
+              adminOverride,
+            },
+            createdAt: new Date(),
+          };
           } else if (error.message?.includes('current transaction is aborted') || error.code === '25P02') {
             // Transaction was aborted - this means an earlier error occurred
             logger.error('[Transaction Abort] Error occurred before userUsage.create, rolling back', {
@@ -375,10 +375,10 @@ export const simulationCreditService = {
             });
             // Don't throw here - let the transaction rollback naturally
             throw new Error('Transaction failed due to a previous error. Please try again.');
-          } else {
+        } else {
             // Other errors - re-throw
             logger.error('Error creating userUsage record:', error);
-            throw error;
+          throw error;
           }
         }
       }

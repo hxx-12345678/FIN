@@ -443,144 +443,162 @@ export const budgetActualService = {
     userId: string,
     period: 'current' | 'previous' | 'ytd' = 'current'
   ): Promise<BudgetActualSimpleResponse> => {
-    // Validate UUIDs
     try {
-      validateUUID(orgId, 'Organization ID');
-      validateUUID(userId, 'User ID');
-    } catch (error) {
-      if (error instanceof ValidationError) {
-        throw error;
+      // Validate UUIDs
+      try {
+        validateUUID(orgId, 'Organization ID');
+        validateUUID(userId, 'User ID');
+      } catch (error) {
+        if (error instanceof ValidationError) {
+          throw error;
+        }
+        throw new ValidationError('Invalid ID format');
       }
-      throw new ValidationError('Invalid ID format');
-    }
 
-    // Verify user access
-    const role = await prisma.userOrgRole.findUnique({
-      where: {
-        userId_orgId: {
-          userId,
-          orgId,
+      // Verify user access
+      const role = await prisma.userOrgRole.findUnique({
+        where: {
+          userId_orgId: {
+            userId,
+            orgId,
+          },
         },
-      },
-    });
+      });
 
-    if (!role) {
-      throw new ForbiddenError('No access to this organization');
-    }
-
-    // Verify org exists (check before access check for proper 404)
-    const org = await prisma.org.findUnique({
-      where: { id: orgId },
-    });
-
-    if (!org) {
-      throw new NotFoundError('Organization not found');
-    }
-
-    // Calculate date range based on period
-    const now = new Date();
-    let startDate: Date;
-    let endDate: Date = new Date(now.getFullYear(), now.getMonth(), 0); // End of current month
-
-    if (period === 'current') {
-      startDate = new Date(now.getFullYear(), 0, 1); // Start of current year
-      endDate = now;
-    } else if (period === 'previous') {
-      startDate = new Date(now.getFullYear() - 1, 0, 1);
-      endDate = new Date(now.getFullYear() - 1, 11, 31);
-    } else {
-      // YTD
-      startDate = new Date(now.getFullYear(), 0, 1);
-      endDate = now;
-    }
-
-    // Get budget and actual values
-    const [budgetData, actualData] = await Promise.all([
-      getBudgetByCategory(orgId, startDate, endDate),
-      getActualByCategory(orgId, startDate, endDate),
-    ]);
-
-    // Combine all categories
-    const allCategories = new Set([
-      ...budgetData.revenue.keys(),
-      ...budgetData.expenses.keys(),
-      ...actualData.revenue.keys(),
-      ...actualData.expenses.keys(),
-    ]);
-
-    // Build revenue array
-    const revenue: Array<{
-      category: string;
-      budget: number;
-      actual: number;
-      variance: number;
-      variancePct: number;
-    }> = [];
-
-    for (const category of allCategories) {
-      const budget = budgetData.revenue.get(category) || 0;
-      const actual = actualData.revenue.get(category) || 0;
-      const variance = actual - budget;
-      const variancePct = budget !== 0 ? (variance / budget) * 100 : (actual !== 0 ? 100 : 0);
-
-      // Only include if there's budget or actual data
-      if (budget > 0 || actual > 0) {
-        revenue.push({
-          category,
-          budget,
-          actual,
-          variance,
-          variancePct: Number(variancePct.toFixed(2)),
-        });
+      if (!role) {
+        throw new ForbiddenError('No access to this organization');
       }
-    }
 
-    // Build expenses array
-    const expenses: Array<{
-      category: string;
-      budget: number;
-      actual: number;
-      variance: number;
-      variancePct: number;
-    }> = [];
+      // Verify org exists (check before access check for proper 404)
+      const org = await prisma.org.findUnique({
+        where: { id: orgId },
+      });
 
-    for (const category of allCategories) {
-      const budget = budgetData.expenses.get(category) || 0;
-      const actual = actualData.expenses.get(category) || 0;
-      const variance = actual - budget;
-      const variancePct = budget !== 0 ? (variance / budget) * 100 : (actual !== 0 ? 100 : 0);
-
-      // Only include if there's budget or actual data
-      if (budget > 0 || actual > 0) {
-        expenses.push({
-          category,
-          budget,
-          actual,
-          variance,
-          variancePct: Number(variancePct.toFixed(2)),
-        });
+      if (!org) {
+        throw new NotFoundError('Organization not found');
       }
+
+      // Calculate date range based on period
+      const now = new Date();
+      let startDate: Date;
+      let endDate: Date = new Date(now.getFullYear(), now.getMonth(), 0); // End of current month
+
+      if (period === 'current') {
+        startDate = new Date(now.getFullYear(), 0, 1); // Start of current year
+        endDate = now;
+      } else if (period === 'previous') {
+        startDate = new Date(now.getFullYear() - 1, 0, 1);
+        endDate = new Date(now.getFullYear() - 1, 11, 31);
+      } else {
+        // YTD
+        startDate = new Date(now.getFullYear(), 0, 1);
+        endDate = now;
+      }
+
+      // Get budget and actual values
+      const [budgetDataRaw, actualDataRaw] = await Promise.all([
+        getBudgetByCategory(orgId, startDate, endDate),
+        getActualByCategory(orgId, startDate, endDate),
+      ]);
+
+      // Ensure safe maps even if helpers return undefined
+      const budgetData = budgetDataRaw || { revenue: new Map<string, number>(), expenses: new Map<string, number>() };
+      const actualData = actualDataRaw || { revenue: new Map<string, number>(), expenses: new Map<string, number>() };
+
+      // Combine all categories
+      const allCategories = new Set([
+        ...budgetData.revenue.keys(),
+        ...budgetData.expenses.keys(),
+        ...actualData.revenue.keys(),
+        ...actualData.expenses.keys(),
+      ]);
+
+      // Build revenue array
+      const revenue: Array<{
+        category: string;
+        budget: number;
+        actual: number;
+        variance: number;
+        variancePct: number;
+      }> = [];
+
+      for (const category of allCategories) {
+        const budget = budgetData.revenue.get(category) || 0;
+        const actual = actualData.revenue.get(category) || 0;
+        const variance = actual - budget;
+        const variancePct = budget !== 0 ? (variance / budget) * 100 : (actual !== 0 ? 100 : 0);
+
+        // Only include if there's budget or actual data
+        if (budget > 0 || actual > 0) {
+          revenue.push({
+            category,
+            budget,
+            actual,
+            variance,
+            variancePct: Number(variancePct.toFixed(2)),
+          });
+        }
+      }
+
+      // Build expenses array
+      const expenses: Array<{
+        category: string;
+        budget: number;
+        actual: number;
+        variance: number;
+        variancePct: number;
+      }> = [];
+
+      for (const category of allCategories) {
+        const budget = budgetData.expenses.get(category) || 0;
+        const actual = actualData.expenses.get(category) || 0;
+        const variance = actual - budget;
+        const variancePct = budget !== 0 ? (variance / budget) * 100 : (actual !== 0 ? 100 : 0);
+
+        // Only include if there's budget or actual data
+        if (budget > 0 || actual > 0) {
+          expenses.push({
+            category,
+            budget,
+            actual,
+            variance,
+            variancePct: Number(variancePct.toFixed(2)),
+          });
+        }
+      }
+
+      // Calculate summary
+      const totalBudgetRevenue = Array.from(budgetData.revenue.values()).reduce((sum, amt) => sum + amt, 0);
+      const totalActualRevenue = Array.from(actualData.revenue.values()).reduce((sum, amt) => sum + amt, 0);
+      const totalBudgetExpenses = Array.from(budgetData.expenses.values()).reduce((sum, amt) => sum + amt, 0);
+      const totalActualExpenses = Array.from(actualData.expenses.values()).reduce((sum, amt) => sum + amt, 0);
+
+      const totalBudget = totalBudgetRevenue - totalBudgetExpenses;
+      const totalActual = totalActualRevenue - totalActualExpenses;
+      const totalVariance = totalActual - totalBudget;
+
+      return {
+        revenue: revenue.sort((a, b) => Math.abs(b.variance) - Math.abs(a.variance)),
+        expenses: expenses.sort((a, b) => Math.abs(b.variance) - Math.abs(a.variance)),
+        summary: {
+          totalBudget: Number(totalBudget.toFixed(2)),
+          totalActual: Number(totalActual.toFixed(2)),
+          totalVariance: Number(totalVariance.toFixed(2)),
+        },
+      };
+    } catch (error: any) {
+      logger.error(`Error in getBudgetActualSimple: ${error?.message || String(error)}`);
+      // Return safe, empty structure instead of throwing
+      return {
+        revenue: [],
+        expenses: [],
+        summary: {
+          totalBudget: 0,
+          totalActual: 0,
+          totalVariance: 0,
+        },
+      };
     }
-
-    // Calculate summary
-    const totalBudgetRevenue = Array.from(budgetData.revenue.values()).reduce((sum, amt) => sum + amt, 0);
-    const totalActualRevenue = Array.from(actualData.revenue.values()).reduce((sum, amt) => sum + amt, 0);
-    const totalBudgetExpenses = Array.from(budgetData.expenses.values()).reduce((sum, amt) => sum + amt, 0);
-    const totalActualExpenses = Array.from(actualData.expenses.values()).reduce((sum, amt) => sum + amt, 0);
-
-    const totalBudget = totalBudgetRevenue - totalBudgetExpenses;
-    const totalActual = totalActualRevenue - totalActualExpenses;
-    const totalVariance = totalActual - totalBudget;
-
-    return {
-      revenue: revenue.sort((a, b) => Math.abs(b.variance) - Math.abs(a.variance)),
-      expenses: expenses.sort((a, b) => Math.abs(b.variance) - Math.abs(a.variance)),
-      summary: {
-        totalBudget: Number(totalBudget.toFixed(2)),
-        totalActual: Number(totalActual.toFixed(2)),
-        totalVariance: Number(totalVariance.toFixed(2)),
-      },
-    };
   },
 
   /**

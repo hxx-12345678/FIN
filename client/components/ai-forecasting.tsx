@@ -454,8 +454,8 @@ export function AIForecasting() {
         // Network errors are expected when backend is not running - don't show error toast
         console.warn("Backend server appears to be unavailable. Models will not be loaded until server is running.")
       } else {
-        console.error("Failed to fetch models:", error)
-        toast.error("Failed to load models")
+      console.error("Failed to fetch models:", error)
+      toast.error("Failed to load models")
       }
     } finally {
       setLoading(false)
@@ -1410,7 +1410,7 @@ Use the model run data to provide specific, data-driven insights about the forec
             <TabsTrigger value="insights" className="text-xs sm:text-sm">AI Insights</TabsTrigger>
             <TabsTrigger value="scenarios" className="text-xs sm:text-sm">Scenarios</TabsTrigger>
             <TabsTrigger value="montecarlo" className="text-xs sm:text-sm">Monte Carlo</TabsTrigger>
-          </TabsList>
+        </TabsList>
         </div>
 
         <TabsContent value="revenue" className="space-y-4 overflow-x-auto overflow-y-visible">

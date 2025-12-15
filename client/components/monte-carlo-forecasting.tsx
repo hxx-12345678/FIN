@@ -623,7 +623,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
             <TabsTrigger value="fanChart" className="text-xs sm:text-sm">Fan Chart</TabsTrigger>
             <TabsTrigger value="sensitivity" className="text-xs sm:text-sm">Sensitivity Analysis</TabsTrigger>
             <TabsTrigger value="explainability" className="text-xs sm:text-sm">Explainability</TabsTrigger>
-          </TabsList>
+        </TabsList>
         </div>
 
         {/* Drivers Configuration */}

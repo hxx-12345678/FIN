@@ -37,10 +37,23 @@ def handle_auto_model_trigger(job_id: str, org_id: str, object_id: str, logs: di
         
         update_progress(job_id, 10, {'status': 'checking_conditions'})
         
-        # Get trigger info from params
-        params = logs.get('params', {})
+        # Get trigger info from params - handle both array and dict log structures
+        params = {}
+        if isinstance(logs, list):
+            # Logs is an array, extract params from meta.params
+            for entry in logs:
+                if isinstance(entry, dict) and entry.get('meta', {}).get('params'):
+                    params = {**params, **entry['meta']['params']}
+        elif isinstance(logs, dict):
+            # Logs is a dict, extract params directly
+            params = logs.get('params', {})
+        
         trigger_type = params.get('triggerType', 'unknown')
         trigger_source = params.get('triggerSource')
+        starting_customers = params.get('startingCustomers', 0)
+        cash_on_hand = params.get('cashOnHand', 0)
+        
+        logger.info(f"Auto-model trigger: startingCustomers={starting_customers}, cashOnHand={cash_on_hand}")
         
         # Check if org has models
         cursor.execute("""
@@ -120,7 +133,7 @@ def handle_auto_model_trigger(job_id: str, org_id: str, object_id: str, logs: di
         
         update_progress(job_id, 50, {'status': 'creating_model_run'})
         
-        # Create model run
+        # Create model run with starting values from CSV import
         cursor.execute("""
             INSERT INTO model_runs (id, "modelId", "orgId", "run_type", "params_json", status, created_at)
             VALUES (gen_random_uuid(), %s, %s, 'baseline', %s::jsonb, 'queued', NOW())
@@ -133,6 +146,8 @@ def handle_auto_model_trigger(job_id: str, org_id: str, object_id: str, logs: di
                 'triggerType': trigger_type,
                 'triggerSource': trigger_source,
                 'triggeredAt': datetime.now(timezone.utc).isoformat(),
+                'startingCustomers': int(starting_customers) if starting_customers else None,
+                'cashOnHand': float(cash_on_hand) if cash_on_hand else None,
             }),
         ))
         
