@@ -18,6 +18,21 @@ function addResult(test: string, status: 'PASS' | 'FAIL' | 'WARNING', message: s
   logger.info(`[${status}] ${test}: ${message}`);
 }
 
+function buildReport() {
+  const passCount = results.filter(r => r.status === 'PASS').length;
+  const failCount = results.filter(r => r.status === 'FAIL').length;
+  const warnCount = results.filter(r => r.status === 'WARNING').length;
+  const totalCount = results.length;
+  return {
+    total: totalCount,
+    passed: passCount,
+    failed: failCount,
+    warnings: warnCount,
+    results,
+    allPassed: failCount === 0,
+  };
+}
+
 async function comprehensiveTest() {
   logger.info(`\n${'='.repeat(80)}`);
   logger.info(`COMPREHENSIVE FINANCIAL MODELING COMPONENT TEST`);
@@ -65,7 +80,7 @@ async function comprehensiveTest() {
 
   if (!user || user.roles.length === 0) {
     addResult('User Exists', 'FAIL', `User ${USER_EMAIL} not found`);
-    return;
+    return buildReport();
   }
   addResult('User Exists', 'PASS', `User found: ${user.email}`);
 
@@ -78,14 +93,14 @@ async function comprehensiveTest() {
   
   if (!model) {
     addResult('Model Exists', 'FAIL', 'No models found for organization');
-    return;
+    return buildReport();
   }
   addResult('Model Exists', 'PASS', `Model: ${model.name} (${model.id})`);
 
   const modelRun = model.modelRuns[0];
   if (!modelRun || !modelRun.summaryJson) {
     addResult('Model Run Exists', 'FAIL', 'No completed model runs found');
-    return;
+    return buildReport();
   }
   addResult('Model Run Exists', 'PASS', `Model Run: ${modelRun.id} (Status: ${modelRun.status})`);
 
@@ -95,12 +110,12 @@ async function comprehensiveTest() {
 
   // Step 3: Verify Monthly Data Structure
   logger.info(`\n📋 STEP 3: Monthly Data Structure Verification`);
-  const monthlyData = summary.monthly || {};
+  const monthlyData = summary.monthly || summary.fullResult?.monthly || {};
   const monthKeys = Object.keys(monthlyData).sort();
   
   if (monthKeys.length === 0) {
     addResult('Monthly Data Exists', 'FAIL', 'No monthly data found in summary');
-    return;
+    return buildReport();
   }
   addResult('Monthly Data Exists', 'PASS', `${monthKeys.length} months of data: ${monthKeys.join(', ')}`);
 
@@ -289,15 +304,12 @@ async function comprehensiveTest() {
   logger.info(`TEST SUMMARY REPORT`);
   logger.info(`${'='.repeat(80)}\n`);
   
-  const passCount = results.filter(r => r.status === 'PASS').length;
-  const failCount = results.filter(r => r.status === 'FAIL').length;
-  const warnCount = results.filter(r => r.status === 'WARNING').length;
-  const totalCount = results.length;
+  const report = buildReport();
   
-  logger.info(`Total Tests: ${totalCount}`);
-  logger.info(`✅ Passed: ${passCount} (${((passCount / totalCount) * 100).toFixed(1)}%)`);
-  logger.info(`❌ Failed: ${failCount} (${((failCount / totalCount) * 100).toFixed(1)}%)`);
-  logger.info(`⚠️  Warnings: ${warnCount} (${((warnCount / totalCount) * 100).toFixed(1)}%)\n`);
+  logger.info(`Total Tests: ${report.total}`);
+  logger.info(`✅ Passed: ${report.passed} (${((report.passed / report.total) * 100).toFixed(1)}%)`);
+  logger.info(`❌ Failed: ${report.failed} (${((report.failed / report.total) * 100).toFixed(1)}%)`);
+  logger.info(`⚠️  Warnings: ${report.warnings} (${((report.warnings / report.total) * 100).toFixed(1)}%)\n`);
   
   // List failures
   const failures = results.filter(r => r.status === 'FAIL');
@@ -328,14 +340,7 @@ async function comprehensiveTest() {
   logger.info(`${'='.repeat(80)}\n`);
   
   // Return results for further processing
-  return {
-    total: totalCount,
-    passed: passCount,
-    failed: failCount,
-    warnings: warnCount,
-    results: results,
-    allPassed: failCount === 0
-  };
+  return report;
 }
 
 comprehensiveTest()

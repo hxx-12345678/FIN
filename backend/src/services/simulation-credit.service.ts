@@ -251,15 +251,26 @@ export const simulationCreditService = {
     if (!tableExists && (adminOverride || currentTotalCredits >= 999999)) {
       logger.info(`Skipping credit deduction - table doesn't exist and credits are unlimited`);
       return {
-        success: true,
-        creditsDeducted: creditsToDeduct,
-        balance: {
-          totalCredits: currentTotalCredits,
-          usedCredits: 0,
-          remainingCredits: currentTotalCredits,
-          resetAt: getCurrentMonthPeriod().end,
-          planId,
+        id: '00000000-0000-0000-0000-000000000000',
+        orgId,
+        userId,
+        simulationRunId,
+        monteCarloJobId,
+        creditsUsed: creditsToDeduct,
+        creditType: 'monte_carlo',
+        description: description || 'Skipped credit deduction (user_usage table missing; unlimited credits)',
+        metadata: {
+          skipped: true,
+          reason: 'user_usage table missing; unlimited credits',
+          balance: {
+            totalCredits: currentTotalCredits,
+            usedCredits: 0,
+            remainingCredits: currentTotalCredits,
+            resetAt: getCurrentMonthPeriod().end,
+            planId,
+          },
         },
+        createdAt: new Date(),
       };
     }
 

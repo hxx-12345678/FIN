@@ -145,6 +145,9 @@ def generate_summary_json(result: Dict[str, Any], model_json: Dict, params_json:
 
         # Build comprehensive summary
         summary = {
+            # Backward-compatible aliases (some clients expect these names)
+            'revenue': float(total_revenue),
+            'expenses': float(total_expenses),
             'totalRevenue': float(total_revenue),
             'totalExpenses': float(total_expenses),
             'netIncome': float(net_income),
@@ -815,7 +818,12 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
         
         # Filter transactions to use most recent data available
         # Prefer last 12 months before start, but use all available if that's all we have
-        cutoff_date = current_month.replace(day=1) - timedelta(days=365)  # 12 months before start
+        #
+        # IMPORTANT: raw_transactions.date is a SQL DATE, which psycopg returns as datetime.date.
+        # Comparing datetime.date to datetime.datetime raises TypeError, which previously caused
+        # the entire computation to fall back to defaults with an empty monthly forecast.
+        cutoff_date_dt = current_month.replace(day=1) - timedelta(days=365)  # 12 months before start
+        cutoff_date = cutoff_date_dt.date()
         recent_transactions = [tx for tx in transactions if tx[0] >= cutoff_date]
         
         # If no recent transactions, use all available (but warn)
@@ -826,9 +834,13 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             if transactions:
                 oldest_date = min(tx[0] for tx in transactions)
                 newest_date = max(tx[0] for tx in transactions)
-                days_old = (current_month - newest_date).days
+                current_month_date = current_month.date()
+                days_old = (current_month_date - newest_date).days
                 if days_old > 180:  # More than 6 months old
-                    logger.warning(f"Transaction data is {days_old} days old (newest: {newest_date.date()}, oldest: {oldest_date.date()}). Consider importing recent data.")
+                    logger.warning(
+                        f"Transaction data is {days_old} days old (newest: {newest_date}, oldest: {oldest_date}). "
+                        f"Consider importing recent data."
+                    )
         elif len(recent_transactions) < len(transactions):
             logger.info(f"Filtered transactions: {len(transactions)} -> {len(recent_transactions)} (using last 12 months before start)")
         

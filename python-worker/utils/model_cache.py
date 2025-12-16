@@ -99,6 +99,36 @@ def get_cached_model_run(
                 summary_json = json.loads(summary_json)
             except:
                 summary_json = {}
+
+        # Normalize cached payload for backward compatibility across frontend expectations.
+        # Some older summaries only had totalRevenue/totalExpenses; newer clients may read revenue/expenses.
+        if isinstance(summary_json, dict):
+            if 'revenue' not in summary_json and 'totalRevenue' in summary_json:
+                summary_json['revenue'] = summary_json.get('totalRevenue', 0)
+            if 'expenses' not in summary_json and 'totalExpenses' in summary_json:
+                summary_json['expenses'] = summary_json.get('totalExpenses', 0)
+
+        # Guardrail: never serve a cache entry that doesn't include a usable monthly series.
+        # Older runs (or runs that hit computation errors) may have summary_json.monthly = {}.
+        # If we return those from cache, we propagate "empty model" UX even when the computation
+        # can succeed on a fresh run.
+        try:
+            monthly = None
+            if isinstance(summary_json, dict):
+                monthly = summary_json.get('monthly')
+                if (not monthly) and isinstance(summary_json.get('fullResult'), dict):
+                    monthly = summary_json['fullResult'].get('monthly')
+            if not (isinstance(monthly, dict) and len(monthly.keys()) > 0):
+                logger.info(f"Cache entry missing monthly series; treating as cache miss (org {org_id}, hash {input_hash})")
+                cursor.close()
+                conn.close()
+                return None
+        except Exception:
+            # If anything about validation fails, prefer recomputing
+            logger.info(f"Cache validation failed; treating as cache miss (org {org_id}, hash {input_hash})")
+            cursor.close()
+            conn.close()
+            return None
         
         cursor.close()
         conn.close()

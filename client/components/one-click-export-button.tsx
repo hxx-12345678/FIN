@@ -15,8 +15,7 @@ import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Download, FileText, Presentation, Link as LinkIcon, Loader2, CheckCircle2, XCircle, Copy } from "lucide-react"
 import { toast } from "sonner"
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
+import { API_BASE_URL } from "@/lib/api-config"
 
 interface OneClickExportButtonProps {
   orgId: string

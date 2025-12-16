@@ -4,6 +4,7 @@ import prisma from '../config/database';
 import { AuthRequest } from '../middlewares/auth';
 import { jobService } from '../services/job.service';
 import { financialModelService } from '../services/financial-model.service';
+import { auditService } from '../services/audit.service';
 
 export const modelController = {
   createModel: async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -129,6 +130,108 @@ export const modelController = {
         ok: true,
         model,
       });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  updateModel: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        throw new ValidationError('User not authenticated');
+      }
+
+      const { model_id } = req.params;
+      const { assumptions } = req.body || {};
+
+      if (!assumptions || typeof assumptions !== 'object') {
+        throw new ValidationError('assumptions is required and must be an object');
+      }
+
+      const model = await prisma.model.findUnique({
+        where: { id: model_id },
+      });
+
+      if (!model) {
+        throw new NotFoundError('Model not found');
+      }
+
+      // Verify access (finance/admin)
+      const role = await prisma.userOrgRole.findUnique({
+        where: {
+          userId_orgId: {
+            userId: req.user.id,
+            orgId: model.orgId,
+          },
+        },
+      });
+
+      if (!role || !['admin', 'finance'].includes(role.role)) {
+        throw new ForbiddenError('Only admins and finance users can update models');
+      }
+
+      const existingModelJson: any = model.modelJson || {};
+      const existingAssumptions: any = (existingModelJson && typeof existingModelJson === 'object')
+        ? (existingModelJson.assumptions || {})
+        : {};
+
+      // Shallow merge + nested merge for common sections
+      const mergedAssumptions: any = {
+        ...existingAssumptions,
+        ...assumptions,
+      };
+      for (const section of ['revenue', 'costs', 'cash']) {
+        if (
+          existingAssumptions?.[section] &&
+          typeof existingAssumptions[section] === 'object' &&
+          assumptions?.[section] &&
+          typeof assumptions[section] === 'object'
+        ) {
+          mergedAssumptions[section] = {
+            ...existingAssumptions[section],
+            ...assumptions[section],
+          };
+        }
+      }
+
+      const updatedModelJson = {
+        ...(existingModelJson && typeof existingModelJson === 'object' ? existingModelJson : {}),
+        assumptions: mergedAssumptions,
+      };
+
+      const updated = await prisma.model.update({
+        where: { id: model_id },
+        data: {
+          modelJson: updatedModelJson,
+          version: { increment: 1 },
+        },
+        select: {
+          id: true,
+          name: true,
+          version: true,
+          modelJson: true,
+          orgId: true,
+          createdAt: true,
+          createdBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      await auditService.log({
+        actorUserId: req.user.id,
+        orgId: model.orgId,
+        action: 'model_updated',
+        objectType: 'model',
+        objectId: model.id,
+        metaJson: { updatedFields: ['assumptions'] },
+      });
+
+      res.json({ ok: true, model: updated });
     } catch (error) {
       next(error);
     }

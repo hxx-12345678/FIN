@@ -86,12 +86,15 @@ const defaultFinancialData = [
 
 // Default assumptions - only used as fallback when no model data exists
 const defaultAssumptions = [
-  { category: "Revenue", item: "Monthly Growth Rate", value: "8%", type: "percentage" },
-  { category: "Revenue", item: "Customer Acquisition Cost", value: "$125", type: "currency" },
-  { category: "Revenue", item: "Customer Lifetime Value", value: "$2,400", type: "currency" },
-  { category: "Costs", item: "Gross Margin", value: "70%", type: "percentage" },
-  { category: "Costs", item: "Employee Count", value: "12", type: "number" },
-  { category: "Costs", item: "Average Salary", value: "$85,000", type: "currency" },
+  { category: "Revenue", key: "baselineRevenue", item: "Baseline Monthly Revenue", value: "100000", type: "currency" },
+  { category: "Revenue", key: "revenueGrowth", item: "Monthly Revenue Growth Rate", value: "0.08", type: "percentage" },
+  { category: "Revenue", key: "churnRate", item: "Monthly Churn Rate", value: "0.05", type: "percentage" },
+  { category: "Revenue", key: "cac", item: "Customer Acquisition Cost (CAC)", value: "125", type: "currency" },
+  { category: "Revenue", key: "ltv", item: "Customer Lifetime Value (LTV)", value: "2400", type: "currency" },
+  { category: "Costs", key: "baselineExpenses", item: "Baseline Monthly Expenses", value: "80000", type: "currency" },
+  { category: "Costs", key: "expenseGrowth", item: "Monthly Expense Growth Rate", value: "0.05", type: "percentage" },
+  { category: "Costs", key: "cogsPercentage", item: "COGS % of Revenue", value: "0.20", type: "percentage" },
+  { category: "Costs", key: "initialCash", item: "Initial Cash Balance", value: "500000", type: "currency" },
 ]
 
 // Transactions are now fetched from the backend API
@@ -142,6 +145,8 @@ export function FinancialModeling() {
   const [newModelStartDate, setNewModelStartDate] = useState<string>(new Date().toISOString().slice(0, 7)) // YYYY-MM
   const [creatingModel, setCreatingModel] = useState(false)
   const [generatingAI, setGeneratingAI] = useState(false)
+  const [assumptionEdits, setAssumptionEdits] = useState<Record<string, string>>({})
+  const [savingAssumptions, setSavingAssumptions] = useState(false)
 
   const { chartData: paginatedChartData, hasMore, loadMore, initializeData } = useChartPagination({
     defaultMonths: 36,
@@ -396,13 +401,24 @@ export function FinancialModeling() {
           
           // Extract financial data from summaryJson
           if (run.summaryJson) {
-            const summary = run.summaryJson
+            // summaryJson can be stored as JSONB or accidentally as a JSON-string; normalize to object.
+            const summary =
+              typeof run.summaryJson === "string"
+                ? (() => {
+                    try {
+                      return JSON.parse(run.summaryJson)
+                    } catch {
+                      return {}
+                    }
+                  })()
+                : run.summaryJson
             const monthlyData: any[] = []
 
             // Extract monthly data from summary
-            if (summary.monthly) {
-              Object.keys(summary.monthly).sort().forEach((monthKey) => {
-                const monthData = summary.monthly[monthKey]
+            const monthly = summary?.monthly || summary?.fullResult?.monthly
+            if (monthly && typeof monthly === "object") {
+              Object.keys(monthly).sort().forEach((monthKey) => {
+                const monthData = monthly[monthKey]
                 monthlyData.push({
                   month: formatMonth(monthKey),
                   monthKey: monthKey, // Store original YYYY-MM format for cell key construction
@@ -418,8 +434,13 @@ export function FinancialModeling() {
 
             if (monthlyData.length > 0) {
               setFinancialData(monthlyData)
+            } else {
+              // Don't blank the UI while a new run is still queued/running.
+              // Only clear if a completed run truly has no monthly series.
+              if (run.status === "done") {
+                setFinancialData([])
+              }
             }
-            // If no monthly data, keep existing financialData so previous run remains visible
           } else {
             // No summary data; keep existing financialData
           }
@@ -453,20 +474,42 @@ export function FinancialModeling() {
           
           // Extract assumptions from modelJson
           if (model.modelJson && model.modelJson.assumptions) {
-            const extractedAssumptions = Object.entries(model.modelJson.assumptions).map(([key, value]: [string, any]) => {
-              const category = key.includes("revenue") || key.includes("growth") || key.includes("customer") ? "Revenue" : "Costs"
-              return {
-                category,
-                item: key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
-                value: typeof value === "number" 
-                  ? (key.includes("percent") || key.includes("rate") ? `${(value * 100).toFixed(1)}%` : `$${value.toLocaleString()}`)
-                  : String(value),
-                type: key.includes("percent") || key.includes("rate") ? "percentage" : typeof value === "number" ? "currency" : "number",
-              }
-            })
-            setModelAssumptions(extractedAssumptions.length > 0 ? extractedAssumptions : [])
+            // Keep a focused, editable set of key assumptions (these flow into the Python worker model).
+            const a: any = model.modelJson.assumptions
+            const toNum = (v: any, fallback: number) => {
+              const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : NaN
+              return Number.isFinite(n) ? n : fallback
+            }
+
+            const normalized = {
+              baselineRevenue: toNum(a.baselineRevenue ?? a.revenue?.baselineRevenue, 100000),
+              revenueGrowth: toNum(a.revenueGrowth ?? a.revenue?.revenueGrowth, 0.08),
+              churnRate: toNum(a.churnRate ?? a.revenue?.churnRate, 0.05),
+              baselineExpenses: toNum(a.baselineExpenses ?? a.costs?.baselineExpenses, 80000),
+              expenseGrowth: toNum(a.expenseGrowth ?? a.costs?.expenseGrowth, 0.05),
+              cogsPercentage: toNum(a.cogsPercentage ?? a.costs?.cogsPercentage, 0.2),
+              initialCash: toNum(a.initialCash ?? a.cash?.initialCash, 500000),
+              cac: toNum(a.cac, 125),
+              ltv: toNum(a.ltv, 2400),
+            }
+
+            const extractedAssumptions: any[] = [
+              { category: "Revenue", key: "baselineRevenue", item: "Baseline Monthly Revenue", value: String(normalized.baselineRevenue), type: "currency" },
+              { category: "Revenue", key: "revenueGrowth", item: "Monthly Revenue Growth Rate", value: String(normalized.revenueGrowth), type: "percentage" },
+              { category: "Revenue", key: "churnRate", item: "Monthly Churn Rate", value: String(normalized.churnRate), type: "percentage" },
+              { category: "Revenue", key: "cac", item: "Customer Acquisition Cost (CAC)", value: String(normalized.cac), type: "currency" },
+              { category: "Revenue", key: "ltv", item: "Customer Lifetime Value (LTV)", value: String(normalized.ltv), type: "currency" },
+              { category: "Costs", key: "baselineExpenses", item: "Baseline Monthly Expenses", value: String(normalized.baselineExpenses), type: "currency" },
+              { category: "Costs", key: "expenseGrowth", item: "Monthly Expense Growth Rate", value: String(normalized.expenseGrowth), type: "percentage" },
+              { category: "Costs", key: "cogsPercentage", item: "COGS % of Revenue", value: String(normalized.cogsPercentage), type: "percentage" },
+              { category: "Costs", key: "initialCash", item: "Initial Cash Balance", value: String(normalized.initialCash), type: "currency" },
+            ]
+
+            setModelAssumptions(extractedAssumptions)
+            setAssumptionEdits(Object.fromEntries(extractedAssumptions.map((x) => [x.key, x.value])))
           } else {
             setModelAssumptions([])
+            setAssumptionEdits({})
           }
           
           // Extract projections from modelJson
@@ -512,6 +555,89 @@ export function FinancialModeling() {
     } catch (error) {
       console.error("Failed to fetch model details:", error)
       setModelAssumptions([])
+    }
+  }
+
+  const handleSaveAssumptions = async () => {
+    if (!selectedModel || !orgId) {
+      toast.error("Please select a model first")
+      return
+    }
+    if (savingAssumptions) return
+
+    const token = localStorage.getItem("auth-token") || document.cookie
+      .split("; ")
+      .find((row) => row.startsWith("auth-token="))
+      ?.split("=")[1]
+
+    if (!token) {
+      toast.error("Authentication token not found")
+      return
+    }
+
+    const parseNum = (key: string, fallback: number) => {
+      const raw = assumptionEdits[key]
+      const n = raw === undefined ? NaN : Number(String(raw).replace(/[%$, ]/g, ""))
+      return Number.isFinite(n) ? n : fallback
+    }
+
+    const assumptionsPayload = {
+      // flat keys
+      baselineRevenue: parseNum("baselineRevenue", 100000),
+      revenueGrowth: parseNum("revenueGrowth", 0.08),
+      churnRate: parseNum("churnRate", 0.05),
+      baselineExpenses: parseNum("baselineExpenses", 80000),
+      expenseGrowth: parseNum("expenseGrowth", 0.05),
+      cogsPercentage: parseNum("cogsPercentage", 0.2),
+      initialCash: parseNum("initialCash", 500000),
+      cac: parseNum("cac", 125),
+      ltv: parseNum("ltv", 2400),
+      // structured mirrors
+      revenue: {
+        baselineRevenue: parseNum("baselineRevenue", 100000),
+        revenueGrowth: parseNum("revenueGrowth", 0.08),
+        churnRate: parseNum("churnRate", 0.05),
+      },
+      costs: {
+        baselineExpenses: parseNum("baselineExpenses", 80000),
+        expenseGrowth: parseNum("expenseGrowth", 0.05),
+        cogsPercentage: parseNum("cogsPercentage", 0.2),
+      },
+      cash: {
+        initialCash: parseNum("initialCash", 500000),
+      },
+    }
+
+    setSavingAssumptions(true)
+    try {
+      const resp = await fetch(`${API_BASE_URL}/models/${selectedModel}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ assumptions: assumptionsPayload }),
+      })
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}))
+        throw new Error(err.error?.message || err.message || "Failed to save assumptions")
+      }
+
+      const result = await resp.json()
+      if (!result.ok) {
+        throw new Error(result.error?.message || result.message || "Failed to save assumptions")
+      }
+
+      toast.success("Assumptions saved. Re-running model to apply changes...")
+      await fetchModelDetails(orgId, selectedModel, token)
+      await handleRunModel()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to save assumptions"
+      toast.error(msg)
+    } finally {
+      setSavingAssumptions(false)
     }
   }
 
@@ -688,8 +814,10 @@ export function FinancialModeling() {
 
             if (runResponse.ok) {
               const runResult = await runResponse.json()
-              if (runResult.ok && runResult.modelRun) {
-                const runStatus = runResult.modelRun.status
+              // Backend returns `{ ok: true, run: {...} }` (not `modelRun`)
+              const runObj = runResult?.run || runResult?.modelRun
+              if (runResult.ok && runObj) {
+                const runStatus = runObj.status
                 if (runStatus === "done") {
                   toast.success("Model run completed!")
                   await fetchModelRuns(orgId, modelId, token)
@@ -737,6 +865,7 @@ export function FinancialModeling() {
       if (!token) {
         throw new Error("Authentication token not found")
       }
+      const authToken: string = token
 
       // Prepare request body with comprehensive industrial standard fields
       const requestBody = {
@@ -753,7 +882,7 @@ export function FinancialModeling() {
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/models`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${authToken}`,
           "Content-Type": "application/json",
         },
         credentials: "include",
@@ -778,13 +907,44 @@ export function FinancialModeling() {
         if (result.model.id) {
           setSelectedModel(result.model.id)
           setCurrentModel(result.model)
-          const token = localStorage.getItem("auth-token") || document.cookie
-            .split("; ")
-            .find((row) => row.startsWith("auth-token="))
-            ?.split("=")[1]
-          if (token && orgId) {
-            await fetchModelRuns(orgId, result.model.id, token)
-            await fetchModelDetails(orgId, result.model.id, token)
+          // Use the already-validated token from this request scope
+          if (orgId) {
+            await fetchModelRuns(orgId, result.model.id, authToken)
+            await fetchModelDetails(orgId, result.model.id, authToken)
+          }
+
+          // IMPORTANT: A brand-new blank model has no runs, so the UI will appear empty.
+          // Automatically trigger a baseline run so the model immediately shows monthly data.
+          try {
+            toast.info("Initializing model (running baseline)...")
+            const runResponse = await fetch(`${API_BASE_URL}/models/${result.model.id}/run`, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${authToken}`,
+                "Content-Type": "application/json",
+              },
+              credentials: "include",
+              body: JSON.stringify({ runType: "baseline" }),
+            })
+            if (runResponse.ok) {
+              const runResult = await runResponse.json()
+              const jobId = runResult.jobId || runResult.modelRun?.jobId || runResult.job?.id
+              const modelRunId = runResult.modelRun?.id
+              if (jobId && orgId) {
+                await pollModelRunStatus(orgId, result.model.id, jobId, authToken, modelRunId)
+              } else if (orgId) {
+                // Fallback: refresh runs to show queued/done state
+                await fetchModelRuns(orgId, result.model.id, authToken)
+              }
+            } else {
+              // If worker isn't running, this may fail; keep the model created but warn.
+              const err = await runResponse.json().catch(() => ({}))
+              console.warn("Baseline run start failed:", err)
+              toast.warning("Model created, but baseline run couldn't start. Please click “Run Model”.")
+            }
+          } catch (e) {
+            console.warn("Baseline run start error:", e)
+            toast.warning("Model created, but baseline run couldn't start. Please click “Run Model”.")
           }
         }
       } else {
@@ -2056,7 +2216,15 @@ export function FinancialModeling() {
                         .map((assumption: any, index: number) => (
                           <div key={index} className="space-y-2">
                             <Label htmlFor={`assumption-${index}`}>{assumption.item}</Label>
-                            <Input id={`assumption-${index}`} defaultValue={assumption.value} className="font-mono" />
+                            <Input
+                              id={`assumption-${index}`}
+                              value={assumptionEdits[assumption.key] ?? assumption.value}
+                              onChange={(e) => {
+                                const next = e.target.value
+                                setAssumptionEdits((prev) => ({ ...prev, [assumption.key]: next }))
+                              }}
+                              className="font-mono"
+                            />
                           </div>
                         ))}
                     </div>
@@ -2068,9 +2236,9 @@ export function FinancialModeling() {
                   </div>
                 ))}
                 <div className="flex gap-2">
-                  <Button>
+                  <Button onClick={handleSaveAssumptions} disabled={savingAssumptions || !selectedModel}>
                     <Save className="mr-2 h-4 w-4" />
-                    Save Changes
+                    {savingAssumptions ? "Saving..." : "Save Changes"}
                   </Button>
                   <Button variant="outline">
                     <Zap className="mr-2 h-4 w-4" />

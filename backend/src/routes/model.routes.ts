@@ -9,6 +9,7 @@ router.post('/orgs/:org_id/models', authenticate, requireFinanceOrAdmin('org_id'
 router.get('/orgs/:org_id/models', authenticate, requireOrgAccess('org_id'), modelController.getModels);
 router.delete('/orgs/:org_id/models/:model_id', authenticate, requireFinanceOrAdmin('org_id'), modelController.deleteModel);
 router.get('/models/:model_id', authenticate, modelController.getModel);
+router.patch('/models/:model_id', authenticate, modelController.updateModel);
 router.get('/models/:model_id/runs', authenticate, modelController.getModelRuns);
 router.post('/models/:model_id/run', authenticate, modelController.createModelRun);
 router.get('/models/:model_id/runs/:run_id', authenticate, modelController.getModelRun);
