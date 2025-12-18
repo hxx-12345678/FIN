@@ -262,13 +262,13 @@ export const simulationCreditService = {
         metadata: {
           skipped: true,
           reason: 'user_usage table missing; unlimited credits',
-          balance: {
-            totalCredits: currentTotalCredits,
-            usedCredits: 0,
-            remainingCredits: currentTotalCredits,
-            resetAt: getCurrentMonthPeriod().end,
-            planId,
-          },
+        balance: {
+          totalCredits: currentTotalCredits,
+          usedCredits: 0,
+          remainingCredits: currentTotalCredits,
+          resetAt: getCurrentMonthPeriod().end,
+          planId,
+        },
         },
         createdAt: new Date(),
       };

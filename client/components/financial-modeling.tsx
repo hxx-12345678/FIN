@@ -439,7 +439,7 @@ export function FinancialModeling() {
               // Only clear if a completed run truly has no monthly series.
               if (run.status === "done") {
                 setFinancialData([])
-              }
+            }
             }
           } else {
             // No summary data; keep existing financialData

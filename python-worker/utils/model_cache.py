@@ -99,7 +99,7 @@ def get_cached_model_run(
                 summary_json = json.loads(summary_json)
             except:
                 summary_json = {}
-
+        
         # Normalize cached payload for backward compatibility across frontend expectations.
         # Some older summaries only had totalRevenue/totalExpenses; newer clients may read revenue/expenses.
         if isinstance(summary_json, dict):
