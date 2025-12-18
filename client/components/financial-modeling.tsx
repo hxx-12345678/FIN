@@ -13,13 +13,14 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts"
 import { VirtualizedTable } from "@/components/ui/virtualized-table"
 import { useChartPagination } from "@/hooks/use-chart-pagination"
-import { Download, Upload, Zap, TrendingUp, Calculator, Brain, Save, SearchIcon, Loader2, AlertCircle, Play, FileDown, FileText } from "lucide-react"
+import { Download, Upload, Zap, TrendingUp, Calculator, Brain, Save, SearchIcon, Loader2, AlertCircle, Play, FileDown, FileText, HelpCircle } from "lucide-react"
 import { toast } from "sonner"
 import { ProvenanceDrawer } from "./provenance-drawer"
 import { ProvenanceSearch } from "./provenance-search"
 import { ModelVersionRollback } from "./model-version-rollback"
 import { CSVImportWizard } from "./csv-import-wizard"
 import { ExcelImportWizard } from "./excel-import-wizard"
+import { AssumptionTooltip } from "./assumption-tooltip"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
@@ -897,7 +898,10 @@ export function FinancialModeling() {
       const result = await response.json()
       
       if (result.ok && result.model) {
-        toast.success("Model created successfully")
+        toast.success("Model created successfully", {
+          description: "This financial model is based on assumptions. Review and adjust assumptions in the Assumptions tab to customize projections.",
+          duration: 6000,
+        })
         setShowCreateModelDialog(false)
         setNewModelName("")
         setNewModelDescription("")
@@ -1095,7 +1099,10 @@ export function FinancialModeling() {
 
       const result = await response.json()
       if (result.ok && result.model) {
-        toast.success("AI model created successfully! Starting analysis...")
+        toast.success("AI model created successfully! Starting analysis...", {
+          description: "This financial model is based on assumptions derived from your data. Review and adjust assumptions in the Assumptions tab to refine projections.",
+          duration: 6000,
+        })
         
         // Trigger a baseline run immediately so the model reflects real data
         try {
@@ -1988,7 +1995,7 @@ export function FinancialModeling() {
           <CardDescription>Search any metric to view its complete data provenance and lineage path</CardDescription>
         </CardHeader>
         <CardContent>
-          <ProvenanceSearch onSelectMetric={handleMetricSearch} metricOverrides={metricOverrides} />
+          <ProvenanceSearch onSelectMetric={handleMetricSearch} metricOverrides={metricOverrides} orgId={orgId} />
         </CardContent>
       </Card>
 
@@ -2203,9 +2210,17 @@ export function FinancialModeling() {
           <Card>
             <CardHeader>
               <CardTitle>Model Assumptions</CardTitle>
-              <CardDescription>Key assumptions driving your financial model</CardDescription>
+              <CardDescription>
+                Key assumptions driving your financial model. Hover over the <HelpCircle className="h-3 w-3 inline" /> icon to learn more about each assumption and its impact.
+              </CardDescription>
             </CardHeader>
             <CardContent>
+              <Alert className="mb-6 border-blue-200 bg-blue-50">
+                <AlertCircle className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-sm">
+                  <strong>Important:</strong> This financial model is built on these assumptions. Changes to assumptions will affect all projections, cash flow, and runway calculations. Hover over the help icons to understand what each assumption means and how it impacts your model.
+                </AlertDescription>
+              </Alert>
               <div className="space-y-6">
                 {["Revenue", "Costs"].map((category) => (
                   <div key={category}>
@@ -2215,7 +2230,10 @@ export function FinancialModeling() {
                         .filter((assumption: any) => assumption.category === category)
                         .map((assumption: any, index: number) => (
                           <div key={index} className="space-y-2">
-                            <Label htmlFor={`assumption-${index}`}>{assumption.item}</Label>
+                            <Label htmlFor={`assumption-${index}`} className="flex items-center gap-1">
+                              {assumption.item}
+                              <AssumptionTooltip assumptionKey={assumption.key} />
+                            </Label>
                             <Input
                               id={`assumption-${index}`}
                               value={assumptionEdits[assumption.key] ?? assumption.value}

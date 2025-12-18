@@ -14,6 +14,7 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import { format, subDays } from "date-fns"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { API_BASE_URL } from "@/lib/api-config"
 
 interface MetricSearchResult {
   id: string
@@ -43,12 +44,13 @@ interface SavedSearch {
 interface ProvenanceSearchProps {
   onSelectMetric: (metricId: string) => void
   metricOverrides?: Record<string, string>
+  orgId?: string | null
 }
 
 const STORAGE_KEY = "provenance_saved_searches"
 const HISTORY_KEY = "provenance_search_history"
 
-export function ProvenanceSearch({ onSelectMetric, metricOverrides }: ProvenanceSearchProps) {
+export function ProvenanceSearch({ onSelectMetric, metricOverrides, orgId }: ProvenanceSearchProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedQuery, setDebouncedQuery] = useState("")
 
@@ -67,6 +69,326 @@ export function ProvenanceSearch({ onSelectMetric, metricOverrides }: Provenance
   const [showHints, setShowHints] = useState(true)
   const [isTyping, setIsTyping] = useState(false)
   const typingTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
+  const getDefaultMetrics = (): MetricSearchResult[] => {
+    return [
+      {
+        id: "mrr",
+        name: "Monthly Recurring Revenue",
+        value: "$67,000",
+        category: "Revenue",
+        icon: DollarSign,
+        lastUpdated: "2 hours ago",
+        sourceType: "transaction",
+        confidenceScore: 0.95,
+        dateRange: { from: subDays(new Date(), 30), to: new Date() },
+      },
+      {
+        id: "arr",
+        name: "Annual Recurring Revenue",
+        value: "$804,000",
+        category: "Revenue",
+        icon: TrendingUp,
+        lastUpdated: "2 hours ago",
+        sourceType: "ai_generated",
+        confidenceScore: 0.88,
+        dateRange: { from: subDays(new Date(), 365), to: new Date() },
+      },
+      {
+        id: "burn_rate",
+        name: "Monthly Burn Rate",
+        value: "$45,000",
+        category: "Costs",
+        icon: Target,
+        lastUpdated: "1 day ago",
+        sourceType: "manual",
+        confidenceScore: 0.92,
+        dateRange: { from: subDays(new Date(), 30), to: new Date() },
+      },
+      {
+        id: "runway",
+        name: "Cash Runway",
+        value: "12.7 months",
+        category: "Financial Health",
+        icon: TrendingUp,
+        lastUpdated: "2 hours ago",
+        sourceType: "ai_generated",
+        confidenceScore: 0.85,
+        dateRange: { from: subDays(new Date(), 90), to: new Date() },
+      },
+      {
+        id: "cac",
+        name: "Customer Acquisition Cost",
+        value: "$125",
+        category: "Metrics",
+        icon: Users,
+        lastUpdated: "3 days ago",
+        sourceType: "integration",
+        confidenceScore: 0.90,
+        dateRange: { from: subDays(new Date(), 60), to: new Date() },
+      },
+      {
+        id: "ltv",
+        name: "Customer Lifetime Value",
+        value: "$2,400",
+        category: "Metrics",
+        icon: DollarSign,
+        lastUpdated: "3 days ago",
+        sourceType: "ai_generated",
+        confidenceScore: 0.87,
+        dateRange: { from: subDays(new Date(), 90), to: new Date() },
+      },
+      {
+        id: "churn_rate",
+        name: "Churn Rate",
+        value: "2.5%",
+        category: "Metrics",
+        icon: TrendingUp,
+        lastUpdated: "3 days ago",
+        sourceType: "ai_generated",
+        confidenceScore: 0.85,
+        dateRange: { from: subDays(new Date(), 90), to: new Date() },
+      },
+      {
+        id: "cash_balance",
+        name: "Cash Balance",
+        value: "$570,000",
+        category: "Financial Health",
+        icon: DollarSign,
+        lastUpdated: "2 hours ago",
+        sourceType: "transaction",
+        confidenceScore: 0.95,
+        dateRange: { from: subDays(new Date(), 30), to: new Date() },
+      },
+      {
+        id: "revenue_growth",
+        name: "Revenue Growth",
+        value: "8.0%",
+        category: "Growth",
+        icon: TrendingUp,
+        lastUpdated: "2 hours ago",
+        sourceType: "ai_generated",
+        confidenceScore: 0.88,
+        dateRange: { from: subDays(new Date(), 90), to: new Date() },
+      },
+      {
+        id: "net_income",
+        name: "Net Income",
+        value: "$18,000",
+        category: "Financial Health",
+        icon: DollarSign,
+        lastUpdated: "2 hours ago",
+        sourceType: "ai_generated",
+        confidenceScore: 0.90,
+        dateRange: { from: subDays(new Date(), 30), to: new Date() },
+      },
+    ]
+  }
+
+  const [allMetrics, setAllMetrics] = useState<MetricSearchResult[]>(getDefaultMetrics())
+  const [loadingMetrics, setLoadingMetrics] = useState(false)
+
+  const fetchMetricsFromAllModels = async () => {
+    if (!orgId) return
+
+    setLoadingMetrics(true)
+    try {
+      const token = localStorage.getItem("auth-token") || document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("auth-token="))
+        ?.split("=")[1]
+
+      if (!token) {
+        setAllMetrics(getDefaultMetrics())
+        setLoadingMetrics(false)
+        return
+      }
+
+      // Fetch all models for the organization
+      const modelsResponse = await fetch(`${API_BASE_URL}/orgs/${orgId}/models`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+      })
+
+      if (!modelsResponse.ok) {
+        setAllMetrics(getDefaultMetrics())
+        setLoadingMetrics(false)
+        return
+      }
+
+      const modelsResult = await modelsResponse.json()
+      if (!modelsResult.ok || !modelsResult.models || modelsResult.models.length === 0) {
+        setAllMetrics(getDefaultMetrics())
+        setLoadingMetrics(false)
+        return
+      }
+
+      // Fetch metrics from all models
+      const metricsPromises = modelsResult.models.map(async (model: any) => {
+        try {
+          // Fetch model runs for this model
+          const runsResponse = await fetch(`${API_BASE_URL}/models/${model.id}/runs`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+          })
+
+          if (!runsResponse.ok) return []
+
+          const runsResult = await runsResponse.json()
+          if (!runsResult.ok || !runsResult.runs || runsResult.runs.length === 0) return []
+
+          // Get the latest completed run
+          const completedRuns = runsResult.runs.filter((run: any) => run.status === "done" || run.status === "completed")
+          if (completedRuns.length === 0) return []
+
+          const latestRun = completedRuns.sort((a: any, b: any) => 
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          )[0]
+
+          const summary = latestRun.summaryJson || {}
+          const summaryData = typeof summary === "string" ? JSON.parse(summary) : summary
+
+          // Extract metrics from the model run
+          const modelMetrics: MetricSearchResult[] = []
+          const modelName = model.name || "Unnamed Model"
+
+          // MRR/Revenue
+          const mrr = summaryData.mrr || summaryData.revenue || summaryData.monthlyRevenue || 0
+          if (mrr > 0) {
+            modelMetrics.push({
+              id: `mrr_${model.id}`,
+              name: `Monthly Recurring Revenue (${modelName})`,
+              value: `$${mrr.toLocaleString()}`,
+              category: "Revenue",
+              icon: DollarSign,
+              lastUpdated: format(new Date(latestRun.finishedAt || latestRun.createdAt), "MMM d, yyyy"),
+              sourceType: "ai_generated",
+              confidenceScore: 0.90,
+              dateRange: { from: subDays(new Date(), 30), to: new Date() },
+            })
+          }
+
+          // ARR
+          const arr = mrr * 12
+          if (arr > 0) {
+            modelMetrics.push({
+              id: `arr_${model.id}`,
+              name: `Annual Recurring Revenue (${modelName})`,
+              value: `$${arr.toLocaleString()}`,
+              category: "Revenue",
+              icon: TrendingUp,
+              lastUpdated: format(new Date(latestRun.finishedAt || latestRun.createdAt), "MMM d, yyyy"),
+              sourceType: "ai_generated",
+              confidenceScore: 0.88,
+              dateRange: { from: subDays(new Date(), 365), to: new Date() },
+            })
+          }
+
+          // Burn Rate
+          const burnRate = summaryData.burnRate || summaryData.monthlyBurn || summaryData.expenses || 0
+          if (burnRate > 0) {
+            modelMetrics.push({
+              id: `burn_rate_${model.id}`,
+              name: `Monthly Burn Rate (${modelName})`,
+              value: `$${burnRate.toLocaleString()}`,
+              category: "Costs",
+              icon: Target,
+              lastUpdated: format(new Date(latestRun.finishedAt || latestRun.createdAt), "MMM d, yyyy"),
+              sourceType: "ai_generated",
+              confidenceScore: 0.92,
+              dateRange: { from: subDays(new Date(), 30), to: new Date() },
+            })
+          }
+
+          // Runway
+          const runway = summaryData.runwayMonths || summaryData.runway || 0
+          if (runway > 0) {
+            modelMetrics.push({
+              id: `runway_${model.id}`,
+              name: `Cash Runway (${modelName})`,
+              value: `${runway.toFixed(1)} months`,
+              category: "Financial Health",
+              icon: TrendingUp,
+              lastUpdated: format(new Date(latestRun.finishedAt || latestRun.createdAt), "MMM d, yyyy"),
+              sourceType: "ai_generated",
+              confidenceScore: 0.85,
+              dateRange: { from: subDays(new Date(), 90), to: new Date() },
+            })
+          }
+
+          // Cash Balance
+          const cashBalance = summaryData.cashBalance || summaryData.cash || 0
+          if (cashBalance > 0) {
+            modelMetrics.push({
+              id: `cash_balance_${model.id}`,
+              name: `Cash Balance (${modelName})`,
+              value: `$${cashBalance.toLocaleString()}`,
+              category: "Financial Health",
+              icon: DollarSign,
+              lastUpdated: format(new Date(latestRun.finishedAt || latestRun.createdAt), "MMM d, yyyy"),
+              sourceType: "ai_generated",
+              confidenceScore: 0.95,
+              dateRange: { from: subDays(new Date(), 30), to: new Date() },
+            })
+          }
+
+          // Revenue Growth
+          const growthRate = summaryData.growthRate || summaryData.revenueGrowth || 0
+          if (growthRate > 0) {
+            modelMetrics.push({
+              id: `revenue_growth_${model.id}`,
+              name: `Revenue Growth (${modelName})`,
+              value: `${(growthRate * 100).toFixed(1)}%`,
+              category: "Growth",
+              icon: TrendingUp,
+              lastUpdated: format(new Date(latestRun.finishedAt || latestRun.createdAt), "MMM d, yyyy"),
+              sourceType: "ai_generated",
+              confidenceScore: 0.88,
+              dateRange: { from: subDays(new Date(), 90), to: new Date() },
+            })
+          }
+
+          return modelMetrics
+        } catch (error) {
+          console.error(`Failed to fetch metrics for model ${model.id}:`, error)
+          return []
+        }
+      })
+
+      const allModelMetrics = await Promise.all(metricsPromises)
+      const flattenedMetrics = allModelMetrics.flat()
+
+      // Combine with default metrics (for fallback) and remove duplicates
+      const defaultMetrics = getDefaultMetrics()
+      const combinedMetrics = [...flattenedMetrics, ...defaultMetrics]
+      
+      // Remove duplicates based on id (keep model-specific ones over defaults)
+      const uniqueMetrics = combinedMetrics.reduce((acc, metric) => {
+        const baseId = metric.id.split('_')[0]
+        const existing = acc.find((m: MetricSearchResult) => m.id === metric.id || (m.id === baseId && !m.id.includes('_')))
+        if (!existing) {
+          acc.push(metric)
+        } else if (metric.id.includes('_') && !existing.id.includes('_')) {
+          // Replace default with model-specific
+          const index = acc.indexOf(existing)
+          acc[index] = metric
+        }
+        return acc
+      }, [] as MetricSearchResult[])
+
+      setAllMetrics(uniqueMetrics)
+    } catch (error) {
+      console.error("Failed to fetch metrics from models:", error)
+      setAllMetrics(getDefaultMetrics())
+    } finally {
+      setLoadingMetrics(false)
+    }
+  }
 
   useEffect(() => {
     // Load saved searches and history from localStorage
@@ -116,152 +438,15 @@ export function ProvenanceSearch({ onSelectMetric, metricOverrides }: Provenance
     }
   }, [debouncedQuery, sourceTypeFilter, confidenceMin, dateRange])
 
-  // Expanded metrics list with aliases and common search terms
-  const allMetrics: MetricSearchResult[] = [
-    {
-      id: "mrr",
-      name: "Monthly Recurring Revenue",
-      value: "$67,000",
-      category: "Revenue",
-      icon: DollarSign,
-      lastUpdated: "2 hours ago",
-      sourceType: "transaction",
-      confidenceScore: 0.95,
-      dateRange: { from: subDays(new Date(), 30), to: new Date() },
-    },
-    {
-      id: "arr",
-      name: "Annual Recurring Revenue",
-      value: "$804,000",
-      category: "Revenue",
-      icon: TrendingUp,
-      lastUpdated: "2 hours ago",
-      sourceType: "ai_generated",
-      confidenceScore: 0.88,
-      dateRange: { from: subDays(new Date(), 365), to: new Date() },
-    },
-    {
-      id: "burn_rate",
-      name: "Monthly Burn Rate",
-      value: "$45,000",
-      category: "Costs",
-      icon: Target,
-      lastUpdated: "1 day ago",
-      sourceType: "manual",
-      confidenceScore: 0.92,
-      dateRange: { from: subDays(new Date(), 30), to: new Date() },
-    },
-    {
-      id: "cash_burn",
-      name: "Cash Burn Rate",
-      value: "$45,000",
-      category: "Costs",
-      icon: Target,
-      lastUpdated: "1 day ago",
-      sourceType: "manual",
-      confidenceScore: 0.92,
-      dateRange: { from: subDays(new Date(), 30), to: new Date() },
-    },
-    {
-      id: "runway",
-      name: "Cash Runway",
-      value: "12.7 months",
-      category: "Financial Health",
-      icon: TrendingUp,
-      lastUpdated: "2 hours ago",
-      sourceType: "ai_generated",
-      confidenceScore: 0.85,
-      dateRange: { from: subDays(new Date(), 90), to: new Date() },
-    },
-    {
-      id: "cac",
-      name: "Customer Acquisition Cost",
-      value: "$125",
-      category: "Metrics",
-      icon: Users,
-      lastUpdated: "3 days ago",
-      sourceType: "integration",
-      confidenceScore: 0.90,
-      dateRange: { from: subDays(new Date(), 60), to: new Date() },
-    },
-    {
-      id: "ltv",
-      name: "Customer Lifetime Value",
-      value: "$2,400",
-      category: "Metrics",
-      icon: DollarSign,
-      lastUpdated: "3 days ago",
-      sourceType: "ai_generated",
-      confidenceScore: 0.87,
-      dateRange: { from: subDays(new Date(), 90), to: new Date() },
-    },
-    {
-      id: "churn_rate",
-      name: "Churn Rate",
-      value: "2.5%",
-      category: "Metrics",
-      icon: TrendingUp,
-      lastUpdated: "3 days ago",
-      sourceType: "ai_generated",
-      confidenceScore: 0.85,
-      dateRange: { from: subDays(new Date(), 90), to: new Date() },
-    },
-    {
-      id: "churn",
-      name: "Monthly Churn Rate",
-      value: "2.5%",
-      category: "Metrics",
-      icon: TrendingUp,
-      lastUpdated: "3 days ago",
-      sourceType: "ai_generated",
-      confidenceScore: 0.85,
-      dateRange: { from: subDays(new Date(), 90), to: new Date() },
-    },
-    {
-      id: "cash_balance",
-      name: "Cash Balance",
-      value: "$570,000",
-      category: "Financial Health",
-      icon: DollarSign,
-      lastUpdated: "2 hours ago",
-      sourceType: "transaction",
-      confidenceScore: 0.95,
-      dateRange: { from: subDays(new Date(), 30), to: new Date() },
-    },
-    {
-      id: "cash",
-      name: "Cash",
-      value: "$570,000",
-      category: "Financial Health",
-      icon: DollarSign,
-      lastUpdated: "2 hours ago",
-      sourceType: "transaction",
-      confidenceScore: 0.95,
-      dateRange: { from: subDays(new Date(), 30), to: new Date() },
-    },
-    {
-      id: "revenue_growth",
-      name: "Revenue Growth",
-      value: "8.0%",
-      category: "Growth",
-      icon: TrendingUp,
-      lastUpdated: "2 hours ago",
-      sourceType: "ai_generated",
-      confidenceScore: 0.88,
-      dateRange: { from: subDays(new Date(), 90), to: new Date() },
-    },
-    {
-      id: "net_income",
-      name: "Net Income",
-      value: "$18,000",
-      category: "Financial Health",
-      icon: DollarSign,
-      lastUpdated: "2 hours ago",
-      sourceType: "ai_generated",
-      confidenceScore: 0.90,
-      dateRange: { from: subDays(new Date(), 30), to: new Date() },
-    },
-  ]
+  // Fetch metrics from all models when orgId is available
+  useEffect(() => {
+    if (orgId) {
+      fetchMetricsFromAllModels()
+    } else {
+      // Use default hardcoded metrics if no orgId
+      setAllMetrics(getDefaultMetrics())
+    }
+  }, [orgId])
 
   const performSearch = (query: string, addToHistory: boolean = true) => {
     if (!query.trim()) {

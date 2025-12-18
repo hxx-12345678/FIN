@@ -28,6 +28,7 @@ import { PostLoginOptions } from "@/components/post-login-options"
 import { isDemoMode, resetDemoDataIfNeeded } from "@/lib/demo-data-generator"
 import { JobQueue } from "@/components/jobs/job-queue"
 import { ExportJobQueue } from "@/components/exports/export-job-queue"
+import { checkUserHasData, getUserOrgId } from "@/lib/user-data-check"
 
 export default function HomePage() {
   const [showLanding, setShowLanding] = useState(true)
@@ -38,7 +39,7 @@ export default function HomePage() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
 
   useEffect(() => {
-    const checkAuthAndState = () => {
+    const checkAuthAndState = async () => {
       const hasSelectedMode = localStorage.getItem("finapilot_mode_selected")
       const authToken = localStorage.getItem("auth-token")
       
@@ -51,9 +52,26 @@ export default function HomePage() {
         return
       }
       
-      // If authenticated but hasn't selected demo/real mode, show post-login options
-      // This is the ONLY place where we show the demo/real selection after login
+      // If authenticated but hasn't selected demo/real mode, check if user has data
       if (authToken && !hasSelectedMode) {
+        // Check if user has imported data or connected integrations
+        const orgId = await getUserOrgId()
+        if (orgId) {
+          const hasData = await checkUserHasData(orgId)
+          if (hasData) {
+            // User has data - skip post-login options and go directly to dashboard
+            localStorage.setItem("finapilot_mode_selected", "true")
+            localStorage.removeItem("finapilot_demo_mode")
+            setShowLanding(false)
+            setShowPostLoginOptions(false)
+            setShowOnboarding(false)
+            setDemoMode(false)
+            setActiveView("overview")
+            return
+          }
+        }
+        
+        // User doesn't have data - show post-login options
         setShowLanding(false)
         setShowOnboarding(false)
         setShowPostLoginOptions(true)
@@ -88,9 +106,26 @@ export default function HomePage() {
     }
 
     // Listen for login success event
-    const handleLoginSuccess = () => {
+    const handleLoginSuccess = async () => {
       const hasSelectedMode = localStorage.getItem("finapilot_mode_selected")
       if (!hasSelectedMode) {
+        // Check if user has data
+        const orgId = await getUserOrgId()
+        if (orgId) {
+          const hasData = await checkUserHasData(orgId)
+          if (hasData) {
+            // User has data - skip post-login options
+            localStorage.setItem("finapilot_mode_selected", "true")
+            localStorage.removeItem("finapilot_demo_mode")
+            setShowLanding(false)
+            setShowPostLoginOptions(false)
+            setShowOnboarding(false)
+            setDemoMode(false)
+            setActiveView("overview")
+            return
+          }
+        }
+        // User doesn't have data - show post-login options
         setShowLanding(false)
         setShowPostLoginOptions(true)
       }

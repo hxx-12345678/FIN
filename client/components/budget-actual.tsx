@@ -211,6 +211,7 @@ export function BudgetActual() {
   const [showImportDialog, setShowImportDialog] = useState(false)
   const [showBudgetPlanner, setShowBudgetPlanner] = useState(false)
   const [hasBudgets, setHasBudgets] = useState<boolean | null>(null)
+  const [hasTransactions, setHasTransactions] = useState<boolean | null>(null)
 
   const fetchOrgId = async (): Promise<string | null> => {
     const storedOrgId = localStorage.getItem("orgId")
@@ -318,6 +319,9 @@ export function BudgetActual() {
           p.budgetRevenue > 0 || p.budgetExpenses > 0
         ) || result.data.categories?.some((c: BudgetActualCategory) => c.budget > 0)
         setHasBudgets(hasUserBudgets ?? null)
+        
+        // Reset hasTransactions when data is fetched to re-check
+        setHasTransactions(null)
       } else {
         throw new Error("Invalid response format")
       }
@@ -367,17 +371,22 @@ export function BudgetActual() {
     }
   }, [selectedPeriod, selectedView, orgId, selectedModelId])
 
-  // Listen for CSV import completion to refresh data
+  // Listen for CSV/Excel import completion to refresh data
   useEffect(() => {
     const handleImportComplete = async (event: CustomEvent) => {
       const { rowsImported, orgId: importedOrgId } = event.detail || {}
       
       if (importedOrgId && importedOrgId === orgId) {
-        toast.success(`CSV import completed! Refreshing budget vs actual data...`)
+        toast.success(`Data import completed! Refreshing budget vs actual data...`)
         
         // Small delay to ensure backend has processed the data
         setTimeout(async () => {
           if (orgId && selectedModelId) {
+            await fetchBudgetActualData()
+          } else if (orgId && models.length > 0) {
+            // If no model selected but models exist, select first one and fetch
+            const firstModelId = models[0].id
+            setSelectedModelId(firstModelId)
             await fetchBudgetActualData()
           }
         }, 2000)
@@ -386,10 +395,63 @@ export function BudgetActual() {
 
     const listener = handleImportComplete as unknown as EventListener
     window.addEventListener('csv-import-completed', listener)
+    window.addEventListener('xlsx-import-completed', listener)
     return () => {
       window.removeEventListener('csv-import-completed', listener)
+      window.removeEventListener('xlsx-import-completed', listener)
     }
-  }, [orgId, selectedModelId])
+  }, [orgId, selectedModelId, models])
+
+  // Check if transactions exist (for missing actual data detection)
+  // This must be at the top before any conditional returns
+  useEffect(() => {
+    const checkTransactions = async () => {
+      if (!orgId) return
+      
+      try {
+        const token = localStorage.getItem("auth-token") || document.cookie
+          .split("; ")
+          .find((row) => row.startsWith("auth-token="))
+          ?.split("=")[1]
+
+        if (!token) return
+
+        const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/transactions?limit=1`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+        })
+
+        if (response.ok) {
+          const result = await response.json()
+          setHasTransactions(result.ok && result.transactions && result.transactions.length > 0)
+        }
+      } catch (error) {
+        console.error("Failed to check transactions:", error)
+      }
+    }
+
+    // Only check if we have orgId and either no data or data without actuals
+    if (orgId) {
+      if (data) {
+        // Check if actual data exists
+        const budgetActualData = data?.periods || []
+        const categoryBreakdown = data?.categories || []
+        const hasActualData = budgetActualData.some((p: BudgetActualPeriod) => 
+          (p.actualRevenue && p.actualRevenue > 0) || (p.actualExpenses && p.actualExpenses > 0)
+        ) || categoryBreakdown.some((c: BudgetActualCategory) => c.actual > 0)
+        
+        if (!hasActualData) {
+          checkTransactions()
+        }
+      } else if (!loading) {
+        // No data and not loading - check transactions to show appropriate message
+        checkTransactions()
+      }
+    }
+  }, [orgId, data, loading])
 
   const formatPeriod = (period: string): string => {
     if (period.match(/^\d{4}-\d{2}$/)) {
@@ -614,6 +676,11 @@ export function BudgetActual() {
     netVariancePercent: 0,
   }
 
+  // Check if actual data is missing (all actuals are 0 or null)
+  const hasActualData = budgetActualData.some((p: BudgetActualPeriod) => 
+    (p.actualRevenue && p.actualRevenue > 0) || (p.actualExpenses && p.actualExpenses > 0)
+  ) || categoryBreakdown.some((c: BudgetActualCategory) => c.actual > 0)
+
   // Format data for charts
   const chartData = budgetActualData.map((period) => ({
     month: formatPeriod(period.period),
@@ -709,6 +776,59 @@ export function BudgetActual() {
           </Button>
         </div>
       </div>
+
+      {/* Missing Actual Data Alert */}
+      {!loading && data && !hasActualData && (
+        <Alert className="border-blue-200 bg-blue-50">
+          <AlertTriangle className="h-4 w-4 text-blue-600" />
+          <AlertDescription className="text-sm">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex-1">
+                <strong className="text-blue-900">Actual data is missing</strong>
+                <p className="text-blue-700 mt-1">
+                  {hasTransactions 
+                    ? "You have imported transactions, but they're not showing in Budget vs Actual. This may be because the transaction dates don't match the selected period, or categories need to be mapped correctly."
+                    : "Import your actual financial data to compare against budgets. You can import CSV/Excel files or connect an accounting integration."}
+                </p>
+              </div>
+              <div className="flex gap-2 flex-shrink-0">
+                {hasTransactions ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      window.location.hash = '#integrations'
+                      window.dispatchEvent(new CustomEvent('navigate-view', { detail: { view: 'integrations' } }))
+                    }}
+                  >
+                    Check Integrations
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowImportDialog(true)}
+                    >
+                      <Upload className="h-3 w-3 mr-1" />
+                      Import CSV
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        window.location.hash = '#integrations'
+                        window.dispatchEvent(new CustomEvent('navigate-view', { detail: { view: 'integrations' } }))
+                      }}
+                    >
+                      Connect Integration
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

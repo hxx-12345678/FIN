@@ -273,15 +273,22 @@ export function OverviewDashboard() {
     fetchOverviewData()
   }, [])
 
-  // Listen for CSV import completion to refresh data
+  // Listen for CSV/Excel import completion to refresh data
   useEffect(() => {
     const handleImportComplete = () => {
-      fetchOverviewData()
+      console.log("[Overview] Import completed, refreshing data...")
+      // Small delay to ensure backend has processed the data
+      setTimeout(() => {
+        fetchOverviewData()
+      }, 1500)
     }
 
-    window.addEventListener('csv-import-completed', handleImportComplete)
+    const listener = handleImportComplete as unknown as EventListener
+    window.addEventListener('csv-import-completed', listener)
+    window.addEventListener('xlsx-import-completed', listener)
     return () => {
-      window.removeEventListener('csv-import-completed', handleImportComplete)
+      window.removeEventListener('csv-import-completed', listener)
+      window.removeEventListener('xlsx-import-completed', listener)
     }
   }, [])
 
