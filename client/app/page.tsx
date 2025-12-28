@@ -30,6 +30,7 @@ import { JobQueue } from "@/components/jobs/job-queue"
 import { ExportJobQueue } from "@/components/exports/export-job-queue"
 import { IntegrationRequiredBanner } from "@/components/integration-required-banner"
 import { checkUserHasData, getUserOrgId } from "@/lib/user-data-check"
+import { ErrorBoundary } from "@/components/error-boundary"
 
 export default function HomePage() {
   // Initialize with default values for SSR compatibility (prevents hydration mismatch)
@@ -378,7 +379,9 @@ export default function HomePage() {
             onNavigateToIntegrations={() => setActiveView("integrations")}
           />
         )}
-        {viewComponent}
+        <ErrorBoundary>
+          {viewComponent}
+        </ErrorBoundary>
       </>
     )
   }

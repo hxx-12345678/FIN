@@ -1,12 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -16,7 +15,6 @@ import {
   CheckCircle, 
   XCircle, 
   Clock, 
-  Settings, 
   AlertTriangle, 
   Database, 
   Activity,
@@ -161,8 +159,10 @@ const availableIntegrations: Integration[] = [
 ]
 
 export function IntegrationsPage() {
-  // Ensure integrations always start with availableIntegrations
-  const [integrations, setIntegrations] = useState<Integration[]>(() => availableIntegrations)
+  // 1. STATE
+  const [integrations, setIntegrations] = useState<Integration[]>(() => 
+    availableIntegrations.map(i => ({ ...i, connector: undefined }))
+  )
   const [connectors, setConnectors] = useState<Connector[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState<Set<string>>(new Set())
@@ -174,514 +174,255 @@ export function IntegrationsPage() {
   const [importHistory, setImportHistory] = useState<any[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
 
-  useEffect(() => {
-    fetchOrgId()
+  // 2. HELPERS
+  const getAuthToken = useCallback(() => {
+    return localStorage.getItem("auth-token") || document.cookie
+      .split("; ")
+      .find((row) => row.startsWith("auth-token="))
+      ?.split("=")[1]
   }, [])
 
-  useEffect(() => {
-    if (orgId) {
-      fetchConnectors()
-      fetchImportHistory()
-      // Check if integration is complete after fetching connectors
-      setTimeout(() => {
-        checkAndMarkIntegrationComplete()
-      }, 1000)
-    } else {
-      // Even without orgId, ensure integrations are shown (already initialized in useState)
-      setLoading(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgId])
-  
-
-  // Refresh import history when CSV import completes
-  useEffect(() => {
-    const handleImportComplete = async (event: CustomEvent) => {
-      if (orgId) {
-        fetchConnectors()
-        fetchImportHistory() // Refresh history
-        toast.success(`CSV import completed! Data is now available in Overview, Budget vs Actual, and Financial Modeling.`)
-        // Check if integration is now complete
-        setTimeout(() => {
-          checkAndMarkIntegrationComplete()
-        }, 1000)
+  const checkCompletion = useCallback(async (id: string) => {
+    try {
+      const modeSelected = localStorage.getItem("finapilot_mode_selected")
+      if (modeSelected === "pending_integration") {
+        const { checkUserHasData } = await import("@/lib/user-data-check")
+        const hasData = await checkUserHasData(id)
+        if (hasData) {
+          localStorage.setItem("finapilot_mode_selected", "true")
+          window.dispatchEvent(new CustomEvent('integration-completed'))
+        }
       }
+    } catch (e) {
+      console.error("[Integrations] checkCompletion error:", e)
     }
+  }, [])
 
-    window.addEventListener('csv-import-completed', handleImportComplete as unknown as EventListener)
-    window.addEventListener('xlsx-import-completed', handleImportComplete as unknown as EventListener)
-    return () => {
-      window.removeEventListener('csv-import-completed', handleImportComplete as unknown as EventListener)
-      window.removeEventListener('xlsx-import-completed', handleImportComplete as unknown as EventListener)
-    }
-  }, [orgId])
-
-  const fetchImportHistory = async () => {
-    if (!orgId) return
+  const fetchAllData = useCallback(async (id: string) => {
+    if (!id) return
+    console.log("[Integrations] Fetching all data for org:", id)
     
-    setLoadingHistory(true)
-    try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) return
-
-      const response = await fetch(`${API_BASE_URL}/jobs?orgId=${orgId}&jobType=csv_import&limit=10`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-      })
-
-      if (response.ok) {
-        const result = await response.json()
-        if (result.ok && result.data) {
-          setImportHistory(result.data)
-        }
-      }
-    } catch (error) {
-      // Silently handle network errors for import history - don't show errors if backend is down
-      const errorMessage = error instanceof Error ? error.message : "Failed to fetch import history"
-      const isNetworkError = 
-        errorMessage.includes("Failed to fetch") ||
-        errorMessage.includes("NetworkError") ||
-        errorMessage.includes("ERR_NETWORK") ||
-        (error instanceof TypeError && error.message.includes("fetch"))
-      
-      if (!isNetworkError) {
-        console.error("Failed to fetch import history:", error)
-      }
-    } finally {
-      setLoadingHistory(false)
-    }
-  }
-
-  // Listen for CSV import completion to refresh data
-  useEffect(() => {
-    const handleImportComplete = (event: CustomEvent) => {
-      // Refresh connectors and import history
-      if (orgId) {
-        fetchConnectors()
-        fetchImportHistory()
-        toast.success(`CSV import completed! Data is now available in Overview, Budget vs Actual, and Financial Modeling.`)
-      }
-    }
-
-    window.addEventListener('csv-import-completed', handleImportComplete as EventListener)
-    return () => {
-      window.removeEventListener('csv-import-completed', handleImportComplete as EventListener)
-    }
-  }, [orgId])
-
-  const fetchOrgId = async (): Promise<string | null> => {
-    const storedOrgId = localStorage.getItem("orgId")
-    if (storedOrgId) {
-      setOrgId(storedOrgId)
-      return storedOrgId
-    }
-
-    try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) return null
-
-      const response = await fetch(`${API_BASE_URL}/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-      })
-
-      if (response.ok) {
-        const userData = await response.json()
-        if (userData.orgs && userData.orgs.length > 0) {
-          const primaryOrgId = userData.orgs[0].id
-          localStorage.setItem("orgId", primaryOrgId)
-          setOrgId(primaryOrgId)
-          return primaryOrgId
-        }
-      }
-    } catch (error) {
-      console.error("Failed to fetch orgId:", error)
-    }
-
-    return null
-  }
-
-  const fetchConnectors = async () => {
-    if (!orgId) return
-
     setLoading(true)
-    setError(null)
-
-    try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found")
-      }
-
-      const response = await fetch(`${API_BASE_URL}/connectors/orgs/${orgId}/connectors`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-      })
-
-      if (!response.ok) {
-        // Handle 404 (no connectors) gracefully
-        if (response.status === 404) {
-          setConnectors([])
-          // Always use availableIntegrations as base
-          setIntegrations(
-            availableIntegrations.map((integration) => ({
-              ...integration,
-              connector: undefined,
-            }))
-          )
-          setLoading(false)
-          return
-        }
-        throw new Error(`Failed to fetch connectors: ${response.statusText}`)
-      }
-
-      const result = await response.json()
-      
-      // Safely extract connectors list
-      let connectorsList: Connector[] = []
-      
-      if (result.ok && result.data) {
-        // Backend returns { ok: true, data: connectors[] } where data is an array
-        if (Array.isArray(result.data)) {
-          connectorsList = result.data
-        } else if (result.data.connectors && Array.isArray(result.data.connectors)) {
-          connectorsList = result.data.connectors
-        } else if (result.data && typeof result.data === 'object') {
-          // If data is an object but not an array, try to extract connectors
-          connectorsList = []
-        }
-      }
-      
-      // Always set connectors (even if empty)
-      setConnectors(connectorsList)
-      
-      // Map connectors to integrations - always use availableIntegrations as base
-      const mappedIntegrations = availableIntegrations.map((integration) => {
-        // Safely find connector
-        const connector = Array.isArray(connectorsList) 
-          ? connectorsList.find((c: Connector) => c && c.type === integration.id)
-          : undefined
-        
-        return {
-          ...integration,
-          connector: connector || undefined,
-        }
-      })
-      setIntegrations(mappedIntegrations)
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to load connectors"
-      console.error("Error fetching connectors:", err)
-      
-      // Check if it's a network error (backend not running)
-      const isNetworkError = 
-        errorMessage.includes("Failed to fetch") ||
-        errorMessage.includes("NetworkError") ||
-        errorMessage.includes("ERR_NETWORK") ||
-        errorMessage.includes("ERR_INTERNET_DISCONNECTED") ||
-        errorMessage.includes("ERR_NETWORK_IO_SUSPENDED") ||
-        (err instanceof TypeError && err.message.includes("fetch"))
-      
-      // On error, still set empty arrays to prevent undefined errors
-      // Always use availableIntegrations as base - never rely on prev state
-      setConnectors([])
-      setIntegrations(
-        availableIntegrations.map((integration) => ({
-          ...integration,
-          connector: undefined,
-        }))
-      )
-      
-      // Only show error for non-network errors and non-404 errors
-      if (isNetworkError) {
-        // Network errors are expected when backend is not running - don't show error toast
-        // Just log it for debugging
-        console.warn("Backend server appears to be unavailable. Connectors will not be loaded until server is running.")
-        setError(null) // Don't show error in UI for network issues
-      } else if (errorMessage && !errorMessage.includes("404") && !errorMessage.includes("not found")) {
-        // Show error for actual API errors (not 404, not network)
-        setError(errorMessage)
-        toast.error(errorMessage)
-      } else {
-        // 404 or not found is expected for new users - clear error
-        setError(null)
-      }
-    } finally {
+    const token = getAuthToken()
+    if (!token) {
       setLoading(false)
-    }
-  }
-
-  const handleConnect = async (integration: Integration) => {
-    if (!orgId) {
-      toast.error("Organization ID not found")
       return
     }
 
+    try {
+      // Parallel fetches for efficiency
+      const [connRes, histRes] = await Promise.allSettled([
+        fetch(`${API_BASE_URL}/connectors/orgs/${id}/connectors`, {
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          credentials: "include",
+        }),
+        fetch(`${API_BASE_URL}/jobs?orgId=${id}&jobType=csv_import&limit=10`, {
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          credentials: "include",
+        })
+      ])
+
+      // 1. Process Connectors
+      if (connRes.status === 'fulfilled' && connRes.value.ok) {
+        const result = await connRes.value.json()
+        let list: Connector[] = []
+        if (result && result.ok && result.data) {
+          list = Array.isArray(result.data) ? result.data : (result.data.connectors || [])
+        } else if (Array.isArray(result)) {
+          list = result
+        }
+        
+        setConnectors(list)
+        setIntegrations(availableIntegrations.map(i => ({
+          ...i,
+          connector: list.find((c: any) => c && c.type === i.id) || undefined
+        })))
+      } else {
+        console.warn("[Integrations] Connectors fetch failed, using fallback")
+        setIntegrations(availableIntegrations.map(i => ({ ...i, connector: undefined })))
+      }
+
+      // 2. Process History
+      if (histRes.status === 'fulfilled' && histRes.value.ok) {
+        const result = await histRes.value.json()
+        if (result.ok && result.data) setImportHistory(result.data)
+      }
+
+      // 3. Check if onboarding complete
+      setTimeout(() => checkCompletion(id), 1000)
+
+    } catch (err) {
+      console.error("[Integrations] fetchAllData critical error:", err)
+      setIntegrations(availableIntegrations.map(i => ({ ...i, connector: undefined })))
+    } finally {
+      setLoading(false)
+    }
+  }, [getAuthToken, checkCompletion])
+
+  // 3. EFFECTS
+  // Initial mount: get Org ID
+  useEffect(() => {
+    const stored = localStorage.getItem("orgId")
+    if (stored) {
+      setOrgId(stored)
+    } else {
+      const token = getAuthToken()
+      if (token) {
+        fetch(`${API_BASE_URL}/auth/me`, {
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          credentials: "include",
+        }).then(res => res.json()).then(data => {
+          if (data.orgs?.length > 0) {
+            localStorage.setItem("orgId", data.orgs[0].id)
+            setOrgId(data.orgs[0].id)
+          } else {
+            setLoading(false)
+          }
+        }).catch(() => setLoading(false))
+      } else {
+        setLoading(false)
+      }
+    }
+  }, [getAuthToken])
+
+  // When orgId is set, fetch data
+  useEffect(() => {
+    if (orgId) fetchAllData(orgId)
+  }, [orgId, fetchAllData])
+
+  // Global event listeners for data refresh
+  useEffect(() => {
+    const handleRefresh = () => {
+      if (orgId) fetchAllData(orgId)
+    }
+    window.addEventListener('csv-import-completed', handleRefresh)
+    window.addEventListener('xlsx-import-completed', handleRefresh)
+    return () => {
+      window.removeEventListener('csv-import-completed', handleRefresh)
+      window.removeEventListener('xlsx-import-completed', handleRefresh)
+    }
+  }, [orgId, fetchAllData])
+
+  // 4. HANDLERS
+  const handleConnect = async (integration: Integration) => {
+    if (!orgId) return toast.error("Organization ID not found")
     setSelectedIntegration(integration)
     setShowConnectDialog(true)
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
+      const token = getAuthToken()
+      if (!token) throw new Error("Authentication token not found")
 
-      if (!token) {
-        throw new Error("Authentication token not found")
-      }
-
-      // Start OAuth flow
       const response = await fetch(
         `${API_BASE_URL}/connectors/orgs/${orgId}/connectors/${integration.id}/start-oauth`,
         {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
           credentials: "include",
         }
       )
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error?.message || `Failed to start OAuth: ${response.statusText}`)
-      }
-
+      if (!response.ok) throw new Error("Failed to start OAuth")
       const result = await response.json()
       if (result.ok && result.data?.authUrl) {
-        // Redirect to OAuth provider - integration will be marked complete when user returns
         window.location.href = result.data.authUrl
       } else {
         throw new Error("Invalid OAuth response")
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to connect integration"
-      const isNetworkError = 
-        errorMessage.includes("Failed to fetch") ||
-        errorMessage.includes("NetworkError") ||
-        errorMessage.includes("ERR_NETWORK") ||
-        (err instanceof TypeError && err.message.includes("fetch"))
-      
-      if (isNetworkError) {
-        toast.error("Cannot connect to server. Please ensure the backend server is running.")
-      } else {
-        toast.error(errorMessage)
-      }
+      toast.error(err instanceof Error ? err.message : "Connection failed")
       setShowConnectDialog(false)
     }
   }
 
   const handleSyncNow = async (connectorId: string) => {
     if (syncing.has(connectorId)) return
+    const token = getAuthToken()
+    if (!token) return
 
-    setSyncing((prev) => new Set(prev).add(connectorId))
-    setSyncProgress((prev) => ({ ...prev, [connectorId]: 0 }))
+    setSyncing(prev => new Set(prev).add(connectorId))
+    setSyncProgress(prev => ({ ...prev, [connectorId]: 0 }))
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found")
-      }
-
-      const response = await fetch(`${API_BASE_URL}/connectors/${connectorId}/sync`, {
+      const res = await fetch(`${API_BASE_URL}/connectors/${connectorId}/sync`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         credentials: "include",
       })
+      if (!res.ok) throw new Error("Sync request failed")
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error?.message || `Sync failed: ${response.statusText}`)
-      }
+      // Mock progress for UI
+      let p = 0
+      const interval = setInterval(() => {
+        p += 10
+        setSyncProgress(prev => ({ ...prev, [connectorId]: p }))
+        if (p >= 100) clearInterval(interval)
+      }, 200)
 
-      const result = await response.json()
-      
-      // Simulate progress
-      let progress = 0
-      const progressInterval = setInterval(() => {
-        progress += 10
-        setSyncProgress((prev) => ({ ...prev, [connectorId]: progress }))
-        if (progress >= 100) {
-          clearInterval(progressInterval)
-        }
-      }, 300)
-
-      // Wait for sync to complete (in production, poll job status)
       setTimeout(() => {
-        clearInterval(progressInterval)
-        setSyncing((prev) => {
-          const newSet = new Set(prev)
-          newSet.delete(connectorId)
-          return newSet
-        })
-        setSyncProgress((prev) => {
-          const newProgress = { ...prev }
-          delete newProgress[connectorId]
-          return newProgress
-        })
-        toast.success("Sync completed successfully")
-        fetchConnectors() // Refresh connectors
-        // Check if user has completed integration and mark as complete
-        checkAndMarkIntegrationComplete()
-      }, 3000)
+        clearInterval(interval)
+        setSyncing(prev => { const n = new Set(prev); n.delete(connectorId); return n })
+        setSyncProgress(prev => { const n = { ...prev }; delete n[connectorId]; return n })
+        toast.success("Sync completed")
+        if (orgId) fetchAllData(orgId)
+      }, 2500)
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to sync"
-      const isNetworkError = 
-        errorMessage.includes("Failed to fetch") ||
-        errorMessage.includes("NetworkError") ||
-        errorMessage.includes("ERR_NETWORK") ||
-        (err instanceof TypeError && err.message.includes("fetch"))
-      
-      if (isNetworkError) {
-        toast.error("Cannot connect to server. Please ensure the backend server is running.")
-      } else {
-        toast.error(errorMessage)
-      }
-      setSyncing((prev) => {
-        const newSet = new Set(prev)
-        newSet.delete(connectorId)
-        return newSet
-      })
-      setSyncProgress((prev) => {
-        const newProgress = { ...prev }
-        delete newProgress[connectorId]
-        return newProgress
-      })
+      toast.error("Sync failed")
+      setSyncing(prev => { const n = new Set(prev); n.delete(connectorId); return n })
     }
   }
 
   const handleToggleAutoSync = async (connectorId: string, enabled: boolean) => {
+    const token = getAuthToken()
+    if (!token) return
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found")
-      }
-
-      const response = await fetch(`${API_BASE_URL}/connectors/${connectorId}/sync-settings`, {
+      const res = await fetch(`${API_BASE_URL}/connectors/${connectorId}/sync-settings`, {
         method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ autoSyncEnabled: enabled }),
       })
-
-      if (!response.ok) {
-        throw new Error("Failed to update sync settings")
-      }
-
+      if (!res.ok) throw new Error("Update failed")
       toast.success(`Auto-sync ${enabled ? "enabled" : "disabled"}`)
-      fetchConnectors()
+      if (orgId) fetchAllData(orgId)
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to update auto-sync settings"
-      const isNetworkError = 
-        errorMessage.includes("Failed to fetch") ||
-        errorMessage.includes("NetworkError") ||
-        errorMessage.includes("ERR_NETWORK") ||
-        (err instanceof TypeError && err.message.includes("fetch"))
-      
-      if (isNetworkError) {
-        toast.error("Cannot connect to server. Please ensure the backend server is running.")
-      } else {
-        toast.error("Failed to update auto-sync settings")
-      }
+      toast.error("Update failed")
     }
   }
 
+  // 5. RENDER HELPERS
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "connected":
-        return <CheckCircle className="h-4 w-4 text-green-500" />
-      case "syncing":
-        return <RefreshCw className="h-4 w-4 text-blue-500 animate-spin" />
-      case "error":
-        return <XCircle className="h-4 w-4 text-red-500" />
-      default:
-        return <Clock className="h-4 w-4 text-gray-500" />
+      case "connected": return <CheckCircle className="h-4 w-4 text-green-500" />
+      case "syncing": return <RefreshCw className="h-4 w-4 text-blue-500 animate-spin" />
+      case "error": return <XCircle className="h-4 w-4 text-red-500" />
+      default: return <Clock className="h-4 w-4 text-gray-500" />
     }
   }
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case "connected":
-        return <Badge className="bg-green-100 text-green-800">Connected</Badge>
-      case "syncing":
-        return <Badge className="bg-blue-100 text-blue-800">Syncing</Badge>
-      case "error":
-        return <Badge className="bg-red-100 text-red-800">Error</Badge>
-      default:
-        return <Badge variant="secondary">Disconnected</Badge>
+      case "connected": return <Badge className="bg-green-100 text-green-800">Connected</Badge>
+      case "syncing": return <Badge className="bg-blue-100 text-blue-800">Syncing</Badge>
+      case "error": return <Badge className="bg-red-100 text-red-800">Error</Badge>
+      default: return <Badge variant="secondary">Disconnected</Badge>
     }
   }
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return "Never"
-    try {
-      return new Date(dateString).toLocaleString()
-    } catch {
-      return "Invalid date"
-    }
+    try { return new Date(dateString).toLocaleString() } catch { return "Invalid date" }
   }
 
   const connectedCount = integrations.filter((i) => i.connector?.status === "connected").length
-  const totalConnectors = connectors.length
-
-  // Check if integration is complete and mark it
-  const checkAndMarkIntegrationComplete = async () => {
-    const modeSelected = localStorage.getItem("finapilot_mode_selected")
-    if (modeSelected === "pending_integration" && orgId) {
-      const { checkUserHasData } = await import("@/lib/user-data-check")
-      const hasData = await checkUserHasData(orgId)
-      if (hasData) {
-        localStorage.setItem("finapilot_mode_selected", "true")
-        // Dispatch event to refresh banners
-        window.dispatchEvent(new CustomEvent('integration-completed'))
-      }
-    }
-  }
+  const totalSyncs = connectors.length
 
   return (
     <div className="space-y-6 p-4 md:p-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Integrations</h1>
-          <p className="text-muted-foreground">
-            Connect your accounting systems, payment gateways, and banking services
-          </p>
+          <p className="text-muted-foreground">Connect your accounting systems, payment gateways, and banking services</p>
         </div>
         <div className="flex gap-2">
           <CSVImportWizard />
@@ -724,7 +465,7 @@ export function IntegrationsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Total Syncs</p>
-                <p className="text-2xl font-bold">{totalConnectors}</p>
+                <p className="text-2xl font-bold">{totalSyncs}</p>
               </div>
               <Activity className="h-8 w-8 text-purple-500" />
             </div>
@@ -738,142 +479,28 @@ export function IntegrationsPage() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex-1">
               <CardTitle>CSV Import Templates</CardTitle>
-              <CardDescription>
-                Download CSV templates for different accounting systems and payment processors
-              </CardDescription>
+              <CardDescription>Download CSV templates for different accounting systems</CardDescription>
             </div>
             <div className="relative w-full sm:w-auto">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="w-full sm:w-auto">
-                    <FileDown className="mr-2 h-4 w-4" />
-                    Download Template
-                    <ChevronDown className="ml-2 h-4 w-4" />
+                    <FileDown className="mr-2 h-4 w-4" /> Download Template <ChevronDown className="ml-2 h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent 
-                  align="end" 
-                  side="bottom"
-                  sideOffset={8}
-                  className="w-[280px] max-h-[60vh] overflow-y-auto"
-                  collisionPadding={{ top: 8, bottom: 8, left: 16, right: 16 }}
-                  onCloseAutoFocus={(e) => e.preventDefault()}
-                >
-                <DropdownMenuLabel>Select Template Type</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => {
-                    const csvContent = integrationTemplates.quickbooks.generator()
-                    downloadCSV(csvContent, integrationTemplates.quickbooks.filename)
-                    toast.success('QuickBooks template downloaded!')
-                  }}
-                >
-                  <div className="flex flex-col">
-                    <span className="font-medium">QuickBooks Online</span>
-                    <span className="text-xs text-muted-foreground">For QuickBooks exports</span>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    const csvContent = integrationTemplates.xero.generator()
-                    downloadCSV(csvContent, integrationTemplates.xero.filename)
-                    toast.success('Xero template downloaded!')
-                  }}
-                >
-                  <div className="flex flex-col">
-                    <span className="font-medium">Xero</span>
-                    <span className="text-xs text-muted-foreground">For Xero accounting exports</span>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    const csvContent = integrationTemplates.tally.generator()
-                    downloadCSV(csvContent, integrationTemplates.tally.filename)
-                    toast.success('Tally template downloaded!')
-                  }}
-                >
-                  <div className="flex flex-col">
-                    <span className="font-medium">Tally</span>
-                    <span className="text-xs text-muted-foreground">For Tally accounting software</span>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    const csvContent = integrationTemplates.zoho.generator()
-                    downloadCSV(csvContent, integrationTemplates.zoho.filename)
-                    toast.success('Zoho Books template downloaded!')
-                  }}
-                >
-                  <div className="flex flex-col">
-                    <span className="font-medium">Zoho Books</span>
-                    <span className="text-xs text-muted-foreground">For Zoho Books exports</span>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => {
-                    const csvContent = integrationTemplates.razorpay.generator()
-                    downloadCSV(csvContent, integrationTemplates.razorpay.filename)
-                    toast.success('Razorpay template downloaded!')
-                  }}
-                >
-                  <div className="flex flex-col">
-                    <span className="font-medium">Razorpay</span>
-                    <span className="text-xs text-muted-foreground">For Razorpay payment gateway</span>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    const csvContent = integrationTemplates.stripe.generator()
-                    downloadCSV(csvContent, integrationTemplates.stripe.filename)
-                    toast.success('Stripe template downloaded!')
-                  }}
-                >
-                  <div className="flex flex-col">
-                    <span className="font-medium">Stripe</span>
-                    <span className="text-xs text-muted-foreground">For Stripe payment processor</span>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => {
-                    const csvContent = integrationTemplates.bank.generator()
-                    downloadCSV(csvContent, integrationTemplates.bank.filename)
-                    toast.success('Bank statement template downloaded!')
-                  }}
-                >
-                  <div className="flex flex-col">
-                    <span className="font-medium">Bank Statement</span>
-                    <span className="text-xs text-muted-foreground">For bank statement imports</span>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    const csvContent = integrationTemplates.generic.generator()
-                    downloadCSV(csvContent, integrationTemplates.generic.filename)
-                    toast.success('Generic accounting template downloaded!')
-                  }}
-                >
-                  <div className="flex flex-col">
-                    <span className="font-medium">Generic Accounting</span>
-                    <span className="text-xs text-muted-foreground">For any accounting system</span>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => {
-                    const csvContent = integrationTemplates.test.generator()
-                    downloadCSV(csvContent, integrationTemplates.test.filename)
-                    toast.success('Comprehensive test data downloaded! Perfect for testing all features.')
-                  }}
-                >
-                  <div className="flex flex-col">
-                    <span className="font-medium">Comprehensive Test Data</span>
-                    <span className="text-xs text-muted-foreground">6 months of realistic transactions for testing</span>
-                  </div>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                <DropdownMenuContent align="end" className="w-[280px]">
+                  <DropdownMenuLabel>Select Template Type</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {Object.entries(integrationTemplates).map(([key, template]: [string, any]) => (
+                    <DropdownMenuItem key={key} onClick={() => { downloadCSV(template.generator(), template.filename); toast.success(`${template.filename} downloaded!`) }}>
+                      <div className="flex flex-col">
+                        <span className="font-medium">{template.filename.replace('.csv', '').replace(/-/g, ' ')}</span>
+                        <span className="text-xs text-muted-foreground">CSV Template</span>
+                      </div>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </CardHeader>
@@ -883,140 +510,59 @@ export function IntegrationsPage() {
               <Database className="h-5 w-5 text-blue-600 mt-0.5" />
               <div className="flex-1">
                 <p className="text-sm font-medium text-blue-900">Template Guide</p>
-                <p className="text-xs text-blue-700 mt-1">
-                  Each template includes sample data with proper formatting. Required fields: Date and Amount. 
-                  Optional fields: Description, Category, Account, Reference, Type, and Currency. 
-                  Templates are compatible with Excel and can be customized to match your data format.
-                </p>
+                <p className="text-xs text-blue-700 mt-1">Required fields: Date and Amount. Recommended: Description, Category, Account.</p>
               </div>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* CSV Import History */}
+      {/* History */}
       {importHistory.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle>Recent CSV Imports</CardTitle>
-            <CardDescription>View your recent CSV import history and results</CardDescription>
-          </CardHeader>
+          <CardHeader><CardTitle>Recent CSV Imports</CardTitle></CardHeader>
           <CardContent>
-            {loadingHistory ? (
-              <div className="space-y-2">
-                {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-16 w-full" />
-                ))}
-              </div>
-            ) : (
+            {loadingHistory ? <div className="space-y-2"><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /></div> : (
               <div className="space-y-3">
-                {importHistory.map((job: any) => {
-                  // Extract import statistics from logs
-                  let rowsImported = 0
-                  let rowsSkipped = 0
-                  const logs = job.logs || []
-                  
-                  if (Array.isArray(logs)) {
-                    for (const entry of logs.reverse()) {
-                      if (entry && entry.meta) {
-                        if (entry.meta.rows_imported !== undefined) {
-                          rowsImported = entry.meta.rows_imported
-                        }
-                        if (entry.meta.rows_skipped !== undefined) {
-                          rowsSkipped = entry.meta.rows_skipped
-                        }
-                      }
-                    }
-                  }
-                  
-                  const statusColor = 
-                    job.status === 'done' ? 'text-green-600' :
-                    job.status === 'failed' ? 'text-red-600' :
-                    job.status === 'running' ? 'text-blue-600' :
-                    'text-gray-600'
-                  
-                  return (
-                    <div key={job.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className={`font-medium ${statusColor}`}>
-                            {job.status === 'done' ? '✅ Completed' :
-                             job.status === 'failed' ? '❌ Failed' :
-                             job.status === 'running' ? '🔄 Processing' :
-                             job.status}
-                          </span>
-                          <span className="text-sm text-muted-foreground">
-                            {new Date(job.createdAt).toLocaleString()}
-                          </span>
-                        </div>
-                        {job.status === 'done' && (
-                          <div className="mt-2 text-sm text-muted-foreground">
-                            {rowsImported > 0 ? (
-                              <>
-                                <span className="text-green-600 font-medium">{rowsImported} rows imported</span>
-                                {rowsSkipped > 0 && (
-                                  <span className="ml-2 text-orange-600">({rowsSkipped} skipped)</span>
-                                )}
-                              </>
-                            ) : (
-                              <span className="text-orange-600">0 rows imported</span>
-                            )}
-                            {job.progress !== undefined && (
-                              <span className="ml-2">• Progress: {job.progress}%</span>
-                            )}
-                          </div>
-                        )}
-                        {job.status === 'failed' && job.lastError && (
-                          <div className="mt-2 text-sm text-red-600">
-                            Error: {job.lastError.substring(0, 100)}
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-right">
-                        {job.finishedAt ? (
-                          <span className="text-xs text-muted-foreground">
-                            Finished: {new Date(job.finishedAt).toLocaleString()}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            In progress...
-                          </span>
-                        )}
+                {importHistory.map((job: any) => (
+                  <div key={job.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className={`font-medium ${job.status === 'done' ? 'text-green-600' : 'text-gray-600'}`}>
+                          {job.status === 'done' ? '✅ Completed' : job.status}
+                        </span>
+                        <span className="text-sm text-muted-foreground">{new Date(job.createdAt).toLocaleString()}</span>
                       </div>
                     </div>
-                  )
-                })}
+                    <div className="text-right text-xs text-muted-foreground">{job.finishedAt ? `Finished: ${new Date(job.finishedAt).toLocaleTimeString()}` : 'In progress...'}</div>
+                  </div>
+                ))}
               </div>
             )}
           </CardContent>
         </Card>
       )}
 
-      {/* Available Integrations */}
+      {/* Grid */}
       <div>
         <h2 className="text-xl font-semibold mb-4">Available Integrations</h2>
-        {loading ? (
+        {loading && integrations.length === 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Array.from({ length: availableIntegrations.length }, (_, i) => i + 1).map((i) => (
-              <Skeleton key={i} className="h-32 w-full" />
-            ))}
+            {[1, 2, 3, 4, 5, 6].map(i => <Skeleton key={i} className="h-32 w-full" />)}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {(integrations.length > 0 ? integrations : availableIntegrations).map((integration) => {
+            {integrations.map((integration) => {
               const connector = integration.connector
-              const isConnected = connector?.status === "connected"
-              const isSyncing = syncing.has(connector?.id || "")
-
               return (
                 <Card key={integration.id} className="hover:shadow-md transition-shadow">
                   <CardHeader>
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
                         <span className="text-3xl">{integration.icon}</span>
-                        <div className="flex-1">
+                        <div>
                           <CardTitle className="text-lg">{integration.name}</CardTitle>
-                          <CardDescription className="mt-1">{integration.description}</CardDescription>
+                          <CardDescription className="text-xs">{integration.description}</CardDescription>
                         </div>
                       </div>
                       {connector && getStatusIcon(connector.status)}
@@ -1027,84 +573,20 @@ export function IntegrationsPage() {
                       <>
                         <div className="flex items-center justify-between">
                           {getStatusBadge(connector.status)}
-                          <Badge variant="outline" className="text-xs">
-                            {integration.type}
-                          </Badge>
+                          <Badge variant="outline" className="text-[10px]">{integration.type}</Badge>
                         </div>
-
-                        {isSyncing && (
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-muted-foreground">Syncing...</span>
-                              <span className="font-medium">{syncProgress[connector.id] || 0}%</span>
-                            </div>
-                            <Progress value={syncProgress[connector.id] || 0} className="h-2" />
-                          </div>
-                        )}
-
-                        <div className="space-y-2 text-sm">
-                          <div className="flex items-center justify-between">
-                            <span className="text-muted-foreground">Last Sync:</span>
-                            <span className="font-medium">{formatDate(connector.lastSyncedAt)}</span>
-                          </div>
-                          {connector.lastSyncStatus && (
-                            <div className="flex items-center justify-between">
-                              <span className="text-muted-foreground">Status:</span>
-                              <Badge
-                                variant={
-                                  connector.lastSyncStatus === "success"
-                                    ? "default"
-                                    : connector.lastSyncStatus === "failed"
-                                      ? "destructive"
-                                      : "secondary"
-                                }
-                                className="text-xs"
-                              >
-                                {connector.lastSyncStatus}
-                              </Badge>
-                            </div>
-                          )}
+                        <div className="text-xs space-y-1">
+                          <div className="flex justify-between"><span>Last Sync:</span><span className="font-medium">{formatDate(connector.lastSyncedAt)}</span></div>
                         </div>
-
-                        <div className="flex items-center justify-between pt-2 border-t">
-                          <div className="flex items-center gap-2">
-                            <Switch
-                              checked={connector.autoSyncEnabled}
-                              onCheckedChange={(checked) => handleToggleAutoSync(connector.id, checked)}
-                              disabled={isSyncing}
-                            />
-                            <Label className="text-xs">Auto-sync</Label>
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleSyncNow(connector.id)}
-                            disabled={isSyncing || connector.status === "error"}
-                          >
-                            {isSyncing ? (
-                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                            ) : (
-                              <RefreshCw className="h-4 w-4 mr-2" />
-                            )}
-                            Sync Now
+                        <div className="flex gap-2 pt-2 border-t">
+                          <Button variant="outline" size="sm" className="flex-1" onClick={() => handleSyncNow(connector.id)} disabled={syncing.has(connector.id)}>
+                            {syncing.has(connector.id) ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1" />} Sync
                           </Button>
                         </div>
-
-                        {connector.lastSyncError && (
-                          <Alert variant="destructive" className="mt-2">
-                            <AlertTriangle className="h-4 w-4" />
-                            <AlertDescription className="text-xs">{connector.lastSyncError}</AlertDescription>
-                          </Alert>
-                        )}
                       </>
                     ) : (
-                      <Button
-                        className="w-full"
-                        onClick={() => handleConnect(integration)}
-                        disabled={!integration.supported}
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Connect {integration.name}
+                      <Button className="w-full" size="sm" onClick={() => handleConnect(integration)} disabled={!integration.supported}>
+                        <Plus className="h-3 w-3 mr-1" /> Connect
                       </Button>
                     )}
                   </CardContent>
@@ -1115,23 +597,15 @@ export function IntegrationsPage() {
         )}
       </div>
 
-      {/* Connect Dialog */}
       <Dialog open={showConnectDialog} onOpenChange={setShowConnectDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Connect {selectedIntegration?.name}</DialogTitle>
-            <DialogDescription>
-              You will be redirected to {selectedIntegration?.name} to authorize the connection.
-            </DialogDescription>
+            <DialogDescription>Redirecting to {selectedIntegration?.name} for authorization.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowConnectDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => selectedIntegration && handleConnect(selectedIntegration)}>
-              Continue to {selectedIntegration?.name}
-              <ExternalLink className="h-4 w-4 ml-2" />
-            </Button>
+            <Button variant="outline" onClick={() => setShowConnectDialog(false)}>Cancel</Button>
+            <Button onClick={() => selectedIntegration && handleConnect(selectedIntegration)}>Continue <ExternalLink className="h-4 w-4 ml-2" /></Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
