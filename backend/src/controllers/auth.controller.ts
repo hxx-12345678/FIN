@@ -121,5 +121,27 @@ export const authController = {
       next(error);
     }
   },
+
+  switchOrg: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        throw new ValidationError('User not authenticated');
+      }
+
+      const { orgId } = req.body;
+
+      if (!orgId) {
+        throw new ValidationError('Organization ID is required');
+      }
+
+      const result = await authService.switchOrg(req.user.id, orgId);
+      res.json({
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
 };
 

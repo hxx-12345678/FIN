@@ -13,6 +13,7 @@ router.post('/accept-invite', authController.acceptInvite);
 router.get('/me', authenticate, authController.getMe);
 router.get('/me/excel-perms', authenticate, authController.getExcelPerms);
 router.post('/logout', authenticate, authController.logout);
+router.post('/switch-org', authenticate, authController.switchOrg);
 
 // SSO routes
 router.post('/sso/:provider', ssoController.initiateSSO);

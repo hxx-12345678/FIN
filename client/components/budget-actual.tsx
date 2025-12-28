@@ -29,6 +29,7 @@ import {
 import { TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Target, Download, Upload, Loader2, FileDown, Plus, FileSpreadsheet } from "lucide-react"
 import { toast } from "sonner"
 import { generateBudgetActualTemplate, generateBudgetTemplate, downloadCSV } from "@/utils/csv-template-generator"
+import { DataDrivenTooltip } from "./data-driven-tooltip"
 import { API_BASE_URL } from "@/lib/api-config"
 
 interface BudgetActualPeriod {
@@ -834,13 +835,23 @@ export function BudgetActual() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Budget Accuracy</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Budget Accuracy
+            </CardTitle>
             <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {data ? summary.budgetAccuracy.toFixed(1) : "0"}%
-            </div>
+            {data ? (
+              <DataDrivenTooltip
+                metric="Budget Accuracy"
+                value={`${summary.budgetAccuracy.toFixed(1)}%`}
+                dataContext={{
+                  budgetAccuracy: summary.budgetAccuracy
+                }}
+              />
+            ) : (
+              <div className="text-2xl font-bold">0%</div>
+            )}
             {data ? (
               <div className={`flex items-center text-xs ${summary.budgetAccuracy >= 90 ? "text-green-600" : summary.budgetAccuracy >= 80 ? "text-yellow-600" : "text-red-600"}`}>
                 {summary.budgetAccuracy >= 90 ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />}
@@ -854,13 +865,23 @@ export function BudgetActual() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Revenue Variance</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Revenue Variance
+            </CardTitle>
             <TrendingDown className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${summary.revenueVariancePercent < 0 ? "text-red-600" : "text-green-600"}`}>
-              {summary.revenueVariancePercent >= 0 ? "+" : ""}{summary.revenueVariancePercent.toFixed(1)}%
-            </div>
+            <DataDrivenTooltip
+              metric="Revenue Variance"
+              value={`${summary.revenueVariancePercent >= 0 ? "+" : ""}${summary.revenueVariancePercent.toFixed(1)}%`}
+              dataContext={{
+                variance: summary.revenueVariance,
+                variancePercent: summary.revenueVariancePercent,
+                budgetedAmount: (summary.revenueVariancePercent !== 0 ? summary.revenueVariance / (summary.revenueVariancePercent / 100) : 0),
+                actualAmount: summary.revenueVariance + (summary.revenueVariancePercent !== 0 ? summary.revenueVariance / (summary.revenueVariancePercent / 100) : 0)
+              }}
+              className={`text-2xl font-bold ${summary.revenueVariancePercent < 0 ? "text-red-600" : "text-green-600"}`}
+            />
             <div className={`flex items-center text-xs ${summary.revenueVariancePercent < 0 ? "text-red-600" : "text-green-600"}`}>
               {summary.revenueVariancePercent < 0 ? <TrendingDown className="mr-1 h-3 w-3" /> : <TrendingUp className="mr-1 h-3 w-3" />}
               ${Math.abs(summary.revenueVariance / 1000).toFixed(1)}K {summary.revenueVariance < 0 ? "under" : "over"} budget
@@ -870,13 +891,23 @@ export function BudgetActual() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Expense Variance</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Expense Variance
+            </CardTitle>
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${summary.expenseVariancePercent > 0 ? "text-red-600" : "text-green-600"}`}>
-              {summary.expenseVariancePercent >= 0 ? "+" : ""}{summary.expenseVariancePercent.toFixed(1)}%
-            </div>
+            <DataDrivenTooltip
+              metric="Expense Variance"
+              value={`${summary.expenseVariancePercent >= 0 ? "+" : ""}${summary.expenseVariancePercent.toFixed(1)}%`}
+              dataContext={{
+                variance: summary.expenseVariance,
+                variancePercent: summary.expenseVariancePercent,
+                budgetedAmount: (summary.expenseVariancePercent !== 0 ? summary.expenseVariance / (summary.expenseVariancePercent / 100) : 0),
+                actualAmount: summary.expenseVariance + (summary.expenseVariancePercent !== 0 ? summary.expenseVariance / (summary.expenseVariancePercent / 100) : 0)
+              }}
+              className={`text-2xl font-bold ${summary.expenseVariancePercent > 0 ? "text-red-600" : "text-green-600"}`}
+            />
             <div className={`flex items-center text-xs ${summary.expenseVariancePercent > 0 ? "text-red-600" : "text-green-600"}`}>
               {summary.expenseVariancePercent > 0 ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />}
               ${Math.abs(summary.expenseVariance / 1000).toFixed(1)}K {summary.expenseVariance > 0 ? "over" : "under"} budget
@@ -886,13 +917,23 @@ export function BudgetActual() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Net Variance</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Net Variance
+            </CardTitle>
             <AlertTriangle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${summary.netVariancePercent < 0 ? "text-red-600" : summary.netVariancePercent > 5 ? "text-green-600" : "text-yellow-600"}`}>
-              {summary.netVariancePercent >= 0 ? "+" : ""}{summary.netVariancePercent.toFixed(1)}%
-            </div>
+            <DataDrivenTooltip
+              metric="Net Variance"
+              value={`${summary.netVariancePercent >= 0 ? "+" : ""}${summary.netVariancePercent.toFixed(1)}%`}
+              dataContext={{
+                variance: summary.netVariance,
+                variancePercent: summary.netVariancePercent,
+                budgetedAmount: (summary.netVariancePercent !== 0 ? summary.netVariance / (summary.netVariancePercent / 100) : 0),
+                actualAmount: summary.netVariance + (summary.netVariancePercent !== 0 ? summary.netVariance / (summary.netVariancePercent / 100) : 0)
+              }}
+              className={`text-2xl font-bold ${summary.netVariancePercent < 0 ? "text-red-600" : summary.netVariancePercent > 5 ? "text-green-600" : "text-yellow-600"}`}
+            />
             <div className={`flex items-center text-xs ${summary.netVariancePercent < 0 ? "text-red-600" : summary.netVariancePercent > 5 ? "text-green-600" : "text-yellow-600"}`}>
               {summary.netVariancePercent < 0 ? <TrendingDown className="mr-1 h-3 w-3" /> : <TrendingUp className="mr-1 h-3 w-3" />}
               ${Math.abs(summary.netVariance / 1000).toFixed(1)}K impact

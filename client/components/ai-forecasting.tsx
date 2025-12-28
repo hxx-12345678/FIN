@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Bar } from "recharts"
 import { Brain, TrendingUp, Zap, Download, RefreshCw, AlertTriangle, CheckCircle, Target, ListTodo, Loader2 } from "lucide-react"
 import { MonteCarloForecasting } from "./monte-carlo-forecasting"
+import { FinancialTermTooltip } from "./financial-term-tooltip"
 import { toast } from "sonner"
 import Link from "next/link"
 import { API_BASE_URL } from "@/lib/api-config"
@@ -1493,7 +1494,10 @@ Use the model run data to provide specific, data-driven insights about the forec
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">Forecast Accuracy</p>
+                    <p className="text-sm font-medium text-muted-foreground flex items-center">
+                      Forecast Accuracy
+                      <FinancialTermTooltip term="Forecast Confidence" definition="The accuracy of the forecast model based on historical backtesting." formula="1 - (Mean Absolute Percentage Error)" />
+                    </p>
                     <p className="text-2xl font-bold text-blue-600">
                       {latestRun?.summaryJson?.kpis?.profitMargin 
                         ? `${latestRun.summaryJson.kpis.profitMargin.toFixed(1)}%`
@@ -1510,7 +1514,10 @@ Use the model run data to provide specific, data-driven insights about the forec
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">Confidence Level</p>
+                    <p className="text-sm font-medium text-muted-foreground flex items-center">
+                      Confidence Level
+                      <FinancialTermTooltip term="Forecast Confidence" />
+                    </p>
                     <p className="text-2xl font-bold text-purple-600">
                       {forecastData.length > 0 && forecastData.filter(d => d.confidence).length > 0
                         ? `${Math.round(forecastData.filter(d => d.confidence).reduce((sum, d) => sum + (d.confidence || 0), 0) / forecastData.filter(d => d.confidence).length)}%`

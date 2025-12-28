@@ -35,6 +35,8 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { API_BASE_URL, getAuthToken, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
+import { FinancialTermTooltip } from "./financial-term-tooltip"
+import { DataDrivenTooltip } from "./data-driven-tooltip"
 
 interface OverviewData {
   healthScore: number
@@ -390,12 +392,23 @@ export function OverviewDashboard() {
               <CardTitle className="flex items-center gap-2">
                 <CheckCircle className="h-5 w-5 text-green-500" />
                 Financial Health Score
+                <FinancialTermTooltip term="Health Score" />
               </CardTitle>
               <CardDescription>Your startup's financial health based on key metrics</CardDescription>
             </div>
             <div className="text-right">
-              <div className="text-3xl font-bold text-green-600">{overviewData.healthScore}</div>
-              <div className="text-sm text-muted-foreground">
+              <DataDrivenTooltip
+                metric="Health Score"
+                value={overviewData.healthScore.toString()}
+                dataContext={{
+                  healthScore: overviewData.healthScore,
+                  revenueGrowth: overviewData.revenueGrowth,
+                  burnRateChange: overviewData.burnRateChange,
+                  runwayChange: overviewData.runwayChange
+                }}
+                className="text-3xl font-bold text-green-600"
+              />
+              <div className="text-sm text-muted-foreground mt-1">
                 {overviewData.healthScore >= 80 ? "Excellent" : overviewData.healthScore >= 60 ? "Good" : overviewData.healthScore >= 40 ? "Fair" : "Needs Attention"}
               </div>
             </div>
@@ -438,12 +451,22 @@ export function OverviewDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Monthly Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Monthly Revenue
+            </CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${overviewData.monthlyRevenue.toLocaleString()}</div>
-            <div className={`flex items-center text-xs ${overviewData.revenueGrowth >= 0 ? "text-green-600" : "text-red-600"}`}>
+            <DataDrivenTooltip
+              metric="Monthly Revenue"
+              value={`$${overviewData.monthlyRevenue.toLocaleString()}`}
+              dataContext={{
+                monthlyRevenue: overviewData.monthlyRevenue,
+                revenueGrowth: overviewData.revenueGrowth,
+                previousMonthRevenue: overviewData.monthlyRevenue / (1 + overviewData.revenueGrowth / 100)
+              }}
+            />
+            <div className={`flex items-center text-xs mt-2 ${overviewData.revenueGrowth >= 0 ? "text-green-600" : "text-red-600"}`}>
               {overviewData.revenueGrowth >= 0 ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />}
               {overviewData.revenueGrowth >= 0 ? "+" : ""}{overviewData.revenueGrowth.toFixed(1)}% from last month
             </div>
@@ -452,12 +475,22 @@ export function OverviewDashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Monthly Burn Rate</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Monthly Burn Rate
+            </CardTitle>
             <TrendingDown className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${overviewData.monthlyBurnRate.toLocaleString()}</div>
-            <div className={`flex items-center text-xs ${overviewData.burnRateChange >= 0 ? "text-red-600" : "text-green-600"}`}>
+            <DataDrivenTooltip
+              metric="Monthly Burn Rate"
+              value={`$${overviewData.monthlyBurnRate.toLocaleString()}`}
+              dataContext={{
+                monthlyBurnRate: overviewData.monthlyBurnRate,
+                burnRateChange: overviewData.burnRateChange,
+                previousMonthBurnRate: overviewData.monthlyBurnRate / (1 + overviewData.burnRateChange / 100)
+              }}
+            />
+            <div className={`flex items-center text-xs mt-2 ${overviewData.burnRateChange >= 0 ? "text-red-600" : "text-green-600"}`}>
               {overviewData.burnRateChange >= 0 ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />}
               {overviewData.burnRateChange >= 0 ? "+" : ""}{overviewData.burnRateChange.toFixed(1)}% from last month
             </div>
@@ -466,12 +499,23 @@ export function OverviewDashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Cash Runway</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Cash Runway
+            </CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{overviewData.cashRunway} months</div>
-            <div className={`flex items-center text-xs ${overviewData.runwayChange >= 0 ? "text-green-600" : "text-yellow-600"}`}>
+            <DataDrivenTooltip
+              metric="Cash Runway"
+              value={`${overviewData.cashRunway} months`}
+              dataContext={{
+                cashRunway: overviewData.cashRunway,
+                monthlyBurnRate: overviewData.monthlyBurnRate,
+                currentCash: overviewData.monthlyBurnRate * overviewData.cashRunway,
+                runwayChange: overviewData.runwayChange
+              }}
+            />
+            <div className={`flex items-center text-xs mt-2 ${overviewData.runwayChange >= 0 ? "text-green-600" : "text-yellow-600"}`}>
               {overviewData.runwayChange >= 0 ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />}
               {overviewData.runwayChange >= 0 ? "+" : ""}{overviewData.runwayChange.toFixed(1)} month from last period
             </div>
@@ -480,12 +524,20 @@ export function OverviewDashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Customers</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Active Customers
+            </CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{overviewData.activeCustomers.toLocaleString()}</div>
-            <div className="flex items-center text-xs text-green-600">
+            <DataDrivenTooltip
+              metric="Active Customers"
+              value={overviewData.activeCustomers.toLocaleString()}
+              dataContext={{
+                activeCustomers: overviewData.activeCustomers
+              }}
+            />
+            <div className="flex items-center text-xs text-green-600 mt-2">
               <TrendingUp className="mr-1 h-3 w-3" />
               Growing
             </div>

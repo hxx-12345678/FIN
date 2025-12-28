@@ -39,10 +39,13 @@ import {
   X,
   FileCheck,
   LogOut,
+  Loader2,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { useStagedChanges } from "@/hooks/use-staged-changes"
 import { toast } from "sonner"
+import { SwitchOrganizationDialog } from "@/components/switch-organization-dialog"
+import { API_BASE_URL, getAuthToken } from "@/lib/api-config"
 
 function PendingApprovalsBadge() {
   const { changes } = useStagedChanges("pending")
@@ -194,14 +197,80 @@ const quickAccessItems = [
   },
 ]
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
-
 export function DashboardLayout({ children, activeView, onViewChange, demoMode = false }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const sidebarRef = useRef<HTMLDivElement>(null)
   const mainContentRef = useRef<HTMLDivElement>(null)
+  
+  // User data state
+  const [userData, setUserData] = useState<{
+    id: string
+    name: string | null
+    email: string
+    orgs: Array<{
+      id: string
+      name: string
+      role: string
+      planTier?: string
+    }>
+  } | null>(null)
+  const [loadingUser, setLoadingUser] = useState(true)
+  const [showSwitchOrgDialog, setShowSwitchOrgDialog] = useState(false)
+  const [currentOrgId, setCurrentOrgId] = useState<string | null>(null)
+
+  // Fetch user data
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const token = getAuthToken()
+        if (!token) {
+          setLoadingUser(false)
+          return
+        }
+
+        const response = await fetch(`${API_BASE_URL}/auth/me`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+        })
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            // Token expired, clear and redirect
+            localStorage.removeItem("auth-token")
+            localStorage.removeItem("refresh-token")
+            localStorage.removeItem("orgId")
+            window.location.href = "/"
+            return
+          }
+          throw new Error("Failed to fetch user data")
+        }
+
+        const data = await response.json()
+        setUserData(data)
+        
+        // Set current org from localStorage or first org
+        const storedOrgId = localStorage.getItem("orgId")
+        if (storedOrgId && data.orgs?.some((org: any) => org.id === storedOrgId)) {
+          setCurrentOrgId(storedOrgId)
+        } else if (data.orgs && data.orgs.length > 0) {
+          setCurrentOrgId(data.orgs[0].id)
+          localStorage.setItem("orgId", data.orgs[0].id)
+        }
+      } catch (error) {
+        console.error("Error fetching user data:", error)
+        toast.error("Failed to load user data")
+      } finally {
+        setLoadingUser(false)
+      }
+    }
+
+    fetchUserData()
+  }, [])
 
   useEffect(() => {
     const checkMobile = () => {
@@ -234,6 +303,8 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
 
   const handleNavClick = (key: string) => {
     onViewChange(key)
+    // Update URL hash to maintain component on refresh
+    window.location.hash = `#${key}`
     if (isMobile) {
       setSidebarOpen(false)
     }
@@ -243,10 +314,7 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
     setIsSigningOut(true)
     try {
       // Call backend logout endpoint
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
+      const token = getAuthToken()
 
       if (token) {
         try {
@@ -289,6 +357,44 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
       toast.error("Failed to sign out. Please try again.")
       setIsSigningOut(false)
     }
+  }
+
+  const handleSwitchOrg = () => {
+    setShowSwitchOrgDialog(true)
+  }
+
+  const handleBillingUsage = () => {
+    onViewChange("pricing")
+  }
+
+  const handleAccountSettings = () => {
+    onViewChange("settings")
+  }
+
+  const handleMFA = () => {
+    onViewChange("settings")
+    // Could dispatch event to open MFA tab in settings
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("open-settings-tab", { detail: { tab: "security" } }))
+    }, 100)
+  }
+
+  // Get current organization
+  const currentOrg = userData?.orgs?.find((org) => org.id === currentOrgId)
+  
+  // Get user initials for avatar
+  const getUserInitials = () => {
+    if (userData?.name) {
+      const parts = userData.name.trim().split(/\s+/)
+      if (parts.length >= 2) {
+        return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+      }
+      return userData.name.substring(0, 2).toUpperCase()
+    }
+    if (userData?.email) {
+      return userData.email.substring(0, 2).toUpperCase()
+    }
+    return "U"
   }
 
   return (
@@ -393,54 +499,71 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
           </div>
 
           <div className="border-t p-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="w-full justify-start p-2 h-auto">
-                  <Avatar className="h-8 w-8 shrink-0">
-                    <AvatarImage src="/placeholder.svg?height=32&width=32" />
-                    <AvatarFallback className="bg-gradient-to-br from-blue-600 to-purple-600 text-white">
-                      JD
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="ml-2 flex flex-col items-start">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">John Doe</span>
-                      <Badge variant="secondary" className="text-xs">Admin</Badge>
+            {loadingUser ? (
+              <div className="flex items-center gap-2 p-2">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Loading...</span>
+              </div>
+            ) : userData ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="w-full justify-start p-2 h-auto">
+                    <Avatar className="h-8 w-8 shrink-0">
+                      <AvatarImage src="/placeholder.svg?height=32&width=32" />
+                      <AvatarFallback className="bg-gradient-to-br from-blue-600 to-purple-600 text-white">
+                        {getUserInitials()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="ml-2 flex flex-col items-start min-w-0 flex-1">
+                      <div className="flex items-center gap-2 w-full">
+                        <span className="text-sm font-medium truncate">
+                          {userData.name || userData.email.split("@")[0]}
+                        </span>
+                        {currentOrg && (
+                          <Badge variant="secondary" className="text-xs shrink-0">
+                            {currentOrg.role.charAt(0).toUpperCase() + currentOrg.role.slice(1)}
+                          </Badge>
+                        )}
+                      </div>
+                      <span className="text-xs text-muted-foreground truncate w-full">
+                        {currentOrg?.name || "No organization"}
+                      </span>
                     </div>
-                    <span className="text-xs text-muted-foreground">Startup Founder</span>
-                  </div>
-                  <ChevronDown className="ml-auto h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem>
-                  <Building2 className="mr-2 h-4 w-4" />
-                  Switch Organization
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <CreditCard className="mr-2 h-4 w-4" />
-                  Billing & Usage
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <Shield className="mr-2 h-4 w-4" />
-                  <span>MFA Enabled</span>
-                  <Badge variant="default" className="ml-auto text-xs">Active</Badge>
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Settings className="mr-2 h-4 w-4" />
-                  Account Settings
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="text-red-600" 
-                  onClick={handleSignOut}
-                  disabled={isSigningOut}
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  {isSigningOut ? "Signing out..." : "Sign Out"}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                    <ChevronDown className="ml-auto h-4 w-4 shrink-0" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem onClick={handleSwitchOrg}>
+                    <Building2 className="mr-2 h-4 w-4" />
+                    Switch Organization
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleBillingUsage}>
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    Billing & Usage
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleMFA}>
+                    <Shield className="mr-2 h-4 w-4" />
+                    <span>MFA Enabled</span>
+                    <Badge variant="default" className="ml-auto text-xs">Active</Badge>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleAccountSettings}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    Account Settings
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    className="text-red-600" 
+                    onClick={handleSignOut}
+                    disabled={isSigningOut}
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    {isSigningOut ? "Signing out..." : "Sign Out"}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <div className="text-sm text-muted-foreground p-2">Not logged in</div>
+            )}
           </div>
         </div>
       </div>
@@ -486,6 +609,19 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
 
       {!isMobile && (
         <div className="fixed left-0 top-0 w-2 h-full z-20 cursor-pointer" onMouseEnter={() => setSidebarOpen(true)} />
+      )}
+
+      {userData && (
+        <SwitchOrganizationDialog
+          open={showSwitchOrgDialog}
+          onOpenChange={setShowSwitchOrgDialog}
+          organizations={userData.orgs || []}
+          currentOrgId={currentOrgId}
+          onSwitchComplete={() => {
+            // Refresh user data after switch
+            window.location.reload()
+          }}
+        />
       )}
     </div>
   )

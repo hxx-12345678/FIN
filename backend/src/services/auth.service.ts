@@ -331,5 +331,61 @@ export const authService = {
     // In the future, we could invalidate refresh tokens here if we track them
     return { success: true, message: 'Logged out successfully' };
   },
+
+  switchOrg: async (userId: string, orgId: string) => {
+    // Verify user has access to the organization
+    const role = await prisma.userOrgRole.findUnique({
+      where: {
+        userId_orgId: {
+          userId,
+          orgId,
+        },
+      },
+      include: {
+        org: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!role) {
+      throw new ValidationError('You do not have access to this organization');
+    }
+
+    // Verify the organization exists
+    if (!role.org) {
+      throw new NotFoundError('Organization not found');
+    }
+
+    // Get user for token generation
+    const user = await userRepository.findById(userId);
+    if (!user || !user.isActive) {
+      throw new UnauthorizedError('User not found or inactive');
+    }
+
+    // Generate new tokens with the new orgId
+    const token = generateToken({
+      userId: user.id,
+      email: user.email,
+      orgId: orgId,
+    });
+    const refreshToken = generateRefreshToken({
+      userId: user.id,
+      email: user.email,
+      orgId: orgId,
+    });
+
+    return {
+      token,
+      refreshToken,
+      org: {
+        id: role.org.id,
+        name: role.org.name,
+      },
+    };
+  },
 };
 

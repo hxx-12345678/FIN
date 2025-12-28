@@ -31,7 +31,7 @@ export async function checkUserHasData(orgId: string): Promise<boolean> {
     }
 
     // Check for connected integrations
-    const connectorsResponse = await fetch(`${API_BASE_URL}/orgs/${orgId}/connectors`, {
+    const connectorsResponse = await fetch(`${API_BASE_URL}/connectors/orgs/${orgId}/connectors`, {
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
@@ -39,16 +39,24 @@ export async function checkUserHasData(orgId: string): Promise<boolean> {
       credentials: "include",
     })
 
+    // 404 is expected when no connectors exist - not an error, just means no integrations
     if (connectorsResponse.ok) {
       const connectorsResult = await connectorsResponse.json()
-      if (connectorsResult.ok && connectorsResult.connectors) {
-        const connectedConnectors = connectorsResult.connectors.filter(
-          (c: any) => c.status === "connected" || c.status === "syncing"
+      if (connectorsResult.ok && connectorsResult.data) {
+        // Handle both array and object response formats
+        const connectorsList = Array.isArray(connectorsResult.data) 
+          ? connectorsResult.data 
+          : connectorsResult.data.connectors || []
+        const connectedConnectors = connectorsList.filter(
+          (c: any) => c && (c.status === "connected" || c.status === "syncing")
         )
         if (connectedConnectors.length > 0) {
           return true
         }
       }
+    } else if (connectorsResponse.status === 404) {
+      // No connectors found - this is normal for new users, continue checking other data sources
+      // Don't log this as an error
     }
 
     return false

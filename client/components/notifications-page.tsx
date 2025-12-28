@@ -500,19 +500,17 @@ export function NotificationsPage() {
       </div>
 
       <Tabs defaultValue="notifications" className="space-y-4">
-        <div className="overflow-x-auto">
-          <TabsList className="grid w-full grid-cols-3 min-w-[300px]">
-            <TabsTrigger value="notifications" className="text-xs sm:text-sm">Notifications</TabsTrigger>
-            <TabsTrigger value="rules" className="text-xs sm:text-sm">Alert Rules</TabsTrigger>
-            <TabsTrigger value="channels" className="text-xs sm:text-sm">Channels</TabsTrigger>
-          </TabsList>
-        </div>
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="notifications" className="text-xs sm:text-sm">Notifications</TabsTrigger>
+          <TabsTrigger value="rules" className="text-xs sm:text-sm">Alert Rules</TabsTrigger>
+          <TabsTrigger value="channels" className="text-xs sm:text-sm">Channels</TabsTrigger>
+        </TabsList>
 
-        <TabsContent value="notifications" className="space-y-4 overflow-x-auto overflow-y-visible">
+        <TabsContent value="notifications" className="space-y-4">
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Recent Notifications</CardTitle>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <CardTitle className="text-lg sm:text-xl">Recent Notifications</CardTitle>
                 <Select value={selectedFilter} onValueChange={setSelectedFilter}>
                   <SelectTrigger className="w-full sm:w-40">
                     <SelectValue />
@@ -536,26 +534,26 @@ export function NotificationsPage() {
                   filteredNotifications.map((notification) => (
                     <div
                       key={notification.id}
-                      className={`p-4 border rounded-lg ${
+                      className={`p-3 sm:p-4 border rounded-lg ${
                         !notification.read ? "bg-blue-50 border-blue-200" : "bg-background"
                       }`}
                     >
-                      <div className="flex items-start gap-3">
-                        {getNotificationIcon(notification.type)}
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-1">
-                            <h3 className="font-medium">{notification.title}</h3>
-                            <div className="flex items-center gap-2">
-                              <Badge className={getPriorityColor(notification.priority)}>
+                      <div className="flex flex-col sm:flex-row items-start gap-3">
+                        <div className="flex-shrink-0">{getNotificationIcon(notification.type)}</div>
+                        <div className="flex-1 min-w-0 w-full">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-1">
+                            <h3 className="font-medium text-sm sm:text-base break-words">{notification.title}</h3>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <Badge className={`${getPriorityColor(notification.priority)} text-xs`}>
                                 {notification.priority}
                               </Badge>
-                              <span className="text-xs text-muted-foreground">
+                              <span className="text-xs text-muted-foreground whitespace-nowrap">
                                 {formatTimestamp(notification.timestamp)}
                               </span>
                             </div>
                           </div>
-                          <p className="text-sm text-muted-foreground">{notification.message}</p>
-                          <div className="flex items-center gap-2 mt-2">
+                          <p className="text-sm text-muted-foreground break-words">{notification.message}</p>
+                          <div className="flex flex-wrap items-center gap-2 mt-2">
                             <Badge variant="outline" className="text-xs">
                               {notification.category}
                             </Badge>
@@ -563,6 +561,7 @@ export function NotificationsPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
+                                className="text-xs"
                                 onClick={() => handleMarkAsRead(notification.id)}
                               >
                                 Mark as Read

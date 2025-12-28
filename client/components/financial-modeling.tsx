@@ -26,6 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { generateFinancialModelingTemplate, downloadCSV } from "@/utils/csv-template-generator"
 import { OneClickExportButton } from "./one-click-export-button"
+import { FinancialTermTooltip } from "./financial-term-tooltip"
 import { API_BASE_URL } from "@/lib/api-config"
 
 const defaultFinancialData = [
@@ -2074,10 +2075,30 @@ export function FinancialModeling() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Month</TableHead>
-                        <TableHead className="text-right">Revenue</TableHead>
-                        <TableHead className="text-right">COGS</TableHead>
-                        <TableHead className="text-right">Gross Profit</TableHead>
-                        <TableHead className="text-right">Net Income</TableHead>
+                        <TableHead className="text-right">
+                          <div className="flex items-center justify-end">
+                            Revenue
+                            <FinancialTermTooltip term="Monthly Revenue" />
+                          </div>
+                        </TableHead>
+                        <TableHead className="text-right">
+                          <div className="flex items-center justify-end">
+                            COGS
+                            <FinancialTermTooltip term="Gross Profit" definition="Cost of Goods Sold (COGS) are the direct costs of producing the goods sold by a company." formula="Sum of direct material and labor costs" />
+                          </div>
+                        </TableHead>
+                        <TableHead className="text-right">
+                          <div className="flex items-center justify-end">
+                            Gross Profit
+                            <FinancialTermTooltip term="Gross Profit" />
+                          </div>
+                        </TableHead>
+                        <TableHead className="text-right">
+                          <div className="flex items-center justify-end">
+                            Net Income
+                            <FinancialTermTooltip term="Net Income" />
+                          </div>
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>

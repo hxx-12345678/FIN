@@ -210,30 +210,40 @@ export const settingsService = {
     try {
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        include: { preferences: true },
       });
 
       if (!user) {
         throw new NotFoundError('User not found');
       }
 
-      const appearanceJson = user.preferences?.appearanceJson as any;
+      // Fetch preferences separately to handle missing table gracefully
+      let preferences = null;
+      try {
+        preferences = await prisma.userPreferences.findUnique({
+          where: { userId },
+        });
+      } catch (prefError: any) {
+        // If table doesn't exist or other error, continue without preferences
+        logger.warn(`Could not fetch user preferences: ${prefError.message}`);
+      }
+
+      const appearanceJson = preferences?.appearanceJson ? (preferences.appearanceJson as any) : null;
       
       return {
         id: user.id,
         email: user.email,
         name: user.name || null,
-        phone: user.preferences?.phone || null,
-        jobTitle: user.preferences?.jobTitle || null,
-        bio: user.preferences?.bio || null,
+        phone: preferences?.phone || null,
+        jobTitle: preferences?.jobTitle || null,
+        bio: preferences?.bio || null,
         timezone: appearanceJson?.timezone || 'UTC',
-        avatarUrl: user.preferences?.avatarUrl || null,
+        avatarUrl: preferences?.avatarUrl || null,
         createdAt: user.createdAt,
         lastLogin: user.lastLogin,
         isActive: user.isActive,
       };
     } catch (error: any) {
-      logger.error(`Error getting profile for user ${userId}: ${error.message}`);
+      logger.error(`Error getting profile for user ${userId}: ${error.message}`, { error: error.stack });
       throw error;
     }
   },
@@ -475,24 +485,39 @@ export const settingsService = {
    * Get user appearance preferences
    */
   getAppearance: async (userId: string) => {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: { preferences: true },
-    });
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+      });
 
-    if (!user) {
-      throw new NotFoundError('User not found');
+      if (!user) {
+        throw new NotFoundError('User not found');
+      }
+
+      // Fetch preferences separately to handle missing table gracefully
+      let preferences = null;
+      try {
+        preferences = await prisma.userPreferences.findUnique({
+          where: { userId },
+        });
+      } catch (prefError: any) {
+        // If table doesn't exist or other error, continue without preferences
+        logger.warn(`Could not fetch user preferences: ${prefError.message}`);
+      }
+
+      const appearanceJson = preferences?.appearanceJson ? (preferences.appearanceJson as any) : null;
+
+      return {
+        theme: appearanceJson?.theme || 'light',
+        themeColor: appearanceJson?.themeColor || 'blue',
+        fontSize: appearanceJson?.fontSize || 'medium',
+        dateFormat: appearanceJson?.dateFormat || 'MM/DD/YYYY',
+        animations: appearanceJson?.animations !== undefined ? appearanceJson.animations : true,
+      };
+    } catch (error: any) {
+      logger.error(`Error getting appearance for user ${userId}: ${error.message}`, { error: error.stack });
+      throw error;
     }
-
-    const appearanceJson = user.preferences?.appearanceJson as any;
-
-    return {
-      theme: appearanceJson?.theme || 'light',
-      themeColor: appearanceJson?.themeColor || 'blue',
-      fontSize: appearanceJson?.fontSize || 'medium',
-      dateFormat: appearanceJson?.dateFormat || 'MM/DD/YYYY',
-      animations: appearanceJson?.animations !== undefined ? appearanceJson.animations : true,
-    };
   },
 
   /**
@@ -676,9 +701,15 @@ export const settingsService = {
         throw new ForbiddenError('No access to this organization');
       }
 
-      let localization = await prisma.localizationSettings.findUnique({
-        where: { orgId },
-      });
+      let localization = null;
+      try {
+        localization = await prisma.localizationSettings.findUnique({
+          where: { orgId },
+        });
+      } catch (findError: any) {
+        // If table doesn't exist, log warning and create default response
+        logger.warn(`Could not fetch localization settings: ${findError.message}`);
+      }
 
       if (!localization) {
         const org = await prisma.org.findUnique({ where: { id: orgId } });
@@ -686,21 +717,50 @@ export const settingsService = {
           throw new NotFoundError('Organization not found');
         }
 
-        localization = await prisma.localizationSettings.create({
-          data: {
-            orgId,
+        try {
+          localization = await prisma.localizationSettings.create({
+            data: {
+              orgId,
+              baseCurrency: org.currency || 'USD',
+              displayCurrency: org.currency || 'USD',
+              timezone: org.timezone || 'UTC',
+              language: 'en',
+              dateFormat: 'MM/DD/YYYY',
+              numberFormat: '1,234.56',
+            },
+          });
+        } catch (createError: any) {
+          // If creation fails (e.g., table doesn't exist), return default values
+          logger.warn(`Failed to create localization settings: ${createError.message}`);
+          return {
             baseCurrency: org.currency || 'USD',
             displayCurrency: org.currency || 'USD',
-            timezone: org.timezone || 'UTC',
             language: 'en',
             dateFormat: 'MM/DD/YYYY',
             numberFormat: '1,234.56',
-          },
-        });
+            timezone: org.timezone || 'UTC',
+            autoFxUpdate: true,
+            fxRates: {},
+            gstEnabled: false,
+            tdsEnabled: false,
+            einvoicingEnabled: false,
+            complianceData: {
+              taxLiabilities: [],
+              gstSummary: {
+                totalGstCollected: 0,
+                totalGstPaid: 0,
+                netGstLiability: 0,
+                itcAvailable: 0,
+                nextFilingDate: null,
+              },
+              integrations: [],
+            },
+          };
+        }
       }
 
-      // Get compliance data with proper structure
-      const complianceJson = (localization.complianceJson as any) || {};
+      // Get compliance data with proper structure - handle null/undefined
+      const complianceJson = localization.complianceJson ? (localization.complianceJson as any) : {};
       
       // Ensure compliance data has proper structure for India
       const complianceData = {
@@ -716,22 +776,25 @@ export const settingsService = {
         ...complianceJson,
       };
 
+      // Safely access fxRatesJson
+      const fxRates = localization.fxRatesJson ? (localization.fxRatesJson as Record<string, number>) : {};
+
       return {
-        baseCurrency: localization.baseCurrency,
-        displayCurrency: localization.displayCurrency,
-        language: localization.language,
-        dateFormat: localization.dateFormat,
-        numberFormat: localization.numberFormat,
-        timezone: localization.timezone,
-        autoFxUpdate: localization.autoFxUpdate,
-        fxRates: (localization.fxRatesJson as Record<string, number>) || {},
-        gstEnabled: localization.gstEnabled,
-        tdsEnabled: localization.tdsEnabled,
-        einvoicingEnabled: localization.einvoicingEnabled,
+        baseCurrency: localization.baseCurrency || 'USD',
+        displayCurrency: localization.displayCurrency || 'USD',
+        language: localization.language || 'en',
+        dateFormat: localization.dateFormat || 'MM/DD/YYYY',
+        numberFormat: localization.numberFormat || '1,234.56',
+        timezone: localization.timezone || 'UTC',
+        autoFxUpdate: localization.autoFxUpdate !== undefined ? localization.autoFxUpdate : true,
+        fxRates,
+        gstEnabled: localization.gstEnabled !== undefined ? localization.gstEnabled : false,
+        tdsEnabled: localization.tdsEnabled !== undefined ? localization.tdsEnabled : false,
+        einvoicingEnabled: localization.einvoicingEnabled !== undefined ? localization.einvoicingEnabled : false,
         complianceData,
       };
     } catch (error: any) {
-      logger.error(`Error getting localization for org ${orgId}: ${error.message}`);
+      logger.error(`Error getting localization for org ${orgId}: ${error.message}`, { error: error.stack });
       throw error;
     }
   },

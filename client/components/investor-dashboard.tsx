@@ -22,6 +22,7 @@ import {
 } from "recharts"
 import { TrendingUp, TrendingDown, Target, Share, Download, Eye, MessageSquare, Loader2, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
+import { FinancialTermTooltip } from "./financial-term-tooltip"
 import { API_BASE_URL } from "@/lib/api-config"
 
 interface DashboardData {
@@ -259,7 +260,10 @@ export function InvestorDashboard() {
               <div className="text-3xl font-bold text-green-600">
                 ${(executiveSummary.arr / 1000).toFixed(0)}K
               </div>
-              <div className="text-sm text-muted-foreground">Annual Recurring Revenue</div>
+              <div className="text-sm text-muted-foreground flex items-center justify-center">
+                Annual Recurring Revenue
+                <FinancialTermTooltip term="ARR" />
+              </div>
               <div className={`flex items-center justify-center text-xs mt-1 ${
                 executiveSummary.arrGrowth >= 0 ? "text-green-600" : "text-red-600"
               }`}>
@@ -274,7 +278,10 @@ export function InvestorDashboard() {
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-blue-600">{executiveSummary.activeCustomers}</div>
-              <div className="text-sm text-muted-foreground">Active Customers</div>
+              <div className="text-sm text-muted-foreground flex items-center justify-center">
+                Active Customers
+                <FinancialTermTooltip term="Active Customers" />
+              </div>
               <div className={`flex items-center justify-center text-xs mt-1 ${
                 executiveSummary.customerGrowth >= 0 ? "text-blue-600" : "text-red-600"
               }`}>
@@ -289,7 +296,10 @@ export function InvestorDashboard() {
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-purple-600">{executiveSummary.monthsRunway.toFixed(1)}</div>
-              <div className="text-sm text-muted-foreground">Months Runway</div>
+              <div className="text-sm text-muted-foreground flex items-center justify-center">
+                Months Runway
+                <FinancialTermTooltip term="Cash Runway" />
+              </div>
               <div className={`flex items-center justify-center text-xs mt-1 ${
                 executiveSummary.runwayChange >= 0 ? "text-green-600" : "text-yellow-600"
               }`}>
@@ -304,7 +314,10 @@ export function InvestorDashboard() {
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-orange-600">{executiveSummary.healthScore}</div>
-              <div className="text-sm text-muted-foreground">Health Score</div>
+              <div className="text-sm text-muted-foreground flex items-center justify-center">
+                Health Score
+                <FinancialTermTooltip term="Health Score" />
+              </div>
               <div className={`flex items-center justify-center text-xs mt-1 ${
                 executiveSummary.healthScore >= 80 ? "text-green-600" : 
                 executiveSummary.healthScore >= 60 ? "text-yellow-600" : "text-red-600"
@@ -499,21 +512,30 @@ export function InvestorDashboard() {
               <div className="text-2xl font-bold text-green-600">
                 ${unitEconomics.ltv.toLocaleString()}
               </div>
-              <div className="text-sm text-green-700">Customer LTV</div>
+              <div className="text-sm text-green-700 flex items-center justify-center">
+                Customer LTV
+                <FinancialTermTooltip term="LTV" />
+              </div>
               <div className="text-xs text-muted-foreground mt-1">Lifetime Value</div>
             </div>
             <div className="text-center p-4 rounded-lg bg-blue-50 border border-blue-200">
               <div className="text-2xl font-bold text-blue-600">
                 ${unitEconomics.cac.toLocaleString()}
               </div>
-              <div className="text-sm text-blue-700">Customer CAC</div>
+              <div className="text-sm text-blue-700 flex items-center justify-center">
+                Customer CAC
+                <FinancialTermTooltip term="CAC" />
+              </div>
               <div className="text-xs text-muted-foreground mt-1">Acquisition Cost</div>
             </div>
             <div className="text-center p-4 rounded-lg bg-purple-50 border border-purple-200">
               <div className="text-2xl font-bold text-purple-600">
                 {unitEconomics.ltvCacRatio.toFixed(1)}:1
               </div>
-              <div className="text-sm text-purple-700">LTV:CAC Ratio</div>
+              <div className="text-sm text-purple-700 flex items-center justify-center">
+                LTV:CAC Ratio
+                <FinancialTermTooltip term="LTV:CAC Ratio" />
+              </div>
               <div className="text-xs text-muted-foreground mt-1">
                 {unitEconomics.ltvCacRatio >= 3 ? "Excellent" : unitEconomics.ltvCacRatio >= 1 ? "Good" : "Needs Improvement"}
               </div>
@@ -522,7 +544,10 @@ export function InvestorDashboard() {
               <div className="text-2xl font-bold text-orange-600">
                 {unitEconomics.paybackPeriod.toFixed(1)} months
               </div>
-              <div className="text-sm text-orange-700">Payback Period</div>
+              <div className="text-sm text-orange-700 flex items-center justify-center">
+                Payback Period
+                <FinancialTermTooltip term="Payback Period" />
+              </div>
               <div className="text-xs text-muted-foreground mt-1">Time to recover CAC</div>
             </div>
           </div>

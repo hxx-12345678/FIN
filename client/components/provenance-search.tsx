@@ -184,7 +184,7 @@ export function ProvenanceSearch({ onSelectMetric, metricOverrides, orgId }: Pro
     ]
   }
 
-  const [allMetrics, setAllMetrics] = useState<MetricSearchResult[]>(getDefaultMetrics())
+  const [allMetrics, setAllMetrics] = useState<MetricSearchResult[]>([])
   const [loadingMetrics, setLoadingMetrics] = useState(false)
 
   const fetchMetricsFromAllModels = async () => {
@@ -198,7 +198,8 @@ export function ProvenanceSearch({ onSelectMetric, metricOverrides, orgId }: Pro
         ?.split("=")[1]
 
       if (!token) {
-        setAllMetrics(getDefaultMetrics())
+        const isDemo = localStorage.getItem("finapilot_demo_mode") === "true"
+        setAllMetrics(isDemo ? getDefaultMetrics() : [])
         setLoadingMetrics(false)
         return
       }
@@ -213,14 +214,16 @@ export function ProvenanceSearch({ onSelectMetric, metricOverrides, orgId }: Pro
       })
 
       if (!modelsResponse.ok) {
-        setAllMetrics(getDefaultMetrics())
+        const isDemo = localStorage.getItem("finapilot_demo_mode") === "true"
+        setAllMetrics(isDemo ? getDefaultMetrics() : [])
         setLoadingMetrics(false)
         return
       }
 
       const modelsResult = await modelsResponse.json()
       if (!modelsResult.ok || !modelsResult.models || modelsResult.models.length === 0) {
-        setAllMetrics(getDefaultMetrics())
+        const isDemo = localStorage.getItem("finapilot_demo_mode") === "true"
+        setAllMetrics(isDemo ? getDefaultMetrics() : [])
         setLoadingMetrics(false)
         return
       }
@@ -384,7 +387,8 @@ export function ProvenanceSearch({ onSelectMetric, metricOverrides, orgId }: Pro
       setAllMetrics(uniqueMetrics)
     } catch (error) {
       console.error("Failed to fetch metrics from models:", error)
-      setAllMetrics(getDefaultMetrics())
+      const isDemo = localStorage.getItem("finapilot_demo_mode") === "true"
+      setAllMetrics(isDemo ? getDefaultMetrics() : [])
     } finally {
       setLoadingMetrics(false)
     }
@@ -443,8 +447,9 @@ export function ProvenanceSearch({ onSelectMetric, metricOverrides, orgId }: Pro
     if (orgId) {
       fetchMetricsFromAllModels()
     } else {
-      // Use default hardcoded metrics if no orgId
-      setAllMetrics(getDefaultMetrics())
+      // Use default hardcoded metrics if no orgId and in demo mode
+      const isDemo = localStorage.getItem("finapilot_demo_mode") === "true"
+      setAllMetrics(isDemo ? getDefaultMetrics() : [])
     }
   }, [orgId])
 

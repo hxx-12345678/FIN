@@ -110,10 +110,59 @@ const availableIntegrations: Integration[] = [
     description: "Sync payment data from Stripe",
     supported: true,
   },
+  {
+    id: "slack",
+    name: "Slack",
+    type: "payment",
+    icon: "💬",
+    description: "Get notifications and alerts in Slack",
+    supported: false,
+  },
+  {
+    id: "asana",
+    name: "Asana",
+    type: "payment",
+    icon: "📋",
+    description: "Sync tasks and project data from Asana",
+    supported: false,
+  },
+  {
+    id: "google-calendar",
+    name: "Google Calendar",
+    type: "payment",
+    icon: "📅",
+    description: "Sync calendar events and reminders",
+    supported: false,
+  },
+  {
+    id: "plaid",
+    name: "Plaid",
+    type: "banking",
+    icon: "🏦",
+    description: "Connect bank accounts via Plaid",
+    supported: false,
+  },
+  {
+    id: "cleartax",
+    name: "ClearTax",
+    type: "accounting",
+    icon: "📊",
+    description: "Sync tax and compliance data from ClearTax",
+    supported: false,
+  },
+  {
+    id: "supabase",
+    name: "Supabase",
+    type: "accounting",
+    icon: "🗄️",
+    description: "Connect to Supabase database",
+    supported: false,
+  },
 ]
 
 export function IntegrationsPage() {
-  const [integrations, setIntegrations] = useState<Integration[]>(availableIntegrations)
+  // Ensure integrations always start with availableIntegrations
+  const [integrations, setIntegrations] = useState<Integration[]>(() => availableIntegrations)
   const [connectors, setConnectors] = useState<Connector[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState<Set<string>>(new Set())
@@ -133,22 +182,37 @@ export function IntegrationsPage() {
     if (orgId) {
       fetchConnectors()
       fetchImportHistory()
+      // Check if integration is complete after fetching connectors
+      setTimeout(() => {
+        checkAndMarkIntegrationComplete()
+      }, 1000)
+    } else {
+      // Even without orgId, ensure integrations are shown (already initialized in useState)
+      setLoading(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId])
+  
 
   // Refresh import history when CSV import completes
   useEffect(() => {
-    const handleImportComplete = (event: CustomEvent) => {
+    const handleImportComplete = async (event: CustomEvent) => {
       if (orgId) {
         fetchConnectors()
         fetchImportHistory() // Refresh history
         toast.success(`CSV import completed! Data is now available in Overview, Budget vs Actual, and Financial Modeling.`)
+        // Check if integration is now complete
+        setTimeout(() => {
+          checkAndMarkIntegrationComplete()
+        }, 1000)
       }
     }
 
-    window.addEventListener('csv-import-completed', handleImportComplete as EventListener)
+    window.addEventListener('csv-import-completed', handleImportComplete as unknown as EventListener)
+    window.addEventListener('xlsx-import-completed', handleImportComplete as unknown as EventListener)
     return () => {
-      window.removeEventListener('csv-import-completed', handleImportComplete as EventListener)
+      window.removeEventListener('csv-import-completed', handleImportComplete as unknown as EventListener)
+      window.removeEventListener('xlsx-import-completed', handleImportComplete as unknown as EventListener)
     }
   }, [orgId])
 
@@ -279,8 +343,9 @@ export function IntegrationsPage() {
         // Handle 404 (no connectors) gracefully
         if (response.status === 404) {
           setConnectors([])
-          setIntegrations((prev) =>
-            prev.map((integration) => ({
+          // Always use availableIntegrations as base
+          setIntegrations(
+            availableIntegrations.map((integration) => ({
               ...integration,
               connector: undefined,
             }))
@@ -311,20 +376,19 @@ export function IntegrationsPage() {
       // Always set connectors (even if empty)
       setConnectors(connectorsList)
       
-      // Map connectors to integrations safely
-      setIntegrations((prev) =>
-        prev.map((integration) => {
-          // Safely find connector
-          const connector = Array.isArray(connectorsList) 
-            ? connectorsList.find((c: Connector) => c && c.type === integration.id)
-            : undefined
-          
-          return {
-            ...integration,
-            connector: connector || undefined,
-          }
-        })
-      )
+      // Map connectors to integrations - always use availableIntegrations as base
+      const mappedIntegrations = availableIntegrations.map((integration) => {
+        // Safely find connector
+        const connector = Array.isArray(connectorsList) 
+          ? connectorsList.find((c: Connector) => c && c.type === integration.id)
+          : undefined
+        
+        return {
+          ...integration,
+          connector: connector || undefined,
+        }
+      })
+      setIntegrations(mappedIntegrations)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to load connectors"
       console.error("Error fetching connectors:", err)
@@ -339,9 +403,10 @@ export function IntegrationsPage() {
         (err instanceof TypeError && err.message.includes("fetch"))
       
       // On error, still set empty arrays to prevent undefined errors
+      // Always use availableIntegrations as base - never rely on prev state
       setConnectors([])
-      setIntegrations((prev) =>
-        prev.map((integration) => ({
+      setIntegrations(
+        availableIntegrations.map((integration) => ({
           ...integration,
           connector: undefined,
         }))
@@ -405,7 +470,7 @@ export function IntegrationsPage() {
 
       const result = await response.json()
       if (result.ok && result.data?.authUrl) {
-        // Redirect to OAuth provider
+        // Redirect to OAuth provider - integration will be marked complete when user returns
         window.location.href = result.data.authUrl
       } else {
         throw new Error("Invalid OAuth response")
@@ -484,6 +549,8 @@ export function IntegrationsPage() {
         })
         toast.success("Sync completed successfully")
         fetchConnectors() // Refresh connectors
+        // Check if user has completed integration and mark as complete
+        checkAndMarkIntegrationComplete()
       }, 3000)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to sync"
@@ -591,6 +658,20 @@ export function IntegrationsPage() {
 
   const connectedCount = integrations.filter((i) => i.connector?.status === "connected").length
   const totalConnectors = connectors.length
+
+  // Check if integration is complete and mark it
+  const checkAndMarkIntegrationComplete = async () => {
+    const modeSelected = localStorage.getItem("finapilot_mode_selected")
+    if (modeSelected === "pending_integration" && orgId) {
+      const { checkUserHasData } = await import("@/lib/user-data-check")
+      const hasData = await checkUserHasData(orgId)
+      if (hasData) {
+        localStorage.setItem("finapilot_mode_selected", "true")
+        // Dispatch event to refresh banners
+        window.dispatchEvent(new CustomEvent('integration-completed'))
+      }
+    }
+  }
 
   return (
     <div className="space-y-6 p-4 md:p-6">
@@ -916,13 +997,13 @@ export function IntegrationsPage() {
         <h2 className="text-xl font-semibold mb-4">Available Integrations</h2>
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
+            {Array.from({ length: availableIntegrations.length }, (_, i) => i + 1).map((i) => (
               <Skeleton key={i} className="h-32 w-full" />
             ))}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {integrations.map((integration) => {
+            {(integrations.length > 0 ? integrations : availableIntegrations).map((integration) => {
               const connector = integration.connector
               const isConnected = connector?.status === "connected"
               const isSyncing = syncing.has(connector?.id || "")

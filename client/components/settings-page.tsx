@@ -423,37 +423,37 @@ export function SettingsPage() {
         errors.push("Organization: Network error")
       }
       
-      // Save appearance - COMMENTED OUT
-      // try {
-      //   const response = await fetch(`${API_BASE_URL}/users/appearance`, {
-      //     method: "PUT",
-      //     headers: getAuthHeaders(),
-      //     credentials: "include",
-      //     body: JSON.stringify(appearance),
-      //   })
-      //   if (!response.ok) {
-      //     const error = await response.json()
-      //     errors.push(`Appearance: ${error.error?.message || "Failed to save"}`)
-      //   }
-      // } catch (error) {
-      //   errors.push("Appearance: Network error")
-      // }
+      // Save appearance
+      try {
+        const response = await fetch(`${API_BASE_URL}/users/appearance`, {
+          method: "PUT",
+          headers: getAuthHeaders(),
+          credentials: "include",
+          body: JSON.stringify(appearance),
+        })
+        if (!response.ok) {
+          const error = await response.json()
+          errors.push(`Appearance: ${error.error?.message || "Failed to save"}`)
+        }
+      } catch (error) {
+        errors.push("Appearance: Network error")
+      }
       
-      // Save notification preferences - COMMENTED OUT
-      // try {
-      //   const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/notifications/preferences`, {
-      //     method: "PUT",
-      //     headers: getAuthHeaders(),
-      //     credentials: "include",
-      //     body: JSON.stringify(notificationPrefs),
-      //   })
-      //   if (!response.ok) {
-      //     const error = await response.json()
-      //     errors.push(`Notifications: ${error.error?.message || "Failed to save"}`)
-      //   }
-      // } catch (error) {
-      //   errors.push("Notifications: Network error")
-      // }
+      // Save notification preferences
+      try {
+        const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/notifications/preferences`, {
+          method: "PUT",
+          headers: getAuthHeaders(),
+          credentials: "include",
+          body: JSON.stringify(notificationPrefs),
+        })
+        if (!response.ok) {
+          const error = await response.json()
+          errors.push(`Notifications: ${error.error?.message || "Failed to save"}`)
+        }
+      } catch (error) {
+        errors.push("Notifications: Network error")
+      }
       
       // Note: Localization is saved separately via LocalizationSettings component's own Save button
       
@@ -461,9 +461,17 @@ export function SettingsPage() {
         toast.error(`Some settings failed to save: ${errors.join(", ")}`)
       } else {
         toast.success("All settings saved successfully")
-        setHasChanges(false)
         // Refresh data to ensure UI is in sync
         await fetchAllData()
+        // Reset initial values after save
+        setInitialValues({
+          profile: { ...profile },
+          organization: { ...organization },
+          appearance: { ...appearance },
+          notificationPrefs: { ...notificationPrefs },
+          localization: { ...localization },
+        })
+        setHasChanges(false)
       }
     } catch (error) {
       toast.error("Failed to save settings")
@@ -565,10 +573,44 @@ export function SettingsPage() {
     }
   }
 
-  // Track changes
+  // Track initial values to compare changes
+  const [initialValues, setInitialValues] = useState<{
+    profile: typeof profile
+    organization: typeof organization
+    appearance: typeof appearance
+    notificationPrefs: typeof notificationPrefs
+    localization: typeof localization
+  } | null>(null)
+
+  // Set initial values after data is loaded
   useEffect(() => {
-    setHasChanges(true)
-  }, [profile, organization, appearance, notificationPrefs, localization])
+    if (!loading && initialValues === null) {
+      setInitialValues({
+        profile: { ...profile },
+        organization: { ...organization },
+        appearance: { ...appearance },
+        notificationPrefs: { ...notificationPrefs },
+        localization: { ...localization },
+      })
+      setHasChanges(false)
+    }
+  }, [loading, profile, organization, appearance, notificationPrefs, localization, initialValues])
+
+  // Track changes by comparing current values with initial values
+  useEffect(() => {
+    if (initialValues === null) {
+      setHasChanges(false)
+      return
+    }
+
+    const hasProfileChanges = JSON.stringify(profile) !== JSON.stringify(initialValues.profile)
+    const hasOrgChanges = JSON.stringify(organization) !== JSON.stringify(initialValues.organization)
+    const hasAppearanceChanges = JSON.stringify(appearance) !== JSON.stringify(initialValues.appearance)
+    const hasNotificationChanges = JSON.stringify(notificationPrefs) !== JSON.stringify(initialValues.notificationPrefs)
+    const hasLocalizationChanges = JSON.stringify(localization) !== JSON.stringify(initialValues.localization)
+
+    setHasChanges(hasProfileChanges || hasOrgChanges || hasAppearanceChanges || hasNotificationChanges || hasLocalizationChanges)
+  }, [profile, organization, appearance, notificationPrefs, localization, initialValues])
 
   if (loading) {
     return (
