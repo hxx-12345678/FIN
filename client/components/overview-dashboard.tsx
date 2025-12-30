@@ -297,7 +297,7 @@ export function OverviewDashboard() {
   const { chartData: paginatedRevenueData, hasMore: hasMoreRevenue, loadMore: loadMoreRevenue, initializeData: initRevenue } = useChartPagination({
     defaultMonths: 36,
     onLoadMore: async (startDate, endDate) => {
-      const revenueData = data?.revenueData || defaultRevenueData
+      const revenueData = data?.revenueData || []
       return revenueData.filter((item) => {
         const itemDate = new Date(`${item.month} 1, 2024`)
         return itemDate >= startDate && itemDate < endDate
@@ -309,7 +309,7 @@ export function OverviewDashboard() {
     if (data?.revenueData) {
       initRevenue(data.revenueData)
     } else {
-      initRevenue(defaultRevenueData)
+      initRevenue([])
     }
   }, [data, initRevenue])
 
@@ -344,18 +344,24 @@ export function OverviewDashboard() {
   }
 
   const overviewData = data || {
-    healthScore: 82,
-    monthlyRevenue: 67000,
-    monthlyBurnRate: 44000,
-    cashRunway: 13,
-    activeCustomers: 1247,
-    revenueGrowth: 12.5,
-    burnRateChange: 7.3,
-    runwayChange: -1,
-    revenueData: defaultRevenueData,
-    burnRateData: defaultBurnRateData,
-    expenseBreakdown: defaultExpenseBreakdown,
-    alerts: [],
+    healthScore: 0,
+    monthlyRevenue: 0,
+    monthlyBurnRate: 0,
+    cashRunway: 0,
+    activeCustomers: 0,
+    revenueGrowth: 0,
+    burnRateChange: 0,
+    runwayChange: 0,
+    revenueData: [],
+    burnRateData: [],
+    expenseBreakdown: [],
+    alerts: [
+      {
+        type: "info",
+        title: "No Data Available",
+        message: "Connect an integration or import a CSV to see your financial overview."
+      }
+    ],
   }
 
   const revenueData = overviewData.revenueData
@@ -620,29 +626,35 @@ export function OverviewDashboard() {
             <CardDescription>Current month expense distribution</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
-              <PieChart>
-                <Pie
-                  data={expenseBreakdown}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={(props: any) => {
-                    const name = props.name ?? ''
-                    const percent = props.percent ?? 0
-                    return `${name} ${(percent * 100).toFixed(0)}%`
-                  }}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {expenseBreakdown.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => [`$${value.toLocaleString()}`, ""]} />
-              </PieChart>
-            </ResponsiveContainer>
+            {expenseBreakdown && expenseBreakdown.length > 0 ? (
+              <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
+                <PieChart>
+                  <Pie
+                    data={expenseBreakdown}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={(props: any) => {
+                      const name = props.name ?? ''
+                      const percent = props.percent ?? 0
+                      return `${name} ${(percent * 100).toFixed(0)}%`
+                    }}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {expenseBreakdown.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => [`$${value.toLocaleString()}`, ""]} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground text-sm px-4 text-center">
+                No expense data available. Promote transactions to the ledger to see breakdown.
+              </div>
+            )}
           </CardContent>
         </Card>
 

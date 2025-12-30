@@ -404,6 +404,7 @@ def handle_model_run(job_id: str, org_id: str, object_id: str, logs: dict):
                 SELECT id, date, amount, category
                 FROM raw_transactions
                 WHERE "orgId" = %s
+                  AND is_duplicate = false
                 ORDER BY date DESC
                 LIMIT 1000
             """, (org_id,))

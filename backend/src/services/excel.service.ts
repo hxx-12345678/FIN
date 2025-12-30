@@ -159,7 +159,8 @@ export const excelService = {
     userId: string,
     uploadKey: string,
     mappingJson: any,
-    mappingId?: string
+    mappingId?: string,
+    fileHash?: string
   ) => {
     // Verify user has access
     const role = await orgRepository.getUserRole(userId, orgId);
@@ -192,6 +193,19 @@ export const excelService = {
     }
 
     // Create import job
+    const importBatch = await prisma.dataImportBatch.create({
+      data: {
+        orgId,
+        sourceType: 'xlsx',
+        sourceRef: uploadKey,
+        fileHash: fileHash || null,
+        mappingJson: mappingJson as any,
+        status: 'created',
+        createdByUserId: userId,
+      },
+      select: { id: true },
+    });
+
     const importJob = await jobService.createJob({
       jobType: 'xlsx_import',
       orgId,
@@ -200,6 +214,8 @@ export const excelService = {
         uploadKey,
         mappingJson,
         mappingId: savedMappingId,
+        fileHash: fileHash || null,
+        importBatchId: importBatch.id,
         orgId,
       },
       createdByUserId: userId,
@@ -208,6 +224,7 @@ export const excelService = {
     return {
       jobId: importJob.id,
       mappingId: savedMappingId,
+      importBatchId: importBatch.id,
     };
   },
 

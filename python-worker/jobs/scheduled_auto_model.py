@@ -87,6 +87,7 @@ def handle_scheduled_auto_model(job_id: str, org_id: str, object_id: str, logs: 
                 cursor.execute("""
                     SELECT "importedAt" FROM raw_transactions
                     WHERE "orgId" = %s
+                      AND is_duplicate = false
                     ORDER BY "importedAt" DESC
                     LIMIT 1
                 """, (org_id_val,))

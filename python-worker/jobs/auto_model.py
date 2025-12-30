@@ -91,6 +91,7 @@ def handle_auto_model(job_id: str, org_id: str, object_id: str, logs: dict):
                 description
             FROM raw_transactions
             WHERE "orgId" = %s
+              AND is_duplicate = false
             ORDER BY date ASC
         """, (org_id,))
         

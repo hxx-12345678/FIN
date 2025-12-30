@@ -57,7 +57,7 @@ export const csvController = {
       }
 
       const { orgId } = req.params;
-      const { uploadKey, mappings, dateFormat, currency, defaultCategory, initialCash, initialCustomers } = req.body;
+      const { uploadKey, mappings, dateFormat, currency, defaultCategory, initialCash, initialCustomers, fileHash } = req.body;
 
       console.log('Parsed request data:', {
         uploadKey,
@@ -84,7 +84,8 @@ export const csvController = {
         currency,
         defaultCategory,
         initialCash,
-        initialCustomers
+        initialCustomers,
+        fileHash
       );
 
       console.log('✅ csvService.mapCsv completed:', result);

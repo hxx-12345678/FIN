@@ -29,6 +29,7 @@ from jobs.notification import handle_notification_task
 from jobs.auto_model_trigger import handle_auto_model_trigger
 from jobs.scheduled_auto_model import handle_scheduled_auto_model
 from jobs.scheduled_connector_sync import handle_scheduled_connector_sync
+from jobs.connector_sync import handle_connector_sync
 from jobs.alert_check import handle_alert_check
 from jobs.runner import reserve_job, run_job_with_retry, release_stuck_jobs
 
@@ -53,6 +54,8 @@ JOB_HANDLERS = {
     'auto_model_trigger': handle_auto_model_trigger,
     'scheduled_auto_model': handle_scheduled_auto_model,
     'scheduled_connector_sync': handle_scheduled_connector_sync,
+    'connector_sync': handle_connector_sync,
+    'connector_initial_sync': handle_connector_sync,
 }
 
 POLL_INTERVAL = 2  # seconds

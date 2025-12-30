@@ -34,11 +34,13 @@ def handle_scheduled_connector_sync(job_id: str, org_id: str, object_id: str, lo
         
         update_progress(job_id, 10, {'status': 'checking_connectors'})
         
-        # Get all connectors with auto-sync enabled
+        # Get all connected connectors with auto-sync enabled
+        # Note: some columns are camelCase (orgId), others are snake_case (mapped by Prisma)
         cursor.execute("""
-            SELECT id, "orgId", type, "lastSyncedAt", "syncFrequencyHours", "autoSyncEnabled"
+            SELECT id, "orgId", type, last_synced_at, sync_frequency_hours, auto_sync_enabled
             FROM connectors
-            WHERE "autoSyncEnabled" = true
+            WHERE auto_sync_enabled = true
+              AND status = 'connected'
         """)
         
         connectors = cursor.fetchall()
@@ -77,8 +79,8 @@ def handle_scheduled_connector_sync(job_id: str, org_id: str, object_id: str, lo
                     # Check if there's already a running sync job for this connector
                     cursor.execute("""
                         SELECT id FROM jobs
-                        WHERE "jobType" = 'connector_sync'
-                        AND "objectId" = %s
+                        WHERE job_type = 'connector_sync'
+                        AND object_id = %s
                         AND status IN ('queued', 'running')
                         LIMIT 1
                     """, (connector_id,))

@@ -21,6 +21,8 @@ import { PricingPage } from "@/components/pricing-page"
 import { SettingsPage } from "@/components/settings-page"
 import { OnboardingPage } from "@/components/onboarding-page"
 import { CollaborationPage } from "@/components/collaboration-page"
+import { ApprovalManagement } from "@/components/approval-management"
+import { SemanticLedger } from "@/components/semantic-ledger"
 import { DemoModeOnboarding } from "@/components/demo-mode-onboarding"
 import { DemoModeBanner } from "@/components/demo-mode-banner"
 import { UpgradeToRealModal } from "@/components/upgrade-to-real-modal"
@@ -51,7 +53,8 @@ export default function HomePage() {
       "overview", "modeling", "budget-actual", "scenarios", "simulations",
       "forecasting", "assistant", "reports", "board-reporting", "investor",
       "users", "integrations", "notifications", "compliance", "pricing",
-      "settings", "onboarding", "collaboration", "job-queue", "export-queue"
+      "settings", "onboarding", "collaboration", "job-queue", "export-queue",
+      "approvals", "ledger"
     ]
     
     // If user has auth token, NEVER show landing page
@@ -363,6 +366,10 @@ export default function HomePage() {
           return <OnboardingPage />
         case "collaboration":
           return <CollaborationPage />
+        case "approvals":
+          return <ApprovalManagement />
+        case "ledger":
+          return <SemanticLedger />
         case "job-queue":
           return <JobQueue />
         case "export-queue":

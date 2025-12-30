@@ -116,10 +116,33 @@ export const runwayCalculationService = {
       }
     }
     
-    // Priority 2: Calculate from transactions
+    // Priority 2: Check Financial Ledger for cash balance (most accurate for promoted data)
+    // Look for cash-related account codes (case-insensitive approach)
+    const allLedgerEntries = await prisma.financialLedger.findMany({
+      where: {
+        orgId,
+      },
+      orderBy: { transactionDate: 'desc' },
+      take: 1000
+    });
+
+    let cashBalance = 0;
+    // Filter for cash-related entries (case-insensitive)
+    const cashEntries = allLedgerEntries.filter(entry => {
+      const code = (entry.accountCode || '').toUpperCase();
+      return code === 'CASH' || code === 'BANK' || code.startsWith('CASH') || code.startsWith('BANK');
+    });
+    
+    if (cashEntries.length > 0) {
+      // Sum all cash entries
+      cashBalance = cashEntries.reduce((sum, entry) => sum + Number(entry.amount), 0);
+    }
+
+    // Priority 3: Calculate from transactions if no ledger cash balance
     const transactions = await prisma.rawTransaction.findMany({
       where: {
         orgId,
+        isDuplicate: false,
       },
       orderBy: {
         date: 'desc',
@@ -150,18 +173,20 @@ export const runwayCalculationService = {
       const monthlyExpenses = totalExpenses / months;
       const monthlyBurnRate = monthlyExpenses - monthlyRevenue;
       
-      // Estimate cash balance from transactions (sum of all positive transactions)
-      const totalCash = transactions
-        .filter(t => Number(t.amount) > 0)
-        .reduce((sum, t) => sum + Number(t.amount), 0);
+      // If no cash balance from ledger, estimate from transactions
+      if (cashBalance === 0) {
+        cashBalance = transactions
+          .filter(t => Number(t.amount) > 0)
+          .reduce((sum, t) => sum + Number(t.amount), 0);
+      }
       
-      if (monthlyBurnRate > 0 && totalCash > 0) {
-        const calculatedRunway = totalCash / monthlyBurnRate;
+      if (monthlyBurnRate > 0 && cashBalance > 0) {
+        const calculatedRunway = cashBalance / monthlyBurnRate;
         return {
           runwayMonths: calculatedRunway,
-          cashBalance: totalCash,
+          cashBalance,
           monthlyBurnRate,
-          source: 'transactions',
+          source: cashBalance > 0 ? 'transactions' : 'calculated',
           confidence: 'medium',
         };
       }

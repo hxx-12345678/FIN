@@ -381,6 +381,7 @@ export const realtimeSimulationService = {
       const transactions = await prisma.rawTransaction.findMany({
         where: {
           orgId,
+          isDuplicate: false,
         },
         orderBy: {
           date: 'desc',
@@ -444,7 +445,7 @@ export const realtimeSimulationService = {
         where: {
           orgId,
           jobType: 'csv_import',
-          status: 'done',
+          status: { in: ['done', 'completed'] },
         },
         orderBy: {
           createdAt: 'desc',
@@ -472,6 +473,47 @@ export const realtimeSimulationService = {
       expenses: expenses || 49000,
       cashBalance: cashBalance || 570000,
     };
+  },
+
+  /**
+   * Sensitivity Analysis: Calculate how changes in key drivers impact runway.
+   * Addresses Pain Point 6 (Probabilistic simulations without spreadsheets).
+   */
+  calculateSensitivity: async (orgId: string, params: SimulationParams): Promise<any> => {
+    const initialValues = await realtimeSimulationService.getInitialValuesFromModel(orgId);
+    
+    const drivers = [
+      { name: 'Growth Rate', key: 'monthlyGrowthRate' as keyof SimulationParams, variations: [-2, -1, 1, 2] },
+      { name: 'Churn Rate', key: 'churnRate' as keyof SimulationParams, variations: [-1, -0.5, 0.5, 1] },
+      { name: 'CAC', key: 'customerAcquisitionCost' as keyof SimulationParams, variations: [-20, -10, 10, 20] },
+    ];
+
+    const sensitivityResults: any = {};
+
+    for (const driver of drivers) {
+      const impacts = driver.variations.map(v => {
+        const modifiedParams = { ...params, [driver.key]: (params as any)[driver.key] + v };
+        const results = realtimeSimulationService.generateSimulation(
+          modifiedParams,
+          initialValues.customers,
+          initialValues.revenue,
+          initialValues.expenses,
+          initialValues.cashBalance
+        );
+        
+        // Final runway in 12 months
+        const finalRunway = results[results.length - 1].runway;
+        return {
+          variation: v,
+          runway: finalRunway,
+          delta: finalRunway - (results[0].runway || 0)
+        };
+      });
+      
+      sensitivityResults[driver.name] = impacts;
+    }
+
+    return sensitivityResults;
   },
 };
 

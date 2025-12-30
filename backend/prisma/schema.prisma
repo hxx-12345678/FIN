@@ -20,23 +20,25 @@ model User {
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   lastLogin    DateTime? @map("last_login") @db.Timestamptz(6)
 
-  roles              UserOrgRole[]
-  prompts            Prompt[]
-  exports            Export[]          @relation("export_createdBy")
-  auditLogs          AuditLog[]        @relation("audit_actor")
-  models             Model[]           @relation("model_createdBy")
-  shareTokens        ShareToken[]      @relation("shareToken_createdBy")
-  invitations        InvitationToken[] @relation("invitation_createdBy")
-  alertRules         AlertRule[]       @relation("alert_createdBy")
-  aiCFOPlans         AICFOPlan[]       @relation("plan_createdBy")
-  orgSettingsUpdated OrgSettings[]     @relation("settings_updatedBy")
-  budgetsCreated     Budget[]          @relation("budget_createdBy")
-  excelMappings      ExcelMapping[]    @relation("excelMapping_createdBy")
-  realtimeSimulations RealtimeSimulation[]
-  boardReportSchedulesCreated BoardReportSchedule[] @relation("boardSchedule_createdBy")
-  preferences        UserPreferences?
-  reportApprovals    ReportApprovalHistory[]
-  usageRecords       UserUsage[]
+  roles                       UserOrgRole[]
+  prompts                     Prompt[]
+  exports                     Export[]                @relation("export_createdBy")
+  auditLogs                   AuditLog[]              @relation("audit_actor")
+  models                      Model[]                 @relation("model_createdBy")
+  shareTokens                 ShareToken[]            @relation("shareToken_createdBy")
+  invitations                 InvitationToken[]       @relation("invitation_createdBy")
+  alertRules                  AlertRule[]             @relation("alert_createdBy")
+  aiCFOPlans                  AICFOPlan[]             @relation("plan_createdBy")
+  orgSettingsUpdated          OrgSettings[]           @relation("settings_updatedBy")
+  budgetsCreated              Budget[]                @relation("budget_createdBy")
+  excelMappings               ExcelMapping[]          @relation("excelMapping_createdBy")
+  realtimeSimulations         RealtimeSimulation[]
+  boardReportSchedulesCreated BoardReportSchedule[]   @relation("boardSchedule_createdBy")
+  preferences                 UserPreferences?
+  reportApprovals             ReportApprovalHistory[]
+  usageRecords                UserUsage[]
+  approvalRequestsRequested   ApprovalRequest[]       @relation("approval_requester")
+  approvalRequestsApproved    ApprovalRequest[]       @relation("approval_approver")
 
   @@map("users")
 }
@@ -50,35 +52,38 @@ model Org {
   dataRegion String   @default("global") @map("data_region")
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  roles            UserOrgRole[]
-  connectors       Connector[]
-  rawTransactions  RawTransaction[]
-  chartOfAccounts  ChartOfAccount[]
-  models           Model[]
-  modelRuns        ModelRun[]
-  monteCarloJobs   MonteCarloJob[]
-  prompts          Prompt[]
-  provenance       ProvenanceEntry[]
-  exports          Export[]
-  jobs             Job[]
-  auditLogs        AuditLog[]
-  shareTokens      ShareToken[]
-  invitationTokens InvitationToken[]
-  billingUsage     BillingUsage[]
-  alertRules       AlertRule[]
-  aiCFOPlans       AICFOPlan[]
-  settings         OrgSettings?
-  budgets          Budget[]
-  excelSyncs       ExcelSync[]
-  excelMappings    ExcelMapping[]
-  quota            OrgQuota?
-  realtimeSimulations RealtimeSimulation[]
+  roles                UserOrgRole[]
+  connectors           Connector[]
+  rawTransactions      RawTransaction[]
+  chartOfAccounts      ChartOfAccount[]
+  models               Model[]
+  modelRuns            ModelRun[]
+  monteCarloJobs       MonteCarloJob[]
+  prompts              Prompt[]
+  provenance           ProvenanceEntry[]
+  exports              Export[]
+  jobs                 Job[]
+  auditLogs            AuditLog[]
+  shareTokens          ShareToken[]
+  invitationTokens     InvitationToken[]
+  billingUsage         BillingUsage[]
+  alertRules           AlertRule[]
+  aiCFOPlans           AICFOPlan[]
+  settings             OrgSettings?
+  budgets              Budget[]
+  excelSyncs           ExcelSync[]
+  excelMappings        ExcelMapping[]
+  quota                OrgQuota?
+  realtimeSimulations  RealtimeSimulation[]
   boardReportSchedules BoardReportSchedule[]
-  notifications    Notification[]
+  notifications        Notification[]
   notificationChannels NotificationChannel[]
-  details         OrgDetails?
+  details              OrgDetails?
   localizationSettings LocalizationSettings?
-  usageRecords    UserUsage[]
+  usageRecords         UserUsage[]
+  dataImportBatches    DataImportBatch[]
+  financialLedger      FinancialLedger[]
+  approvalRequests     ApprovalRequest[]
 
   @@map("orgs")
 }
@@ -123,25 +128,51 @@ model Connector {
 }
 
 model RawTransaction {
-  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  org         Org        @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  orgId       String     @db.Uuid
-  connector   Connector? @relation(fields: [connectorId], references: [id], onDelete: SetNull)
-  connectorId String?    @db.Uuid
-  sourceId    String?    @map("source_id")
-  date        DateTime   @db.Date
-  amount      Decimal    @db.Decimal(20, 4)
-  currency    String     @default("USD")
-  category    String?
-  description String?
-  rawPayload  Json?      @map("raw_payload")
-  importedAt  DateTime   @default(now()) @map("imported_at") @db.Timestamptz(6)
+  id            String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org           Org              @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId         String           @db.Uuid
+  connector     Connector?       @relation(fields: [connectorId], references: [id], onDelete: SetNull)
+  connectorId   String?          @db.Uuid
+  importBatch   DataImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  importBatchId String?          @map("import_batch_id") @db.Uuid
+  sourceId      String?          @map("source_id")
+  date          DateTime         @db.Date
+  amount        Decimal          @db.Decimal(20, 4)
+  currency      String           @default("USD")
+  category      String?
+  description   String?
+  rawPayload    Json?            @map("raw_payload")
+  isDuplicate   Boolean          @default(false) @map("is_duplicate")
+  importedAt    DateTime         @default(now()) @map("imported_at") @db.Timestamptz(6)
 
   @@index([orgId])
   @@index([sourceId])
+  @@index([importBatchId])
+  @@index([isDuplicate])
   @@index([date])
   @@index([orgId, date], name: "raw_transactions_org_date_idx")
   @@map("raw_transactions")
+}
+
+model DataImportBatch {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org             Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId           String   @map("org_id") @db.Uuid
+  sourceType      String   @map("source_type") // csv|xlsx|connector
+  sourceRef       String?  @map("source_ref") // uploadKey|fileHash|connectorId
+  fileHash        String?  @map("file_hash")
+  mappingJson     Json?    @map("mapping_json")
+  statsJson       Json?    @map("stats_json") // rowsImported, rowsSkipped, errors
+  status          String   @default("created") // created|running|completed|failed
+  createdByUserId String?  @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  transactions RawTransaction[]
+
+  @@index([orgId])
+  @@index([sourceType])
+  @@index([fileHash])
+  @@map("data_import_batches")
 }
 
 model ChartOfAccount {
@@ -287,7 +318,7 @@ model Export {
   createdById        String?   @db.Uuid
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  
+
   // Approval workflow fields (Abacum feature)
   approvalStatus     String?   @default("draft") @map("approval_status") // draft|pending_approval|approved|rejected|published
   approvalRequired   Boolean   @default(false) @map("approval_required")
@@ -304,8 +335,8 @@ model Export {
   distributionMethod String?   @map("distribution_method") // email|slack|download|share_link
   scheduledAt        DateTime? @map("scheduled_at") @db.Timestamptz(6) // For scheduled reports
   scheduleFrequency  String?   @map("schedule_frequency") // daily|weekly|monthly|quarterly|yearly
-  
-  approvalHistory    ReportApprovalHistory[]
+
+  approvalHistory ReportApprovalHistory[]
 
   @@index([orgId])
   @@index([status])
@@ -320,7 +351,7 @@ model ReportApprovalHistory {
   exportId   String   @db.Uuid
   approver   User     @relation(fields: [approverId], references: [id], onDelete: Cascade)
   approverId String   @db.Uuid
-  action     String   // approve|reject|request_changes
+  action     String // approve|reject|request_changes
   comment    String?
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
@@ -367,26 +398,26 @@ model Job {
 }
 
 model BoardReportSchedule {
-  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  org               Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  orgId             String   @map("org_id") @db.Uuid
-  name              String
-  template          String
-  format            String
-  frequency         String   @default("monthly")
-  scheduleType      String   @default("single") @map("schedule_type") // single|recurring
-  timezone          String   @default("UTC")
-  distributionMethod String? @map("distribution_method")
-  recipients        String?
-  ccRecipients      String?  @map("cc_recipients")
-  status            String   @default("active") // active|paused|cancelled
-  nextRunAt         DateTime? @map("next_run_at") @db.Timestamptz(6)
-  lastRunAt         DateTime? @map("last_run_at") @db.Timestamptz(6)
-  metadata          Json?
-  createdBy         User?    @relation("boardSchedule_createdBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdById       String?  @map("created_by_id") @db.Uuid
-  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org                Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId              String    @map("org_id") @db.Uuid
+  name               String
+  template           String
+  format             String
+  frequency          String    @default("monthly")
+  scheduleType       String    @default("single") @map("schedule_type") // single|recurring
+  timezone           String    @default("UTC")
+  distributionMethod String?   @map("distribution_method")
+  recipients         String?
+  ccRecipients       String?   @map("cc_recipients")
+  status             String    @default("active") // active|paused|cancelled
+  nextRunAt          DateTime? @map("next_run_at") @db.Timestamptz(6)
+  lastRunAt          DateTime? @map("last_run_at") @db.Timestamptz(6)
+  metadata           Json?
+  createdBy          User?     @relation("boardSchedule_createdBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById        String?   @map("created_by_id") @db.Uuid
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([orgId])
   @@index([status])
@@ -504,19 +535,19 @@ model AICFOPlan {
 }
 
 model Notification {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  org         Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  orgId       String    @db.Uuid
-  userId      String?   @db.Uuid // null for org-wide notifications
-  type        String    // alert|success|warning|info
-  title       String
-  message     String
-  category    String    // financial|growth|reporting|system
-  priority    String    // high|medium|low
-  read        Boolean   @default(false)
-  readAt      DateTime? @map("read_at") @db.Timestamptz(6)
-  metadata    Json?     // Additional data
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org       Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId     String    @db.Uuid
+  userId    String?   @db.Uuid // null for org-wide notifications
+  type      String // alert|success|warning|info
+  title     String
+  message   String
+  category  String // financial|growth|reporting|system
+  priority  String // high|medium|low
+  read      Boolean   @default(false)
+  readAt    DateTime? @map("read_at") @db.Timestamptz(6)
+  metadata  Json? // Additional data
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@index([orgId])
   @@index([userId])
@@ -526,15 +557,15 @@ model Notification {
 }
 
 model NotificationChannel {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  org         Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  orgId       String   @db.Uuid
-  userId      String?  @db.Uuid // null for org-wide channels
-  type        String   // email|slack|sms|in-app
-  enabled     Boolean  @default(true)
-  configJson  Json?    @map("config_json") // webhook URL, phone number, etc.
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org        Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId      String   @db.Uuid
+  userId     String?  @db.Uuid // null for org-wide channels
+  type       String // email|slack|sms|in-app
+  enabled    Boolean  @default(true)
+  configJson Json?    @map("config_json") // webhook URL, phone number, etc.
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@unique([orgId, userId, type], name: "notification_channel_unique")
   @@index([orgId])
@@ -543,35 +574,35 @@ model NotificationChannel {
 }
 
 model OrgSettings {
-  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  org               Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  orgId             String   @unique @db.Uuid
-  dataRetentionDays Int      @default(365) @map("data_retention_days")
-  currency          String   @default("USD")
-  timezone          String   @default("UTC")
-  region            String   @default("global")
-  complianceJson    Json?    @map("compliance_json")
-  securityControlsJson Json? @map("security_controls_json")
-  policiesJson      Json?    @map("policies_json")
-  metaJson          Json?    @map("meta_json") // For storing Slack config, headcount plans, etc.
-  updatedBy         User?    @relation("settings_updatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
-  updatedById       String?  @db.Uuid
-  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org                  Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId                String   @unique @db.Uuid
+  dataRetentionDays    Int      @default(365) @map("data_retention_days")
+  currency             String   @default("USD")
+  timezone             String   @default("UTC")
+  region               String   @default("global")
+  complianceJson       Json?    @map("compliance_json")
+  securityControlsJson Json?    @map("security_controls_json")
+  policiesJson         Json?    @map("policies_json")
+  metaJson             Json?    @map("meta_json") // For storing Slack config, headcount plans, etc.
+  updatedBy            User?    @relation("settings_updatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedById          String?  @db.Uuid
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("org_settings")
 }
 
 model UserPreferences {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId        String   @unique @db.Uuid
-  phone         String?
-  jobTitle      String?
-  bio           String?
-  avatarUrl     String?
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String   @unique @db.Uuid
+  phone          String?
+  jobTitle       String?
+  bio            String?
+  avatarUrl      String?
   appearanceJson Json?
-  createdAt     DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@index([userId])
   @@map("user_preferences")
@@ -595,22 +626,22 @@ model OrgDetails {
 
 model LocalizationSettings {
   id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  org                Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  orgId              String   @unique @db.Uuid
-  baseCurrency       String   @default("USD")
+  org               Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId             String   @unique @db.Uuid
+  baseCurrency      String   @default("USD")
   displayCurrency   String   @default("USD")
-  language           String   @default("en")
-  dateFormat         String   @default("MM/DD/YYYY")
-  numberFormat       String   @default("1,234.56")
-  timezone           String   @default("UTC")
-  autoFxUpdate       Boolean  @default(true)
-  fxRatesJson        Json?
-  gstEnabled         Boolean  @default(false)
-  tdsEnabled         Boolean  @default(false)
-  einvoicingEnabled  Boolean  @default(false)
-  complianceJson     Json?
-  createdAt          DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt          DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  language          String   @default("en")
+  dateFormat        String   @default("MM/DD/YYYY")
+  numberFormat      String   @default("1,234.56")
+  timezone          String   @default("UTC")
+  autoFxUpdate      Boolean  @default(true)
+  fxRatesJson       Json?
+  gstEnabled        Boolean  @default(false)
+  tdsEnabled        Boolean  @default(false)
+  einvoicingEnabled Boolean  @default(false)
+  complianceJson    Json?
+  createdAt         DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@index([orgId])
   @@map("localization_settings")
@@ -695,38 +726,41 @@ model OrgQuota {
 }
 
 model RealtimeSimulation {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  org          Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  orgId        String   @map("org_id") @db.Uuid
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId       String   @map("user_id") @db.Uuid
-  name         String?  @db.VarChar(255)
-  paramsJson   Json     @map("params_json")
-  resultsJson  Json     @map("results_json")
-  currentMonth Int      @default(0) @map("current_month")
-  isRunning    Boolean  @default(false) @map("is_running")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org           Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId         String   @map("org_id") @db.Uuid
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String   @map("user_id") @db.Uuid
+  name          String?  @db.VarChar(255)
+  paramsJson    Json     @map("params_json")
+  resultsJson   Json     @map("results_json")
+  currentMonth  Int      @default(0) @map("current_month")
+  isRunning     Boolean  @default(false) @map("is_running")
+  isSnapshot    Boolean  @default(false) @map("is_snapshot")
+  snapshotToken String?  @unique @map("snapshot_token")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([orgId])
   @@index([userId])
+  @@index([snapshotToken])
   @@index([updatedAt(sort: Desc)])
   @@map("realtime_simulations")
 }
 
 model UserUsage {
-  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  org               Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  orgId             String    @db.Uuid
-  user              User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
-  userId            String?   @db.Uuid
-  simulationRunId   String?   @map("simulation_run_id") @db.Uuid // MonteCarloJob.id or ModelRun.id
-  monteCarloJobId   String?   @map("monte_carlo_job_id") @db.Uuid // Specific Monte Carlo job
-  creditsUsed       Int       @default(0) @map("credits_used")
-  creditType        String    @default("simulation") @map("credit_type") // simulation|export|alert
-  description       String?
-  metadata          Json?     // Additional data (numSimulations, etc.)
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org             Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId           String   @db.Uuid
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId          String?  @db.Uuid
+  simulationRunId String?  @map("simulation_run_id") @db.Uuid // MonteCarloJob.id or ModelRun.id
+  monteCarloJobId String?  @map("monte_carlo_job_id") @db.Uuid // Specific Monte Carlo job
+  creditsUsed     Int      @default(0) @map("credits_used")
+  creditType      String   @default("simulation") @map("credit_type") // simulation|export|alert
+  description     String?
+  metadata        Json? // Additional data (numSimulations, etc.)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@index([orgId])
   @@index([userId])
@@ -734,4 +768,52 @@ model UserUsage {
   @@index([simulationRunId])
   @@index([monteCarloJobId])
   @@map("user_usage")
+}
+
+model FinancialLedger {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org              Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId            String   @db.Uuid
+  transactionDate  DateTime @map("transaction_date") @db.Date
+  amount           Decimal  @db.Decimal(20, 4)
+  currency         String   @default("USD")
+  accountCode      String?  @map("account_code")
+  accountName      String?  @map("account_name")
+  category         String?
+  description      String?
+  sourceType       String   @map("source_type") // raw_transaction|manual|adjustment
+  sourceId         String?  @map("source_id") // ID of RawTransaction or adjustment
+  isAdjustment     Boolean  @default(false) @map("is_adjustment")
+  adjustmentReason String?  @map("adjustment_reason")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([orgId])
+  @@index([transactionDate])
+  @@index([accountCode])
+  @@map("financial_ledger")
+}
+
+model ApprovalRequest {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org         Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId       String    @db.Uuid
+  requester   User      @relation("approval_requester", fields: [requesterId], references: [id], onDelete: Cascade)
+  requesterId String    @db.Uuid
+  approver    User?     @relation("approval_approver", fields: [approverId], references: [id], onDelete: SetNull)
+  approverId  String?   @db.Uuid
+  status      String    @default("pending") // pending|approved|rejected|cancelled
+  type        String // model_assumption|budget_change|ledger_adjustment
+  objectType  String    @map("object_type") // Model|Budget|FinancialLedger
+  objectId    String    @map("object_id") @db.Uuid
+  payloadJson Json      @map("payload_json") // The proposed changes
+  comment     String?
+  reviewedAt  DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([orgId])
+  @@index([status])
+  @@index([requesterId])
+  @@map("approval_requests")
 }

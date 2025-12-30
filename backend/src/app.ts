@@ -44,6 +44,7 @@ import formulaAutocompleteRoutes from './routes/formula-autocomplete.routes';
 import slackIntegrationRoutes from './routes/slack-integration.routes';
 import drillDownRoutes from './routes/drill-down.routes';
 import dataTransformationRoutes from './routes/data-transformation.routes';
+import dataImportRoutes from './routes/data-import.routes';
 import headcountPlanningRoutes from './routes/headcount-planning.routes';
 import industryTemplatesRoutes from './routes/industry-templates.routes';
 import quotaRoutes from './routes/quota.routes';
@@ -52,6 +53,9 @@ import csvMappingRoutes from './routes/csv-mapping.routes';
 import onboardingRoutes from './routes/onboarding.routes';
 import pricingRoutes from './routes/pricing.routes';
 import usageRoutes from './routes/usage.routes';
+import decisionEngineRoutes from './routes/decision-engine.routes';
+import approvalRoutes from './routes/approval.routes';
+import semanticLayerRoutes from './routes/semantic-layer.routes';
 
 dotenv.config();
 
@@ -209,6 +213,7 @@ app.use('/api/v1', formulaAutocompleteRoutes);
 app.use('/api/v1', slackIntegrationRoutes);
 app.use('/api/v1', drillDownRoutes);
 app.use('/api/v1', dataTransformationRoutes);
+app.use('/api/v1', dataImportRoutes);
 app.use('/api/v1', headcountPlanningRoutes);
 app.use('/api/v1', industryTemplatesRoutes);
 app.use('/api/v1', quotaRoutes);
@@ -217,6 +222,9 @@ app.use('/api/v1', csvMappingRoutes);
 app.use('/api/v1', onboardingRoutes);
 app.use('/api/v1', pricingRoutes);
 app.use('/api/v1', usageRoutes);
+app.use('/api/v1', decisionEngineRoutes);
+app.use('/api/v1', approvalRoutes);
+app.use('/api/v1', semanticLayerRoutes);
 app.use('/api/v1/debug', debugRoutes);
 
 // 404 handler

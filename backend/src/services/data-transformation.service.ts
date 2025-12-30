@@ -7,6 +7,7 @@
 import prisma from '../config/database';
 import { logger } from '../utils/logger';
 import { ValidationError, NotFoundError, ForbiddenError } from '../utils/errors';
+import { auditService } from './audit.service';
 
 export interface TransformationRule {
   id?: string;
@@ -142,6 +143,29 @@ export const dataTransformationService = {
 
           // Update records for next rule
           records = ruleResult.updatedRecords || records;
+
+          // Persist changes if not dryRun and rule produced DB actions
+          if (!request.dryRun && ruleResult.dbActions) {
+            // Category updates (audit-friendly, idempotent)
+            if (ruleResult.dbActions.setCategories && ruleResult.dbActions.setCategories.length > 0) {
+              await prisma.$transaction(
+                ruleResult.dbActions.setCategories.map(({ id, category }) =>
+                  prisma.rawTransaction.update({
+                    where: { id },
+                    data: { category },
+                  })
+                )
+              );
+            }
+
+            // Mark duplicates (does not delete; makes analytics ignore them)
+            if (ruleResult.dbActions.markDuplicates && ruleResult.dbActions.markDuplicates.length > 0) {
+              await prisma.rawTransaction.updateMany({
+                where: { id: { in: ruleResult.dbActions.markDuplicates } },
+                data: { isDuplicate: true },
+              });
+            }
+          }
         } catch (error: any) {
           logger.error(`Error applying transformation rule ${rule.name}`, error);
           result.errors.push({
@@ -153,8 +177,23 @@ export const dataTransformationService = {
 
       // If not dry run, save transformed data
       if (!request.dryRun && result.success) {
-        // Update transactions in database
-        // For now, just log - in production would update records
+        // Log transformation as an auditable event
+        await auditService.log({
+          actorUserId: userId,
+          orgId: request.orgId,
+          action: 'data_transformation_applied',
+          objectType: 'data',
+          metaJson: {
+            dataSource: request.dataSource,
+            rules: request.rules.map(r => ({ name: r.name, type: r.type, enabled: r.enabled })),
+            summary: result.summary,
+            recordsProcessed: result.recordsProcessed,
+            recordsTransformed: result.recordsTransformed,
+            recordsFailed: result.recordsFailed,
+          },
+        });
+
+        // Update transactions in database was done per-rule above.
         logger.info(`Data transformation completed`, {
           orgId: request.orgId,
           recordsProcessed: result.recordsProcessed,
@@ -197,7 +236,7 @@ export const dataTransformationService = {
       {
         name: 'Remove Duplicates',
         type: 'clean',
-        config: { matchFields: ['description', 'amount', 'date'] },
+        config: { action: 'remove_duplicates', matchFields: ['description', 'amount', 'date'] },
         enabled: true,
       },
       {
@@ -223,6 +262,10 @@ async function applyTransformationRule(
   errors: Array<{ record: any; error: string }>;
   warnings: Array<{ record: any; warning: string }>;
   updatedRecords?: any[];
+  dbActions?: {
+    setCategories?: Array<{ id: string; category: string }>;
+    markDuplicates?: string[];
+  };
 }> {
   const result = {
     transformed: 0,
@@ -230,6 +273,10 @@ async function applyTransformationRule(
     errors: [] as Array<{ record: any; error: string }>,
     warnings: [] as Array<{ record: any; warning: string }>,
     updatedRecords: [] as any[],
+    dbActions: {} as {
+      setCategories?: Array<{ id: string; category: string }>;
+      markDuplicates?: string[];
+    },
   };
 
   switch (rule.type) {
@@ -264,6 +311,7 @@ async function cleanData(
   const cleaned = [...records];
 
   if (rule.config.action === 'categorize_uncategorized') {
+    result.dbActions.setCategories = result.dbActions.setCategories || [];
     cleaned.forEach((record, index) => {
       if (!record.category || record.category.trim() === '') {
         // Try to infer category from description
@@ -271,6 +319,9 @@ async function cleanData(
         if (inferred) {
           cleaned[index].category = inferred;
           result.transformed++;
+          if (record.id) {
+            result.dbActions.setCategories.push({ id: record.id, category: inferred });
+          }
         } else {
           result.warnings.push({
             record: { id: record.id },
@@ -279,21 +330,31 @@ async function cleanData(
         }
       }
     });
-  } else if (rule.config.action === 'remove_duplicates') {
+  } else if (rule.config.action === 'remove_duplicates' || Array.isArray(rule.config.matchFields)) {
     const seen = new Set<string>();
     const unique: any[] = [];
+    result.dbActions.markDuplicates = result.dbActions.markDuplicates || [];
     
     cleaned.forEach(record => {
-      const key = `${record.description}_${record.amount}_${record.date}`;
+      const matchFields: string[] = Array.isArray(rule.config.matchFields) ? rule.config.matchFields : ['description', 'amount', 'date'];
+      const parts = matchFields.map((f) => {
+        const v = (record as any)[f];
+        if (v instanceof Date) return v.toISOString().slice(0, 10);
+        return String(v ?? '').trim().toLowerCase();
+      });
+      const key = parts.join('|');
       if (!seen.has(key)) {
         seen.add(key);
         unique.push(record);
-        result.transformed++;
+        result.transformed++; // treated as "kept"
       } else {
         result.warnings.push({
           record: { id: record.id },
           warning: 'Duplicate removed',
         });
+        if (record.id) {
+          result.dbActions.markDuplicates.push(record.id);
+        }
       }
     });
     

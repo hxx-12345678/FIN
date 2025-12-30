@@ -64,6 +64,7 @@ export const overviewDashboardService = {
     let transactions = await prisma.rawTransaction.findMany({
       where: {
         orgId,
+        isDuplicate: false,
         date: {
           gte: startDate,
           lte: endDate,
@@ -80,6 +81,7 @@ export const overviewDashboardService = {
       transactions = await prisma.rawTransaction.findMany({
         where: {
           orgId,
+          isDuplicate: false,
         },
         orderBy: {
           date: 'desc',
@@ -609,15 +611,9 @@ export const overviewDashboardService = {
       ].filter(item => item.value > 0); // Remove zero values
     }
     
-    // If still empty, use default
+    // If still empty, use empty array (don't provide fake values)
     if (finalExpenseBreakdown.length === 0) {
-      finalExpenseBreakdown = [
-        { name: 'Payroll', value: 180000, color: '#8884d8' },
-        { name: 'Marketing', value: 45000, color: '#82ca9d' },
-        { name: 'Operations', value: 32000, color: '#ffc658' },
-        { name: 'R&D', value: 28000, color: '#ff7300' },
-        { name: 'Other', value: 15000, color: '#00ff88' },
-      ];
+      finalExpenseBreakdown = [];
     }
     
     // Get top vendors from transactions
@@ -672,25 +668,11 @@ export const overviewDashboardService = {
 };
 
 function getDefaultRevenueData() {
-  return [
-    { month: 'Jan', revenue: 45000, forecast: 42000 },
-    { month: 'Feb', revenue: 52000, forecast: 48000 },
-    { month: 'Mar', revenue: 48000, forecast: 51000 },
-    { month: 'Apr', revenue: 61000, forecast: 55000 },
-    { month: 'May', revenue: 55000, forecast: 58000 },
-    { month: 'Jun', revenue: 67000, forecast: 62000 },
-  ];
+  return [];
 }
 
 function getDefaultBurnRateData() {
-  return [
-    { month: 'Jan', burn: 35000, runway: 18 },
-    { month: 'Feb', burn: 38000, runway: 17 },
-    { month: 'Mar', burn: 42000, runway: 16 },
-    { month: 'Apr', burn: 39000, runway: 15 },
-    { month: 'May', burn: 41000, runway: 14 },
-    { month: 'Jun', burn: 44000, runway: 13 },
-  ];
+  return [];
 }
 
 function getDefaultAlerts() {
@@ -698,7 +680,7 @@ function getDefaultAlerts() {
     {
       type: 'info' as const,
       title: 'Welcome',
-      message: 'Connect your accounting system to get real-time financial insights.',
+      message: 'Connect your accounting system or import transactions to get real-time financial insights.',
     },
   ];
 }

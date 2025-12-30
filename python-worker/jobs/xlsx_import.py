@@ -5,7 +5,7 @@ Handles Excel file import with formula preservation
 import json
 import hashlib
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
 import openpyxl
 from openpyxl.cell.cell import Cell
@@ -248,33 +248,19 @@ def handle_xlsx_import(job_id: str, org_id: str, object_id: str, logs: Dict[str,
         s3_key = params.get('s3Key')
         mapping_json = params.get('mappingJson', {})
         mapping_id = params.get('mappingId')
+        file_hash = params.get('fileHash') or ''
+        import_batch_id = params.get('importBatchId')
         
         logger.info(f"Starting XLSX import for job {job_id}, org {org_id}")
         
         # Parse XLSX
         parsed_data = parse_xlsx_file('', s3_key=s3_key)
         
-        # Get connector for Excel
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        cursor.execute("""
-            SELECT id FROM connectors
-            WHERE org_id = %s AND type = 'excel'
-            LIMIT 1
-        """, (org_id,))
-        
-        connector_result = cursor.fetchone()
-        connector_id = connector_result[0] if connector_result else None
-        
-        if not connector_id:
-            # Create Excel connector
-            cursor.execute("""
-                INSERT INTO connectors (org_id, type, status, created_at)
-                VALUES (%s, 'excel', 'connected', NOW())
-                RETURNING id
-            """, (org_id,))
-            connector_id = cursor.fetchone()[0]
+        # Note: There is no dedicated "excel" connector type in this MVP.
+        # We keep connectorId NULL and rely on import_batch_id + provenance for lineage.
+        connector_id = None
         
         # Process each sheet
         transactions_created = 0
@@ -364,9 +350,15 @@ def handle_xlsx_import(job_id: str, org_id: str, object_id: str, logs: Dict[str,
                     continue
                 
                 # Prepare transaction
+                if not source_id_value:
+                    # Deterministic fallback source_id for idempotency
+                    fp = f"{org_id}|{file_hash}|{sheet_name}|{row_index}|{date_value}|{amount_value}|{description_value}|{category_value}"
+                    source_id_value = hashlib.sha256(fp.encode('utf-8')).hexdigest()
+
                 transaction_values.append((
                     org_id,
                     connector_id,
+                    import_batch_id,
                     source_id_value,
                     date_value,
                     amount_value,
@@ -375,6 +367,7 @@ def handle_xlsx_import(job_id: str, org_id: str, object_id: str, logs: Dict[str,
                     description_value,
                     json.dumps(raw_payload) if raw_payload else None,
                     datetime.utcnow(),
+                    False,
                 ))
             
             # Bulk insert transactions
@@ -383,8 +376,9 @@ def handle_xlsx_import(job_id: str, org_id: str, object_id: str, logs: Dict[str,
                     cursor,
                     """
                     INSERT INTO raw_transactions 
-                    (org_id, connector_id, source_id, date, amount, currency, category, description, raw_payload, imported_at)
+                    ("orgId", "connectorId", import_batch_id, source_id, date, amount, currency, category, description, raw_payload, imported_at, is_duplicate)
                     VALUES %s
+                    ON CONFLICT ("orgId", source_id) DO NOTHING
                     """,
                     transaction_values,
                     template=None,
@@ -397,7 +391,7 @@ def handle_xlsx_import(job_id: str, org_id: str, object_id: str, logs: Dict[str,
             INSERT INTO excel_syncs (org_id, file_hash, mapping_id, status, last_synced_at, metadata, created_at, updated_at)
             VALUES (%s, %s, %s, 'completed', NOW(), %s::jsonb, NOW(), NOW())
             ON CONFLICT DO NOTHING
-        """, (org_id, params.get('fileHash'), mapping_id, json.dumps({
+        """, (org_id, file_hash, mapping_id, json.dumps({
             'transactions_created': transactions_created,
             'formulas_detected': parsed_data['formulas_detected'],
             'volatile_formulas': parsed_data['volatile_formulas'],
@@ -407,6 +401,28 @@ def handle_xlsx_import(job_id: str, org_id: str, object_id: str, logs: Dict[str,
         conn.commit()
         
         logger.info(f"XLSX import completed: {transactions_created} transactions created")
+
+        # Update import batch (lineage + stats)
+        if import_batch_id:
+            try:
+                cursor.execute("""
+                    UPDATE data_import_batches
+                    SET status = %s,
+                        stats_json = %s::jsonb
+                    WHERE id = %s
+                """, (
+                    'completed',
+                    json.dumps({
+                        'transactionsCreated': transactions_created,
+                        'formulasDetected': parsed_data.get('formulas_detected', 0),
+                        'volatileFormulas': parsed_data.get('volatile_formulas', 0),
+                        'completedAt': datetime.utcnow().replace(tzinfo=timezone.utc).isoformat(),
+                    }),
+                    import_batch_id,
+                ))
+                conn.commit()
+            except Exception as e:
+                logger.warning(f"Failed to update data_import_batches for {import_batch_id}: {str(e)}")
         
         return {
             'transactions_created': transactions_created,
@@ -418,6 +434,22 @@ def handle_xlsx_import(job_id: str, org_id: str, object_id: str, logs: Dict[str,
         logger.error(f"Error in XLSX import job {job_id}: {str(e)}", exc_info=True)
         if conn:
             conn.rollback()
+        # Mark batch failed if we have one
+        try:
+            if 'import_batch_id' in locals() and import_batch_id and cursor:
+                cursor.execute("""
+                    UPDATE data_import_batches
+                    SET status = %s,
+                        stats_json = %s::jsonb
+                    WHERE id = %s
+                """, (
+                    'failed',
+                    json.dumps({'error': str(e), 'failedAt': datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()}),
+                    import_batch_id,
+                ))
+                conn.commit()
+        except Exception:
+            pass
         raise
     finally:
         if cursor:

@@ -55,7 +55,7 @@ export const excelController = {
       }
 
       const { orgId } = req.params;
-      const { uploadKey, mappingJson, mappingId } = req.body;
+      const { uploadKey, mappingJson, mappingId, fileHash } = req.body;
 
       if (!uploadKey || !mappingJson) {
         throw new ValidationError('uploadKey and mappingJson are required');
@@ -75,7 +75,8 @@ export const excelController = {
         req.user.id,
         uploadKey,
         mappingJson,
-        mappingId
+        mappingId,
+        fileHash
       );
 
       res.status(201).json({

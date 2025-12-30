@@ -24,7 +24,7 @@ import {
   Bar,
   ReferenceLine,
 } from "recharts"
-import { Play, Pause, RotateCcw, Zap, TrendingUp, Users, DollarSign, Activity, Loader2, AlertCircle } from "lucide-react"
+import { Play, Pause, RotateCcw, Zap, TrendingUp, Users, DollarSign, Activity, Loader2, AlertCircle, Share2, ShieldCheck, Calendar } from "lucide-react"
 import { toast } from "sonner"
 import { API_BASE_URL } from "@/lib/api-config"
 
@@ -58,6 +58,84 @@ export function RealtimeSimulations() {
   const [error, setError] = useState<string | null>(null)
   const [orgId, setOrgId] = useState<string | null>(null)
   const [simulationId, setSimulationId] = useState<string | null>(null)
+  const [decisionImpact, setDecisionImpact] = useState<any>(null)
+  const [calculatingImpact, setCalculatingImpact] = useState(false)
+  const [shareUrl, setShareUrl] = useState<string | null>(null)
+  const [creatingSnapshot, setCreatingSnapshot] = useState(false)
+
+  // Fetch decision impact whenever params change
+  useEffect(() => {
+    if (!orgId || loading) return
+
+    const fetchImpact = async () => {
+      setCalculatingImpact(true)
+      try {
+        const token = localStorage.getItem("auth-token") || document.cookie
+          .split("; ")
+          .find((row) => row.startsWith("auth-token="))
+          ?.split("=")[1]
+
+        const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/decision-impact`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            headcountChange: params.teamSize - initialParams.teamSize,
+            marketingSpendChange: params.marketingSpend - initialParams.marketingSpend,
+            revenueChange: (params.pricingTier * params.monthlyGrowthRate) - (initialParams.pricingTier * initialParams.monthlyGrowthRate) // Simplified delta
+          }),
+        })
+
+        if (response.ok) {
+          const result = await response.json()
+          setDecisionImpact(result.data)
+        }
+      } catch (err) {
+        console.error("Impact calculation failed:", err)
+      } finally {
+        setCalculatingImpact(false)
+      }
+    }
+
+    const timer = setTimeout(fetchImpact, 1200) // Debounce
+    return () => clearTimeout(timer)
+  }, [params, orgId, loading])
+
+  const handleShareSnapshot = async () => {
+    if (!orgId) return
+    setCreatingSnapshot(true)
+    try {
+      const token = localStorage.getItem("auth-token") || document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("auth-token="))
+        ?.split("=")[1]
+
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/decision-snapshots`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          params,
+          name: `Board Update - ${new Date().toLocaleDateString()}`,
+          description: "Scenario snapshot for board meeting"
+        }),
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        setShareUrl(result.data.shareUrl)
+        toast.success("Snapshot created! Copy the link below to share with the board.")
+      }
+    } catch (err) {
+      toast.error("Failed to create snapshot.")
+    } finally {
+      setCreatingSnapshot(false)
+    }
+  }
 
   // Generate simulation data based on parameters - ALWAYS uses backend when orgId is available
   const generateSimulationData = async (params: SimulationParams, useBackend: boolean = true) => {
@@ -741,6 +819,10 @@ export function RealtimeSimulations() {
               Saving...
             </Badge>
           )}
+          <Button variant="outline" onClick={handleShareSnapshot} disabled={creatingSnapshot || !orgId}>
+            {creatingSnapshot ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="mr-2 h-4 w-4" />}
+            Board Snapshot
+          </Button>
           <Button variant="outline" onClick={resetSimulation} disabled={saving} className="w-full sm:w-auto">
             <RotateCcw className="mr-2 h-4 w-4" />
             Reset
@@ -841,6 +923,97 @@ export function RealtimeSimulations() {
           )}
         </CardContent>
       </Card>
+
+      {/* Decision Impact Engine - PAIN POINT 1, 2, 4 SOLVED */}
+      {decisionImpact && (
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+          <Card className="md:col-span-8 border-l-4 border-l-blue-500 bg-blue-50/30">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5 text-blue-600" />
+                  Decision Intelligence Impact
+                </CardTitle>
+                {calculatingImpact && <Loader2 className="h-4 w-4 animate-spin text-blue-500" />}
+              </div>
+              <CardDescription>Instant evaluation of your current slider configuration</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col md:flex-row items-center gap-6">
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-blue-800 uppercase tracking-wider">CFO Recommendation</p>
+                    <Badge variant="outline" className="text-[10px] bg-white/50 border-blue-200 text-blue-700">
+                      Source: {decisionImpact.provenance?.source === 'model_run' ? 'Financial Model' : 'Live Ledger'}
+                    </Badge>
+                  </div>
+                  <p className="text-lg font-medium leading-snug text-slate-900">{decisionImpact.recommendation}</p>
+                </div>
+                <div className="flex gap-4 border-l pl-6 border-blue-100">
+                  <div className="text-center">
+                    <p className="text-xs text-blue-600 font-bold uppercase mb-1">Survival Odds</p>
+                    <div className="text-3xl font-black text-blue-900">
+                      {Math.round(decisionImpact.estimatedNewSurvivalProbability * 100)}%
+                    </div>
+                    <div className={`text-xs font-bold ${decisionImpact.survivalProbabilityImpact >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {decisionImpact.survivalProbabilityImpact >= 0 ? '+' : ''}{decisionImpact.survivalProbabilityImpact}% shift
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="md:col-span-4 border-l-4 border-l-purple-500 bg-purple-50/30">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-purple-600" />
+                Runway Shift
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <div className="text-3xl font-black text-purple-900">
+                    {decisionImpact.newRunwayMonths} Mo
+                  </div>
+                  <p className={`text-sm font-bold ${decisionImpact.runwayDelta >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {decisionImpact.cashOutDateImpact}
+                  </p>
+                </div>
+                
+                {/* Strategic Buffers - PAIN POINT 4 & 6 */}
+                <div className="pt-2 border-t border-purple-100 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-semibold text-purple-700 uppercase">Hiring Buffer</span>
+                    <span className="text-sm font-bold text-purple-900">+${(decisionImpact.sensitivity.maxAdditionalBurn / 1000).toFixed(0)}k/mo</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-semibold text-purple-700 uppercase">Revenue Buffer</span>
+                    <span className="text-sm font-bold text-purple-900">-${(decisionImpact.sensitivity.revenueBuffer / 1000).toFixed(0)}k/mo</span>
+                  </div>
+                  <p className="text-[10px] text-purple-500 italic leading-tight">
+                    Maximum margin before dropping below 6 months runway.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {shareUrl && (
+        <Alert className="bg-green-50 border-green-200">
+          <Zap className="h-4 w-4 text-green-600" />
+          <AlertDescription className="flex items-center justify-between w-full">
+            <span className="text-green-800 font-medium">Board Snapshot Live: <code className="bg-white px-2 py-0.5 rounded border ml-2 text-xs">{shareUrl}</code></span>
+            <Button variant="outline" size="sm" className="ml-4" onClick={() => {
+              navigator.clipboard.writeText(shareUrl);
+              toast.success("URL copied!");
+            }}>Copy Link</Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Parameter Controls */}

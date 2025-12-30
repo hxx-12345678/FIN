@@ -40,6 +40,8 @@ import {
   FileCheck,
   LogOut,
   Loader2,
+  ShieldCheck,
+  Database,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { useStagedChanges } from "@/hooks/use-staged-changes"
@@ -106,6 +108,18 @@ const navigationItems = [
     icon: Activity,
     key: "simulations",
     badge: "Live",
+  },
+  {
+    title: "Governance & Approvals",
+    icon: ShieldCheck,
+    key: "approvals",
+    badge: null,
+  },
+  {
+    title: "Semantic Ledger",
+    icon: Database,
+    key: "ledger",
+    badge: "Truth",
   },
   {
     title: "Job Queue",

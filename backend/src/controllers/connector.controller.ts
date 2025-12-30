@@ -4,6 +4,29 @@ import { ValidationError } from '../utils/errors';
 import { AuthRequest } from '../middlewares/auth';
 
 export const connectorController = {
+  /**
+   * POST /api/v1/connectors/orgs/:orgId/connectors/stripe/connect
+   * Configure Stripe connector using API key (no OAuth)
+   */
+  connectStripe: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        throw new ValidationError('User not authenticated');
+      }
+
+      const { orgId } = req.params;
+      const { stripeSecretKey } = req.body || {};
+
+      if (!orgId) {
+        throw new ValidationError('orgId is required');
+      }
+
+      const result = await connectorService.connectStripeApiKey(orgId, req.user.id, stripeSecretKey);
+      res.status(201).json({ ok: true, data: result });
+    } catch (e) {
+      next(e);
+    }
+  },
   startOAuth: async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.user) {

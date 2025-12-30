@@ -3,6 +3,7 @@ import csv
 import json
 from io import StringIO
 from datetime import datetime, timezone
+import hashlib
 from utils.db import get_db_connection
 from utils.s3 import download_from_s3
 from utils.logger import setup_logger
@@ -154,6 +155,8 @@ def handle_csv_import(job_id: str, org_id: str, object_id: str, logs: dict):
         mappings = params.get('mappings', {})
         currency_default = params.get('currency', 'USD')
         default_category = params.get('defaultCategory', 'Uncategorized')
+        file_hash = params.get('fileHash') or ''
+        import_batch_id = params.get('importBatchId')
         
         logger.info(f"Mappings received: {mappings}")
         logger.info(f"Currency: {currency_default}, Default category: {default_category}")
@@ -296,15 +299,23 @@ def handle_csv_import(job_id: str, org_id: str, object_id: str, logs: dict):
                 currency_value = currency_default
                 category_value = category or default_category
                 description_value = description or ''
+
+                # Compute deterministic source_id for idempotent imports (prevents duplicates on re-upload)
+                # If file_hash is available, dedupe is stable per-file; if not, still stable by content.
+                fingerprint_input = f"{org_id}|{file_hash}|{parsed_date.date().isoformat()}|{amount_value}|{description_value}|{category_value}"
+                source_id = hashlib.sha256(fingerprint_input.encode('utf-8')).hexdigest()
                 
                 # Insert transaction - match Prisma schema column names
                 # Database columns: "orgId" (camelCase, quoted), raw_payload (snake_case, not quoted)
                 try:
                     cursor.execute("""
-                        INSERT INTO raw_transactions ("orgId", date, amount, currency, category, description, raw_payload)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        INSERT INTO raw_transactions ("orgId", import_batch_id, source_id, date, amount, currency, category, description, raw_payload, is_duplicate)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, false)
+                        ON CONFLICT ("orgId", source_id) DO NOTHING
                     """, (
                         org_id,
+                        import_batch_id,
+                        source_id,
                         parsed_date.date(),
                         amount_value,
                         currency_value,
@@ -312,7 +323,9 @@ def handle_csv_import(job_id: str, org_id: str, object_id: str, logs: dict):
                         description_value,
                         json.dumps(row),
                     ))
-                    inserted += 1
+                    # Only count as inserted if rowcount > 0 (conflicts are ignored)
+                    if cursor.rowcount > 0:
+                        inserted += 1
                     if inserted == 1 or inserted % 5 == 0:  # Log first row and every 5 rows
                         logger.info(f"Inserted row {inserted}: {parsed_date.date()} | ${amount_value} | {category_value}")
                     
@@ -391,6 +404,28 @@ def handle_csv_import(job_id: str, org_id: str, object_id: str, logs: dict):
         conn.commit()
         
         logger.info(f"CSV import completed: {inserted} rows imported, {skipped} skipped")
+
+        # Update import batch (lineage + stats)
+        if import_batch_id:
+            try:
+                cursor.execute("""
+                    UPDATE data_import_batches
+                    SET status = %s,
+                        stats_json = %s::jsonb
+                    WHERE id = %s
+                """, (
+                    'completed',
+                    json.dumps({
+                        'rowsImported': inserted,
+                        'rowsSkipped': skipped,
+                        'errors': errors[:50] if errors else [],
+                        'completedAt': datetime.now(timezone.utc).isoformat(),
+                    }),
+                    import_batch_id,
+                ))
+                conn.commit()
+            except Exception as e:
+                logger.warning(f"Failed to update data_import_batches for {import_batch_id}: {str(e)}")
         
         # Trigger auto-model run if transactions were imported
         if inserted > 0:
@@ -458,6 +493,25 @@ def handle_csv_import(job_id: str, org_id: str, object_id: str, logs: dict):
         
     except Exception as e:
         logger.error(f"CSV import failed: {str(e)}", exc_info=True)
+        # Mark batch failed if we have one
+        try:
+            if 'import_batch_id' in locals() and import_batch_id:
+                cursor.execute("""
+                    UPDATE data_import_batches
+                    SET status = %s,
+                        stats_json = %s::jsonb
+                    WHERE id = %s
+                """, (
+                    'failed',
+                    json.dumps({
+                        'error': str(e),
+                        'failedAt': datetime.now(timezone.utc).isoformat(),
+                    }),
+                    import_batch_id,
+                ))
+                conn.commit()
+        except Exception:
+            pass
         raise
     finally:
         cursor.close()

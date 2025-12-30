@@ -10,6 +10,69 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config/env';
 
 export const connectorService = {
+  /**
+   * Stripe API-key based connection (no OAuth).
+   * Stores key in encrypted_config using AES-256-GCM and marks connector connected.
+   */
+  connectStripeApiKey: async (orgId: string, userId: string, stripeSecretKey: string) => {
+    // Verify user has access to org
+    const role = await orgRepository.getUserRole(userId, orgId);
+    if (!role) {
+      throw new ForbiddenError('No access to this organization');
+    }
+    if (!['admin', 'finance'].includes(role.role)) {
+      throw new ForbiddenError('Only admins and finance users can configure Stripe connector');
+    }
+
+    if (!stripeSecretKey || typeof stripeSecretKey !== 'string') {
+      throw new ValidationError('stripeSecretKey is required');
+    }
+    const trimmed = stripeSecretKey.trim();
+    // Stripe secret keys typically start with sk_
+    if (!trimmed.startsWith('sk_') || trimmed.length < 20) {
+      throw new ValidationError('Invalid Stripe secret key format');
+    }
+
+    // Encrypt and store
+    const payloadJson = JSON.stringify({
+      stripeSecretKey: trimmed,
+    });
+    const encryptedBase64 = encrypt(payloadJson);
+    const encryptedBytes = Buffer.from(encryptedBase64, 'base64');
+
+    const connector = await connectorRepository.upsert(orgId, 'stripe', {
+      status: 'connected',
+      encryptedConfig: encryptedBytes,
+      configJson: {
+        connectedAt: new Date().toISOString(),
+        keyPrefix: trimmed.slice(0, 6),
+        keyLast4: trimmed.slice(-4),
+      },
+    });
+
+    // Trigger initial sync (idempotent key prevents spam)
+    await jobService.createJob(
+      {
+        jobType: 'connector_initial_sync' as any,
+        orgId,
+        objectId: connector.id,
+        params: {
+          connectorId: connector.id,
+          type: 'stripe',
+          provider: 'stripe',
+          syncedBy: userId,
+        },
+        createdByUserId: userId,
+      },
+      `stripe_initial_sync:${orgId}:${connector.id}`
+    );
+
+    return {
+      connectorId: connector.id,
+      status: connector.status,
+      configured: true,
+    };
+  },
   startOAuth: async (orgId: string, type: ConnectorType, userId: string) => {
     // Validate connector type
     const validTypes: ConnectorType[] = ['quickbooks', 'xero', 'stripe', 'plaid', 'razorpay', 'tally', 'csv'];

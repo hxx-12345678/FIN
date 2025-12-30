@@ -14,6 +14,14 @@ router.post(
   connectorController.startOAuth
 );
 
+// Stripe API-key connect (no OAuth)
+router.post(
+  '/orgs/:orgId/connectors/stripe/connect',
+  authenticate,
+  requireOrgAccess,
+  connectorController.connectStripe
+);
+
 // OAuth callback (no auth required - handled by state token)
 // Note: OAuth providers require static callback URL, so connectorId comes from state token
 router.get('/callback', connectorController.oauthCallback);

@@ -141,6 +141,7 @@ async function detectSpendingAnomalies(orgId: string, threshold: number): Promis
   const transactions = await prisma.rawTransaction.findMany({
     where: {
       orgId,
+      isDuplicate: false,
       date: { gte: threeMonthsAgo },
       amount: { lt: 0 }, // Expenses (negative amounts)
     },

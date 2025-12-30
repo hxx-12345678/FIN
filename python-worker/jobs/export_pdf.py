@@ -58,6 +58,7 @@ def fetch_additional_financial_data(cursor, conn, org_id: str, model_run_id: str
                 COUNT(*) as transaction_count
             FROM raw_transactions
             WHERE "orgId" = %s
+            AND is_duplicate = false
             AND date >= NOW() - INTERVAL '12 months'
             GROUP BY DATE_TRUNC('month', date)
             ORDER BY month DESC
@@ -96,6 +97,7 @@ def fetch_additional_financial_data(cursor, conn, org_id: str, model_run_id: str
                 COUNT(*) as transaction_count
             FROM raw_transactions
             WHERE "orgId" = %s
+            AND is_duplicate = false
             AND amount < 0
             AND date >= NOW() - INTERVAL '3 months'
             AND category IS NOT NULL
@@ -119,6 +121,7 @@ def fetch_additional_financial_data(cursor, conn, org_id: str, model_run_id: str
         cursor.execute("""
             SELECT COUNT(*) FROM raw_transactions
             WHERE "orgId" = %s
+            AND is_duplicate = false
         """, (org_id,))
         
         count_result = cursor.fetchone()

@@ -143,9 +143,27 @@ export const connectorSyncService = {
       let newTransactionsPulled = 0;
       if (successfulSyncs.length > 0) {
         const lastSync = successfulSyncs[0];
-        if (lastSync.logs && typeof lastSync.logs === 'object') {
-          const logs = lastSync.logs as any;
-          newTransactionsPulled = logs.newTransactionsPulled || logs.transactionsPulled || 0;
+        const logsRaw = lastSync.logs as any;
+        try {
+          const logs = typeof logsRaw === 'string' ? JSON.parse(logsRaw) : logsRaw;
+          if (Array.isArray(logs)) {
+            // Backend/worker logs are typically an array of entries; search for meta.newTransactionsPulled
+            for (let i = logs.length - 1; i >= 0; i--) {
+              const entry = logs[i];
+              const meta = entry?.meta;
+              if (meta && typeof meta === 'object') {
+                const v = meta.newTransactionsPulled ?? meta.transactionsPulled;
+                if (typeof v === 'number') {
+                  newTransactionsPulled = v;
+                  break;
+                }
+              }
+            }
+          } else if (logs && typeof logs === 'object') {
+            newTransactionsPulled = logs.newTransactionsPulled || logs.transactionsPulled || 0;
+          }
+        } catch {
+          // ignore
         }
       }
 

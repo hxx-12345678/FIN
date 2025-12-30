@@ -5,12 +5,14 @@ import { ValidationError, ForbiddenError } from '../utils/errors';
 import { csvRepository } from '../repositories/csv.repository';
 import { v4 as uuidv4 } from 'uuid';
 import { Readable } from 'stream';
+import crypto from 'crypto';
+import prisma from '../config/database';
 
 const MAX_UPLOAD_SIZE = parseInt(process.env.MAX_UPLOAD_SIZE || '104857600', 10); // 100MB default
 
 // In-memory cache for file data (for development when S3 is not configured)
 // In production, this should be replaced with Redis or database storage
-const fileDataCache = new Map<string, { data: Buffer; expiresAt: number }>();
+const fileDataCache = new Map<string, { data: Buffer; fileHash: string; expiresAt: number }>();
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 export const csvService = {
@@ -61,6 +63,9 @@ export const csvService = {
 
     console.log('✅ File validation passed');
 
+    // Compute stable file hash for lineage + idempotency
+    const fileHash = crypto.createHash('sha256').update(file.buffer).digest('hex');
+
     // Generate upload key
     const fileId = uuidv4();
     const uploadKey = `uploads/${orgId}/${fileId}.csv`;
@@ -86,6 +91,7 @@ export const csvService = {
       const expiresAt = Date.now() + CACHE_TTL_MS;
       fileDataCache.set(uploadKey, {
         data: file.buffer,
+        fileHash,
         expiresAt,
       });
     }
@@ -100,11 +106,12 @@ export const csvService = {
 
     // No need for preview job - we'll parse CSV directly in the import job
     // Just return the upload info for the mapping step
-    console.log('✅ Upload complete, returning:', { uploadKey, fileName: file.originalname, fileSize: file.size });
+    console.log('✅ Upload complete, returning:', { uploadKey, fileName: file.originalname, fileSize: file.size, fileHash });
     return {
       uploadKey,
       fileName: file.originalname,
       fileSize: file.size,
+      fileHash,
     };
   },
 
@@ -117,7 +124,8 @@ export const csvService = {
     currency?: string,
     defaultCategory?: string,
     initialCash?: number,
-    initialCustomers?: number
+    initialCustomers?: number,
+    fileHash?: string
   ) => {
     // Verify user has access
     const role = await orgRepository.getUserRole(userId, orgId);
@@ -145,11 +153,13 @@ export const csvService = {
 
     // Get file data from cache if S3 is not configured
     let fileDataBase64: string | null = null;
+    let effectiveFileHash: string | null = fileHash || null;
     const s3Bucket = process.env.S3_BUCKET_NAME;
     if (!s3Bucket) {
       const cached = fileDataCache.get(uploadKey);
       if (cached) {
         fileDataBase64 = cached.data.toString('base64');
+        effectiveFileHash = effectiveFileHash || cached.fileHash;
         console.info(`File data retrieved from cache for ${uploadKey}, size: ${cached.data.length} bytes`);
         // Don't delete cache yet - keep it until job is processed
         // The cache will expire after 30 minutes automatically
@@ -159,6 +169,25 @@ export const csvService = {
         throw new ValidationError('File data not found. Please re-upload the file.');
       }
     }
+
+    // Create import batch (lineage root)
+    const importBatch = await prisma.dataImportBatch.create({
+      data: {
+        orgId,
+        sourceType: 'csv',
+        sourceRef: uploadKey,
+        fileHash: effectiveFileHash,
+        mappingJson: {
+          mappings,
+          dateFormat: dateFormat || 'YYYY-MM-DD',
+          currency: currency || 'USD',
+          defaultCategory,
+        } as any,
+        status: 'created',
+        createdByUserId: userId,
+      },
+      select: { id: true },
+    });
 
     // Create import job
     console.log('📤 Creating CSV import job with params:', {
@@ -180,6 +209,8 @@ export const csvService = {
           uploadKey, // Store the upload key in params
           s3Key: s3Bucket ? uploadKey : null, // Only set if S3 is configured
           fileData: fileDataBase64, // Base64 encoded file data for development
+          fileHash: effectiveFileHash,
+          importBatchId: importBatch.id,
           mappings,
           dateFormat: dateFormat || 'YYYY-MM-DD',
           currency: currency || 'USD',
@@ -201,6 +232,7 @@ export const csvService = {
       return {
         jobId: importJob.id,
         status: importJob.status,
+        importBatchId: importBatch.id,
       };
     } catch (error: any) {
       console.error('❌ Failed to create CSV import job:', error);
