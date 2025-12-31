@@ -1006,30 +1006,49 @@ async function generateDeepCFOAnalysis(
   // Final fallback if context is still empty
   if (Object.keys(context).length === 0) {
     context = {
-      cashBalance: 500000,
-      burnRate: 80000,
-      runwayMonths: 6.25,
-      revenue: 67000,
-      revenueGrowth: 0.08,
-      grossMargin: 0.75,
-      customerCount: 248,
-      cac: 125,
-      ltv: 2400,
-      churnRate: 0.025,
+      cashBalance: 0,
+      burnRate: 0,
+      runwayMonths: 0,
+      revenue: 0,
+      revenueGrowth: 0,
+      grossMargin: 0,
+      customerCount: 0,
+      cac: 0,
+      ltv: 0,
+      churnRate: 0,
       hasRealData: false,
     };
   }
 
   // 2. Perform "CFO Health Check" (Provenance/Evidence Generation)
   const healthCheck = {
-    isBurnHigh: context.burnRate > context.revenue * 1.5,
-    isRunwayCritical: context.runwayMonths < 6,
-    isGrowthHealthy: context.revenueGrowth > 0.10,
-    isChurnHigh: context.churnRate > 0.05,
-    isEfficient: (context.ltv / context.cac) > 3,
+    isBurnHigh: context.hasRealData && context.burnRate > context.revenue * 1.5,
+    isRunwayCritical: context.hasRealData && context.runwayMonths < 6,
+    isGrowthHealthy: context.hasRealData && context.revenueGrowth > 0.10,
+    isChurnHigh: context.hasRealData && context.churnRate > 0.05,
+    isEfficient: context.hasRealData && (context.ltv / (context.cac || 1)) > 3,
   };
 
   // 3. Generate Recommendations based on Goal AND Health Check
+  
+  // If NO real data is available, return a "Setup First" plan - CFO DIGNITY
+  if (!context.hasRealData) {
+    changes.push({
+      type: 'setup_required',
+      category: 'strategy',
+      action: 'Connect live financial data for accurate analysis',
+      reasoning: 'As your CFO, I cannot provide precise recommendations without access to your actual transaction data or a completed financial model.',
+      impact: {
+        insightAccuracy: 'From 0% to 100%',
+        decisionConfidence: 'Critical Improvement',
+      },
+      priority: 'critical',
+      timeline: 'immediate',
+      confidence: 1.0,
+      evidence: ['No historical transactions found', 'No active model runs found']
+    });
+    return changes;
+  }
 
   // SCENARIO A: Runway/Cash/Survival Questions
   if (

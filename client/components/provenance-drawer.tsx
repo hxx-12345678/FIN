@@ -23,6 +23,7 @@ import {
   Loader2,
 } from "lucide-react"
 import { toast } from "sonner"
+import { API_BASE_URL, getAuthToken, getAuthHeaders } from "@/lib/api-config"
 
 interface ProvenanceData {
   cellId: string
@@ -93,14 +94,11 @@ export function ProvenanceDrawer({
     setLoading(true)
 
     try {
-      const token = localStorage.getItem('auth-token') || localStorage.getItem('token')
+      const token = getAuthToken()
       const response = await fetch(
-        `/api/v1/provenance?model_run_id=${modelRunId}&cell=${encodeURIComponent(cellKey)}&full=true`,
+        `${API_BASE_URL}/provenance?model_run_id=${modelRunId}&cell=${encodeURIComponent(cellKey)}&full=true`,
         {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
+          headers: getAuthHeaders(),
         }
       )
 

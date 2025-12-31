@@ -112,25 +112,23 @@ export const investorDashboardService = {
     const milestones = getMilestones(arr, runwayMonths);
     const keyUpdates = getKeyUpdates(orgId, latestModelRun.createdAt);
 
-    // Calculate unit economics (if available in summary or use defaults)
+    // Calculate unit economics (if available in summary or use zeros)
     const unitEconomics = {
-      ltv: Number(summary.ltv || summary.customerLTV || 2400),
-      cac: Number(summary.cac || summary.customerCAC || 125),
+      ltv: Number(summary.ltv || summary.customerLTV || 0),
+      cac: Number(summary.cac || summary.customerCAC || 0),
       ltvCacRatio: 0,
       paybackPeriod: 0,
     };
     unitEconomics.ltvCacRatio = unitEconomics.ltv > 0 && unitEconomics.cac > 0 
       ? unitEconomics.ltv / unitEconomics.cac 
-      : 19;
+      : 0;
     unitEconomics.paybackPeriod = unitEconomics.ltv > 0 && unitEconomics.cac > 0 && arr > 0
-      ? (unitEconomics.cac / (arr / (Number(summary.activeCustomers) || 248))) * 12
-      : 8;
+      ? (unitEconomics.cac / (arr / (Number(summary.activeCustomers) || 1))) * 12
+      : 0;
 
     return {
       executiveSummary: {
         arr: Math.round(arr),
-        // Only use fallback (248) if no real customer data exists in model run
-        // This fallback is a mock value for demo purposes when no real data is available
         activeCustomers: Number(summary.activeCustomers || summary.customers || summary.customerCount || 0),
         monthsRunway: Math.round(runwayMonths * 10) / 10,
         healthScore: Math.round(healthScore),

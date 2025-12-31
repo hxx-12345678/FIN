@@ -1,724 +1,576 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useMemo, useState, useRef } from "react"
+import { motion, useScroll, useTransform, useSpring, AnimatePresence, useInView } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { AuthModal } from "@/components/auth/auth-modal"
 import {
-  ArrowRight,
-  Sparkles,
-  TrendingUp,
-  Shield,
-  Zap,
-  BarChart3,
-  Brain,
-  CheckCircle2,
-  Play,
   Menu,
   X,
-  ChevronRight,
-  LineChart,
-  Target,
-  Users,
-  Building2,
-  Calculator,
-  Globe,
-  Lock,
   Gauge,
+  ArrowRight,
+  Sparkles,
+  CheckCircle2,
+  Database,
+  BarChart3,
+  Wand2,
+  ShieldCheck,
+  LockKeyhole,
+  Mail,
+  Layout,
+  Globe,
+  TrendingUp,
+  Cpu,
+  ChevronRight,
 } from "lucide-react"
+
+// --- ULTRA PREMIUM 3D COMPONENTS ---
+
+const GlowingBackground = () => (
+  <div className="fixed inset-0 -z-50 bg-[#020617] overflow-hidden">
+    {/* Infinite Grid Plane */}
+    <div 
+      className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-20"
+      style={{ transform: 'perspective(1000px) rotateX(60deg) translateY(-100px) scale(2)' }}
+    />
+    
+    {/* Atmospheric Orbs */}
+    <motion.div 
+      animate={{ 
+        scale: [1, 1.2, 1],
+        opacity: [0.3, 0.5, 0.3],
+        x: [0, 50, 0],
+        y: [0, 30, 0]
+      }}
+      transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
+      className="absolute -top-[10%] -left-[10%] w-[600px] h-[600px] rounded-full bg-indigo-600/30 blur-[120px]" 
+    />
+    <motion.div 
+      animate={{ 
+        scale: [1.2, 1, 1.2],
+        opacity: [0.2, 0.4, 0.2],
+        x: [0, -40, 0],
+        y: [0, -20, 0]
+      }}
+      transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+      className="absolute top-[20%] -right-[10%] w-[500px] h-[500px] rounded-full bg-purple-600/20 blur-[100px]" 
+    />
+    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#020617]/80 to-[#020617]" />
+  </div>
+)
+
+const PremiumCard = ({ children, className = "", delay = 0 }: any) => {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, delay }}
+      viewport={{ once: true }}
+      whileHover={{ y: -8, transition: { duration: 0.2 } }}
+      className={`group relative rounded-[2.5rem] border border-white/5 bg-white/[0.03] backdrop-blur-xl p-8 overflow-hidden hover:bg-white/[0.05] hover:border-white/10 transition-all shadow-2xl ${className}`}
+    >
+      {/* Internal Glow */}
+      <div className="absolute -inset-px bg-gradient-to-br from-indigo-500/20 via-transparent to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+      <div className="relative z-10">{children}</div>
+    </motion.div>
+  )
+}
+
+const TextReveal = ({ children, className = "" }: any) => {
+  return (
+    <motion.span
+      initial={{ y: "100%" }}
+      whileInView={{ y: 0 }}
+      transition={{ duration: 0.8, ease: [0.33, 1, 0.68, 1] }}
+      className={`inline-block overflow-hidden ${className}`}
+    >
+      {children}
+    </motion.span>
+  )
+}
+
+const IndustrialDivider = () => (
+  <div className="w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent my-20" />
+)
+
+// --- MAIN LANDING PAGE ---
 
 export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [authMode, setAuthMode] = useState<"login" | "signup">("login")
+  
+  const containerRef = useRef(null)
+  const { scrollYProgress } = useScroll({
+    target: containerRef,
+    offset: ["start start", "end end"]
+  })
+
+  // Smooth scroll logic
+  const smoothProgress = useSpring(scrollYProgress, { stiffness: 100, damping: 30, restDelta: 0.001 })
 
   useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 20)
-    }
+    const handleScroll = () => setScrolled(window.scrollY > 20)
     window.addEventListener("scroll", handleScroll)
     return () => window.removeEventListener("scroll", handleScroll)
   }, [])
 
+  const openSignup = () => {
+    setAuthMode("signup")
+    setAuthModalOpen(true)
+  }
+
+  const openLogin = () => {
+    setAuthMode("login")
+    setAuthModalOpen(true)
+  }
+
+  const requestDemo = () => {
+    window.location.href = `mailto:sales@finapilot.ai?subject=FinaPilot%20Demo%20Request`
+  }
+
   return (
-    <div className="min-h-screen bg-white overflow-hidden">
-      {/* Navigation */}
+    <div ref={containerRef} className="relative min-h-screen bg-[#020617] text-white selection:bg-indigo-500/30 selection:text-indigo-200 font-sans antialiased">
+      <GlowingBackground />
+
+      {/* Navigation - Always Visible with Maximum Z-Index */}
       <nav
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-          scrolled ? "bg-white/80 backdrop-blur-lg border-b border-slate-200 shadow-sm" : "bg-transparent"
+        className={`fixed top-0 left-0 right-0 z-[9999] transition-all duration-700 ${
+          scrolled ? "py-4 bg-[#020617]/80 backdrop-blur-2xl border-b border-white/10 shadow-[0_4px_40px_rgba(0,0,0,0.3)]" : "py-10 bg-transparent"
         }`}
+        style={{ willChange: 'transform', transform: 'translateZ(0)' }}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            {/* Logo */}
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-indigo-400 to-slate-400 rounded-lg flex items-center justify-center">
-                <Gauge className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-xl font-bold text-slate-900">
-                Fina
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-slate-400">
-                  Pilot
+        <div className="max-w-[1400px] mx-auto px-6 lg:px-12 flex items-center justify-between">
+          <motion.div 
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="flex items-center gap-3 group cursor-pointer"
+          >
+            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(255,255,255,0.1)] group-hover:scale-110 transition-transform">
+              <Gauge className="w-7 h-7 text-[#020617]" />
+            </div>
+            <span className="text-2xl font-black tracking-tight uppercase italic">
+              Fina<span className="text-indigo-500 not-italic">Pilot</span>
+            </span>
+          </motion.div>
+
+          <div className="hidden md:flex items-center gap-12 text-[11px] font-black uppercase tracking-[0.3em] text-slate-500">
+            {["Platform", "Intelligence", "Pricing", "Audit"].map((l) => (
+              <a key={l} href={`#${l.toLowerCase()}`} className="hover:text-white transition-all hover:tracking-[0.4em]">
+                {l}
+              </a>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-4">
+            <Button 
+              variant="ghost" 
+              className="hidden sm:flex font-black text-xs uppercase tracking-widest text-slate-400 hover:text-white hover:bg-white/5 h-12 px-6 rounded-full transition-all" 
+              onClick={openLogin}
+            >
+              Login
+            </Button>
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <Button 
+                onClick={openSignup} 
+                className="bg-white text-[#020617] hover:bg-slate-200 h-12 px-8 font-black uppercase tracking-widest text-xs rounded-full shadow-[0_0_40px_rgba(255,255,255,0.2)] transition-all relative overflow-hidden group"
+              >
+                <span className="relative z-10 flex items-center gap-2">
+                  Start Pilot
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </span>
-              </span>
-            </div>
-
-            {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center gap-8">
-              <a href="#features" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
-                Features
-              </a>
-              <a
-                href="#use-cases"
-                className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
-              >
-                Use Cases
-              </a>
-              <a href="#pricing" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
-                Pricing
-              </a>
-              <a
-                href="#integrations"
-                className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
-              >
-                Integrations
-              </a>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-slate-600"
-                onClick={() => {
-                  setAuthMode("login")
-                  setAuthModalOpen(true)
-                }}
-              >
-                Sign In
+                <motion.div
+                  className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity"
+                  initial={false}
+                />
               </Button>
-              <Button
-                size="sm"
-                onClick={() => {
-                  setAuthMode("signup")
-                  setAuthModalOpen(true)
-                }}
-                className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white shadow-lg shadow-orange-500/30"
-              >
-                Get Started Free
-              </Button>
-            </div>
-
-            {/* Mobile Menu Button */}
-            <button className="md:hidden p-2" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+            </motion.div>
+            <button 
+              className="md:hidden p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors" 
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle menu"
+            >
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
           </div>
         </div>
 
         {/* Mobile Menu */}
-        {mobileMenuOpen && (
-          <div className="md:hidden bg-white border-t border-slate-200">
-            <div className="px-4 py-4 space-y-3">
-              <a href="#features" className="block text-sm font-medium text-slate-600 hover:text-slate-900">
-                Features
-              </a>
-              <a href="#use-cases" className="block text-sm font-medium text-slate-600 hover:text-slate-900">
-                Use Cases
-              </a>
-              <a href="#pricing" className="block text-sm font-medium text-slate-600 hover:text-slate-900">
-                Pricing
-              </a>
-              <a href="#integrations" className="block text-sm font-medium text-slate-600 hover:text-slate-900">
-                Integrations
-              </a>
-              <Button variant="ghost" size="sm" className="w-full justify-start text-slate-600">
-                Sign In
-              </Button>
-              <Button
-                size="sm"
-                onClick={onGetStarted}
-                className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white"
-              >
-                Get Started Free
-              </Button>
-            </div>
-          </div>
-        )}
-      </nav>
-
-      {/* Hero Section */}
-      <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden">
-        {/* Background Gradient */}
-        <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 -z-10" />
-        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-gradient-to-br from-indigo-300/20 to-slate-400/20 rounded-full blur-3xl animate-pulse -z-10" />
-        <div
-          className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-gradient-to-tr from-orange-400/10 to-pink-500/10 rounded-full blur-3xl animate-pulse -z-10"
-          style={{ animationDelay: "1s" }}
-        />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gradient-to-r from-indigo-200/5 to-slate-300/5 rounded-full blur-3xl -z-10" />
-
-        <div className="max-w-7xl mx-auto">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            {/* Left Column - Content */}
-            <div className="space-y-8">
-              <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100">
-                <Sparkles className="w-3 h-3 mr-1" />
-                Trusted by early-stage startups & accounting partners
-              </Badge>
-
-              <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold text-slate-900 leading-tight">
-                Auto-generate your{" "}
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-slate-400">
-                  financial model
-                </span>
-              </h1>
-
-              <p className="text-xl text-slate-600 leading-relaxed max-w-2xl">
-                FinaPilot — your AI-CFO for startups and SMBs. Build a full P&L, cashflow, and runway in minutes, run
-                probabilistic forecasts, and export investor-ready decks — with audit trails accountants trust.
-              </p>
-
-              <div className="flex flex-col sm:flex-row gap-4">
-                <Button
-                  size="lg"
-                  onClick={onGetStarted}
-                  className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white shadow-xl shadow-orange-500/30 text-base px-8"
-                >
-                  Get Started — Free Demo
-                  <ArrowRight className="w-5 h-5 ml-2" />
-                </Button>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="border-slate-300 text-slate-700 text-base px-8 bg-transparent"
-                >
-                  <Play className="w-5 h-5 mr-2" />
-                  Book a 15-min Demo
-                </Button>
-              </div>
-
-              {/* Trust Indicators */}
-              <div className="flex items-center gap-6 pt-4">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600" />
-                  <span className="text-sm text-slate-600">Set up in 10 minutes</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600" />
-                  <span className="text-sm text-slate-600">No credit card required</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Right Column - Visual */}
-            <div className="relative">
-              <div className="relative bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl shadow-2xl p-8 border border-slate-700">
-                {/* Mock Dashboard UI */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-gradient-to-br from-indigo-400 to-slate-400 rounded-lg" />
-                      <span className="text-white font-semibold">FinaPilot Dashboard</span>
-                    </div>
-                    <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Live</Badge>
-                  </div>
-
-                  <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Brain className="w-4 h-4 text-indigo-400" />
-                      <span className="text-sm text-slate-300">AI-CFO Analysis</span>
-                    </div>
-                    <p className="text-white text-sm leading-relaxed">
-                      Based on your current burn rate of ₹8.5L/month, you have 14 months of runway. I recommend reducing
-                      cloud costs by 20% to extend runway to 18 months.
-                    </p>
-                    <Button
-                      size="sm"
-                      className="mt-3 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-500/30"
-                    >
-                      Create Task
-                      <ChevronRight className="w-4 h-4 ml-1" />
-                    </Button>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700">
-                      <div className="text-2xl font-bold text-white">₹1.2Cr</div>
-                      <div className="text-xs text-slate-400">Cash Balance</div>
-                    </div>
-                    <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700">
-                      <div className="text-2xl font-bold text-green-400">+23%</div>
-                      <div className="text-xs text-slate-400">Revenue Growth</div>
-                    </div>
-                    <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700">
-                      <div className="text-2xl font-bold text-indigo-400">14mo</div>
-                      <div className="text-xs text-slate-400">Runway</div>
-                    </div>
-                  </div>
-
-                  {/* Mini Chart */}
-                  <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-                    <div className="text-sm text-slate-300 mb-2">Monte Carlo Forecast</div>
-                    <div className="h-24 flex items-end gap-1">
-                      {[40, 60, 45, 70, 55, 80, 65, 85, 75, 90, 80, 95].map((height, i) => (
-                        <div
-                          key={i}
-                          className="flex-1 bg-gradient-to-t from-indigo-400 to-slate-400 rounded-t opacity-70"
-                          style={{ height: `${height}%` }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Floating Elements */}
-                <div className="absolute -top-4 -right-4 bg-white rounded-lg shadow-xl p-3 border border-slate-200">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                    <span className="text-xs font-medium text-slate-700">Syncing live data</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Decorative Elements */}
-              <div className="absolute -bottom-6 -left-6 w-32 h-32 bg-gradient-to-br from-indigo-300 to-slate-400 rounded-full blur-3xl opacity-20" />
-              <div className="absolute -top-6 -right-6 w-32 h-32 bg-gradient-to-br from-orange-400 to-orange-500 rounded-full blur-3xl opacity-20" />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Curved wave divider */}
-      <div className="relative -mt-1">
-        <svg className="w-full h-24" viewBox="0 0 1440 120" preserveAspectRatio="none">
-          <path d="M0,64 C360,20 720,20 1080,64 C1260,86 1350,96 1440,96 L1440,120 L0,120 Z" fill="#f8fafc" />
-        </svg>
-      </div>
-
-      {/* Value Pillars */}
-      <section className="relative py-20 px-4 sm:px-6 lg:px-8 bg-slate-50">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-slate-900 mb-4">Why FinaPilot?</h2>
-            <p className="text-xl text-slate-600 max-w-2xl mx-auto">
-              The only financial planning platform that combines automation, AI intelligence, and probabilistic
-              forecasting
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            <Card className="p-8 border-slate-200 hover:shadow-xl transition-shadow bg-white">
-              <div className="w-12 h-12 bg-gradient-to-br from-indigo-400 to-slate-400 rounded-xl flex items-center justify-center mb-6">
-                <Zap className="w-6 h-6 text-white" />
-              </div>
-              <h3 className="text-2xl font-bold text-slate-900 mb-3">Auto Models in Minutes</h3>
-              <p className="text-slate-600 leading-relaxed">
-                Connect your accounting & payments systems. FinaPilot auto-builds your P&L, cashflow, and balance sheet
-                with zero manual data entry.
-              </p>
-            </Card>
-
-            <Card className="p-8 border-slate-200 hover:shadow-xl transition-shadow bg-white">
-              <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center mb-6">
-                <Brain className="w-6 h-6 text-white" />
-              </div>
-              <h3 className="text-2xl font-bold text-slate-900 mb-3">AI-CFO that Acts</h3>
-              <p className="text-slate-600 leading-relaxed">
-                Ask questions in plain English. Get actionable insights with one-click task creation to Slack, Asana, or
-                your calendar.
-              </p>
-            </Card>
-
-            <Card className="p-8 border-slate-200 hover:shadow-xl transition-shadow bg-white">
-              <div className="w-12 h-12 bg-gradient-to-br from-slate-700 to-slate-900 rounded-xl flex items-center justify-center mb-6">
-                <BarChart3 className="w-6 h-6 text-white" />
-              </div>
-              <h3 className="text-2xl font-bold text-slate-900 mb-3">Know the Risk</h3>
-              <p className="text-slate-600 leading-relaxed">
-                Run Monte Carlo simulations with 1000+ scenarios. See probability bands, confidence intervals, and
-                risk-adjusted forecasts.
-              </p>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      {/* Curved wave divider with gradient */}
-      <div className="relative -mt-1">
-        <svg className="w-full h-24" viewBox="0 0 1440 120" preserveAspectRatio="none">
-          <path d="M0,32 C240,80 480,80 720,32 C960,80 1200,80 1440,32 L1440,120 L0,120 Z" fill="white" />
-        </svg>
-      </div>
-
-      {/* Product Tour */}
-      <section className="relative py-20 px-4 sm:px-6 lg:px-8 bg-white">
-        {/* Floating gradient orbs */}
-        <div className="absolute top-20 right-10 w-64 h-64 bg-gradient-to-br from-indigo-300/10 to-slate-400/10 rounded-full blur-3xl -z-10" />
-        <div className="absolute bottom-20 left-10 w-72 h-72 bg-gradient-to-br from-orange-400/10 to-pink-500/10 rounded-full blur-3xl -z-10" />
-
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-slate-900 mb-4">See it in Action</h2>
-            <p className="text-xl text-slate-600 max-w-2xl mx-auto">
-              From data connection to investor-ready reports in minutes
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-12">
-            <div className="space-y-6">
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <span className="text-indigo-700 font-bold">1</span>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-slate-900 mb-2">Connect Your Data</h3>
-                  <p className="text-slate-600">
-                    One-click integrations with QuickBooks, Xero, Stripe, Razorpay, Zoho Books, and Tally. Secure OAuth
-                    authentication.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <span className="text-indigo-700 font-bold">2</span>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-slate-900 mb-2">AI Builds Your Model</h3>
-                  <p className="text-slate-600">
-                    Machine learning categorizes transactions, identifies patterns, and generates a complete 3-statement
-                    financial model.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <span className="text-indigo-700 font-bold">3</span>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-slate-900 mb-2">Run Scenarios & Forecasts</h3>
-                  <p className="text-slate-600">
-                    Create best/base/worst case scenarios. Run Monte Carlo simulations. See probability-weighted
-                    outcomes.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <span className="text-indigo-700 font-bold">4</span>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-slate-900 mb-2">Export & Share</h3>
-                  <p className="text-slate-600">
-                    Generate investor decks, board reports, and compliance-ready exports with full audit trails and
-                    provenance.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="relative">
-              <div className="bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl p-8 h-full flex items-center justify-center">
-                <div className="text-center space-y-4">
-                  <div className="w-20 h-20 bg-gradient-to-br from-indigo-400 to-slate-400 rounded-2xl mx-auto flex items-center justify-center">
-                    <Play className="w-10 h-10 text-white" />
-                  </div>
-                  <p className="text-slate-700 font-medium">Watch 2-minute product tour</p>
-                  <Button
-                    size="lg"
-                    className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white"
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="md:hidden bg-[#020617]/95 backdrop-blur-2xl border-t border-white/10 overflow-hidden"
+            >
+              <div className="px-6 py-8 space-y-6">
+                {["Platform", "Intelligence", "Pricing", "Audit"].map((l) => (
+                  <a 
+                    key={l} 
+                    href={`#${l.toLowerCase()}`} 
+                    className="block text-lg font-black uppercase tracking-widest text-slate-400 hover:text-white transition-colors"
+                    onClick={() => setMobileMenuOpen(false)}
                   >
-                    See it Live
+                    {l}
+                  </a>
+                ))}
+                <div className="pt-6 border-t border-white/10 flex flex-col gap-4">
+                  <Button
+                    variant="outline"
+                    className="w-full border-white/10 bg-white/5 text-white hover:bg-white/10 h-12 rounded-full font-black uppercase tracking-widest text-xs"
+                    onClick={() => {
+                      setMobileMenuOpen(false)
+                      openLogin()
+                    }}
+                  >
+                    Login
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setMobileMenuOpen(false)
+                      openSignup()
+                    }}
+                    className="w-full bg-white text-[#020617] hover:bg-slate-200 h-12 rounded-full font-black uppercase tracking-widest text-xs shadow-lg"
+                  >
+                    Start Pilot
                   </Button>
                 </div>
               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </nav>
+
+      {/* Hero Section - 3D Perspective Headline */}
+      <section className="relative pt-[20vh] pb-32 px-6 overflow-hidden min-h-screen flex flex-col items-center">
+        <div className="max-w-[1400px] w-full mx-auto relative z-10 text-center">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
+            className="space-y-12"
+          >
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-indigo-400 text-[10px] font-black uppercase tracking-[0.3em] backdrop-blur-sm">
+              <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping" />
+              Intelligence Layer v2.0 Live
             </div>
-          </div>
-        </div>
-      </section>
 
-      {/* Curved wave divider */}
-      <div className="relative -mt-1">
-        <svg className="w-full h-32" viewBox="0 0 1440 120" preserveAspectRatio="none">
-          <path d="M0,96 C480,32 960,32 1440,96 L1440,120 L0,120 Z" fill="#f8fafc" />
-        </svg>
-      </div>
+            <h1 className="text-[12vw] lg:text-[10vw] font-black tracking-tighter leading-[0.85] uppercase italic select-none">
+              <span className="block text-white opacity-90">FINANCIAL</span>
+              <span className="block text-transparent bg-clip-text bg-gradient-to-b from-indigo-500 to-purple-600">COMMAND</span>
+            </h1>
 
-      {/* Use Cases */}
-      <section id="use-cases" className="relative py-20 px-4 sm:px-6 lg:px-8 bg-slate-50">
-        {/* Organic blob shapes */}
-        <div className="absolute top-0 left-0 w-96 h-96 bg-gradient-to-br from-indigo-200/10 to-slate-300/10 rounded-[40%_60%_70%_30%/60%_30%_70%_40%] blur-3xl -z-10" />
-        <div className="absolute bottom-0 right-0 w-80 h-80 bg-gradient-to-br from-orange-300/10 to-pink-400/10 rounded-[60%_40%_30%_70%/40%_60%_70%_30%] blur-3xl -z-10" />
-
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-slate-900 mb-4">Built for Every Finance Role</h2>
-            <p className="text-xl text-slate-600 max-w-2xl mx-auto">
-              Whether you're a founder, accountant, or finance team — FinaPilot adapts to your workflow
+            <p className="text-xl sm:text-3xl text-slate-400 leading-relaxed max-w-3xl mx-auto font-medium tracking-tight">
+              The first Decision Engine for startups. <span className="text-white">Unify your data</span>, simulate the future, and report with 100% confidence.
             </p>
-          </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
-            <Card className="p-8 border-slate-200 bg-white">
-              <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center mb-6">
-                <Target className="w-6 h-6 text-orange-600" />
-              </div>
-              <h3 className="text-2xl font-bold text-slate-900 mb-4">For Founders</h3>
-              <ul className="space-y-3">
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-slate-600">Understand your runway and burn rate instantly</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-slate-600">Make data-driven hiring and spending decisions</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-slate-600">Generate investor-ready financial models in minutes</span>
-                </li>
-              </ul>
-            </Card>
-
-            <Card className="p-8 border-slate-200 bg-white">
-              <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center mb-6">
-                <Calculator className="w-6 h-6 text-indigo-600" />
-              </div>
-              <h3 className="text-2xl font-bold text-slate-900 mb-4">For Accountants</h3>
-              <ul className="space-y-3">
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-slate-600">Full audit trails and provenance for every number</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-slate-600">GST compliance and tax planning built-in</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-slate-600">Serve multiple clients from one dashboard</span>
-                </li>
-              </ul>
-            </Card>
-
-            <Card className="p-8 border-slate-200 bg-white">
-              <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center mb-6">
-                <Users className="w-6 h-6 text-slate-600" />
-              </div>
-              <h3 className="text-2xl font-bold text-slate-900 mb-4">For Finance Teams</h3>
-              <ul className="space-y-3">
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-slate-600">Collaborative scenario planning and version control</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-slate-600">Automated board reporting and investor updates</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-slate-600">Real-time dashboards with role-based access</span>
-                </li>
-              </ul>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      {/* Curved wave divider with multiple layers */}
-      <div className="relative -mt-1">
-        <svg className="w-full h-32" viewBox="0 0 1440 120" preserveAspectRatio="none">
-          <path
-            d="M0,64 C360,96 720,96 1080,64 C1260,48 1350,40 1440,40 L1440,120 L0,120 Z"
-            fill="white"
-            fillOpacity="0.5"
-          />
-          <path d="M0,80 C360,40 720,40 1080,80 C1260,100 1350,110 1440,110 L1440,120 L0,120 Z" fill="white" />
-        </svg>
-      </div>
-
-      {/* Feature Highlights */}
-      <section id="features" className="relative py-20 px-4 sm:px-6 lg:px-8 bg-white">
-        <div className="max-w-7xl mx-auto space-y-24">
-          {/* Feature 1 */}
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div className="space-y-6">
-              <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200">AI-Powered</Badge>
-              <h2 className="text-4xl font-bold text-slate-900">Auto Model Engine</h2>
-              <p className="text-xl text-slate-600 leading-relaxed">
-                Connect your accounting system once. FinaPilot's ML engine automatically categorizes transactions,
-                identifies revenue patterns, and builds a complete 3-statement financial model — no spreadsheets
-                required.
-              </p>
-              <ul className="space-y-3">
-                <li className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-1" />
-                  <span className="text-slate-600">Automatic transaction categorization with 95%+ accuracy</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-1" />
-                  <span className="text-slate-600">Real-time sync with QuickBooks, Xero, Zoho, Tally</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-1" />
-                  <span className="text-slate-600">Complete P&L, cashflow, and balance sheet in minutes</span>
-                </li>
-              </ul>
-            </div>
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-indigo-400/20 to-slate-400/20 rounded-[2rem] blur-2xl" />
-              <div className="relative bg-gradient-to-br from-slate-100 to-slate-200 rounded-[2rem] p-8 h-96 flex items-center justify-center border border-slate-300/50">
-                <LineChart className="w-32 h-32 text-slate-400" />
-              </div>
-            </div>
-          </div>
-
-          {/* Feature 2 */}
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div className="relative order-2 lg:order-1">
-              <div className="absolute inset-0 bg-gradient-to-br from-orange-500/20 to-pink-600/20 rounded-[2rem] blur-2xl" />
-              <div className="relative bg-gradient-to-br from-slate-100 to-slate-200 rounded-[2rem] p-8 h-96 flex items-center justify-center border border-slate-300/50">
-                <TrendingUp className="w-32 h-32 text-slate-400" />
-              </div>
-            </div>
-            <div className="space-y-6 order-1 lg:order-2">
-              <Badge className="bg-orange-50 text-orange-700 border-orange-200">Probabilistic</Badge>
-              <h2 className="text-4xl font-bold text-slate-900">Monte Carlo Forecasting</h2>
-              <p className="text-xl text-slate-600 leading-relaxed">
-                Move beyond single-point forecasts. Run 1000+ simulations to understand the full range of possible
-                outcomes. See confidence bands, probability distributions, and risk-adjusted projections.
-              </p>
-              <ul className="space-y-3">
-                <li className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-1" />
-                  <span className="text-slate-600">5th-95th percentile confidence bands on all forecasts</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-1" />
-                  <span className="text-slate-600">Probability of hitting runway, revenue, or cash targets</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-1" />
-                  <span className="text-slate-600">Sensitivity analysis showing top uncertainty drivers</span>
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          {/* Feature 3 */}
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div className="space-y-6">
-              <Badge className="bg-slate-50 text-slate-700 border-slate-200">Compliance-Ready</Badge>
-              <h2 className="text-4xl font-bold text-slate-900">Provenance & Audit Trails</h2>
-              <p className="text-xl text-slate-600 leading-relaxed">
-                Every number is fully explainable. Click any cell to see source transactions, assumptions, formulas, and
-                AI explanations. Export complete audit trails for accountants and auditors.
-              </p>
-              <ul className="space-y-3">
-                <li className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-1" />
-                  <span className="text-slate-600">Cell-level provenance with source data lineage</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-1" />
-                  <span className="text-slate-600">GST compliance and TDS tracking for India</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-1" />
-                  <span className="text-slate-600">SOC2-ready security and access controls</span>
-                </li>
-              </ul>
-            </div>
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-slate-400/20 to-indigo-400/20 rounded-[2rem] blur-2xl" />
-              <div className="relative bg-gradient-to-br from-slate-100 to-slate-200 rounded-[2rem] p-8 h-96 flex items-center justify-center border border-slate-300/50">
-                <Shield className="w-32 h-32 text-slate-400" />
-              </div>
-            </div>
-          </div>
-
-          {/* Feature 4 */}
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div className="relative order-2 lg:order-1">
-              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/20 to-pink-600/20 rounded-[2rem] blur-2xl" />
-              <div className="relative bg-gradient-to-br from-slate-100 to-slate-200 rounded-[2rem] p-8 h-96 flex items-center justify-center border border-slate-300/50">
-                <Brain className="w-32 h-32 text-slate-400" />
-              </div>
-            </div>
-            <div className="space-y-6 order-1 lg:order-2">
-              <Badge className="bg-purple-50 text-purple-700 border-purple-200">AI-Powered</Badge>
-              <h2 className="text-4xl font-bold text-slate-900">AI-CFO Actions</h2>
-              <p className="text-xl text-slate-600 leading-relaxed">
-                Ask questions in plain English. Get actionable recommendations with one-click task creation. Export
-                tasks to Slack, Asana, or Google Calendar. Track completion and measure impact.
-              </p>
-              <ul className="space-y-3">
-                <li className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-1" />
-                  <span className="text-slate-600">Natural language queries: "How can I extend runway?"</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-1" />
-                  <span className="text-slate-600">One-click task creation with context and assumptions</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-1" />
-                  <span className="text-slate-600">Integration with Slack, Asana, Trello, Google Calendar</span>
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Curved wave divider */}
-      <div className="relative -mt-1">
-        <svg className="w-full h-24" viewBox="0 0 1440 120" preserveAspectRatio="none">
-          <path d="M0,32 C360,80 720,80 1080,32 C1260,10 1350,0 1440,0 L1440,120 L0,120 Z" fill="#f8fafc" />
-        </svg>
-      </div>
-
-      {/* Integrations */}
-      <section id="integrations" className="relative py-20 px-4 sm:px-6 lg:px-8 bg-slate-50">
-        {/* Organic blob shapes */}
-        <div className="absolute top-10 right-20 w-72 h-72 bg-gradient-to-br from-indigo-300/10 to-slate-400/10 rounded-[60%_40%_30%_70%/40%_60%_70%_30%] blur-3xl -z-10 animate-pulse" />
-        <div
-          className="absolute bottom-10 left-20 w-64 h-64 bg-gradient-to-br from-orange-400/10 to-pink-500/10 rounded-[40%_60%_70%_30%/60%_30%_70%_40%] blur-3xl -z-10 animate-pulse"
-          style={{ animationDelay: "1.5s" }}
-        />
-
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-slate-900 mb-4">Integrates with Your Stack</h2>
-            <p className="text-xl text-slate-600 max-w-2xl mx-auto">
-              One-click connections to the tools you already use
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-8">
-            {[
-              "QuickBooks",
-              "Xero",
-              "Stripe",
-              "Razorpay",
-              "Zoho Books",
-              "Tally",
-              "Slack",
-              "Asana",
-              "Google Calendar",
-              "Plaid",
-              "ClearTax",
-              "Supabase",
-            ].map((integration) => (
-              <div
-                key={integration}
-                className="bg-white rounded-xl p-6 border border-slate-200 flex items-center justify-center hover:shadow-lg transition-shadow"
+            <div className="flex flex-col sm:flex-row gap-6 justify-center pt-8">
+              <Button
+                size="lg"
+                onClick={openSignup}
+                className="bg-indigo-600 text-white hover:bg-indigo-500 h-20 px-16 text-xl font-black uppercase tracking-widest rounded-[2rem] shadow-[0_20px_80px_rgba(79,70,229,0.3)] transition-all hover:scale-105 group"
               >
-                <div className="text-center">
-                  <Building2 className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                  <span className="text-sm font-medium text-slate-700">{integration}</span>
+                Start Free Pilot
+                <ArrowRight className="w-6 h-6 ml-3 group-hover:translate-x-2 transition-transform" />
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                className="h-20 px-16 text-xl font-black uppercase tracking-widest rounded-[2rem] border-white/10 bg-white/5 backdrop-blur-2xl hover:bg-white/10 transition-all"
+                onClick={requestDemo}
+              >
+                Request Demo
+              </Button>
+            </div>
+          </motion.div>
+        </div>
+
+        {/* Floating 3D Assets Mockup */}
+        <motion.div 
+          style={{ rotateX: 15, perspective: 1000 }}
+          className="mt-32 w-full max-w-[1200px] relative"
+        >
+          <div className="absolute inset-0 bg-indigo-500/20 blur-[150px] -z-10 rounded-full" />
+          <div className="relative aspect-video rounded-[3rem] border border-white/10 bg-[#020617]/80 backdrop-blur-3xl shadow-[0_0_100px_rgba(0,0,0,0.5)] overflow-hidden">
+            <div className="absolute top-0 inset-x-0 h-14 bg-white/5 flex items-center px-8 border-b border-white/5">
+              <div className="flex gap-2">
+                <div className="w-3 h-3 rounded-full bg-white/10" />
+                <div className="w-3 h-3 rounded-full bg-white/10" />
+                <div className="w-3 h-3 rounded-full bg-white/10" />
+              </div>
+              <div className="ml-10 text-[10px] font-black uppercase tracking-widest text-slate-500">LIVE COMMAND CENTER</div>
+            </div>
+            {/* Mock Content */}
+            <div className="pt-20 px-12 grid grid-cols-3 gap-10">
+              <div className="space-y-8">
+                <div className="h-32 rounded-3xl bg-white/5 border border-white/5 p-6 space-y-4">
+                  <div className="h-2 w-20 bg-indigo-500/50 rounded" />
+                  <div className="h-8 w-32 bg-white rounded" />
+                </div>
+                <div className="h-48 rounded-3xl bg-gradient-to-br from-indigo-500/10 to-transparent border border-white/5" />
+              </div>
+              <div className="col-span-2 rounded-[2.5rem] bg-white/[0.02] border border-white/5 p-10 relative">
+                <div className="flex justify-between items-center mb-10">
+                  <div className="h-6 w-48 bg-white/10 rounded-full" />
+                  <div className="h-6 w-20 bg-green-500/20 rounded-full" />
+                </div>
+                <div className="h-64 flex items-end gap-4 px-4">
+                  {[40, 70, 50, 90, 60, 100, 80, 110, 95, 120, 100].map((h, i) => (
+                    <motion.div 
+                      key={i}
+                      initial={{ height: 0 }}
+                      whileInView={{ height: `${h * 0.6}%` }}
+                      className="flex-1 bg-white/10 rounded-t-lg group-hover:bg-indigo-500/50 transition-colors"
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </section>
+
+      {/* Industrial Capabilities - Combined Section to reduce repetition */}
+      <section id="features" className="py-48 px-6 relative">
+        <div className="max-w-[1400px] mx-auto">
+          <div className="flex flex-col lg:flex-row gap-20 items-end mb-32">
+            <div className="max-w-2xl space-y-8">
+              <Badge className="bg-indigo-500/10 text-indigo-400 border-indigo-500/20 py-2 px-6 rounded-full text-[10px] font-black uppercase tracking-[0.3em]">Built for Industrial Scale</Badge>
+              <h2 className="text-6xl sm:text-8xl font-black tracking-tighter leading-[0.9] uppercase italic">
+                BEYOND <span className="text-slate-700">SHEETS.</span><br />
+                REAL <span className="text-indigo-500">SPEED.</span>
+              </h2>
+            </div>
+            <p className="text-xl text-slate-400 font-medium max-w-lg mb-4">
+              Stop fighting manual exports. FinaPilot automates the entire upstream data cycle so you can focus on the next $10M decision.
+            </p>
+          </div>
+
+          <div className="grid lg:grid-cols-3 gap-8">
+            <PremiumCard className="lg:col-span-2">
+              <div className="grid md:grid-cols-2 gap-12 h-full">
+                <div className="space-y-8">
+                  <div className="w-16 h-16 rounded-[1.5rem] bg-indigo-600 flex items-center justify-center">
+                    <Database className="w-8 h-8 text-white" />
+                  </div>
+                  <h3 className="text-4xl font-black tracking-tight uppercase italic">Autonomous Data Pipelines</h3>
+                  <p className="text-lg text-slate-400 font-medium leading-relaxed">
+                    Connect QuickBooks, Stripe, and your ERP once. We handle categorization, deduplication, and reconciliation with 99% accuracy.
+                  </p>
+                  <Button variant="outline" className="border-white/10 h-14 rounded-2xl uppercase tracking-widest font-black text-[10px]">Explore Connectors</Button>
+                </div>
+                <div className="relative bg-[#020617] rounded-3xl border border-white/5 p-8 flex flex-col justify-between overflow-hidden">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl rounded-full" />
+                  <div className="space-y-4">
+                    {[1, 2, 3].map(i => (
+                      <div key={i} className="flex justify-between items-center py-3 border-b border-white/5">
+                        <div className="flex gap-3 items-center">
+                          <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
+                          <div className="h-2 w-24 bg-white/10 rounded" />
+                        </div>
+                        <div className="h-2 w-12 bg-white/20 rounded" />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-600">Reconciling 1,240 txns...</div>
+                </div>
+              </div>
+            </PremiumCard>
+
+            <PremiumCard>
+              <div className="space-y-8">
+                <div className="w-16 h-16 rounded-[1.5rem] bg-white/5 flex items-center justify-center border border-white/10">
+                  <BarChart3 className="w-8 h-8 text-white" />
+                </div>
+                <h3 className="text-3xl font-black tracking-tight uppercase italic">Monte Carlo Simulations</h3>
+                <p className="text-slate-400 font-medium leading-relaxed">
+                  Don't just predict one future. Simulate 1,000+. Understand risk-adjusted runway and probability of success.
+                </p>
+              </div>
+            </PremiumCard>
+
+            <PremiumCard>
+              <div className="space-y-8">
+                <div className="w-16 h-16 rounded-[1.5rem] bg-white/5 flex items-center justify-center border border-white/10">
+                  <Wand2 className="w-8 h-8 text-white" />
+                </div>
+                <h3 className="text-3xl font-black tracking-tight uppercase italic">Dynamic AI-CFO</h3>
+                <p className="text-slate-400 font-medium leading-relaxed">
+                  Ask strategy questions. Get board-ready narratives and actionable task exports to Slack or Asana.
+                </p>
+              </div>
+            </PremiumCard>
+
+            <PremiumCard className="lg:col-span-2">
+              <div className="flex flex-col md:flex-row gap-12 h-full items-center">
+                <div className="space-y-8 flex-1">
+                  <div className="w-16 h-16 rounded-[1.5rem] bg-white/5 flex items-center justify-center border border-white/10">
+                    <ShieldCheck className="w-8 h-8 text-white" />
+                  </div>
+                  <h3 className="text-4xl font-black tracking-tight uppercase italic">Cell-Level Provenance</h3>
+                  <p className="text-lg text-slate-400 font-medium leading-relaxed">
+                    Zero-hallucination reporting. Every number in your model can be traced back to its specific source transaction.
+                  </p>
+                </div>
+                <div className="flex-1 w-full bg-white/5 rounded-3xl p-10 border border-white/5 text-center space-y-4">
+                  <div className="text-sm font-black uppercase tracking-widest text-indigo-400">Audit Proof</div>
+                  <div className="text-5xl font-black tabular-nums">100%</div>
+                  <div className="text-[10px] font-bold text-slate-500">LINEAGE VERIFIED</div>
+                </div>
+              </div>
+            </PremiumCard>
+          </div>
+        </div>
+      </section>
+
+      {/* Industrial Audit Section - White Section for Contrast */}
+      <section className="py-48 px-6 bg-white text-[#020617] relative overflow-hidden">
+        <div className="max-w-[1400px] mx-auto grid lg:grid-cols-2 gap-24 items-center">
+          <div className="space-y-12">
+            <h2 className="text-[8vw] lg:text-[6vw] font-black tracking-tighter leading-[0.85] uppercase italic">
+              STOP <span className="text-slate-300">GUESSING.</span><br />
+              START <span className="text-indigo-600">COMMANDING.</span>
+            </h2>
+            <p className="text-2xl text-slate-600 font-medium leading-relaxed max-w-xl tracking-tight">
+              Excel is a liability. FinaPilot is your industrial-grade intelligence layer. Move from uncertainty to 95% statistical confidence.
+            </p>
+            <div className="space-y-8">
+              {[
+                { t: "Automated Board Packs", d: "3 days of manual preparation turned into 1-click precision exports." },
+                { t: "Predictive Burn Analysis", d: "Identify cash-out events 6 months before they happen with AI alerting." }
+              ].map((item, i) => (
+                <div key={i} className="flex gap-8 items-start group">
+                  <div className="w-16 h-16 rounded-[1.5rem] bg-[#020617] text-white flex items-center justify-center flex-shrink-0 group-hover:bg-indigo-600 transition-all group-hover:rotate-6">
+                    <CheckCircle2 className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h4 className="text-2xl font-black uppercase tracking-tight">{item.t}</h4>
+                    <p className="text-slate-500 font-medium text-lg leading-snug">{item.d}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <div className="relative">
+            {/* 3D Visual Box */}
+            <div className="absolute inset-0 bg-[#020617]/5 rounded-[4rem] -rotate-3 -z-10 shadow-inner" />
+            <div className="bg-slate-50 rounded-[4rem] border border-slate-200 p-16 shadow-2xl relative overflow-hidden">
+              <div className="space-y-12">
+                <div className="flex justify-between items-center">
+                  <div className="text-sm font-black uppercase tracking-[0.3em] text-slate-400">Risk Assessment</div>
+                  <Cpu className="w-6 h-6 text-indigo-600" />
+                </div>
+                <div className="space-y-10">
+                  {[
+                    { l: "Manual Error Risk", v: 94, c: "bg-red-500" },
+                    { l: "Data Latency", v: 88, c: "bg-orange-500" },
+                    { l: "Decision Lag", v: 72, c: "bg-yellow-500" }
+                  ].map((s, i) => (
+                    <div key={i} className="space-y-4">
+                      <div className="flex justify-between font-black uppercase text-xs tracking-widest">
+                        <span>{s.l}</span>
+                        <span>{s.v}% Impact</span>
+                      </div>
+                      <div className="h-5 w-full bg-slate-200 rounded-full overflow-hidden p-1 shadow-inner">
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          whileInView={{ width: `${s.v}%` }}
+                          transition={{ duration: 1.5, delay: i * 0.2, ease: "circOut" }}
+                          className={`h-full ${s.c} rounded-full shadow-[0_0_10px_rgba(0,0,0,0.1)]`} 
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-slate-400 text-sm italic font-medium leading-relaxed pt-6 border-t border-slate-200">
+                  "Legacy spreadsheet workflows create an average of 14.2 hidden errors per model, costing Series A teams over $40k/month in missed optimizations."
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing - High Fashion Cards */}
+      <section id="pricing" className="py-48 px-6 bg-[#020617] relative">
+        <div className="max-w-[1400px] mx-auto">
+          <div className="text-center mb-32 space-y-8">
+            <h2 className="text-[6vw] font-black tracking-tighter uppercase italic leading-none">COMMAND <span className="text-indigo-500">TIERS.</span></h2>
+            <p className="text-2xl text-slate-500 font-medium tracking-tight">Scale your financial intelligence from Seed to Exit.</p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-10 items-stretch">
+            {[
+              { n: "Starter Pilot", p: "$0", d: "Early Exploration", f: ["1 Workspace", "Core Dashboard", "Manual CSV"] },
+              { n: "Growth Command", p: "$199", d: "Forecasting Power", f: ["Unlimited Scenarios", "Monte Carlo Simulations", "Auto-Connectors", "Board Export Pack"], featured: true },
+              { n: "Industrial Scale", p: "Custom", d: "Governance & Control", f: ["RBAC & Approvals", "Audit Provenance", "Dedicated Success", "SSO/SAML"] }
+            ].map((plan, i) => (
+              <motion.div 
+                key={i}
+                whileHover={{ y: -15 }}
+                className={`relative flex flex-col p-12 rounded-[3.5rem] border ${plan.featured ? 'bg-indigo-600 border-indigo-400 text-white shadow-[0_0_100px_rgba(79,70,229,0.3)]' : 'bg-white/5 border-white/10 text-white'}`}
+              >
+                {plan.featured && (
+                  <div className="absolute top-0 right-12 -translate-y-1/2 bg-white text-indigo-600 px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest shadow-xl">Most Popular</div>
+                )}
+                <div className="flex-1 space-y-10">
+                  <div>
+                    <div className={`text-[10px] font-black uppercase tracking-[0.3em] mb-4 ${plan.featured ? 'text-white/60' : 'text-slate-500'}`}>{plan.n}</div>
+                    <div className="text-7xl font-black tracking-tighter italic">{plan.p}</div>
+                    <p className={`text-sm mt-4 font-bold ${plan.featured ? 'text-white/80' : 'text-indigo-400'}`}>{plan.d}</p>
+                  </div>
+                  <div className={`h-px w-full ${plan.featured ? 'bg-white/20' : 'bg-white/10'}`} />
+                  <ul className="space-y-6">
+                    {plan.f.map((f, j) => (
+                      <li key={j} className="flex gap-4 items-center font-bold text-sm tracking-tight">
+                        <CheckCircle2 className={`w-5 h-5 ${plan.featured ? 'text-white' : 'text-indigo-500'}`} /> {f}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <Button 
+                  onClick={plan.n.includes("Scale") ? requestDemo : openSignup}
+                  className={`mt-12 h-20 rounded-[2rem] font-black uppercase tracking-widest text-xs transition-all ${
+                    plan.featured 
+                      ? 'bg-white text-indigo-600 hover:bg-slate-100 shadow-2xl' 
+                      : 'bg-white/10 text-white hover:bg-white/20 border border-white/10'
+                  }`}
+                >
+                  {plan.n.includes("Scale") ? "Contact Sales" : "Start Pilot"}
+                </Button>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Testimonials - Kinetic Scroll */}
+      <section className="py-48 px-6 bg-[#020617]/50 border-y border-white/5">
+        <div className="max-w-[1400px] mx-auto">
+          <div className="grid lg:grid-cols-3 gap-16">
+            {[
+              { q: "FinaPilot turned our chaotic monthly fire-drills into a smooth check-in. It's absolute clarity.", a: "Alex Rivera", r: "Founder, TechScale" },
+              { q: "The cell-level provenance is a game changer for audit. No more spreadsheet forensic work.", a: "Sarah Chen", r: "CFO, Meridian FinTech" },
+              { q: "Monte Carlo forecasting gave our investors the confidence they needed to lead our Series B.", a: "James Miller", r: "VP Finance, CloudOptics" }
+            ].map((t, i) => (
+              <div key={i} className="space-y-8 p-10 rounded-[3rem] bg-white/[0.02] border border-white/5 hover:border-white/10 transition-colors">
+                <div className="text-indigo-500 text-6xl font-serif leading-none">“</div>
+                <p className="text-2xl text-slate-300 font-medium tracking-tight leading-relaxed italic">
+                  {t.q}
+                </p>
+                <div className="flex items-center gap-5 pt-6 border-t border-white/5">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600" />
+                  <div>
+                    <div className="font-black text-white uppercase tracking-tight">{t.a}</div>
+                    <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t.r}</div>
+                  </div>
                 </div>
               </div>
             ))}
@@ -726,362 +578,65 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
         </div>
       </section>
 
-      {/* Curved wave divider with gradient */}
-      <div className="relative -mt-1">
-        <svg className="w-full h-32" viewBox="0 0 1440 120" preserveAspectRatio="none">
-          <defs>
-            <linearGradient id="waveGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="white" />
-              <stop offset="50%" stopColor="#f8fafc" />
-              <stop offset="100%" stopColor="white" />
-            </linearGradient>
-          </defs>
-          <path d="M0,64 C240,96 480,96 720,64 C960,32 1200,32 1440,64 L1440,120 L0,120 Z" fill="url(#waveGradient)" />
-        </svg>
-      </div>
-
-      {/* Pricing */}
-      <section id="pricing" className="relative py-20 px-4 sm:px-6 lg:px-8 bg-white">
-        {/* Floating gradient orbs */}
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-gradient-to-br from-indigo-200/10 to-slate-300/10 rounded-full blur-3xl -z-10" />
-        <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-gradient-to-br from-orange-300/10 to-pink-400/10 rounded-full blur-3xl -z-10" />
-
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-slate-900 mb-4">Simple, Transparent Pricing</h2>
-            <p className="text-xl text-slate-600 max-w-2xl mx-auto">Start free, scale as you grow. No hidden fees.</p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            {/* Starter */}
-            <Card className="p-8 border-slate-200 bg-white">
-              <div className="mb-6">
-                <h3 className="text-2xl font-bold text-slate-900 mb-2">Starter</h3>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-slate-900">Free</span>
+      {/* Footer - Industrial Terminal Style */}
+      <footer className="py-32 px-6 bg-[#020617] relative">
+        <div className="max-w-[1400px] mx-auto">
+          <div className="grid md:grid-cols-12 gap-24 mb-32">
+            <div className="md:col-span-5 space-y-10">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center">
+                  <Gauge className="w-8 h-8 text-[#020617]" />
                 </div>
-                <p className="text-slate-600 mt-2">Perfect for trying FinaPilot</p>
+                <span className="text-3xl font-black tracking-tight text-white uppercase italic">FinaPilot</span>
               </div>
-              <Button
-                onClick={onGetStarted}
-                variant="outline"
-                className="w-full border-slate-300 text-slate-700 mb-6 bg-transparent"
-              >
-                Start Free Trial
-              </Button>
-              <ul className="space-y-3">
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-slate-600">Demo company with sample data</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-slate-600">Basic financial modeling</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-slate-600">AI-CFO chat (limited)</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-slate-600">1 user</span>
-                </li>
-              </ul>
-            </Card>
-
-            {/* Pro */}
-            <Card className="p-8 border-2 border-indigo-500 bg-white relative">
-              <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-indigo-400 to-slate-400 text-white">
-                Most Popular
-              </Badge>
-              <div className="mb-6">
-                <h3 className="text-2xl font-bold text-slate-900 mb-2">Pro</h3>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-slate-900">$199</span>
-                  <span className="text-slate-600">/month</span>
-                </div>
-                <p className="text-slate-600 mt-2">₹16,500/month • For growing startups</p>
+              <p className="text-slate-500 text-xl font-medium leading-relaxed max-w-md tracking-tight">
+                Industrial-grade financial intelligence for high-growth teams building the future.
+              </p>
+              <div className="flex gap-12 text-[10px] font-black text-slate-600 uppercase tracking-[0.3em]">
+                <a href="#" className="hover:text-indigo-500 transition-colors">TWITTER</a>
+                <a href="#" className="hover:text-indigo-500 transition-colors">LINKEDIN</a>
+                <a href="#" className="hover:text-indigo-500 transition-colors">GITHUB</a>
               </div>
-              <Button
-                onClick={onGetStarted}
-                className="w-full bg-gradient-to-r from-indigo-400 to-slate-400 hover:from-indigo-500 hover:to-slate-500 text-white mb-6"
-              >
-                Get Started
-              </Button>
-              <ul className="space-y-3">
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-slate-600">All integrations included</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-slate-600">Unlimited scenarios & forecasts</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-slate-600">Monte Carlo simulations</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-slate-600">AI-CFO with task creation</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-slate-600">Up to 5 users</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-slate-600">Priority support</span>
-                </li>
-              </ul>
-            </Card>
-
-            {/* Enterprise */}
-            <Card className="p-8 border-slate-200 bg-white">
-              <div className="mb-6">
-                <h3 className="text-2xl font-bold text-slate-900 mb-2">Enterprise</h3>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-slate-900">Custom</span>
-                </div>
-                <p className="text-slate-600 mt-2">For accounting firms & enterprises</p>
-              </div>
-              <Button variant="outline" className="w-full border-slate-300 text-slate-700 mb-6 bg-transparent">
-                Contact Sales
-              </Button>
-              <ul className="space-y-3">
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-slate-600">Everything in Pro</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-slate-600">White-label options</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-slate-600">Multi-client management</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-slate-600">Unlimited users</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-slate-600">Dedicated account manager</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm text-slate-600">Custom integrations</span>
-                </li>
-              </ul>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      {/* Curved wave divider transitioning to dark section */}
-      <div className="relative -mt-1">
-        <svg className="w-full h-32" viewBox="0 0 1440 120" preserveAspectRatio="none">
-          <defs>
-            <linearGradient id="darkWaveGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="white" />
-              <stop offset="100%" stopColor="#0f172a" />
-            </linearGradient>
-          </defs>
-          <path
-            d="M0,96 C360,32 720,32 1080,96 C1260,128 1350,144 1440,144 L1440,120 L0,120 Z"
-            fill="url(#darkWaveGradient)"
-          />
-        </svg>
-      </div>
-
-      {/* CTA Banner */}
-      <section className="relative py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-slate-900 to-slate-800 overflow-hidden">
-        {/* Animated gradient orbs in dark section */}
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-indigo-400/20 to-slate-400/20 rounded-full blur-3xl animate-pulse" />
-        <div
-          className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-br from-orange-500/20 to-pink-600/20 rounded-full blur-3xl animate-pulse"
-          style={{ animationDelay: "1s" }}
-        />
-
-        <div className="max-w-4xl mx-auto text-center space-y-8">
-          <h2 className="text-4xl sm:text-5xl font-bold text-white">Ready to meet your AI-CFO?</h2>
-          <p className="text-xl text-slate-300">
-            Join hundreds of startups and SMBs making smarter financial decisions with FinaPilot
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button
-              size="lg"
-              onClick={onGetStarted}
-              className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white shadow-xl shadow-orange-500/30 text-base px-8"
-            >
-              Start Free Trial
-              <ArrowRight className="w-5 h-5 ml-2" />
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              className="border-slate-600 text-white hover:bg-slate-800 text-base px-8 bg-transparent"
-            >
-              <Play className="w-5 h-5 mr-2" />
-              Watch Demo
-            </Button>
-          </div>
-          <div className="flex items-center justify-center gap-8 pt-4">
-            <div className="flex items-center gap-2">
-              <Lock className="w-5 h-5 text-slate-400" />
-              <span className="text-sm text-slate-400">SOC2 Compliant</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Globe className="w-5 h-5 text-slate-400" />
-              <span className="text-sm text-slate-400">India & Global</span>
+            <div className="md:col-span-7 grid grid-cols-2 sm:grid-cols-3 gap-16">
+              {[
+                { t: "Platform", l: ["Features", "Pricing", "Connectors", "Security"] },
+                { t: "Company", l: ["About", "Careers", "Contact", "Mission"] },
+                { t: "Legal", l: ["Privacy", "Terms", "Compliance", "Cookies"] }
+              ].map((col, i) => (
+                <div key={i} className="space-y-10">
+                  <h4 className="text-[10px] font-black text-white uppercase tracking-[0.4em] opacity-50">{col.t}</h4>
+                  <ul className="space-y-6">
+                    {col.l.map((link, j) => (
+                      <li key={j}>
+                        <a href="#" className="text-slate-500 hover:text-white transition-colors text-sm font-black uppercase tracking-widest">{link}</a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
-            <div className="flex items-center gap-2">
-              <Shield className="w-5 h-5 text-slate-400" />
-              <span className="text-sm text-slate-400">Bank-grade Security</span>
+          </div>
+          <div className="pt-12 border-t border-white/5 flex flex-col sm:flex-row justify-between items-center gap-10">
+            <p className="text-slate-600 text-[10px] font-black uppercase tracking-[0.3em]">
+              © {new Date().getFullYear()} FinaPilot Technologies Pvt. Ltd.
+            </p>
+            <div className="flex items-center gap-12 grayscale opacity-30">
+              <ShieldCheck className="w-8 h-8" />
+              <Globe className="w-8 h-8" />
+              <LockKeyhole className="w-8 h-8" />
             </div>
           </div>
         </div>
-      </section>
-
-      {/* Curved wave divider transitioning to footer */}
-      <div className="relative -mt-1">
-        <svg className="w-full h-24" viewBox="0 0 1440 120" preserveAspectRatio="none">
-          <defs>
-            <linearGradient id="footerWaveGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#0f172a" />
-              <stop offset="100%" stopColor="#f8fafc" />
-            </linearGradient>
-          </defs>
-          <path d="M0,32 C480,96 960,96 1440,32 L1440,120 L0,120 Z" fill="url(#footerWaveGradient)" />
-        </svg>
-      </div>
-
-      {/* Footer */}
-      <footer className="py-12 px-4 sm:px-6 lg:px-8 bg-slate-50 border-t border-slate-200">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 bg-gradient-to-br from-indigo-400 to-slate-400 rounded-lg flex items-center justify-center">
-                  <Gauge className="w-5 h-5 text-white" />
-                </div>
-                <span className="text-xl font-bold text-slate-900">
-                  Fina
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-slate-400">
-                    Pilot
-                  </span>
-                </span>
-              </div>
-              <p className="text-sm text-slate-600">Your AI-CFO for smarter financial decisions</p>
-            </div>
-
-            <div>
-              <h4 className="font-semibold text-slate-900 mb-4">Product</h4>
-              <ul className="space-y-2">
-                <li>
-                  <a href="#features" className="text-sm text-slate-600 hover:text-slate-900">
-                    Features
-                  </a>
-                </li>
-                <li>
-                  <a href="#pricing" className="text-sm text-slate-600 hover:text-slate-900">
-                    Pricing
-                  </a>
-                </li>
-                <li>
-                  <a href="#integrations" className="text-sm text-slate-600 hover:text-slate-900">
-                    Integrations
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="text-sm text-slate-600 hover:text-slate-900">
-                    Changelog
-                  </a>
-                </li>
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="font-semibold text-slate-900 mb-4">Company</h4>
-              <ul className="space-y-2">
-                <li>
-                  <a href="#" className="text-sm text-slate-600 hover:text-slate-900">
-                    About
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="text-sm text-slate-600 hover:text-slate-900">
-                    Careers
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="text-sm text-slate-600 hover:text-slate-900">
-                    Contact
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="text-sm text-slate-600 hover:text-slate-900">
-                    Partners
-                  </a>
-                </li>
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="font-semibold text-slate-900 mb-4">Resources</h4>
-              <ul className="space-y-2">
-                <li>
-                  <a href="#" className="text-sm text-slate-600 hover:text-slate-900">
-                    Documentation
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="text-sm text-slate-600 hover:text-slate-900">
-                    Security
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="text-sm text-slate-600 hover:text-slate-900">
-                    Privacy Policy
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="text-sm text-slate-600 hover:text-slate-900">
-                    Terms of Service
-                  </a>
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="pt-8 border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <p className="text-sm text-slate-600">© 2025 FinaPilot Technologies Pvt. Ltd. All rights reserved.</p>
-            <div className="flex items-center gap-6">
-              <a href="#" className="text-sm text-slate-600 hover:text-slate-900">
-                Twitter
-              </a>
-              <a href="#" className="text-sm text-slate-600 hover:text-slate-900">
-                LinkedIn
-              </a>
-              <a href="#" className="text-sm text-slate-600 hover:text-slate-900">
-                GitHub
-              </a>
-            </div>
-          </div>
-        </div>
-      </footer>
+      </footer >
 
       <AuthModal
         open={authModalOpen}
         onOpenChange={setAuthModalOpen}
         defaultMode={authMode}
         onSuccess={() => {
-          // Check if user is authenticated and redirect
           const token = localStorage.getItem("auth-token")
-          if (token) {
-            onGetStarted()
-          }
+          if (token) onGetStarted()
         }}
       />
     </div>
