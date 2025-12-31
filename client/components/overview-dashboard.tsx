@@ -183,20 +183,39 @@ export function OverviewDashboard() {
     setError(null)
 
     try {
-      const currentOrgId = await fetchOrgId()
+      // First try to get orgId from state or localStorage
+      let currentOrgId = orgId || localStorage.getItem("orgId")
+      
+      // If not found, fetch it
+      if (!currentOrgId) {
+        currentOrgId = await fetchOrgId()
+      }
+      
       if (!currentOrgId) {
         const errorMsg = "Organization ID not found. Please ensure you're logged in."
         console.error("[Overview] No orgId found:", errorMsg)
         setError(errorMsg)
-        toast.error(errorMsg)
         setLoading(false)
         return
       }
 
-      setOrgId(currentOrgId)
+      // Ensure orgId is set in state and localStorage
+      if (currentOrgId !== orgId) {
+        setOrgId(currentOrgId)
+        localStorage.setItem("orgId", currentOrgId)
+      }
+      
       console.log("[Overview] Fetching data for orgId:", currentOrgId)
 
       const token = getAuthToken()
+      
+      if (!token) {
+        const errorMsg = "Authentication token not found. Please log in again."
+        console.error("[Overview] No token found")
+        setError(errorMsg)
+        setLoading(false)
+        return
+      }
 
       if (!token) {
         const errorMsg = "Authentication token not found. Please log in."
@@ -277,12 +296,23 @@ export function OverviewDashboard() {
 
   // Listen for CSV/Excel import completion to refresh data
   useEffect(() => {
-    const handleImportComplete = () => {
-      console.log("[Overview] Import completed, refreshing data...")
+    const handleImportComplete = async (event: CustomEvent) => {
+      const { rowsImported, orgId: importedOrgId } = event.detail || {}
+      
+      console.log("[Overview] Import completed, refreshing data...", { rowsImported, importedOrgId, currentOrgId: orgId })
+      
+      // Update orgId if it came from the event
+      if (importedOrgId) {
+        if (importedOrgId !== orgId) {
+          setOrgId(importedOrgId)
+          localStorage.setItem("orgId", importedOrgId)
+        }
+      }
+      
       // Small delay to ensure backend has processed the data
       setTimeout(() => {
         fetchOverviewData()
-      }, 1500)
+      }, 2000)
     }
 
     const listener = handleImportComplete as unknown as EventListener
@@ -292,7 +322,7 @@ export function OverviewDashboard() {
       window.removeEventListener('csv-import-completed', listener)
       window.removeEventListener('xlsx-import-completed', listener)
     }
-  }, [])
+  }, [orgId])
 
   const { chartData: paginatedRevenueData, hasMore: hasMoreRevenue, loadMore: loadMoreRevenue, initializeData: initRevenue } = useChartPagination({
     defaultMonths: 36,

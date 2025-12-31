@@ -108,81 +108,126 @@ export function CSVImportWizard() {
     }
   }, [pendingJobId])
 
-  // Auto-detect field mappings based on column names
+  // Auto-detect field mappings based on column names with improved matching
   const autoMapFields = (headers: string[]): FieldMapping[] => {
     const mappings: FieldMapping[] = []
+    const usedFields = new Set<string>()
     const headerLower = headers.map((h) => h.toLowerCase().trim())
 
-    headers.forEach((header, index) => {
+    // First pass: Exact matches and high-confidence matches
+    headers.forEach((header) => {
       const headerLower = header.toLowerCase().trim()
       let mappedField: string | null = null
       let confidence = 0
 
-      // Date detection
+      // Date detection - multiple patterns
       if (
-        headerLower.includes("date") ||
-        headerLower.includes("transaction date") ||
-        headerLower.includes("posted date")
+        headerLower === "date" ||
+        headerLower === "transaction date" ||
+        headerLower === "posted date" ||
+        headerLower === "posting date" ||
+        headerLower.includes("date") && !headerLower.includes("update")
       ) {
-        mappedField = "date"
-        confidence = 95
+        if (!usedFields.has("date")) {
+          mappedField = "date"
+          confidence = headerLower === "date" ? 98 : 95
+        }
       }
-      // Amount detection
+      // Amount detection - multiple patterns
       else if (
+        headerLower === "amount" ||
+        headerLower === "value" ||
+        headerLower === "total" ||
         headerLower.includes("amount") ||
-        headerLower.includes("value") ||
-        headerLower.includes("total") ||
+        (headerLower.includes("value") && !headerLower.includes("date")) ||
         headerLower.includes("debit") ||
         headerLower.includes("credit")
       ) {
-        mappedField = "amount"
-        confidence = 90
+        if (!usedFields.has("amount")) {
+          mappedField = "amount"
+          confidence = headerLower === "amount" ? 95 : 90
+        }
       }
       // Description detection
       else if (
+        headerLower === "description" ||
+        headerLower === "memo" ||
+        headerLower === "notes" ||
+        headerLower === "details" ||
+        headerLower === "narration" ||
         headerLower.includes("description") ||
         headerLower.includes("memo") ||
-        headerLower.includes("notes") ||
-        headerLower.includes("details")
+        headerLower.includes("notes")
       ) {
-        mappedField = "description"
-        confidence = 85
+        if (!usedFields.has("description")) {
+          mappedField = "description"
+          confidence = headerLower === "description" ? 92 : 85
+        }
       }
       // Category detection
       else if (
+        headerLower === "category" ||
+        headerLower === "type" ||
+        headerLower === "class" ||
         headerLower.includes("category") ||
-        headerLower.includes("type") ||
-        headerLower.includes("class")
+        (headerLower.includes("type") && !headerLower.includes("transaction"))
       ) {
-        mappedField = "category"
-        confidence = 80
+        if (!usedFields.has("category")) {
+          mappedField = "category"
+          confidence = headerLower === "category" ? 88 : 80
+        }
       }
       // Account detection
       else if (
-        headerLower.includes("account") ||
-        headerLower.includes("account name") ||
-        headerLower.includes("account number")
+        headerLower === "account" ||
+        headerLower === "account name" ||
+        headerLower.includes("account") && !headerLower.includes("number")
       ) {
-        mappedField = "account"
-        confidence = 75
+        if (!usedFields.has("account")) {
+          mappedField = "account"
+          confidence = headerLower === "account" ? 85 : 75
+        }
       }
       // Reference detection
       else if (
+        headerLower === "reference" ||
+        headerLower === "ref" ||
+        headerLower === "transaction id" ||
+        headerLower === "check number" ||
+        headerLower === "invoice number" ||
         headerLower.includes("reference") ||
-        headerLower.includes("ref") ||
-        headerLower.includes("transaction id") ||
-        headerLower.includes("check number")
+        headerLower.includes("ref #")
       ) {
-        mappedField = "reference"
-        confidence = 70
+        if (!usedFields.has("reference")) {
+          mappedField = "reference"
+          confidence = headerLower === "reference" || headerLower === "ref" ? 82 : 70
+        }
+      }
+      // Type detection
+      else if (
+        headerLower === "transaction type" ||
+        headerLower === "type" ||
+        headerLower.includes("transaction type")
+      ) {
+        if (!usedFields.has("type")) {
+          mappedField = "type"
+          confidence = headerLower === "transaction type" ? 88 : 75
+        }
       }
       // Currency detection
-      else if (headerLower.includes("currency") || headerLower.includes("curr")) {
-        mappedField = "currency"
-        confidence = 90
+      else if (
+        headerLower === "currency" ||
+        headerLower === "curr" ||
+        headerLower.includes("currency")
+      ) {
+        if (!usedFields.has("currency")) {
+          mappedField = "currency"
+          confidence = headerLower === "currency" ? 95 : 90
+        }
       }
 
-      if (mappedField) {
+      if (mappedField && !usedFields.has(mappedField)) {
+        usedFields.add(mappedField)
         mappings.push({
           csvColumn: header,
           targetField: mappedField,
@@ -192,6 +237,50 @@ export function CSVImportWizard() {
     })
 
     return mappings
+  }
+
+  // Calculate confidence for a field even if not auto-mapped
+  const getFieldConfidence = (targetField: string, csvColumn: string | null): number => {
+    if (!csvColumn) return 0
+    
+    const headerLower = csvColumn.toLowerCase().trim()
+    
+    switch (targetField) {
+      case "date":
+        if (headerLower === "date") return 98
+        if (headerLower.includes("date")) return 95
+        return 0
+      case "amount":
+        if (headerLower === "amount") return 95
+        if (headerLower.includes("amount") || headerLower === "value" || headerLower === "total") return 90
+        return 0
+      case "description":
+        if (headerLower === "description") return 92
+        if (headerLower.includes("description") || headerLower === "memo" || headerLower === "notes") return 85
+        return 0
+      case "category":
+        if (headerLower === "category") return 88
+        if (headerLower.includes("category") || (headerLower === "type" && !headerLower.includes("transaction"))) return 80
+        return 0
+      case "account":
+        if (headerLower === "account") return 85
+        if (headerLower.includes("account") && !headerLower.includes("number")) return 75
+        return 0
+      case "reference":
+        if (headerLower === "reference" || headerLower === "ref") return 82
+        if (headerLower.includes("reference") || headerLower.includes("ref")) return 70
+        return 0
+      case "type":
+        if (headerLower === "transaction type") return 88
+        if (headerLower === "type") return 75
+        return 0
+      case "currency":
+        if (headerLower === "currency") return 95
+        if (headerLower.includes("currency")) return 90
+        return 0
+      default:
+        return 0
+    }
   }
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -214,24 +303,50 @@ export function CSVImportWizard() {
         return
       }
 
-      // Parse CSV (simple parser - handles quoted fields)
+      // Parse CSV with improved handling for quoted fields, escaped quotes, and edge cases
       const parseCSVLine = (line: string): string[] => {
         const result: string[] = []
         let current = ""
         let inQuotes = false
+        let i = 0
 
-        for (let i = 0; i < line.length; i++) {
+        while (i < line.length) {
           const char = line[i]
+          const nextChar = i + 1 < line.length ? line[i + 1] : null
+
           if (char === '"') {
-            inQuotes = !inQuotes
+            if (inQuotes && nextChar === '"') {
+              // Escaped quote inside quoted field
+              current += '"'
+              i += 2
+              continue
+            } else {
+              // Toggle quote state
+              inQuotes = !inQuotes
+            }
           } else if (char === "," && !inQuotes) {
+            // Field separator
             result.push(current.trim())
             current = ""
+          } else if (char === '\n' && !inQuotes) {
+            // Newline outside quotes - end of line
+            break
+          } else if (char === '\r' && !inQuotes) {
+            // Carriage return outside quotes - skip
           } else {
             current += char
           }
+          i++
         }
+        
+        // Push the last field
         result.push(current.trim())
+        
+        // Clean up empty trailing fields
+        while (result.length > 0 && result[result.length - 1] === "") {
+          result.pop()
+        }
+        
         return result
       }
 
@@ -259,12 +374,26 @@ export function CSVImportWizard() {
 
       // Read all rows for import, but only show first 10 for preview
       for (let i = startIndex; i < lines.length; i++) {
-        const values = parseCSVLine(lines[i])
+        const line = lines[i].trim()
+        if (!line) continue // Skip empty lines
+        
+        const values = parseCSVLine(line)
+        if (values.length === 0) continue // Skip rows with no data
+        
         const row: CSVRow = {}
+        let hasData = false
+        
         cleanHeaders.forEach((header, index) => {
-          row[header] = values[index] || ""
+          const value = (values[index] || "").trim()
+          // Clean the value: remove extra whitespace, handle null/undefined
+          row[header] = value === "null" || value === "undefined" || value === "NULL" || value === "UNDEFINED" ? "" : value
+          if (value) hasData = true
         })
-        data.push(row)
+        
+        // Only add rows that have at least some data
+        if (hasData) {
+          data.push(row)
+        }
       }
 
       console.log("📊 Parsed data rows:", data.length)
@@ -1034,19 +1163,55 @@ export function CSVImportWizard() {
                         .filter((f) => f.required)
                         .map((field) => {
                           const mapping = fieldMappings.find((m) => m.targetField === field.value)
+                          const currentColumn = getMappedColumn(field.value)
+                          const confidence = mapping?.confidence || (currentColumn !== "__none__" ? getFieldConfidence(field.value, currentColumn) : 0)
+                          const isMapped = currentColumn !== "__none__"
+                          
                           return (
-                            <div key={field.value} className="flex items-center gap-4 p-3 border rounded-lg">
-                              <div className="flex-1">
-                                <Label className="font-medium">{field.label}</Label>
-                                {mapping && (
-                                  <Badge variant="secondary" className="ml-2">
-                                    {mapping.confidence}% confidence
-                                  </Badge>
-                                )}
+                            <div key={field.value} className="flex items-center gap-4 p-3 border rounded-lg bg-white">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <Label className="font-medium">{field.label}</Label>
+                                  {isMapped && confidence > 0 && (
+                                    <Badge 
+                                      variant="secondary" 
+                                      className={`text-xs ${
+                                        confidence >= 90 ? "bg-green-100 text-green-700" :
+                                        confidence >= 75 ? "bg-blue-100 text-blue-700" :
+                                        "bg-yellow-100 text-yellow-700"
+                                      }`}
+                                    >
+                                      {confidence}% confidence
+                                    </Badge>
+                                  )}
+                                  {!isMapped && (
+                                    <Badge variant="outline" className="text-xs bg-red-50 text-red-600 border-red-200">
+                                      Not mapped
+                                    </Badge>
+                                  )}
+                                </div>
                               </div>
                               <Select
-                                value={getMappedColumn(field.value)}
-                                onValueChange={(value) => handleMappingChange(value, field.value)}
+                                value={currentColumn}
+                                onValueChange={(value) => {
+                                  handleMappingChange(value, field.value)
+                                  // Recalculate confidence after change
+                                  if (value !== "__none__") {
+                                    const newConfidence = getFieldConfidence(field.value, value)
+                                    setFieldMappings((prev) => {
+                                      const existing = prev.find((m) => m.targetField === field.value)
+                                      if (existing) {
+                                        return prev.map((m) => 
+                                          m.targetField === field.value 
+                                            ? { ...m, csvColumn: value, confidence: newConfidence }
+                                            : m
+                                        )
+                                      } else {
+                                        return [...prev, { csvColumn: value, targetField: field.value, confidence: newConfidence }]
+                                      }
+                                    })
+                                  }
+                                }}
                               >
                                 <SelectTrigger className="w-[250px]">
                                   <SelectValue placeholder="Select CSV column" />
@@ -1060,8 +1225,8 @@ export function CSVImportWizard() {
                                   ))}
                                 </SelectContent>
                               </Select>
-                              {mapping && (
-                                <CheckCircle2 className="h-5 w-5 text-green-500" />
+                              {isMapped && (
+                                <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
                               )}
                             </div>
                           )
@@ -1074,37 +1239,73 @@ export function CSVImportWizard() {
                           .filter((f) => !f.required)
                           .map((field) => {
                             const mapping = fieldMappings.find((m) => m.targetField === field.value)
+                            const currentColumn = getMappedColumn(field.value)
+                            const confidence = mapping?.confidence || (currentColumn !== "__none__" ? getFieldConfidence(field.value, currentColumn) : 0)
+                            const isMapped = currentColumn !== "__none__"
+                            
                             return (
                               <div
                                 key={field.value}
-                                className="flex items-center gap-4 p-3 border rounded-lg mb-2"
+                                className="flex items-center gap-4 p-3 border rounded-lg mb-2 bg-white"
                               >
-                                <div className="flex-1">
-                                  <Label className="font-medium">{field.label}</Label>
-                                  {mapping && (
-                                    <Badge variant="secondary" className="ml-2">
-                                      {mapping.confidence}% confidence
-                                    </Badge>
-                                  )}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <Label className="font-medium">{field.label}</Label>
+                                    {isMapped && confidence > 0 && (
+                                      <Badge 
+                                        variant="secondary" 
+                                        className={`text-xs ${
+                                          confidence >= 90 ? "bg-green-100 text-green-700" :
+                                          confidence >= 75 ? "bg-blue-100 text-blue-700" :
+                                          "bg-yellow-100 text-yellow-700"
+                                        }`}
+                                      >
+                                        {confidence}% confidence
+                                      </Badge>
+                                    )}
+                                    {!isMapped && (
+                                      <Badge variant="outline" className="text-xs text-muted-foreground">
+                                        Optional
+                                      </Badge>
+                                    )}
+                                  </div>
                                 </div>
-                              <Select
-                                value={getMappedColumn(field.value)}
-                                onValueChange={(value) => handleMappingChange(value, field.value)}
-                              >
-                                <SelectTrigger className="w-[250px]">
-                                  <SelectValue placeholder="Select CSV column (optional)" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="__none__">None</SelectItem>
-                                  {csvHeaders.map((header) => (
-                                    <SelectItem key={header} value={header}>
-                                      {header}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                                {mapping && (
-                                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                                <Select
+                                  value={currentColumn}
+                                  onValueChange={(value) => {
+                                    handleMappingChange(value, field.value)
+                                    // Recalculate confidence after change
+                                    if (value !== "__none__") {
+                                      const newConfidence = getFieldConfidence(field.value, value)
+                                      setFieldMappings((prev) => {
+                                        const existing = prev.find((m) => m.targetField === field.value)
+                                        if (existing) {
+                                          return prev.map((m) => 
+                                            m.targetField === field.value 
+                                              ? { ...m, csvColumn: value, confidence: newConfidence }
+                                              : m
+                                          )
+                                        } else {
+                                          return [...prev, { csvColumn: value, targetField: field.value, confidence: newConfidence }]
+                                        }
+                                      })
+                                    }
+                                  }}
+                                >
+                                  <SelectTrigger className="w-[250px]">
+                                    <SelectValue placeholder="Select CSV column (optional)" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__none__">None</SelectItem>
+                                    {csvHeaders.map((header) => (
+                                      <SelectItem key={header} value={header}>
+                                        {header}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                {isMapped && (
+                                  <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
                                 )}
                               </div>
                             )

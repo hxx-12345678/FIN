@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { API_BASE_URL } from "@/lib/api-config"
 
 interface Job {
   id: string
@@ -20,7 +21,6 @@ interface UseJobStatusReturn {
   cancel: () => Promise<void>
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
 const POLL_INTERVAL = 2000
 
 export function useJobStatus(jobId: string | null): UseJobStatusReturn {

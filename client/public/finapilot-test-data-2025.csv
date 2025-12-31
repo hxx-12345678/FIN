@@ -1,0 +1,114 @@
+Date,Amount,Description,Category,Account,Reference,Type,Currency
+2025-01-15,50000.00,Monthly subscription revenue - January,Revenue,Bank Account,INV-2025-001,income,USD
+2025-01-16,-15000.00,Office rent payment - January,Expenses,Bank Account,CHK-2025-001,expense,USD
+2025-01-17,25000.00,Client payment - Project Alpha,Revenue,Bank Account,INV-2025-002,income,USD
+2025-01-18,-5000.00,Employee payroll - January,Payroll,Bank Account,PAY-2025-001,expense,USD
+2025-01-20,-3000.00,Software subscription - Slack,Expenses,Credit Card,CC-2025-001,expense,USD
+2025-01-22,15000.00,Consulting fee - Client Beta,Revenue,Bank Account,INV-2025-003,income,USD
+2025-01-24,-8000.00,Marketing campaign - Google Ads,Marketing,Credit Card,CC-2025-002,expense,USD
+2025-01-25,-2000.00,Utilities - Electricity bill,Expenses,Bank Account,UTIL-2025-001,expense,USD
+2025-01-27,35000.00,Product sales revenue - Q1,Revenue,Bank Account,INV-2025-004,income,USD
+2025-01-28,-1200.00,Office supplies - Stationery,Expenses,Credit Card,CC-2025-003,expense,USD
+2025-01-30,18000.00,Service contract payment,Revenue,Bank Account,INV-2025-005,income,USD
+2025-02-01,55000.00,Monthly subscription revenue - February,Revenue,Bank Account,INV-2025-006,income,USD
+2025-02-02,-15000.00,Office rent payment - February,Expenses,Bank Account,CHK-2025-002,expense,USD
+2025-02-05,-5000.00,Employee payroll - February,Payroll,Bank Account,PAY-2025-002,expense,USD
+2025-02-07,28000.00,Client payment - Project Gamma,Revenue,Bank Account,INV-2025-007,income,USD
+2025-02-10,-3500.00,Software subscription - Microsoft 365,Expenses,Credit Card,CC-2025-004,expense,USD
+2025-02-12,-9500.00,Marketing campaign - Facebook Ads,Marketing,Credit Card,CC-2025-005,expense,USD
+2025-02-14,-2100.00,Utilities - Water and Internet,Expenses,Bank Account,UTIL-2025-002,expense,USD
+2025-02-17,42000.00,Product sales revenue - Q1,Revenue,Bank Account,INV-2025-008,income,USD
+2025-02-19,12000.00,Consulting fee - Client Delta,Revenue,Bank Account,INV-2025-009,income,USD
+2025-02-21,-1500.00,Office supplies - Equipment,Expenses,Credit Card,CC-2025-006,expense,USD
+2025-02-24,-7000.00,Professional services - Accounting,Expenses,Bank Account,ACC-2025-001,expense,USD
+2025-02-26,25000.00,Recurring revenue - SaaS subscriptions,Revenue,Bank Account,INV-2025-010,income,USD
+2025-03-01,60000.00,Monthly subscription revenue - March,Revenue,Bank Account,INV-2025-011,income,USD
+2025-03-02,-15000.00,Office rent payment - March,Expenses,Bank Account,CHK-2025-003,expense,USD
+2025-03-05,-5000.00,Employee payroll - March,Payroll,Bank Account,PAY-2025-003,expense,USD
+2025-03-07,32000.00,Client payment - Project Epsilon,Revenue,Bank Account,INV-2025-012,income,USD
+2025-03-10,-4000.00,Software subscription - AWS,Expenses,Credit Card,CC-2025-007,expense,USD
+2025-03-12,-11000.00,Marketing campaign - LinkedIn Ads,Marketing,Credit Card,CC-2025-008,expense,USD
+2025-03-14,-2200.00,Utilities - Gas and Electricity,Expenses,Bank Account,UTIL-2025-003,expense,USD
+2025-03-17,48000.00,Product sales revenue - Q1,Revenue,Bank Account,INV-2025-013,income,USD
+2025-03-19,15000.00,Consulting fee - Client Zeta,Revenue,Bank Account,INV-2025-014,income,USD
+2025-03-21,-1800.00,Office supplies - Furniture,Expenses,Credit Card,CC-2025-009,expense,USD
+2025-03-24,-5500.00,Professional services - Tax preparation,Expenses,Bank Account,TAX-2025-001,expense,USD
+2025-03-26,28000.00,Recurring revenue - SaaS subscriptions,Revenue,Bank Account,INV-2025-015,income,USD
+2025-03-28,-3000.00,Travel expenses - Business trip,Expenses,Credit Card,CC-2025-010,expense,USD
+2025-04-01,65000.00,Monthly subscription revenue - April,Revenue,Bank Account,INV-2025-016,income,USD
+2025-04-02,-15000.00,Office rent payment - April,Expenses,Bank Account,CHK-2025-004,expense,USD
+2025-04-05,-5000.00,Employee payroll - April,Payroll,Bank Account,PAY-2025-004,expense,USD
+2025-04-07,35000.00,Client payment - Project Eta,Revenue,Bank Account,INV-2025-017,income,USD
+2025-04-10,-4500.00,Software subscription - GitHub,Expenses,Credit Card,CC-2025-011,expense,USD
+2025-04-12,-12500.00,Marketing campaign - Twitter Ads,Marketing,Credit Card,CC-2025-012,expense,USD
+2025-04-14,-2300.00,Utilities - All services,Expenses,Bank Account,UTIL-2025-004,expense,USD
+2025-04-17,52000.00,Product sales revenue - Q2,Revenue,Bank Account,INV-2025-018,income,USD
+2025-04-19,18000.00,Consulting fee - Client Theta,Revenue,Bank Account,INV-2025-019,income,USD
+2025-04-21,-2000.00,Office supplies - Technology,Expenses,Credit Card,CC-2025-013,expense,USD
+2025-04-24,-8000.00,Professional services - Legal consultation,Expenses,Bank Account,LEG-2025-001,expense,USD
+2025-04-26,30000.00,Recurring revenue - SaaS subscriptions,Revenue,Bank Account,INV-2025-020,income,USD
+2025-05-01,70000.00,Monthly subscription revenue - May,Revenue,Bank Account,INV-2025-021,income,USD
+2025-05-02,-15000.00,Office rent payment - May,Expenses,Bank Account,CHK-2025-005,expense,USD
+2025-05-05,-5000.00,Employee payroll - May,Payroll,Bank Account,PAY-2025-005,expense,USD
+2025-05-07,38000.00,Client payment - Project Iota,Revenue,Bank Account,INV-2025-022,income,USD
+2025-05-10,-5000.00,Software subscription - Salesforce,Expenses,Credit Card,CC-2025-014,expense,USD
+2025-05-12,-14000.00,Marketing campaign - YouTube Ads,Marketing,Credit Card,CC-2025-015,expense,USD
+2025-05-14,-2400.00,Utilities - Comprehensive,Expenses,Bank Account,UTIL-2025-005,expense,USD
+2025-05-17,58000.00,Product sales revenue - Q2,Revenue,Bank Account,INV-2025-023,income,USD
+2025-05-19,20000.00,Consulting fee - Client Kappa,Revenue,Bank Account,INV-2025-024,income,USD
+2025-05-21,-2500.00,Office supplies - Maintenance,Expenses,Credit Card,CC-2025-016,expense,USD
+2025-05-24,-6500.00,Professional services - Audit,Expenses,Bank Account,AUD-2025-001,expense,USD
+2025-05-26,32000.00,Recurring revenue - SaaS subscriptions,Revenue,Bank Account,INV-2025-025,income,USD
+2025-06-01,75000.00,Monthly subscription revenue - June,Revenue,Bank Account,INV-2025-026,income,USD
+2025-06-02,-15000.00,Office rent payment - June,Expenses,Bank Account,CHK-2025-006,expense,USD
+2025-06-05,-5000.00,Employee payroll - June,Payroll,Bank Account,PAY-2025-006,expense,USD
+2025-06-07,40000.00,Client payment - Project Lambda,Revenue,Bank Account,INV-2025-027,income,USD
+2025-06-10,-5500.00,Software subscription - HubSpot,Expenses,Credit Card,CC-2025-017,expense,USD
+2025-06-12,-15000.00,Marketing campaign - Instagram Ads,Marketing,Credit Card,CC-2025-018,expense,USD
+2025-06-14,-2500.00,Utilities - Summer peak,Expenses,Bank Account,UTIL-2025-006,expense,USD
+2025-06-17,62000.00,Product sales revenue - Q2,Revenue,Bank Account,INV-2025-028,income,USD
+2025-06-19,22000.00,Consulting fee - Client Mu,Revenue,Bank Account,INV-2025-029,income,USD
+2025-06-21,-3000.00,Office supplies - Annual refresh,Expenses,Credit Card,CC-2025-019,expense,USD
+2025-06-24,-9000.00,Professional services - Compliance,Expenses,Bank Account,COM-2025-001,expense,USD
+2025-06-26,35000.00,Recurring revenue - SaaS subscriptions,Revenue,Bank Account,INV-2025-030,income,USD
+2025-06-28,-4000.00,Travel expenses - Conference,Expenses,Credit Card,CC-2025-020,expense,USD
+2025-07-01,80000.00,Monthly subscription revenue - July,Revenue,Bank Account,INV-2025-031,income,USD
+2025-07-02,-15000.00,Office rent payment - July,Expenses,Bank Account,CHK-2025-007,expense,USD
+2025-07-05,-5000.00,Employee payroll - July,Payroll,Bank Account,PAY-2025-007,expense,USD
+2025-07-07,42000.00,Client payment - Project Nu,Revenue,Bank Account,INV-2025-032,income,USD
+2025-07-10,-6000.00,Software subscription - Adobe Creative Cloud,Expenses,Credit Card,CC-2025-021,expense,USD
+2025-07-12,-16000.00,Marketing campaign - TikTok Ads,Marketing,Credit Card,CC-2025-022,expense,USD
+2025-07-14,-2600.00,Utilities - Air conditioning,Expenses,Bank Account,UTIL-2025-007,expense,USD
+2025-07-17,68000.00,Product sales revenue - Q3,Revenue,Bank Account,INV-2025-033,income,USD
+2025-07-19,24000.00,Consulting fee - Client Xi,Revenue,Bank Account,INV-2025-034,income,USD
+2025-07-21,-3500.00,Office supplies - Software licenses,Expenses,Credit Card,CC-2025-023,expense,USD
+2025-07-24,-7500.00,Professional services - HR consulting,Expenses,Bank Account,HR-2025-001,expense,USD
+2025-07-26,38000.00,Recurring revenue - SaaS subscriptions,Revenue,Bank Account,INV-2025-035,income,USD
+2025-07-28,-4500.00,Travel expenses - Client visit,Expenses,Credit Card,CC-2025-024,expense,USD
+2025-08-01,85000.00,Monthly subscription revenue - August,Revenue,Bank Account,INV-2025-036,income,USD
+2025-08-02,-15000.00,Office rent payment - August,Expenses,Bank Account,CHK-2025-008,expense,USD
+2025-08-05,-5000.00,Employee payroll - August,Payroll,Bank Account,PAY-2025-008,expense,USD
+2025-08-07,45000.00,Client payment - Project Omicron,Revenue,Bank Account,INV-2025-037,income,USD
+2025-08-10,-6500.00,Software subscription - Zoom,Expenses,Credit Card,CC-2025-025,expense,USD
+2025-08-12,-17000.00,Marketing campaign - Snapchat Ads,Marketing,Credit Card,CC-2025-026,expense,USD
+2025-08-14,-2700.00,Utilities - Peak summer usage,Expenses,Bank Account,UTIL-2025-008,expense,USD
+2025-08-17,72000.00,Product sales revenue - Q3,Revenue,Bank Account,INV-2025-038,income,USD
+2025-08-19,26000.00,Consulting fee - Client Pi,Revenue,Bank Account,INV-2025-039,income,USD
+2025-08-21,-4000.00,Office supplies - Hardware upgrade,Expenses,Credit Card,CC-2025-027,expense,USD
+2025-08-24,-8500.00,Professional services - Security audit,Expenses,Bank Account,SEC-2025-001,expense,USD
+2025-08-26,40000.00,Recurring revenue - SaaS subscriptions,Revenue,Bank Account,INV-2025-040,income,USD
+2025-08-28,-5000.00,Travel expenses - Industry conference,Expenses,Credit Card,CC-2025-028,expense,USD
+2025-09-01,90000.00,Monthly subscription revenue - September,Revenue,Bank Account,INV-2025-041,income,USD
+2025-09-02,-15000.00,Office rent payment - September,Expenses,Bank Account,CHK-2025-009,expense,USD
+2025-09-05,-5000.00,Employee payroll - September,Payroll,Bank Account,PAY-2025-009,expense,USD
+2025-09-07,48000.00,Client payment - Project Rho,Revenue,Bank Account,INV-2025-042,income,USD
+2025-09-10,-7000.00,Software subscription - Notion,Expenses,Credit Card,CC-2025-029,expense,USD
+2025-09-12,-18000.00,Marketing campaign - Reddit Ads,Marketing,Credit Card,CC-2025-030,expense,USD
+2025-09-14,-2800.00,Utilities - Fall transition,Expenses,Bank Account,UTIL-2025-009,expense,USD
+2025-09-17,76000.00,Product sales revenue - Q3,Revenue,Bank Account,INV-2025-043,income,USD
+2025-09-19,28000.00,Consulting fee - Client Sigma,Revenue,Bank Account,INV-2025-044,income,USD
+2025-09-21,-4500.00,Office supplies - Cloud storage,Expenses,Credit Card,CC-2025-031,expense,USD
+2025-09-24,-9500.00,Professional services - Financial planning,Expenses,Bank Account,FP-2025-001,expense,USD
+2025-09-26,42000.00,Recurring revenue - SaaS subscriptions,Revenue,Bank Account,INV-2025-045,income,USD
+2025-09-28,-5500.00,Travel expenses - Team building,Expenses,Credit Card,CC-2025-032,expense,USD
+

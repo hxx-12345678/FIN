@@ -774,15 +774,26 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
         total_revenue = 0
         total_expenses = 0
         # Get initial cash from assumptions, with proper fallback
-        # Priority: assumptions.cash.initialCash > assumptions.initialCash > default
-        cash_assumptions = final_assumptions.get('cash', {})
-        if isinstance(cash_assumptions, dict):
-            initial_cash = float(cash_assumptions.get('initialCash', final_assumptions.get('initialCash', 500000)))
-        else:
-            initial_cash = float(final_assumptions.get('initialCash', 500000))
+        # Priority: params_json.cashOnHand (from CSV import) > assumptions.cash.initialCash > assumptions.initialCash > default
+        initial_cash = 500000  # Default fallback
         
-        # Log the source of initial cash for transparency
-        logger.info(f"Initial cash: ${initial_cash:,.2f} (from assumptions)")
+        # First check params_json for cashOnHand (from CSV import)
+        if isinstance(params_json, dict):
+            cash_on_hand = params_json.get('cashOnHand')
+            if cash_on_hand and float(cash_on_hand) > 0:
+                initial_cash = float(cash_on_hand)
+                logger.info(f"Using cashOnHand from params_json (CSV import): ${initial_cash:,.2f}")
+        
+        # If not found in params_json, check assumptions
+        if initial_cash == 500000:  # Still using default
+            cash_assumptions = final_assumptions.get('cash', {})
+            if isinstance(cash_assumptions, dict):
+                initial_cash = float(cash_assumptions.get('initialCash', final_assumptions.get('initialCash', 500000)))
+            else:
+                initial_cash = float(final_assumptions.get('initialCash', 500000))
+            logger.info(f"Using initial cash from assumptions: ${initial_cash:,.2f}")
+        else:
+            logger.info(f"Initial cash: ${initial_cash:,.2f} (from CSV import)")
         
         for tx in transactions:
             tx_date = tx[0]

@@ -134,6 +134,24 @@ def handle_auto_model_trigger(job_id: str, org_id: str, object_id: str, logs: di
         update_progress(job_id, 50, {'status': 'creating_model_run'})
         
         # Create model run with starting values from CSV import
+        # Store both startingCustomers and cashOnHand in params_json so model_run.py can use them
+        model_run_params = {
+            'autoTriggered': True,
+            'triggerType': trigger_type,
+            'triggerSource': trigger_source,
+            'triggeredAt': datetime.now(timezone.utc).isoformat(),
+        }
+        
+        # Add startingCustomers if provided
+        if starting_customers and int(starting_customers) > 0:
+            model_run_params['startingCustomers'] = int(starting_customers)
+            logger.info(f"Setting startingCustomers in model run params: {model_run_params['startingCustomers']}")
+        
+        # Add cashOnHand if provided
+        if cash_on_hand and float(cash_on_hand) > 0:
+            model_run_params['cashOnHand'] = float(cash_on_hand)
+            logger.info(f"Setting cashOnHand in model run params: ${model_run_params['cashOnHand']:,.2f}")
+        
         cursor.execute("""
             INSERT INTO model_runs (id, "modelId", "orgId", "run_type", "params_json", status, created_at)
             VALUES (gen_random_uuid(), %s, %s, 'baseline', %s::jsonb, 'queued', NOW())
@@ -141,14 +159,7 @@ def handle_auto_model_trigger(job_id: str, org_id: str, object_id: str, logs: di
         """, (
             model_id,
             org_id,
-            json.dumps({
-                'autoTriggered': True,
-                'triggerType': trigger_type,
-                'triggerSource': trigger_source,
-                'triggeredAt': datetime.now(timezone.utc).isoformat(),
-                'startingCustomers': int(starting_customers) if starting_customers else None,
-                'cashOnHand': float(cash_on_hand) if cash_on_hand else None,
-            }),
+            json.dumps(model_run_params),
         ))
         
         model_run_id = cursor.fetchone()[0]

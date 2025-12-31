@@ -18,6 +18,7 @@ import { Loader2, Download, AlertCircle, FileText, BarChart3, X } from "lucide-r
 import { toast } from "sonner"
 import { useJobStatus } from "@/hooks/use-job-status"
 import { JobProgressIndicator } from "./job-progress-indicator"
+import { API_BASE_URL } from "@/lib/api-config"
 import {
   LineChart,
   Line,
@@ -38,8 +39,6 @@ interface JobDetailsModalProps {
   open: boolean
   onClose: () => void
 }
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
 
 export function JobDetailsModal({ jobId, open, onClose }: JobDetailsModalProps) {
   const { job, isLoading, error, refetch, cancel } = useJobStatus(jobId)

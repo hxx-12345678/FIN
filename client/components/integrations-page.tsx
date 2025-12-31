@@ -22,7 +22,8 @@ import {
   ExternalLink,
   Loader2,
   FileDown,
-  ChevronDown
+  ChevronDown,
+  FileText
 } from "lucide-react"
 import { CSVImportWizard } from "./csv-import-wizard"
 import { toast } from "sonner"
@@ -198,6 +199,39 @@ export function IntegrationsPage() {
     }
   }, [])
 
+  const fetchImportHistory = useCallback(async (id: string) => {
+    if (!id) return
+    console.log("[Integrations] Fetching import history for org:", id)
+    
+    setLoadingHistory(true)
+    const token = getAuthToken()
+    if (!token) {
+      setLoadingHistory(false)
+      return
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/jobs?orgId=${id}&jobType=csv_import&limit=10`, {
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        credentials: "include",
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        if (result.ok && result.data) {
+          setImportHistory(result.data)
+          console.log("[Integrations] Import history updated:", result.data.length, "jobs")
+        } else if (Array.isArray(result)) {
+          setImportHistory(result)
+        }
+      }
+    } catch (err) {
+      console.error("[Integrations] Failed to fetch import history:", err)
+    } finally {
+      setLoadingHistory(false)
+    }
+  }, [getAuthToken])
+
   const fetchAllData = useCallback(async (id: string) => {
     if (!id) return
     console.log("[Integrations] Fetching all data for org:", id)
@@ -245,7 +279,11 @@ export function IntegrationsPage() {
       // 2. Process History
       if (histRes.status === 'fulfilled' && histRes.value.ok) {
         const result = await histRes.value.json()
-        if (result.ok && result.data) setImportHistory(result.data)
+        if (result.ok && result.data) {
+          setImportHistory(result.data)
+        } else if (Array.isArray(result)) {
+          setImportHistory(result)
+        }
       }
 
       // 3. Check if onboarding complete
@@ -287,21 +325,49 @@ export function IntegrationsPage() {
 
   // When orgId is set, fetch data
   useEffect(() => {
-    if (orgId) fetchAllData(orgId)
-  }, [orgId, fetchAllData])
+    if (orgId) {
+      fetchAllData(orgId)
+      fetchImportHistory(orgId) // Also fetch import history on mount
+    }
+  }, [orgId, fetchAllData, fetchImportHistory])
 
   // Global event listeners for data refresh
   useEffect(() => {
-    const handleRefresh = () => {
-      if (orgId) fetchAllData(orgId)
+    const handleRefresh = async (event: CustomEvent) => {
+      const { rowsImported, orgId: importedOrgId } = event.detail || {}
+      
+      // Use the orgId from event if available, otherwise use current orgId
+      const targetOrgId = importedOrgId || orgId
+      
+      if (targetOrgId) {
+        console.log("[Integrations] CSV import completed, refreshing data...", { rowsImported, targetOrgId })
+        toast.success(`CSV import completed! Refreshing integrations...`)
+        
+        // Update orgId if it came from the event
+        if (importedOrgId && importedOrgId !== orgId) {
+          setOrgId(importedOrgId)
+          localStorage.setItem("orgId", importedOrgId)
+        }
+        
+        // Refresh all data with a small delay to ensure backend has processed
+        setTimeout(async () => {
+          await fetchAllData(targetOrgId)
+          // Explicitly refresh import history
+          await fetchImportHistory(targetOrgId)
+        }, 2000)
+      } else {
+        console.warn("[Integrations] No orgId available for refresh")
+      }
     }
-    window.addEventListener('csv-import-completed', handleRefresh)
-    window.addEventListener('xlsx-import-completed', handleRefresh)
+    
+    const listener = handleRefresh as unknown as EventListener
+    window.addEventListener('csv-import-completed', listener)
+    window.addEventListener('xlsx-import-completed', listener)
     return () => {
-      window.removeEventListener('csv-import-completed', handleRefresh)
-      window.removeEventListener('xlsx-import-completed', handleRefresh)
+      window.removeEventListener('csv-import-completed', listener)
+      window.removeEventListener('xlsx-import-completed', listener)
     }
-  }, [orgId, fetchAllData])
+  }, [orgId, fetchAllData, fetchImportHistory])
 
   // 4. HANDLERS
   const handleConnect = async (integration: Integration) => {
@@ -517,31 +583,76 @@ export function IntegrationsPage() {
         </CardContent>
       </Card>
 
-      {/* History */}
-      {importHistory.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>Recent CSV Imports</CardTitle></CardHeader>
-          <CardContent>
-            {loadingHistory ? <div className="space-y-2"><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /></div> : (
-              <div className="space-y-3">
-                {importHistory.map((job: any) => (
-                  <div key={job.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className={`font-medium ${job.status === 'done' ? 'text-green-600' : 'text-gray-600'}`}>
-                          {job.status === 'done' ? '✅ Completed' : job.status}
-                        </span>
-                        <span className="text-sm text-muted-foreground">{new Date(job.createdAt).toLocaleString()}</span>
-                      </div>
+      {/* History - Always show, even if empty */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Recent CSV Imports</CardTitle>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => orgId && fetchImportHistory(orgId)}
+              disabled={loadingHistory}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${loadingHistory ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loadingHistory ? (
+            <div className="space-y-2">
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+          ) : importHistory.length > 0 ? (
+            <div className="space-y-3">
+              {importHistory.map((job: any) => (
+                <div key={job.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`font-medium ${
+                        job.status === 'done' || job.status === 'completed' ? 'text-green-600' : 
+                        job.status === 'failed' || job.status === 'error' ? 'text-red-600' :
+                        'text-blue-600'
+                      }`}>
+                        {job.status === 'done' || job.status === 'completed' ? '✅ Completed' : 
+                         job.status === 'failed' || job.status === 'error' ? '❌ Failed' :
+                         job.status === 'running' ? '🔄 Running' :
+                         job.status === 'queued' ? '⏳ Queued' :
+                         job.status}
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        {new Date(job.createdAt).toLocaleString()}
+                      </span>
                     </div>
-                    <div className="text-right text-xs text-muted-foreground">{job.finishedAt ? `Finished: ${new Date(job.finishedAt).toLocaleTimeString()}` : 'In progress...'}</div>
+                    {job.logs && typeof job.logs === 'object' && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {Array.isArray(job.logs) && job.logs.length > 0 && (
+                          <span>Rows: {job.logs[job.logs.length - 1]?.meta?.rows_imported || 'N/A'}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+                  <div className="text-right text-xs text-muted-foreground">
+                    {job.finishedAt ? (
+                      <span>Finished: {new Date(job.finishedAt).toLocaleTimeString()}</span>
+                    ) : (
+                      <span className="text-blue-600">In progress...</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p className="font-medium">No CSV imports yet</p>
+              <p className="text-sm mt-1">Import a CSV file to see your import history here</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Grid */}
       <div>
