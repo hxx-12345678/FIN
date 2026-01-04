@@ -213,6 +213,33 @@ export function FinancialModeling() {
     }
   }, [financialData, initializeData])
 
+  // Regenerate sensitivity data when currentRun changes
+  useEffect(() => {
+    if (selectedModel && orgId) {
+      const regenerateSensitivity = async () => {
+        const token = localStorage.getItem("auth-token") || document.cookie
+          .split("; ")
+          .find((row) => row.startsWith("auth-token="))
+          ?.split("=")[1]
+        
+        if (!token) return
+        
+        // Only regenerate if we don't have valid sensitivity data
+        if (!sensitivityData || !sensitivityData.revenueGrowth || !sensitivityData.churnRate) {
+          console.log("Regenerating sensitivity data - currentRun:", currentRun?.id)
+          await fetchModelDetails(orgId, selectedModel, token)
+        }
+      }
+      
+      // Small delay to ensure state is updated
+      const timer = setTimeout(() => {
+        regenerateSensitivity()
+      }, 300)
+      
+      return () => clearTimeout(timer)
+    }
+  }, [currentRun?.id, selectedModel, orgId])
+
   const fetchOrgId = async (): Promise<string | null> => {
     const storedOrgId = localStorage.getItem("orgId")
     if (storedOrgId) return storedOrgId
@@ -319,11 +346,35 @@ export function FinancialModeling() {
       if (modelsResult.ok && modelsResult.models) {
         setModels(modelsResult.models)
         if (modelsResult.models.length > 0) {
-          const firstModel = modelsResult.models[0]
-          setSelectedModel(firstModel.id)
-          setCurrentModel(firstModel)
-          await fetchModelRuns(currentOrgId, firstModel.id, token)
-          await fetchModelDetails(currentOrgId, firstModel.id, token)
+          // Prioritize model with completed runs, otherwise use first model
+          let selectedModelObj = modelsResult.models[0]
+          
+          // Check if any model has completed runs
+          for (const model of modelsResult.models) {
+            const runsResponse = await fetch(`${API_BASE_URL}/models/${model.id}/runs`, {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+              credentials: "include",
+            })
+            
+            if (runsResponse.ok) {
+              const runsResult = await runsResponse.json()
+              if (runsResult.ok && runsResult.runs && runsResult.runs.length > 0) {
+                const hasCompletedRun = runsResult.runs.some((r: ModelRun) => r.status === "done")
+                if (hasCompletedRun) {
+                  selectedModelObj = model
+                  break
+                }
+              }
+            }
+          }
+          
+          setSelectedModel(selectedModelObj.id)
+          setCurrentModel(selectedModelObj)
+          await fetchModelRuns(currentOrgId, selectedModelObj.id, token)
+          await fetchModelDetails(currentOrgId, selectedModelObj.id, token)
         }
       } else {
         // No models yet, clear data
@@ -360,15 +411,19 @@ export function FinancialModeling() {
           // Get the latest completed run (or most recent run)
           const latestRun = runs.find((r: ModelRun) => r.status === "done") || runs[0]
           if (latestRun) {
+            // Set currentRun first
             setCurrentRun(latestRun)
-            await fetchModelRunDetails(orgId, modelId, latestRun.id, token)
+            // Fetch run details to get financial data
+            const runDetails = await fetchModelRunDetails(orgId, modelId, latestRun.id, token)
+            // IMPORTANT: Pass latestRun directly to fetchModelDetails to avoid stale closure
+            await fetchModelDetails(orgId, modelId, token, true, latestRun) // Force regenerate sensitivity with run
           } else {
             // No completed runs yet for this model
             setCurrentRun(null)
             setFinancialData([])
+            // Still fetch model details for assumptions (sensitivity will use assumptions)
+            await fetchModelDetails(orgId, modelId, token, true, null)
           }
-          // Always fetch model details for assumptions/projections/sensitivity
-          await fetchModelDetails(orgId, modelId, token)
         } else {
           // No runs yet for this model; clear run-specific state so UI shows correct "no data" message
           setModelRuns([])
@@ -437,11 +492,46 @@ export function FinancialModeling() {
             if (monthlyData.length > 0) {
               setFinancialData(monthlyData)
             } else {
-              // Don't blank the UI while a new run is still queued/running.
-              // Only clear if a completed run truly has no monthly series.
-              if (run.status === "done") {
+              // If no monthly data but run is done, try to generate from summary top-level data
+              if (run.status === "done" && summary) {
+                const revenue = Number(summary.revenue || summary.mrr || 0)
+                const expenses = Number(summary.expenses || 0)
+                const cogs = Number(summary.cogs || revenue * 0.2)
+                
+                if (revenue > 0 || expenses > 0) {
+                  // Generate 12 months of data from summary
+                  const generatedData: any[] = []
+                  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                  const now = new Date()
+                  
+                  for (let i = 0; i < 12; i++) {
+                    const monthDate = new Date(now.getFullYear(), now.getMonth() + i, 1)
+                    const monthKey = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}`
+                    const growthFactor = Math.pow(1.08, i) // 8% monthly growth
+                    
+                    generatedData.push({
+                      month: monthNames[monthDate.getMonth()],
+                      monthKey: monthKey,
+                      revenue: Math.round(revenue * growthFactor),
+                      cogs: Math.round(cogs * growthFactor),
+                      grossProfit: Math.round((revenue - cogs) * growthFactor),
+                      opex: Math.round(expenses * growthFactor),
+                      netIncome: Math.round((revenue - cogs - expenses) * growthFactor),
+                      cashFlow: Math.round((revenue - expenses) * growthFactor),
+                    })
+                  }
+                  
+                  if (generatedData.length > 0) {
+                    setFinancialData(generatedData)
+                  } else {
+                    setFinancialData([])
+                  }
+                } else {
+                  setFinancialData([])
+                }
+              } else if (run.status === "done") {
                 setFinancialData([])
-            }
+              }
             }
           } else {
             // No summary data; keep existing financialData
@@ -458,7 +548,7 @@ export function FinancialModeling() {
     }
   }
 
-  const fetchModelDetails = async (orgId: string, modelId: string, token: string) => {
+  const fetchModelDetails = async (orgId: string, modelId: string, token: string, forceRegenerateSensitivity: boolean = false, runToUseOverride?: ModelRun | null) => {
     try {
       const response = await fetch(`${API_BASE_URL}/models/${modelId}`, {
         headers: {
@@ -473,6 +563,9 @@ export function FinancialModeling() {
         if (result.ok && result.model) {
           const model = result.model
           setCurrentModel(model)
+          
+          // Use override if provided, otherwise use currentRun from state
+          const runToUse = runToUseOverride !== undefined ? runToUseOverride : currentRun
           
           // Extract assumptions from modelJson
           if (model.modelJson && model.modelJson.assumptions) {
@@ -517,40 +610,119 @@ export function FinancialModeling() {
           // Extract projections from modelJson
           if (model.modelJson && model.modelJson.projections) {
             setProjections(model.modelJson.projections)
-          } else if (currentRun && currentRun.summaryJson) {
-            // Generate projections from summary
-            const summary = currentRun.summaryJson as any
+          } else if (runToUse && runToUse.summaryJson) {
+            // Generate projections from summary (use runToUse instead of currentRun)
+            const summary = typeof runToUse.summaryJson === 'string' 
+              ? JSON.parse(runToUse.summaryJson) 
+              : runToUse.summaryJson
             const monthlyRevenue = summary.revenue || summary.mrr || 0
             const arr = monthlyRevenue * 12
             const growthRate = summary.growthRate || 0.08
             const projectedArr = arr * Math.pow(1 + growthRate, 1)
+            // Calculate runway correctly - if burn rate is negative (profitable), show 999
+            const burnRate = summary.burnRate || summary.monthlyBurnRate || (summary.expenses - summary.revenue) || 0;
+            const cashBalance = summary.cashBalance || summary.cash || 0;
+            let calculatedRunway = summary.runwayMonths || 0;
+            if (calculatedRunway === 0 && burnRate < 0 && cashBalance > 0) {
+              // Profitable scenario - infinite runway
+              calculatedRunway = 999;
+            } else if (calculatedRunway === 0 && burnRate > 0 && cashBalance > 0) {
+              // Calculate from cash and burn rate
+              calculatedRunway = cashBalance / burnRate;
+            }
+            
             setProjections({
               projectedARR: projectedArr,
               totalBurn: summary.expenses * 12 || 0,
-              runway: summary.runwayMonths || 0,
+              runway: calculatedRunway,
               growthRate: growthRate * 100,
             })
+          } else if (model.modelJson?.assumptions) {
+            // Generate projections from assumptions if no model run
+            const a = model.modelJson.assumptions
+            const baselineRevenue = a.baselineRevenue || a.revenue?.baselineRevenue || 100000
+            const revenueGrowth = a.revenueGrowth || a.revenue?.revenueGrowth || 0.08
+            const baselineExpenses = a.baselineExpenses || a.costs?.baselineExpenses || 80000
+            const initialCash = a.initialCash || a.cash?.initialCash || 500000
+            const monthlyBurn = baselineExpenses - baselineRevenue
+            
+            // Calculate runway correctly - if monthlyBurn is negative (profitable), show 999
+            const calculatedRunway = monthlyBurn > 0 && initialCash > 0 
+              ? initialCash / monthlyBurn 
+              : monthlyBurn <= 0 && initialCash > 0 
+              ? 999 
+              : 0;
+            
+            const projectionsData = {
+              projectedARR: baselineRevenue * 12 * (1 + revenueGrowth),
+              totalBurn: baselineExpenses * 12,
+              runway: calculatedRunway,
+              growthRate: revenueGrowth * 100,
+            }
+            console.log("Setting projections from assumptions:", projectionsData)
+            setProjections(projectionsData)
           }
           
           // Extract sensitivity data from modelJson or generate from assumptions
-          if (model.modelJson && model.modelJson.sensitivity) {
-            setSensitivityData(model.modelJson.sensitivity)
+          // Check if sensitivity data exists AND is valid (has revenueGrowth and churnRate)
+          const existingSensitivity = model.modelJson?.sensitivity
+          const hasValidSensitivity = existingSensitivity && 
+            existingSensitivity.revenueGrowth && 
+            existingSensitivity.churnRate &&
+            existingSensitivity.revenueGrowth.base &&
+            existingSensitivity.churnRate.base &&
+            !forceRegenerateSensitivity
+          
+          if (hasValidSensitivity) {
+            console.log("Using existing sensitivity data from modelJson")
+            setSensitivityData(existingSensitivity)
           } else {
-            // Generate default sensitivity data
-            const baseRevenue = currentRun?.summaryJson ? (currentRun.summaryJson as any).revenue || (currentRun.summaryJson as any).mrr || 0 : 0
+            // Generate sensitivity data from model run or assumptions
+            console.log("Generating sensitivity data - runToUse:", runToUse?.id, "has summary:", !!runToUse?.summaryJson, "forceRegenerate:", forceRegenerateSensitivity)
+            
+            let baseRevenue = 0
+            let revenueGrowth = 0.08
+            let churnRate = 0.05
+            
+            // Try to get from current run first (use runToUse which is currentRun from state)
+            if (runToUse?.summaryJson) {
+              const summary = typeof runToUse.summaryJson === 'string' 
+                ? JSON.parse(runToUse.summaryJson) 
+                : runToUse.summaryJson
+              baseRevenue = Number(summary.revenue || summary.mrr || 0)
+              revenueGrowth = Number(summary.growthRate || summary.revenueGrowth || 0.08)
+              churnRate = Number(summary.churnRate || 0.05)
+              console.log("✅ Using run data - Revenue:", baseRevenue, "Growth:", revenueGrowth, "Churn:", churnRate)
+            } 
+            // Fallback to assumptions
+            else if (model.modelJson?.assumptions) {
+              const a = model.modelJson.assumptions
+              baseRevenue = Number(a.baselineRevenue || a.revenue?.baselineRevenue || 100000)
+              revenueGrowth = Number(a.revenueGrowth || a.revenue?.revenueGrowth || 0.08)
+              churnRate = Number(a.churnRate || a.revenue?.churnRate || 0.05)
+              console.log("✅ Using assumptions - Revenue:", baseRevenue, "Growth:", revenueGrowth, "Churn:", churnRate)
+            }
+            
+            // Ensure we have valid values
+            if (baseRevenue <= 0) baseRevenue = 100000
+            if (revenueGrowth <= 0) revenueGrowth = 0.08
+            if (churnRate <= 0) churnRate = 0.05
+            
             const baseARR = baseRevenue * 12
-            setSensitivityData({
+            const sensitivity = {
               revenueGrowth: {
-                conservative: { rate: 0.05, arr: baseARR * 1.05 },
-                base: { rate: 0.08, arr: baseARR * 1.08 },
-                optimistic: { rate: 0.12, arr: baseARR * 1.12 },
+                conservative: { rate: revenueGrowth * 0.6, arr: baseARR * (1 + revenueGrowth * 0.6) },
+                base: { rate: revenueGrowth, arr: baseARR * (1 + revenueGrowth) },
+                optimistic: { rate: revenueGrowth * 1.5, arr: baseARR * (1 + revenueGrowth * 1.5) },
               },
               churnRate: {
-                low: { rate: 0.02, arr: baseARR * 1.1 },
-                base: { rate: 0.05, arr: baseARR },
-                high: { rate: 0.08, arr: baseARR * 0.9 },
+                low: { rate: churnRate * 0.4, arr: baseARR * 1.1 },
+                base: { rate: churnRate, arr: baseARR },
+                high: { rate: churnRate * 1.6, arr: baseARR * 0.9 },
               },
-            })
+            }
+            console.log("✅ Setting sensitivity data:", JSON.stringify(sensitivity, null, 2))
+            setSensitivityData(sensitivity)
           }
         }
       }
@@ -782,9 +954,33 @@ export function FinancialModeling() {
 
             if (jobStatus === "done" || jobStatus === "completed") {
               toast.success("Model run completed successfully!")
-              // Refresh all data
+              // Refresh all data - get the latest run and fetch its details
               await fetchModelRuns(orgId, modelId, token)
-              await fetchModelDetails(orgId, modelId, token)
+              // Wait a bit for the run to be fully saved
+              await new Promise(resolve => setTimeout(resolve, 1000))
+              // Fetch runs again to get the latest one
+              const runsResponse = await fetch(`${API_BASE_URL}/models/${modelId}/runs`, {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": "application/json",
+                },
+                credentials: "include",
+              })
+              if (runsResponse.ok) {
+                const runsResult = await runsResponse.json()
+                if (runsResult.ok && runsResult.runs && runsResult.runs.length > 0) {
+                  const latestRun = runsResult.runs.find((r: ModelRun) => r.status === "done") || runsResult.runs[0]
+                  if (latestRun) {
+                    await fetchModelRunDetails(orgId, modelId, latestRun.id, token)
+                  }
+                }
+              }
+              // IMPORTANT: Fetch model details AFTER run details to ensure currentRun is set
+              // Wait a bit for state to update, then pass the latest run directly
+              await new Promise(resolve => setTimeout(resolve, 500))
+              // Get the latest run again to pass it directly
+              const latestRunForDetails = runsResult.runs.find((r: ModelRun) => r.status === "done") || runsResult.runs[0]
+              await fetchModelDetails(orgId, modelId, token, true, latestRunForDetails) // Force regenerate sensitivity
               return
             } else if (jobStatus === "failed") {
               toast.error("Model run failed. Please check the logs and try again.")
@@ -823,7 +1019,28 @@ export function FinancialModeling() {
                 if (runStatus === "done") {
                   toast.success("Model run completed!")
                   await fetchModelRuns(orgId, modelId, token)
-                  await fetchModelDetails(orgId, modelId, token)
+                  // Fetch the run details to update financial data
+                  let runObjForDetails = runObj
+                  if (modelRunId) {
+                    await fetchModelRunDetails(orgId, modelId, modelRunId, token)
+                    // Get the run again to ensure we have the latest
+                    const runDetailsResponse = await fetch(`${API_BASE_URL}/models/${modelId}/runs/${modelRunId}`, {
+                      headers: {
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                      },
+                      credentials: "include",
+                    })
+                    if (runDetailsResponse.ok) {
+                      const runDetailsResult = await runDetailsResponse.json()
+                      if (runDetailsResult.ok && runDetailsResult.run) {
+                        runObjForDetails = runDetailsResult.run
+                      }
+                    }
+                  }
+                  // Wait a bit for state to update
+                  await new Promise(resolve => setTimeout(resolve, 300))
+                  await fetchModelDetails(orgId, modelId, token, true, runObjForDetails) // Force regenerate sensitivity
                   return
                 } else if (runStatus === "failed") {
                   toast.error("Model run failed.")
@@ -2152,8 +2369,16 @@ export function FinancialModeling() {
                       ))
                       ) : (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                            No financial data available. Run a model to see results.
+                          <TableCell colSpan={5} className="text-center py-8">
+                            <div className="space-y-2">
+                              <p className="text-muted-foreground font-medium">No financial model has been generated yet.</p>
+                              <p className="text-sm text-muted-foreground">
+                                Your financial model will be generated based on the values in the <strong>Assumptions</strong> tab.
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-2">
+                                Adjust your assumptions or use the default values, then run a model to see financial statements, projections, and sensitivity analysis.
+                              </p>
+                            </div>
                           </TableCell>
                         </TableRow>
                       )}
@@ -2180,8 +2405,14 @@ export function FinancialModeling() {
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="flex items-center justify-center h-[250px] text-muted-foreground">
-                    No revenue data available. Run a model to see trends.
+                  <div className="flex flex-col items-center justify-center h-[250px] text-center space-y-2 px-4">
+                    <p className="text-muted-foreground font-medium">No revenue data available.</p>
+                    <p className="text-sm text-muted-foreground">
+                      Your financial model will be generated based on the values in the <strong>Assumptions</strong> tab.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Configure your assumptions and run a model to see revenue trends and projections.
+                    </p>
                   </div>
                 )}
                 {hasMore && (
@@ -2212,8 +2443,14 @@ export function FinancialModeling() {
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-                    No cash flow data available. Run a model to see analysis.
+                  <div className="flex flex-col items-center justify-center h-[300px] text-center space-y-2 px-4">
+                    <p className="text-muted-foreground font-medium">No cash flow data available.</p>
+                    <p className="text-sm text-muted-foreground">
+                      Your financial model will be generated based on the values in the <strong>Assumptions</strong> tab.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Set your initial cash balance and expense assumptions, then run a model to see cash flow analysis.
+                    </p>
                   </div>
                 )}
                 {hasMore && (
@@ -2236,12 +2473,24 @@ export function FinancialModeling() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Alert className="mb-6 border-blue-200 bg-blue-50">
-                <AlertCircle className="h-4 w-4 text-blue-600" />
-                <AlertDescription className="text-sm">
-                  <strong>Important:</strong> This financial model is built on these assumptions. Changes to assumptions will affect all projections, cash flow, and runway calculations. Hover over the help icons to understand what each assumption means and how it impacts your model.
-                </AlertDescription>
-              </Alert>
+              {!selectedModel || modelAssumptions.length === 0 ? (
+                <Alert className="mb-6 border-amber-200 bg-amber-50">
+                  <AlertCircle className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-sm">
+                    <strong>No Model Generated Yet:</strong> Your financial model will be generated based on the values you set in this Assumptions tab. 
+                    Adjust the default values below to match your business parameters, or keep the defaults if they're appropriate. 
+                    Once you run a model, these assumptions will drive all projections, cash flow calculations, and runway estimates. 
+                    Hover over the help icons to understand what each assumption means and how it impacts your model.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <Alert className="mb-6 border-blue-200 bg-blue-50">
+                  <AlertCircle className="h-4 w-4 text-blue-600" />
+                  <AlertDescription className="text-sm">
+                    <strong>Important:</strong> This financial model is built on these assumptions. Changes to assumptions will affect all projections, cash flow, and runway calculations. Hover over the help icons to understand what each assumption means and how it impacts your model.
+                  </AlertDescription>
+                </Alert>
+              )}
               <div className="space-y-6">
                 {["Revenue", "Costs"].map((category) => (
                   <div key={category}>
@@ -2351,11 +2600,33 @@ export function FinancialModeling() {
                 <Card>
                   <CardContent className="p-4">
                     <div className="text-2xl font-bold text-purple-600">
-                      {projections?.runway 
-                        ? `${projections.runway.toFixed(0)} months`
-                        : currentRun?.summaryJson 
-                        ? `${((currentRun.summaryJson as any).runwayMonths || 0).toFixed(0)} months`
-                        : "N/A"}
+                      {(() => {
+                        if (projections?.runway) {
+                          return projections.runway >= 999 ? "999+ months" : `${projections.runway.toFixed(0)} months`;
+                        }
+                        if (currentRun?.summaryJson) {
+                          const summary = typeof currentRun.summaryJson === 'string' 
+                            ? JSON.parse(currentRun.summaryJson) 
+                            : currentRun.summaryJson;
+                          const runway = summary.runwayMonths || summary.runway || 0;
+                          // Try multiple field names for burn rate
+                          const burnRate = summary.burnRate || summary.monthlyBurnRate || summary.monthlyBurn || 
+                            (summary.expenses && summary.revenue ? summary.expenses - summary.revenue : 0) || 0;
+                          const cashBalance = summary.cashBalance || summary.cash || 0;
+                          
+                          // If burn rate is negative or zero (profitable/break-even) and we have cash, show 999+
+                          if (burnRate <= 0 && cashBalance > 0) {
+                            return "999+ months";
+                          }
+                          // If runway is 0 but we have burn rate and cash, calculate it
+                          if (runway === 0 && burnRate > 0 && cashBalance > 0) {
+                            const calculatedRunway = cashBalance / burnRate;
+                            return calculatedRunway >= 999 ? "999+ months" : `${calculatedRunway.toFixed(0)} months`;
+                          }
+                          return runway >= 999 ? "999+ months" : `${runway.toFixed(0)} months`;
+                        }
+                        return "N/A";
+                      })()}
                     </div>
                     <div className="text-sm text-muted-foreground">Runway</div>
                     {projections || currentRun?.summaryJson ? (
@@ -2394,17 +2665,17 @@ export function FinancialModeling() {
                     <div className="mt-2 space-y-2">
                       {sensitivityData?.revenueGrowth ? (
                         <>
-                          <div className="flex justify-between text-sm">
-                            <span>Conservative ({sensitivityData.revenueGrowth.conservative.rate * 100}%)</span>
-                            <span className="font-mono">${(sensitivityData.revenueGrowth.conservative.arr / 1000).toFixed(0)}K ARR</span>
+                          <div className="flex justify-between text-sm p-2 bg-muted/50 rounded">
+                            <span>Conservative ({(sensitivityData.revenueGrowth.conservative?.rate || 0) * 100}%)</span>
+                            <span className="font-mono font-semibold">${((sensitivityData.revenueGrowth.conservative?.arr || 0) / 1000).toFixed(0)}K ARR</span>
                           </div>
-                          <div className="flex justify-between text-sm">
-                            <span>Base Case ({sensitivityData.revenueGrowth.base.rate * 100}%)</span>
-                            <span className="font-mono">${(sensitivityData.revenueGrowth.base.arr / 1000).toFixed(0)}K ARR</span>
+                          <div className="flex justify-between text-sm p-2 bg-primary/5 rounded border border-primary/20">
+                            <span className="font-medium">Base Case ({(sensitivityData.revenueGrowth.base?.rate || 0) * 100}%)</span>
+                            <span className="font-mono font-semibold text-primary">${((sensitivityData.revenueGrowth.base?.arr || 0) / 1000).toFixed(0)}K ARR</span>
                           </div>
-                          <div className="flex justify-between text-sm">
-                            <span>Optimistic ({sensitivityData.revenueGrowth.optimistic.rate * 100}%)</span>
-                            <span className="font-mono">${(sensitivityData.revenueGrowth.optimistic.arr / 1000).toFixed(0)}K ARR</span>
+                          <div className="flex justify-between text-sm p-2 bg-muted/50 rounded">
+                            <span>Optimistic ({(sensitivityData.revenueGrowth.optimistic?.rate || 0) * 100}%)</span>
+                            <span className="font-mono font-semibold">${((sensitivityData.revenueGrowth.optimistic?.arr || 0) / 1000).toFixed(0)}K ARR</span>
                           </div>
                         </>
                       ) : (
@@ -2419,17 +2690,17 @@ export function FinancialModeling() {
                     <div className="mt-2 space-y-2">
                       {sensitivityData?.churnRate ? (
                         <>
-                          <div className="flex justify-between text-sm">
-                            <span>Low ({sensitivityData.churnRate.low.rate * 100}%)</span>
-                            <span className="font-mono">${(sensitivityData.churnRate.low.arr / 1000).toFixed(0)}K ARR</span>
+                          <div className="flex justify-between text-sm p-2 bg-muted/50 rounded">
+                            <span>Low ({(sensitivityData.churnRate.low?.rate || 0) * 100}%)</span>
+                            <span className="font-mono font-semibold">${((sensitivityData.churnRate.low?.arr || 0) / 1000).toFixed(0)}K ARR</span>
                           </div>
-                          <div className="flex justify-between text-sm">
-                            <span>Base Case ({sensitivityData.churnRate.base.rate * 100}%)</span>
-                            <span className="font-mono">${(sensitivityData.churnRate.base.arr / 1000).toFixed(0)}K ARR</span>
+                          <div className="flex justify-between text-sm p-2 bg-primary/5 rounded border border-primary/20">
+                            <span className="font-medium">Base Case ({(sensitivityData.churnRate.base?.rate || 0) * 100}%)</span>
+                            <span className="font-mono font-semibold text-primary">${((sensitivityData.churnRate.base?.arr || 0) / 1000).toFixed(0)}K ARR</span>
                           </div>
-                          <div className="flex justify-between text-sm">
-                            <span>High ({sensitivityData.churnRate.high.rate * 100}%)</span>
-                            <span className="font-mono">${(sensitivityData.churnRate.high.arr / 1000).toFixed(0)}K ARR</span>
+                          <div className="flex justify-between text-sm p-2 bg-muted/50 rounded">
+                            <span>High ({(sensitivityData.churnRate.high?.rate || 0) * 100}%)</span>
+                            <span className="font-mono font-semibold">${((sensitivityData.churnRate.high?.arr || 0) / 1000).toFixed(0)}K ARR</span>
                           </div>
                         </>
                       ) : (

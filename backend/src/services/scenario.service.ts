@@ -340,12 +340,16 @@ export const scenarioService = {
         },
       };
 
+      // Return in format expected by frontend
       return {
         id: s.id,
-        name: paramsJson?.scenarioName || 'Unnamed Scenario',
+        scenarioName: paramsJson?.scenarioName || 'Unnamed Scenario',
+        scenarioType: paramsJson?.scenarioType || 'adhoc',
+        name: paramsJson?.scenarioName || 'Unnamed Scenario', // Keep for backward compatibility
         createdAt: s.createdAt.toISOString(),
         baseModelId: modelId,
         changes,
+        overrides, // Also include raw overrides
         status: s.status,
         summary: s.summaryJson,
         finishedAt: s.finishedAt?.toISOString() || null,

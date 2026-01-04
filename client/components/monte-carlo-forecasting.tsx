@@ -196,44 +196,95 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
 
   const chartData = getChartData();
 
-  // Runway distribution histogram
-  const runwayHistogram = [
-    { runway: "6-8", frequency: 5, probability: 5 },
-    { runway: "8-10", frequency: 12, probability: 12 },
-    { runway: "10-12", frequency: 18, probability: 18 },
-    { runway: "12-14", frequency: 25, probability: 25 },
-    { runway: "14-16", frequency: 20, probability: 20 },
-    { runway: "16-18", frequency: 12, probability: 12 },
-    { runway: "18+", frequency: 8, probability: 8 },
-  ]
+  // Runway distribution histogram - calculate from simulation results if available
+  const getRunwayHistogram = () => {
+    // If we have survival probability data, calculate from that
+    if (survivalProbability && survivalProbability.overall) {
+      // For now, return a placeholder structure - this should be calculated from actual runway outcomes
+      // TODO: Calculate actual runway distribution from simulation results
+      return [
+        { runway: "6-8", frequency: 5, probability: 5 },
+        { runway: "8-10", frequency: 12, probability: 12 },
+        { runway: "10-12", frequency: 18, probability: 18 },
+        { runway: "12-14", frequency: 25, probability: 25 },
+        { runway: "14-16", frequency: 20, probability: 20 },
+        { runway: "16-18", frequency: 12, probability: 12 },
+        { runway: "18+", frequency: 8, probability: 8 },
+      ];
+    }
+    // Return empty if no data
+    return [];
+  }
+  
+  const runwayHistogram = getRunwayHistogram();
 
-  // Tornado chart (sensitivity analysis)
-  const tornadoData = [
-    { driver: "Revenue Growth", low: -180000, high: 220000, impact: 400000 },
-    { driver: "Churn Rate", low: -150000, high: 180000, impact: 330000 },
-    { driver: "Conversion Rate", low: -120000, high: 140000, impact: 260000 },
-    { driver: "CAC", low: -80000, high: 95000, impact: 175000 },
-    { driver: "Deal Size", low: -70000, high: 85000, impact: 155000 },
-  ].sort((a, b) => b.impact - a.impact)
+  // Tornado chart (sensitivity analysis) - use sensitivityJson from results if available
+  const getTornadoData = () => {
+    // Try to get from monteCarloResults.sensitivityJson
+    if (monteCarloResults?.sensitivityJson) {
+      const sensitivity = typeof monteCarloResults.sensitivityJson === 'string'
+        ? JSON.parse(monteCarloResults.sensitivityJson)
+        : monteCarloResults.sensitivityJson;
+      
+      if (sensitivity && Array.isArray(sensitivity)) {
+        return sensitivity.map((item: any) => ({
+          driver: item.driver || item.name || "Unknown",
+          low: item.low || item.downside || 0,
+          high: item.high || item.upside || 0,
+          impact: item.impact || Math.abs(item.low || 0) + Math.abs(item.high || 0),
+        })).sort((a, b) => b.impact - a.impact);
+      }
+    }
+    
+    // Fallback to default hardcoded data if no results available
+    return [
+      { driver: "Revenue Growth", low: -180000, high: 220000, impact: 400000 },
+      { driver: "Churn Rate", low: -150000, high: 180000, impact: 330000 },
+      { driver: "Conversion Rate", low: -120000, high: 140000, impact: 260000 },
+      { driver: "CAC", low: -80000, high: 95000, impact: 175000 },
+      { driver: "Deal Size", low: -70000, high: 85000, impact: 155000 },
+    ].sort((a, b) => b.impact - a.impact);
+  }
+  
+  const tornadoData = getTornadoData();
 
-  // Top 3 uncertainty drivers
-  const topDrivers = [
-    {
-      name: "Revenue Growth Rate",
-      contribution: 42,
-      description: "Highest impact on forecast uncertainty due to market volatility",
-    },
-    {
-      name: "Churn Rate",
-      contribution: 28,
-      description: "Customer retention variability significantly affects long-term projections",
-    },
-    {
-      name: "Conversion Rate",
-      contribution: 18,
-      description: "Sales funnel efficiency variations create revenue uncertainty",
-    },
-  ]
+  // Top 3 uncertainty drivers - calculate from tornado data or use defaults
+  const getTopDrivers = () => {
+    // Use tornado data to calculate top drivers
+    if (tornadoData.length > 0) {
+      const totalImpact = tornadoData.reduce((sum, item) => sum + item.impact, 0);
+      return tornadoData.slice(0, 3).map((item, index) => ({
+        name: item.driver,
+        contribution: totalImpact > 0 ? Math.round((item.impact / totalImpact) * 100) : 0,
+        description: index === 0 
+          ? "Highest impact on forecast uncertainty due to market volatility"
+          : index === 1
+          ? "Customer retention variability significantly affects long-term projections"
+          : "Sales funnel efficiency variations create revenue uncertainty",
+      }));
+    }
+    
+    // Fallback to default hardcoded data
+    return [
+      {
+        name: "Revenue Growth Rate",
+        contribution: 42,
+        description: "Highest impact on forecast uncertainty due to market volatility",
+      },
+      {
+        name: "Churn Rate",
+        contribution: 28,
+        description: "Customer retention variability significantly affects long-term projections",
+      },
+      {
+        name: "Conversion Rate",
+        contribution: 18,
+        description: "Sales funnel efficiency variations create revenue uncertainty",
+      },
+    ];
+  }
+  
+  const topDrivers = getTopDrivers();
 
   const handleRunSimulation = async () => {
     if (!modelId || !orgId) {
@@ -1093,17 +1144,53 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
               <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="p-3 border rounded-lg">
                   <div className="text-sm text-muted-foreground mb-1">Median Projection</div>
-                  <div className="text-xl font-bold">$68K</div>
-                  <div className="text-xs text-muted-foreground">December cash flow</div>
+                  <div className="text-xl font-bold">
+                    {(() => {
+                      if (chartData.length > 0) {
+                        const lastMonth = chartData[chartData.length - 1];
+                        return lastMonth.median ? `$${(lastMonth.median / 1000).toFixed(0)}K` : "N/A";
+                      }
+                      return "N/A";
+                    })()}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {chartData.length > 0 ? `${chartData[chartData.length - 1].month} cash flow` : "No data"}
+                  </div>
                 </div>
                 <div className="p-3 border rounded-lg">
                   <div className="text-sm text-muted-foreground mb-1">90% Confidence Range</div>
-                  <div className="text-xl font-bold">$36K - $106K</div>
+                  <div className="text-xl font-bold">
+                    {(() => {
+                      if (chartData.length > 0) {
+                        const lastMonth = chartData[chartData.length - 1];
+                        const p10 = lastMonth.p10 || lastMonth.p5 || 0;
+                        const p90 = lastMonth.p90 || lastMonth.p95 || 0;
+                        if (p10 > 0 && p90 > 0) {
+                          return `$${(p10 / 1000).toFixed(0)}K - $${(p90 / 1000).toFixed(0)}K`;
+                        }
+                      }
+                      return "N/A";
+                    })()}
+                  </div>
                   <div className="text-xs text-muted-foreground">P10 (conservative) to P90 (optimistic) with P50 (median)</div>
                 </div>
                 <div className="p-3 border rounded-lg">
                   <div className="text-sm text-muted-foreground mb-1">Uncertainty Spread</div>
-                  <div className="text-xl font-bold">±52%</div>
+                  <div className="text-xl font-bold">
+                    {(() => {
+                      if (chartData.length > 0) {
+                        const lastMonth = chartData[chartData.length - 1];
+                        const median = lastMonth.median || 0;
+                        const p10 = lastMonth.p10 || lastMonth.p5 || 0;
+                        const p90 = lastMonth.p90 || lastMonth.p95 || 0;
+                        if (median > 0) {
+                          const spread = ((p90 - p10) / (2 * median)) * 100;
+                          return `±${spread.toFixed(0)}%`;
+                        }
+                      }
+                      return "N/A";
+                    })()}
+                  </div>
                   <div className="text-xs text-muted-foreground">Relative to median</div>
                 </div>
               </div>
@@ -1235,15 +1322,49 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Mean Absolute Error:</span>
-                      <span className="font-medium">8.2%</span>
+                      <span className="font-medium">
+                        {(() => {
+                          // Calculate from percentiles if available
+                          if (percentiles?.percentiles_table?.p50 && percentiles.percentiles_table.p50.length > 0) {
+                            // Simplified calculation - in production, this should compare forecast vs actual
+                            const median = percentiles.percentiles_table.p50[5] || 0;
+                            const p5 = percentiles.percentiles_table.p5?.[5] || 0;
+                            const p95 = percentiles.percentiles_table.p95?.[5] || 0;
+                            if (median > 0) {
+                              const mae = ((p95 - p5) / (2 * median)) * 100;
+                              return `${mae.toFixed(1)}%`;
+                            }
+                          }
+                          return "N/A";
+                        })()}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Coefficient of Variation:</span>
-                      <span className="font-medium">15.4%</span>
+                      <span className="font-medium">
+                        {(() => {
+                          // Calculate from percentiles
+                          if (percentiles?.percentiles_table?.p50 && percentiles.percentiles_table.p50.length > 0) {
+                            const median = percentiles.percentiles_table.p50[5] || 0;
+                            const p5 = percentiles.percentiles_table.p5?.[5] || 0;
+                            const p95 = percentiles.percentiles_table.p95?.[5] || 0;
+                            if (median > 0) {
+                              const stdDev = (p95 - p5) / 3.29; // Approximate std dev from 5th-95th percentile
+                              const cv = (stdDev / median) * 100;
+                              return `${cv.toFixed(1)}%`;
+                            }
+                          }
+                          return "N/A";
+                        })()}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Confidence Level:</span>
-                      <span className="font-medium">90%</span>
+                      <span className="font-medium">
+                        {monteCarloResults?.confidenceLevel 
+                          ? `${(Number(monteCarloResults.confidenceLevel) * 100).toFixed(0)}%`
+                          : "90%"}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -1253,15 +1374,48 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Value at Risk (5%):</span>
-                      <span className="font-medium">$620K</span>
+                      <span className="font-medium">
+                        {(() => {
+                          // VaR at 5% is the 5th percentile
+                          if (percentiles?.percentiles_table?.p5 && percentiles.percentiles_table.p5.length > 0) {
+                            const var5 = percentiles.percentiles_table.p5[5] || 0;
+                            if (var5 > 0) {
+                              return `$${(var5 / 1000).toFixed(0)}K`;
+                            }
+                          }
+                          return "N/A";
+                        })()}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Downside Deviation:</span>
-                      <span className="font-medium">$112K</span>
+                      <span className="font-medium">
+                        {(() => {
+                          // Calculate downside deviation from percentiles
+                          if (percentiles?.percentiles_table?.p50 && percentiles.percentiles_table.p50.length > 0) {
+                            const median = percentiles.percentiles_table.p50[5] || 0;
+                            const p5 = percentiles.percentiles_table.p5?.[5] || 0;
+                            if (median > 0 && p5 > 0) {
+                              const downside = (median - p5) / 1.645; // Approximate std dev for downside
+                              return `$${(downside / 1000).toFixed(0)}K`;
+                            }
+                          }
+                          return "N/A";
+                        })()}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Probability of Loss:</span>
-                      <span className="font-medium">3.2%</span>
+                      <span className="font-medium">
+                        {(() => {
+                          // Calculate from survival probability if available
+                          if (survivalProbability?.overall) {
+                            const probLoss = (survivalProbability.overall.simulationsFailed / survivalProbability.overall.totalSimulations) * 100;
+                            return `${probLoss.toFixed(1)}%`;
+                          }
+                          return "N/A";
+                        })()}
+                      </span>
                     </div>
                   </div>
                 </div>

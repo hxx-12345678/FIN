@@ -427,8 +427,19 @@ def handle_csv_import(job_id: str, org_id: str, object_id: str, logs: dict):
             except Exception as e:
                 logger.warning(f"Failed to update data_import_batches for {import_batch_id}: {str(e)}")
         
-        # Trigger auto-model run if transactions were imported
-        if inserted > 0:
+        # Trigger auto-model run if transactions were imported OR if there are existing transactions
+        # (Even if all rows were duplicates, we should still trigger if this is the first import)
+        has_transactions = inserted > 0
+        if not has_transactions:
+            # Check if org has any transactions at all
+            cursor.execute("""
+                SELECT COUNT(*) FROM raw_transactions WHERE "orgId" = %s AND is_duplicate = false
+            """, (org_id,))
+            existing_count = cursor.fetchone()[0]
+            has_transactions = existing_count > 0
+            logger.info(f"CSV import: {inserted} new rows, {existing_count} existing transactions")
+        
+        if has_transactions:
             try:
                 logger.info(f"Auto-model: Triggering auto-model after CSV import ({inserted} rows imported)")
                 

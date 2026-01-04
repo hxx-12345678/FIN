@@ -369,7 +369,11 @@ export function AIForecasting() {
       if (hasCurrentRun) {
         return current
       }
-      const baseline = buildBaselineInsight(latestRun.summaryJson, latestRun.id)
+      // Safely parse summaryJson
+      const summary = typeof latestRun.summaryJson === "string" 
+        ? safeJsonParse(latestRun.summaryJson) 
+        : latestRun.summaryJson;
+      const baseline = buildBaselineInsight(summary, latestRun.id)
       return baseline ? [baseline] : current
     })
   }, [latestRun])
@@ -509,18 +513,33 @@ export function AIForecasting() {
       Object.entries(monthly).forEach(([monthKey, monthData]: [string, any]) => {
         const revenue = monthData.revenue || 0
         const expenses = monthData.expenses || 0
-        const netIncome = monthData.netIncome || revenue - expenses
+        const netIncome = monthData.netIncome !== undefined ? monthData.netIncome : (revenue - expenses)
         // Use cashBalance (from Python) or cash (fallback)
         const cash = monthData.cashBalance || monthData.cash || 0
 
-        // Format month for display
+        // Format month for display - handle invalid formats
         const [year, month] = monthKey.split("-")
+        if (!year || !month || isNaN(parseInt(year)) || isNaN(parseInt(month))) {
+          console.warn(`Invalid month key format: ${monthKey}, skipping...`)
+          return // Skip invalid month keys
+        }
+        
+        const monthNum = parseInt(month)
+        if (monthNum < 1 || monthNum > 12) {
+          console.warn(`Invalid month number: ${monthNum} in key ${monthKey}, skipping...`)
+          return // Skip invalid month numbers
+        }
+        
         const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-        const monthName = `${monthNames[parseInt(month) - 1]} ${year}`
+        const monthName = `${monthNames[monthNum - 1]} ${year}`
 
         // Determine if it's historical or forecast
         const now = new Date()
-        const dataDate = new Date(parseInt(year), parseInt(month) - 1, 1)
+        const dataDate = new Date(parseInt(year), monthNum - 1, 1)
+        if (isNaN(dataDate.getTime())) {
+          console.warn(`Invalid date for month key: ${monthKey}, skipping...`)
+          return // Skip invalid dates
+        }
         const isHistorical = dataDate < now
 
         forecastPoints.push({
@@ -1475,17 +1494,49 @@ Use the model run data to provide specific, data-driven insights about the forec
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">6-Month Forecast</p>
                     <p className="text-2xl font-bold text-green-600">
-                      {latestRun?.summaryJson?.totalRevenue || latestRun?.summaryJson?.revenue
-                        ? `$${((latestRun.summaryJson.totalRevenue || latestRun.summaryJson.revenue) / 1000).toFixed(0)}K`
-                        : "N/A"}
+                      {(() => {
+                        // Calculate actual 6-month revenue from monthly data
+                        if (latestRun?.summaryJson) {
+                          const summary = typeof latestRun.summaryJson === "string" 
+                            ? safeJsonParse(latestRun.summaryJson) 
+                            : latestRun.summaryJson;
+                          const monthly = summary?.monthly || {};
+                          const monthlyKeys = Object.keys(monthly).sort().slice(0, 6);
+                          let sixMonthRevenue = 0;
+                          monthlyKeys.forEach((key) => {
+                            const monthData = monthly[key];
+                            if (monthData) {
+                              sixMonthRevenue += (monthData.revenue || monthData.totalRevenue || 0);
+                            }
+                          });
+                          if (sixMonthRevenue > 0) {
+                            return `$${(sixMonthRevenue / 1000).toFixed(0)}K`;
+                          }
+                          // Fallback to total revenue / 2 if monthly calculation fails
+                          const totalRevenue = summary?.totalRevenue || summary?.revenue || 0;
+                          if (totalRevenue > 0) {
+                            return `$${((totalRevenue / 2) / 1000).toFixed(0)}K`;
+                          }
+                        }
+                        return "N/A";
+                      })()}
                     </p>
                   </div>
                   <TrendingUp className="h-8 w-8 text-green-500" />
                 </div>
                 <div className="mt-2 text-xs text-muted-foreground">
-                  {latestRun?.summaryJson?.kpis?.revenueGrowth 
-                    ? `+${(latestRun.summaryJson.kpis.revenueGrowth * 100).toFixed(0)}% growth projected`
-                    : "No data available"}
+                  {(() => {
+                    if (latestRun?.summaryJson) {
+                      const summary = typeof latestRun.summaryJson === "string" 
+                        ? safeJsonParse(latestRun.summaryJson) 
+                        : latestRun.summaryJson;
+                      const revenueGrowth = summary?.kpis?.revenueGrowth || summary?.revenueGrowth || 0;
+                      if (revenueGrowth > 0) {
+                        return `+${(revenueGrowth * 100).toFixed(0)}% growth projected`;
+                      }
+                    }
+                    return "No data available";
+                  })()}
                 </div>
               </CardContent>
             </Card>
@@ -1499,9 +1550,19 @@ Use the model run data to provide specific, data-driven insights about the forec
                       <FinancialTermTooltip term="Forecast Confidence" definition="The accuracy of the forecast model based on historical backtesting." formula="1 - (Mean Absolute Percentage Error)" />
                     </p>
                     <p className="text-2xl font-bold text-blue-600">
-                      {latestRun?.summaryJson?.kpis?.profitMargin 
-                        ? `${latestRun.summaryJson.kpis.profitMargin.toFixed(1)}%`
-                        : "N/A"}
+                      {(() => {
+                        if (latestRun?.summaryJson) {
+                          const summary = typeof latestRun.summaryJson === "string" 
+                            ? safeJsonParse(latestRun.summaryJson) 
+                            : latestRun.summaryJson;
+                          // Forecast Accuracy should NOT use profitMargin - that's a different metric
+                          const accuracy = summary?.kpis?.forecastAccuracy || summary?.kpis?.accuracy || 0;
+                          if (accuracy > 0) {
+                            return `${accuracy.toFixed(1)}%`;
+                          }
+                        }
+                        return "N/A";
+                      })()}
                     </p>
                   </div>
                   <Target className="h-8 w-8 text-blue-500" />
@@ -1606,11 +1667,24 @@ Use the model run data to provide specific, data-driven insights about the forec
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Projected Cash Balance</span>
                   <span className="font-semibold text-purple-600">
-                    {latestRun?.summaryJson?.cashBalance
-                      ? `$${latestRun.summaryJson.cashBalance.toLocaleString()}`
-                      : cashFlowForecast.length > 0
-                      ? `$${cashFlowForecast[cashFlowForecast.length - 1]?.cumulativeCash?.toLocaleString() || "N/A"}`
-                      : "N/A"}
+                    {(() => {
+                      if (latestRun?.summaryJson) {
+                        const summary = typeof latestRun.summaryJson === "string" 
+                          ? safeJsonParse(latestRun.summaryJson) 
+                          : latestRun.summaryJson;
+                        const cashBalance = summary?.cashBalance || summary?.cash || 0;
+                        if (cashBalance > 0) {
+                          return `$${cashBalance.toLocaleString()}`;
+                        }
+                      }
+                      if (cashFlowForecast.length > 0) {
+                        const lastCash = cashFlowForecast[cashFlowForecast.length - 1]?.cumulativeCash || 0;
+                        if (lastCash > 0) {
+                          return `$${lastCash.toLocaleString()}`;
+                        }
+                      }
+                      return "N/A";
+                    })()}
                   </span>
                 </div>
               </CardContent>
@@ -1623,9 +1697,21 @@ Use the model run data to provide specific, data-driven insights about the forec
               <CardContent className="space-y-4">
                 <div className="text-center">
                   <div className="text-3xl font-bold text-green-600">
-                    {latestRun?.summaryJson?.runwayMonths || latestRun?.summaryJson?.runway
-                      ? `${Math.round(latestRun.summaryJson.runwayMonths || latestRun.summaryJson.runway)}+ months`
-                      : "N/A"}
+                    {(() => {
+                      if (latestRun?.summaryJson) {
+                        const summary = typeof latestRun.summaryJson === "string" 
+                          ? safeJsonParse(latestRun.summaryJson) 
+                          : latestRun.summaryJson;
+                        const burnRate = summary?.burnRate || summary?.monthlyBurnRate || 0;
+                        const runway = summary?.runwayMonths || summary?.runway || 0;
+                        // If burn rate is negative (profitable), runway is infinite
+                        if (burnRate < 0) {
+                          return "999+ months";
+                        }
+                        return runway > 0 ? `${Math.round(runway)}+ months` : "N/A";
+                      }
+                      return "N/A";
+                    })()}
                   </div>
                   <div className="text-sm text-muted-foreground">Projected runway</div>
                 </div>
@@ -1633,27 +1719,50 @@ Use the model run data to provide specific, data-driven insights about the forec
                   <div className="flex justify-between text-sm">
                     <span>Current burn rate</span>
                     <span>
-                      {latestRun?.summaryJson?.burnRate || latestRun?.summaryJson?.monthlyBurnRate
-                        ? `$${((latestRun.summaryJson.burnRate || latestRun.summaryJson.monthlyBurnRate) / 1000).toFixed(0)}K/month`
-                        : "N/A"}
+                      {(() => {
+                        if (latestRun?.summaryJson) {
+                          const summary = typeof latestRun.summaryJson === "string" 
+                            ? safeJsonParse(latestRun.summaryJson) 
+                            : latestRun.summaryJson;
+                          const burnRate = summary?.burnRate || summary?.monthlyBurnRate || 0;
+                          if (burnRate !== 0) {
+                            return `$${((Math.abs(burnRate)) / 1000).toFixed(0)}K/month${burnRate < 0 ? ' (profitable)' : ''}`;
+                          }
+                        }
+                        return "N/A";
+                      })()}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span>Projected burn rate</span>
                     <span>
-                      {latestRun?.summaryJson?.monthlyBurn
-                        ? `$${(latestRun.summaryJson.monthlyBurn / 1000).toFixed(0)}K/month`
-                        : "N/A"}
+                      {(() => {
+                        if (latestRun?.summaryJson) {
+                          const summary = typeof latestRun.summaryJson === "string" 
+                            ? safeJsonParse(latestRun.summaryJson) 
+                            : latestRun.summaryJson;
+                          const monthlyBurn = summary?.monthlyBurn || 0;
+                          if (monthlyBurn !== 0) {
+                            return `$${(Math.abs(monthlyBurn) / 1000).toFixed(0)}K/month${monthlyBurn < 0 ? ' (profitable)' : ''}`;
+                          }
+                        }
+                        return "N/A";
+                      })()}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span>Break-even month</span>
                     <span>
-                      {cashFlowForecast.length > 0
-                        ? cashFlowForecast.findIndex(item => (item.netCashFlow || 0) > 0) >= 0
-                          ? `Month ${cashFlowForecast.findIndex(item => (item.netCashFlow || 0) > 0) + 1}`
-                          : "Not projected"
-                        : "N/A"}
+                      {(() => {
+                        if (cashFlowForecast.length > 0) {
+                          const breakEvenIndex = cashFlowForecast.findIndex(item => (item.netCashFlow || 0) > 0);
+                          if (breakEvenIndex >= 0) {
+                            return `Month ${breakEvenIndex + 1}`;
+                          }
+                          return "Not projected";
+                        }
+                        return "N/A";
+                      })()}
                     </span>
                   </div>
                 </div>
@@ -1889,7 +1998,11 @@ Use the model run data to provide specific, data-driven insights about the forec
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {scenarios.map((scenario) => {
                 // Handle both summary and summaryJson (backend returns 'summary')
-                const summary = scenario.summary || scenario.summaryJson || {}
+                // Safely parse summary if it's a string
+                const rawSummary = scenario.summary || scenario.summaryJson || {}
+                const summary = typeof rawSummary === "string" 
+                  ? safeJsonParse(rawSummary) 
+                  : rawSummary;
                 const scenarioName = scenario.name || scenario.scenarioName || scenario.scenario_name || "Unnamed Scenario"
                 const paramsJson = scenario.paramsJson || {}
                 const scenarioType = scenario.scenarioType || paramsJson.scenarioType || scenario.scenario_type || "adhoc"
@@ -1970,9 +2083,17 @@ Use the model run data to provide specific, data-driven insights about the forec
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Runway</span>
                             <span className="font-semibold">
-                              {runway !== null && runway !== undefined
-                                ? `${Math.round(runway)} months`
-                                : "N/A"}
+                              {(() => {
+                                const scenBurnRate = summary.burnRate || summary.monthlyBurnRate || 0;
+                                // If burn rate is negative (profitable), runway is infinite
+                                if (scenBurnRate < 0) {
+                                  return "999+ months";
+                                }
+                                if (runway !== null && runway !== undefined && runway > 0) {
+                                  return `${Math.round(runway)} months`;
+                                }
+                                return "N/A";
+                              })()}
                             </span>
                     </div>
                     <div className="flex justify-between">

@@ -140,7 +140,15 @@ export const aicfoService = {
       });
 
       hasConnectedAccounting = connectors.length > 0;
-      hasFinancialData = groundingContext.evidence.length > 0 || !!(modelRun && modelRun.summaryJson);
+      // Check for actual financial data: model runs, transactions, or overview data
+      const hasModelRunData = !!(modelRun && modelRun.summaryJson);
+      const hasTransactionData = await prisma.rawTransaction.count({
+        where: { orgId, isDuplicate: false },
+      }).then(count => count > 0).catch(() => false);
+      const hasOverviewData = await overviewDashboardService.getOverviewData(orgId)
+        .then(data => (data.monthlyRevenue > 0 || data.monthlyBurnRate > 0))
+        .catch(() => false);
+      hasFinancialData = hasModelRunData || hasTransactionData || hasOverviewData || groundingContext.evidence.length > 0;
 
       if (!groundingValidation.sufficient) {
         console.warn('Insufficient grounding:', groundingValidation.issues);
@@ -355,11 +363,18 @@ export const aicfoService = {
           
           let fallbackNaturalLanguage = await generateCFOExplanation(sanitizedGoal, cfoAnalysis);
           
-          // Add accounting system connection suggestion if no data
-          if (!hasFinancialData || !hasConnectedAccounting) {
+          // Check if staged changes have evidence (meaning we used real data)
+          const hasEvidenceInChanges = stagedChanges.some((sc: any) => sc.evidence && sc.evidence.length > 0);
+          const hasRealDataUsed = hasFinancialData || hasEvidenceInChanges;
+          
+          // Only show data limitation if we truly have no data
+          if (!hasRealDataUsed && !hasConnectedAccounting) {
             fallbackNaturalLanguage += "\n\n⚠️ **Data Limitation:** Insufficient financial data available. ";
             fallbackNaturalLanguage += "Recommendations are based on limited information and may not reflect your actual financial situation. ";
             fallbackNaturalLanguage += "To get accurate, grounded insights, please connect your accounting system.";
+          } else if (hasRealDataUsed && !hasConnectedAccounting) {
+            // We have data but no connected accounting system - suggest connecting for better insights
+            fallbackNaturalLanguage += "\n\n💡 **Tip:** Connect your accounting system for real-time data sync and even more accurate insights.";
           }
           
           structuredResponse.natural_text = fallbackNaturalLanguage;
@@ -420,10 +435,18 @@ export const aicfoService = {
           confidence: 0.5,
           evidence: [],
         };
-        hasFinancialData = false;
-      } else {
-        hasFinancialData = groundingContext.evidence.length > 0 || !!(modelRun && modelRun.summaryJson);
       }
+      
+      // Re-check for financial data after deep CFO analysis (which uses real data if available)
+      const hasModelRunData = !!(modelRun && modelRun.summaryJson);
+      const hasTransactionData = await prisma.rawTransaction.count({
+        where: { orgId, isDuplicate: false },
+      }).then(count => count > 0).catch(() => false);
+      const hasOverviewData = await overviewDashboardService.getOverviewData(orgId)
+        .then(data => (data.monthlyRevenue > 0 || data.monthlyBurnRate > 0))
+        .catch(() => false);
+      const hasEvidenceInStagedChanges = stagedChanges.some((sc: any) => sc.evidence && sc.evidence.length > 0);
+      hasFinancialData = hasModelRunData || hasTransactionData || hasOverviewData || hasEvidenceInStagedChanges || (groundingContext.evidence.length > 0);
       
       // Create fallback structured response if needed
       if (!structuredResponse) {
@@ -434,7 +457,7 @@ export const aicfoService = {
           []
         );
         
-        // Use the improved CFO response generation
+        // Use the improved CFO response generation with question context
         let fallbackText = await generateCFOExplanation(sanitizedGoal, {
           intent: intentClassification.intent,
           calculations: Object.keys(calculations).length > 0 ? calculations : undefined,
@@ -466,10 +489,18 @@ export const aicfoService = {
           });
         }
 
-        if (!hasFinancialData || !hasConnectedAccounting) {
+        // Check if staged changes have evidence (meaning we used real data from deep CFO analysis)
+        const hasEvidenceInChanges = stagedChanges.some((sc: any) => sc.evidence && sc.evidence.length > 0);
+        const hasRealDataUsed = hasFinancialData || hasEvidenceInChanges;
+        
+        // Only show data limitation if we truly have no data
+        if (!hasRealDataUsed && !hasConnectedAccounting) {
           fallbackText += "\n\n⚠️ **Data Limitation:** Insufficient financial data available. ";
           fallbackText += "To get accurate, personalized insights, please connect your accounting system. ";
           fallbackText += "This will allow me to analyze your actual transaction data and provide precise, grounded recommendations without assumptions.";
+        } else if (hasRealDataUsed && !hasConnectedAccounting) {
+          // We have data but no connected accounting system - suggest connecting for better insights
+          fallbackText += "\n\n💡 **Tip:** Connect your accounting system for real-time data sync and even more accurate insights.";
         }
         structuredResponse.natural_text = fallbackText;
       }

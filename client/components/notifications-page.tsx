@@ -186,13 +186,29 @@ export function NotificationsPage() {
   const fetchAlertRules = async () => {
     if (!orgId) return
     try {
+      // Use alert-rules endpoint from notification routes
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/alert-rules`, {
         headers: getAuthHeaders(),
         credentials: "include",
       })
       if (response.ok) {
         const data = await response.json()
-        setAlertRules(data.data || [])
+        // Transform backend AlertRule format to frontend AlertRule format
+        const rules = (data.data || data.alertRules || []).map((rule: any) => ({
+          id: rule.id,
+          name: rule.name,
+          description: rule.description || '',
+          enabled: rule.enabled,
+          channels: [
+            ...(rule.notifyEmail ? ['email'] : []),
+            ...(rule.notifySlack ? ['slack'] : []),
+          ],
+          threshold: rule.threshold?.toString() || '',
+          frequency: 'immediate' as const, // Backend doesn't have frequency, default to immediate
+          metric: rule.metric,
+          operator: rule.operator,
+        }))
+        setAlertRules(rules)
       }
     } catch (error) {
       console.error("Failed to fetch alert rules:", error)
@@ -283,6 +299,9 @@ export function NotificationsPage() {
         await fetchAlertRules()
         await fetchStats()
         toast.success(`Alert rule ${enabled ? "enabled" : "disabled"}`)
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || "Failed to update alert rule")
       }
     } catch (error) {
       toast.error("Failed to update alert rule")
@@ -301,6 +320,9 @@ export function NotificationsPage() {
         await fetchAlertRules()
         await fetchStats()
         toast.success("Alert rule deleted")
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || "Failed to delete alert rule")
       }
     } catch (error) {
       toast.error("Failed to delete alert rule")
@@ -324,8 +346,8 @@ export function NotificationsPage() {
           metric: newRule.metric,
           operator: newRule.operator,
           threshold: parseFloat(newRule.threshold),
-          channels: newRule.channels,
-          frequency: newRule.frequency,
+          notifyEmail: newRule.channels.includes('email'),
+          notifySlack: newRule.channels.includes('slack'),
         }),
       })
       if (response.ok) {

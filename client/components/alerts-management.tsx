@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -18,6 +18,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   AlertTriangle,
   Bell,
@@ -36,24 +38,31 @@ import {
   CheckCircle,
   Volume2,
   VolumeX,
+  Loader2,
+  RefreshCw,
 } from "lucide-react"
+import { API_BASE_URL, getAuthHeaders } from "@/lib/api-config"
+import { toast } from "sonner"
 
-interface Alert {
+interface AlertRule {
   id: string
   name: string
-  description: string
+  description?: string
   metric: string
-  operator: ">" | "<" | "=" | ">=" | "<="
-  threshold: string
-  frequency: "immediate" | "daily" | "weekly" | "monthly"
-  channels: ("email" | "slack" | "in-app")[]
+  operator: ">" | "<" | "=" | ">=" | "<=" | "==" | "!="
+  threshold: number
   enabled: boolean
-  muted: boolean
-  scope: "personal" | "organization"
-  createdBy: string
-  subscribers: string[]
-  lastTriggered?: Date
-  triggerCount: number
+  notifyEmail: boolean
+  notifySlack: boolean
+  slackWebhook?: string
+  lastTriggered?: string | Date
+  createdBy?: {
+    id: string
+    name: string
+    email: string
+  }
+  createdAt: string | Date
+  updatedAt: string | Date
 }
 
 interface AlertHistory {
@@ -69,194 +78,279 @@ interface AlertHistory {
 }
 
 const metrics = [
+  { value: "runway_months", label: "Cash Runway (months)", icon: Clock },
   { value: "cash_balance", label: "Cash Balance", icon: DollarSign },
   { value: "burn_rate", label: "Burn Rate", icon: TrendingDown },
-  { value: "revenue", label: "Revenue", icon: TrendingUp },
   { value: "revenue_growth", label: "Revenue Growth %", icon: Activity },
-  { value: "runway", label: "Cash Runway (months)", icon: Clock },
-  { value: "customer_count", label: "Customer Count", icon: Users },
-  { value: "churn_rate", label: "Churn Rate %", icon: TrendingDown },
-  { value: "mrr", label: "Monthly Recurring Revenue", icon: DollarSign },
-  { value: "arr", label: "Annual Recurring Revenue", icon: Target },
+  { value: "expense_growth", label: "Expense Growth %", icon: TrendingDown },
+  { value: "net_income", label: "Net Income", icon: TrendingUp },
 ]
 
-export function AlertsManagement() {
-  const [alerts, setAlerts] = useState<Alert[]>([
-    {
-      id: "1",
-      name: "Low Cash Warning",
-      description: "Alert when cash balance drops below critical threshold",
-      metric: "cash_balance",
-      operator: "<",
-      threshold: "1000000",
-      frequency: "immediate",
-      channels: ["email", "slack", "in-app"],
-      enabled: true,
-      muted: false,
-      scope: "organization",
-      createdBy: "John Doe",
-      subscribers: ["john@company.com", "cfo@company.com"],
-      lastTriggered: new Date(Date.now() - 86400000 * 3),
-      triggerCount: 2,
-    },
-    {
-      id: "2",
-      name: "Burn Rate Spike",
-      description: "Monitor monthly burn rate increases",
-      metric: "burn_rate",
-      operator: ">",
-      threshold: "15",
-      frequency: "daily",
-      channels: ["email", "in-app"],
-      enabled: true,
-      muted: false,
-      scope: "organization",
-      createdBy: "John Doe",
-      subscribers: ["john@company.com", "finance@company.com"],
-      triggerCount: 0,
-    },
-    {
-      id: "3",
-      name: "Revenue Growth Slowdown",
-      description: "Alert when revenue growth falls below target",
-      metric: "revenue_growth",
-      operator: "<",
-      threshold: "5",
-      frequency: "weekly",
-      channels: ["email"],
-      enabled: false,
-      muted: false,
-      scope: "personal",
-      createdBy: "John Doe",
-      subscribers: ["john@company.com"],
-      lastTriggered: new Date(Date.now() - 86400000 * 7),
-      triggerCount: 1,
-    },
-  ])
+// Map backend metric names to display names
+const getMetricLabel = (metric: string): string => {
+  const found = metrics.find(m => m.value === metric)
+  return found ? found.label : metric
+}
 
-  const [alertHistory, setAlertHistory] = useState<AlertHistory[]>([
-    {
-      id: "h1",
-      alertId: "1",
-      alertName: "Low Cash Warning",
-      triggeredAt: new Date(Date.now() - 86400000 * 3),
-      metric: "Cash Balance",
-      actualValue: "₹9,50,000",
-      threshold: "₹10,00,000",
-      message: "Cash balance has dropped below ₹10,00,000. Current balance: ₹9,50,000",
-      acknowledged: true,
-    },
-    {
-      id: "h2",
-      alertId: "1",
-      alertName: "Low Cash Warning",
-      triggeredAt: new Date(Date.now() - 86400000 * 10),
-      metric: "Cash Balance",
-      actualValue: "₹9,80,000",
-      threshold: "₹10,00,000",
-      message: "Cash balance has dropped below ₹10,00,000. Current balance: ₹9,80,000",
-      acknowledged: true,
-    },
-    {
-      id: "h3",
-      alertId: "3",
-      alertName: "Revenue Growth Slowdown",
-      triggeredAt: new Date(Date.now() - 86400000 * 7),
-      metric: "Revenue Growth",
-      actualValue: "4.2%",
-      threshold: "5%",
-      message: "Revenue growth rate of 4.2% is below target threshold of 5%",
-      acknowledged: false,
-    },
-  ])
+export function AlertsManagement() {
+  const [orgId, setOrgId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [alerts, setAlerts] = useState<AlertRule[]>([])
+  const [alertHistory, setAlertHistory] = useState<AlertHistory[]>([])
 
   const [showCreateDialog, setShowCreateDialog] = useState(false)
-  const [editingAlert, setEditingAlert] = useState<Alert | null>(null)
+  const [editingAlert, setEditingAlert] = useState<AlertRule | null>(null)
   const [alertForm, setAlertForm] = useState({
     name: "",
     description: "",
     metric: "",
-    operator: "<" as Alert["operator"],
+    operator: "<" as AlertRule["operator"],
     threshold: "",
-    frequency: "immediate" as Alert["frequency"],
-    channels: ["email"] as Alert["channels"],
-    scope: "personal" as Alert["scope"],
-    subscribers: "",
+    notifyEmail: true,
+    notifySlack: false,
+    slackWebhook: "",
   })
 
-  const handleCreateAlert = () => {
-    const newAlert: Alert = {
-      id: Date.now().toString(),
-      name: alertForm.name,
-      description: alertForm.description,
-      metric: alertForm.metric,
-      operator: alertForm.operator,
-      threshold: alertForm.threshold,
-      frequency: alertForm.frequency,
-      channels: alertForm.channels,
-      enabled: true,
-      muted: false,
-      scope: alertForm.scope,
-      createdBy: "John Doe",
-      subscribers: alertForm.subscribers.split(",").map((s) => s.trim()),
-      triggerCount: 0,
+  // Fetch orgId
+  useEffect(() => {
+    const fetchOrgId = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/auth/me`, {
+          headers: getAuthHeaders(),
+          credentials: "include",
+        })
+        if (response.ok) {
+          const data = await response.json()
+          if (data.orgs && data.orgs.length > 0) {
+            setOrgId(data.orgs[0].id)
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch orgId:", error)
+      }
+    }
+    fetchOrgId()
+  }, [])
+
+  // Fetch alerts when orgId is available
+  useEffect(() => {
+    if (orgId) {
+      fetchAlerts()
+      fetchAlertHistory()
+    }
+  }, [orgId])
+
+  const fetchAlerts = async () => {
+    if (!orgId) return
+    setLoading(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/alerts`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
+      if (response.ok) {
+        const data = await response.json()
+        if (data.ok && data.alerts) {
+          setAlerts(data.alerts)
+        }
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || "Failed to fetch alerts")
+      }
+    } catch (error) {
+      console.error("Failed to fetch alerts:", error)
+      toast.error("Failed to load alerts")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchAlertHistory = async () => {
+    if (!orgId) return
+    try {
+      // Use compliance audit logs endpoint to show alert triggers
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/compliance/audit-logs?action=alert_triggered&limit=50`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
+      if (response.ok) {
+        const data = await response.json()
+        if (data.ok && data.data) {
+          // Transform audit logs to alert history format
+          const history: AlertHistory[] = data.data.map((log: any, index: number) => {
+            const meta = typeof log.metaJson === 'string' ? JSON.parse(log.metaJson) : log.metaJson || {}
+            return {
+              id: log.id || `h${index}`,
+              alertId: log.objectId || '',
+              alertName: meta.alertName || meta.name || 'Unknown Alert',
+              triggeredAt: new Date(log.createdAt),
+              metric: meta.metric || 'Unknown',
+              actualValue: meta.actualValue || meta.value || 'N/A',
+              threshold: meta.threshold || 'N/A',
+              message: meta.message || `Alert "${meta.alertName || meta.name || 'Unknown'}" triggered: ${meta.metric || 'Unknown'} ${meta.operator || ''} ${meta.threshold || ''}`,
+              acknowledged: false, // Audit logs don't track acknowledgment
+            }
+          })
+          setAlertHistory(history)
+        }
+      } else {
+        // If audit logs endpoint doesn't exist or fails, show empty state
+        setAlertHistory([])
+      }
+    } catch (error) {
+      console.error("Failed to fetch alert history:", error)
+      // Don't show error toast for history as it's optional - just show empty state
+      setAlertHistory([])
+    }
+  }
+
+  const handleCreateAlert = async () => {
+    if (!orgId) return
+    
+    if (!alertForm.name || !alertForm.metric || !alertForm.threshold) {
+      toast.error("Please fill in all required fields")
+      return
     }
 
-    setAlerts([newAlert, ...alerts])
-    setShowCreateDialog(false)
-    resetForm()
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/alerts`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        credentials: "include",
+        body: JSON.stringify({
+          name: alertForm.name,
+          description: alertForm.description || undefined,
+          metric: alertForm.metric,
+          operator: alertForm.operator,
+          threshold: Number(alertForm.threshold),
+          notifyEmail: alertForm.notifyEmail,
+          notifySlack: alertForm.notifySlack,
+          slackWebhook: alertForm.slackWebhook || undefined,
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.ok && data.alert) {
+          toast.success("Alert created successfully")
+          setShowCreateDialog(false)
+          resetForm()
+          fetchAlerts()
+        }
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || "Failed to create alert")
+      }
+    } catch (error) {
+      console.error("Failed to create alert:", error)
+      toast.error("Failed to create alert")
+    }
   }
 
-  const handleUpdateAlert = () => {
-    if (!editingAlert) return
+  const handleUpdateAlert = async () => {
+    if (!editingAlert || !orgId) return
 
-    setAlerts(
-      alerts.map((alert) =>
-        alert.id === editingAlert.id
-          ? {
-              ...alert,
-              name: alertForm.name,
-              description: alertForm.description,
-              metric: alertForm.metric,
-              operator: alertForm.operator,
-              threshold: alertForm.threshold,
-              frequency: alertForm.frequency,
-              channels: alertForm.channels,
-              scope: alertForm.scope,
-              subscribers: alertForm.subscribers.split(",").map((s) => s.trim()),
-            }
-          : alert,
-      ),
-    )
+    if (!alertForm.name || !alertForm.metric || !alertForm.threshold) {
+      toast.error("Please fill in all required fields")
+      return
+    }
 
-    setEditingAlert(null)
-    resetForm()
+    try {
+      const response = await fetch(`${API_BASE_URL}/alerts/${editingAlert.id}`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        credentials: "include",
+        body: JSON.stringify({
+          name: alertForm.name,
+          description: alertForm.description || undefined,
+          metric: alertForm.metric,
+          operator: alertForm.operator,
+          threshold: Number(alertForm.threshold),
+          notifyEmail: alertForm.notifyEmail,
+          notifySlack: alertForm.notifySlack,
+          slackWebhook: alertForm.slackWebhook || undefined,
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.ok && data.alert) {
+          toast.success("Alert updated successfully")
+          setEditingAlert(null)
+          resetForm()
+          fetchAlerts()
+        }
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || "Failed to update alert")
+      }
+    } catch (error) {
+      console.error("Failed to update alert:", error)
+      toast.error("Failed to update alert")
+    }
   }
 
-  const handleDeleteAlert = (id: string) => {
-    setAlerts(alerts.filter((alert) => alert.id !== id))
+  const handleDeleteAlert = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this alert?")) return
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/alerts/${id}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
+
+      if (response.ok) {
+        toast.success("Alert deleted successfully")
+        fetchAlerts()
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || "Failed to delete alert")
+      }
+    } catch (error) {
+      console.error("Failed to delete alert:", error)
+      toast.error("Failed to delete alert")
+    }
   }
 
-  const handleToggleAlert = (id: string) => {
-    setAlerts(alerts.map((alert) => (alert.id === id ? { ...alert, enabled: !alert.enabled } : alert)))
+  const handleToggleAlert = async (id: string) => {
+    const alert = alerts.find(a => a.id === id)
+    if (!alert) return
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/alerts/${id}`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        credentials: "include",
+        body: JSON.stringify({
+          enabled: !alert.enabled,
+        }),
+      })
+
+      if (response.ok) {
+        toast.success(`Alert ${!alert.enabled ? 'enabled' : 'disabled'}`)
+        fetchAlerts()
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || "Failed to update alert")
+      }
+    } catch (error) {
+      console.error("Failed to toggle alert:", error)
+      toast.error("Failed to update alert")
+    }
   }
 
-  const handleMuteAlert = (id: string) => {
-    setAlerts(alerts.map((alert) => (alert.id === id ? { ...alert, muted: !alert.muted } : alert)))
-  }
-
-  const handleEditAlert = (alert: Alert) => {
+  const handleEditAlert = (alert: AlertRule) => {
     setEditingAlert(alert)
     setAlertForm({
       name: alert.name,
-      description: alert.description,
+      description: alert.description || "",
       metric: alert.metric,
       operator: alert.operator,
-      threshold: alert.threshold,
-      frequency: alert.frequency,
-      channels: alert.channels,
-      scope: alert.scope,
-      subscribers: alert.subscribers.join(", "),
+      threshold: alert.threshold.toString(),
+      notifyEmail: alert.notifyEmail,
+      notifySlack: alert.notifySlack,
+      slackWebhook: alert.slackWebhook || "",
     })
   }
 
@@ -267,20 +361,10 @@ export function AlertsManagement() {
       metric: "",
       operator: "<",
       threshold: "",
-      frequency: "immediate",
-      channels: ["email"],
-      scope: "personal",
-      subscribers: "",
+      notifyEmail: true,
+      notifySlack: false,
+      slackWebhook: "",
     })
-  }
-
-  const handleChannelToggle = (channel: "email" | "slack" | "in-app") => {
-    setAlertForm((prev) => ({
-      ...prev,
-      channels: prev.channels.includes(channel)
-        ? prev.channels.filter((c) => c !== channel)
-        : [...prev.channels, channel],
-    }))
   }
 
   const getMetricIcon = (metricValue: string) => {
@@ -288,18 +372,8 @@ export function AlertsManagement() {
     return metric?.icon || AlertTriangle
   }
 
-  const getOperatorSymbol = (operator: Alert["operator"]) => {
+  const getOperatorSymbol = (operator: AlertRule["operator"]) => {
     return operator
-  }
-
-  const getFrequencyBadge = (frequency: Alert["frequency"]) => {
-    const colors = {
-      immediate: "bg-red-100 text-red-800",
-      daily: "bg-orange-100 text-orange-800",
-      weekly: "bg-blue-100 text-blue-800",
-      monthly: "bg-green-100 text-green-800",
-    }
-    return colors[frequency]
   }
 
   const triggeredThisWeek = alertHistory.filter(
@@ -351,8 +425,8 @@ export function AlertsManagement() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Organization Alerts</p>
-                <p className="text-2xl font-bold">{alerts.filter((a) => a.scope === "organization").length}</p>
+                <p className="text-sm font-medium text-muted-foreground">Total Alerts</p>
+                <p className="text-2xl font-bold">{alerts.length}</p>
               </div>
               <Users className="h-8 w-8 text-green-600" />
             </div>
@@ -363,8 +437,8 @@ export function AlertsManagement() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Muted Alerts</p>
-                <p className="text-2xl font-bold">{alerts.filter((a) => a.muted).length}</p>
+                <p className="text-sm font-medium text-muted-foreground">Disabled Alerts</p>
+                <p className="text-2xl font-bold">{alerts.filter((a) => !a.enabled).length}</p>
               </div>
               <VolumeX className="h-8 w-8 text-gray-600" />
             </div>
@@ -388,13 +462,27 @@ export function AlertsManagement() {
         <TabsContent value="alerts" className="space-y-4 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
-              <CardTitle>Your Alert Rules</CardTitle>
-              <CardDescription>
-                Manage automated alerts for key metrics. Organization alerts require Admin permissions.
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Your Alert Rules</CardTitle>
+                  <CardDescription>
+                    Manage automated alerts for key financial metrics.
+                  </CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={fetchAlerts} disabled={loading}>
+                  <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
-              {alerts.length === 0 ? (
+              {loading ? (
+                <div className="space-y-4">
+                  <Skeleton className="h-24 w-full" />
+                  <Skeleton className="h-24 w-full" />
+                  <Skeleton className="h-24 w-full" />
+                </div>
+              ) : alerts.length === 0 ? (
                 <div className="text-center py-12">
                   <Bell className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                   <h3 className="text-lg font-medium mb-2">No alerts configured</h3>
@@ -410,8 +498,9 @@ export function AlertsManagement() {
                 <div className="space-y-4">
                   {alerts.map((alert) => {
                     const MetricIcon = getMetricIcon(alert.metric)
+                    const lastTriggered = alert.lastTriggered ? new Date(alert.lastTriggered) : null
                     return (
-                      <Card key={alert.id} className={alert.muted ? "opacity-60" : ""}>
+                      <Card key={alert.id} className={!alert.enabled ? "opacity-60" : ""}>
                         <CardContent className="p-4">
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex items-start gap-3 flex-1">
@@ -421,54 +510,47 @@ export function AlertsManagement() {
                               <div className="flex-1 space-y-2">
                                 <div className="flex items-center gap-2">
                                   <h3 className="font-medium">{alert.name}</h3>
-                                  {alert.muted && (
+                                  {!alert.enabled && (
                                     <Badge variant="outline" className="text-xs">
-                                      <VolumeX className="h-3 w-3 mr-1" />
-                                      Muted
+                                      Disabled
                                     </Badge>
                                   )}
-                                  <Badge variant="outline" className="text-xs">
-                                    {alert.scope}
-                                  </Badge>
                                 </div>
-                                <p className="text-sm text-muted-foreground">{alert.description}</p>
+                                {alert.description && (
+                                  <p className="text-sm text-muted-foreground">{alert.description}</p>
+                                )}
                                 <div className="flex flex-wrap gap-2 text-sm">
                                   <Badge variant="outline">
-                                    {metrics.find((m) => m.value === alert.metric)?.label}{" "}
+                                    {getMetricLabel(alert.metric)}{" "}
                                     {getOperatorSymbol(alert.operator)} {alert.threshold}
                                   </Badge>
-                                  <Badge className={getFrequencyBadge(alert.frequency)}>{alert.frequency}</Badge>
                                   <div className="flex gap-1">
-                                    {alert.channels.map((channel) => (
-                                      <Badge key={channel} variant="secondary" className="text-xs">
-                                        {channel === "email" && <Mail className="h-3 w-3 mr-1" />}
-                                        {channel === "slack" && <MessageSquare className="h-3 w-3 mr-1" />}
-                                        {channel === "in-app" && <Bell className="h-3 w-3 mr-1" />}
-                                        {channel}
+                                    {alert.notifyEmail && (
+                                      <Badge variant="secondary" className="text-xs">
+                                        <Mail className="h-3 w-3 mr-1" />
+                                        Email
                                       </Badge>
-                                    ))}
+                                    )}
+                                    {alert.notifySlack && (
+                                      <Badge variant="secondary" className="text-xs">
+                                        <MessageSquare className="h-3 w-3 mr-1" />
+                                        Slack
+                                      </Badge>
+                                    )}
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                                  <span>Created by {alert.createdBy}</span>
-                                  <span>{alert.subscribers.length} subscribers</span>
-                                  {alert.lastTriggered && (
-                                    <span>Last triggered {alert.lastTriggered.toLocaleDateString()}</span>
+                                  {alert.createdBy && (
+                                    <span>Created by {alert.createdBy.name || alert.createdBy.email}</span>
                                   )}
-                                  <span>Triggered {alert.triggerCount} times</span>
+                                  {lastTriggered && (
+                                    <span>Last triggered {lastTriggered.toLocaleDateString()}</span>
+                                  )}
                                 </div>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
                               <Switch checked={alert.enabled} onCheckedChange={() => handleToggleAlert(alert.id)} />
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                onClick={() => handleMuteAlert(alert.id)}
-                                className="bg-transparent"
-                              >
-                                {alert.muted ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-                              </Button>
                               <Button
                                 variant="outline"
                                 size="icon"
@@ -627,7 +709,7 @@ export function AlertsManagement() {
                 <Label htmlFor="operator">Operator *</Label>
                 <Select
                   value={alertForm.operator}
-                  onValueChange={(value) => setAlertForm({ ...alertForm, operator: value as Alert["operator"] })}
+                  onValueChange={(value) => setAlertForm({ ...alertForm, operator: value as AlertRule["operator"] })}
                 >
                   <SelectTrigger id="operator">
                     <SelectValue />
@@ -637,7 +719,8 @@ export function AlertsManagement() {
                     <SelectItem value="<=">{"<="} Less or equal</SelectItem>
                     <SelectItem value=">">{">"} Greater than</SelectItem>
                     <SelectItem value=">=">{">="} Greater or equal</SelectItem>
-                    <SelectItem value="=">{"="} Equal to</SelectItem>
+                    <SelectItem value="==">{"=="} Equal to</SelectItem>
+                    <SelectItem value="!=">{"!="} Not equal</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -656,90 +739,6 @@ export function AlertsManagement() {
               </p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="frequency">Check Frequency *</Label>
-              <Select
-                value={alertForm.frequency}
-                onValueChange={(value) => setAlertForm({ ...alertForm, frequency: value as Alert["frequency"] })}
-              >
-                <SelectTrigger id="frequency">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="immediate">Immediate (Real-time)</SelectItem>
-                  <SelectItem value="daily">Daily (Once per day)</SelectItem>
-                  <SelectItem value="weekly">Weekly (Once per week)</SelectItem>
-                  <SelectItem value="monthly">Monthly (Once per month)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Notification Channels *</Label>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant={alertForm.channels.includes("email") ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => handleChannelToggle("email")}
-                  className={!alertForm.channels.includes("email") ? "bg-transparent" : ""}
-                >
-                  <Mail className="h-4 w-4 mr-2" />
-                  Email
-                </Button>
-                <Button
-                  type="button"
-                  variant={alertForm.channels.includes("slack") ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => handleChannelToggle("slack")}
-                  className={!alertForm.channels.includes("slack") ? "bg-transparent" : ""}
-                >
-                  <MessageSquare className="h-4 w-4 mr-2" />
-                  Slack
-                </Button>
-                <Button
-                  type="button"
-                  variant={alertForm.channels.includes("in-app") ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => handleChannelToggle("in-app")}
-                  className={!alertForm.channels.includes("in-app") ? "bg-transparent" : ""}
-                >
-                  <Bell className="h-4 w-4 mr-2" />
-                  In-App
-                </Button>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="scope">Alert Scope *</Label>
-              <Select
-                value={alertForm.scope}
-                onValueChange={(value) => setAlertForm({ ...alertForm, scope: value as Alert["scope"] })}
-              >
-                <SelectTrigger id="scope">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="personal">Personal (Only you)</SelectItem>
-                  <SelectItem value="organization">Organization (All team members)</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">Organization alerts require Admin permissions</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="subscribers">Subscribers (Email Addresses)</Label>
-              <Textarea
-                id="subscribers"
-                value={alertForm.subscribers}
-                onChange={(e) => setAlertForm({ ...alertForm, subscribers: e.target.value })}
-                placeholder="john@company.com, jane@company.com"
-                rows={2}
-              />
-              <p className="text-xs text-muted-foreground">
-                Comma-separated email addresses for multi-user subscriptions
-              </p>
-            </div>
           </div>
           <DialogFooter>
             <Button
@@ -754,7 +753,7 @@ export function AlertsManagement() {
             </Button>
             <Button
               onClick={editingAlert ? handleUpdateAlert : handleCreateAlert}
-              disabled={!alertForm.name || !alertForm.metric || !alertForm.threshold || alertForm.channels.length === 0}
+              disabled={!alertForm.name || !alertForm.metric || !alertForm.threshold || (!alertForm.notifyEmail && !alertForm.notifySlack)}
             >
               {editingAlert ? "Update Alert" : "Create Alert"}
             </Button>

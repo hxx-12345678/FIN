@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { LoginForm } from "./login-form"
 import { SignupForm } from "./signup-form"
 import { Gauge, X } from "lucide-react"
@@ -29,6 +29,10 @@ export function AuthModal({ open, onOpenChange, defaultMode = "login", onSuccess
         className="sm:max-w-[520px] max-w-[95vw] max-h-[95vh] overflow-y-auto p-0 bg-[#020617] border-white/10 rounded-[2.5rem] shadow-[0_0_100px_rgba(0,0,0,0.5)]"
         style={{ zIndex: 10000 }}
       >
+        <DialogHeader className="sr-only">
+          <DialogTitle>Authentication</DialogTitle>
+          <DialogDescription>Sign in or create an account to access FinaPilot</DialogDescription>
+        </DialogHeader>
         {/* Premium Header */}
         <div className="relative p-8 border-b border-white/10 bg-gradient-to-br from-white/[0.03] to-transparent">
           <div className="flex items-center justify-between mb-6">

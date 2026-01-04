@@ -88,14 +88,14 @@ export function ScenarioVersionHistory({ modelId, orgId }: ScenarioVersionHistor
           // Transform scenarios to version history format
           const transformed = result.scenarios
             .map((s: any, index: number) => {
-              const summary = s.summary || {}
+              const summary = typeof s.summary === 'string' ? JSON.parse(s.summary) : (s.summary || {})
               return {
                 version: result.scenarios.length - index,
                 timestamp: s.createdAt,
                 author: "System",
-                changes: `${s.scenarioType} scenario: ${s.scenarioName || "Unnamed"}`,
+                changes: `${s.scenarioType || "adhoc"} scenario: ${s.scenarioName || s.name || "Unnamed"}`,
                 data: {
-                  revenue: summary.totalRevenue || summary.revenue || 0,
+                  revenue: summary.totalRevenue || summary.revenue || summary.mrr || 0,
                   expenses: summary.totalExpenses || summary.expenses || 0,
                   runway: summary.runwayMonths || summary.runway || 0,
                 },

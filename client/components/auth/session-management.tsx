@@ -32,7 +32,7 @@ interface Session {
 
 type SessionState = "loading" | "active-sessions" | "empty" | "error"
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
+import { API_BASE_URL } from "@/lib/api-config"
 
 export function SessionManagement() {
   const [state, setState] = useState<SessionState>("loading")

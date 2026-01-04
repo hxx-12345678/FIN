@@ -52,6 +52,17 @@ export const runwayCalculationService = {
       
       const modelRunway = Number(summary.runwayMonths || summary.runway || 0);
       
+      // Handle profitable scenarios (negative or zero burn rate) - infinite runway
+      if (monthlyBurnRate <= 0 && cashBalance > 0) {
+        return {
+          runwayMonths: 999, // Infinite runway for profitable companies
+          cashBalance,
+          monthlyBurnRate: monthlyBurnRate < 0 ? monthlyBurnRate : 0, // Preserve negative if it was negative
+          source: 'model_run',
+          confidence: 'high',
+        };
+      }
+      
       // If we have cash balance and burn rate, calculate runway
       if (cashBalance > 0 && monthlyBurnRate > 0) {
         const calculatedRunway = cashBalance / monthlyBurnRate;
@@ -139,56 +150,108 @@ export const runwayCalculationService = {
     }
 
     // Priority 3: Calculate from transactions if no ledger cash balance
-    const transactions = await prisma.rawTransaction.findMany({
+    const now = new Date();
+    const startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1); // Last 12 months
+    const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    
+    let transactions = await prisma.rawTransaction.findMany({
       where: {
         orgId,
         isDuplicate: false,
+        date: {
+          gte: startDate,
+          lte: endDate,
+        },
       },
       orderBy: {
         date: 'desc',
       },
-      take: 1000,
     });
     
+    // If no recent transactions, get all transactions
+    if (transactions.length === 0) {
+      transactions = await prisma.rawTransaction.findMany({
+        where: {
+          orgId,
+          isDuplicate: false,
+        },
+        orderBy: {
+          date: 'desc',
+        },
+        take: 1000,
+      });
+    }
+    
     if (transactions.length > 0) {
-      // Calculate average monthly burn rate from last 6 months
-      const now = new Date();
-      const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 6, 1);
-      const recentTransactions = transactions.filter(tx => tx.date >= sixMonthsAgo);
+      // Calculate monthly revenue and expenses from all transactions
+      const monthlyRevenueMap = new Map<string, number>();
+      const monthlyExpenseMap = new Map<string, number>();
       
-      let totalRevenue = 0;
-      let totalExpenses = 0;
-      
-      for (const tx of recentTransactions) {
+      for (const tx of transactions) {
+        const month = String(tx.date.getMonth() + 1).padStart(2, '0');
+        const period = `${tx.date.getFullYear()}-${month}`;
         const amount = Number(tx.amount) || 0;
+        
         if (amount > 0) {
-          totalRevenue += amount;
+          monthlyRevenueMap.set(period, (monthlyRevenueMap.get(period) || 0) + amount);
         } else {
-          totalExpenses += Math.abs(amount);
+          monthlyExpenseMap.set(period, (monthlyExpenseMap.get(period) || 0) + Math.abs(amount));
         }
       }
       
-      const months = Math.max(1, Math.ceil((now.getTime() - sixMonthsAgo.getTime()) / (1000 * 60 * 60 * 24 * 30)));
-      const monthlyRevenue = totalRevenue / months;
-      const monthlyExpenses = totalExpenses / months;
-      const monthlyBurnRate = monthlyExpenses - monthlyRevenue;
+      // Get all periods and calculate averages
+      const allPeriods = Array.from(new Set([
+        ...monthlyRevenueMap.keys(),
+        ...monthlyExpenseMap.keys()
+      ])).sort();
       
-      // If no cash balance from ledger, estimate from transactions
-      if (cashBalance === 0) {
-        cashBalance = transactions
-          .filter(t => Number(t.amount) > 0)
-          .reduce((sum, t) => sum + Number(t.amount), 0);
-      }
-      
-      if (monthlyBurnRate > 0 && cashBalance > 0) {
-        const calculatedRunway = cashBalance / monthlyBurnRate;
-        return {
-          runwayMonths: calculatedRunway,
-          cashBalance,
-          monthlyBurnRate,
-          source: cashBalance > 0 ? 'transactions' : 'calculated',
-          confidence: 'medium',
-        };
+      if (allPeriods.length > 0) {
+        // Use last 3 months for average (or all if less than 3)
+        const periodsForAvg = allPeriods.slice(-3);
+        let totalRevenue = 0;
+        let totalExpenses = 0;
+        
+        for (const period of periodsForAvg) {
+          totalRevenue += monthlyRevenueMap.get(period) || 0;
+          totalExpenses += monthlyExpenseMap.get(period) || 0;
+        }
+        
+        const monthlyRevenue = totalRevenue / periodsForAvg.length;
+        const monthlyExpenses = totalExpenses / periodsForAvg.length;
+        // Burn rate is monthly expenses (cash going out)
+        const monthlyBurnRate = monthlyExpenses;
+        
+        // If no cash balance from ledger, estimate from transactions (net: revenue - expenses)
+        if (cashBalance === 0) {
+          const netCash = transactions.reduce((sum, t) => {
+            return sum + Number(t.amount) || 0;
+          }, 0);
+          // Use net cash as estimate (assumes starting cash was 0, or this is cumulative)
+          cashBalance = Math.max(0, netCash);
+        }
+        
+        // Calculate runway: cash balance / monthly burn rate
+        // If burn rate is 0 or negative (profitable), runway is infinite (999)
+        if (monthlyBurnRate <= 0) {
+          return {
+            runwayMonths: cashBalance > 0 ? 999 : 0,
+            cashBalance,
+            monthlyBurnRate: 0,
+            source: 'transactions',
+            confidence: 'medium',
+          };
+        }
+        
+        if (cashBalance > 0) {
+          const calculatedRunway = cashBalance / monthlyBurnRate;
+          return {
+            runwayMonths: calculatedRunway,
+            cashBalance,
+            monthlyBurnRate,
+            source: 'transactions',
+            confidence: 'medium',
+          };
+        }
       }
     }
     

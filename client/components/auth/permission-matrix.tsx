@@ -33,74 +33,8 @@ interface PermissionMatrixProps {
 
 type MatrixState = "loading" | "matrix-display" | "editing" | "saving" | "error"
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
+import { API_BASE_URL, getAuthHeaders } from "@/lib/api-config"
 
-// Helper function to get auth token
-const getAuthToken = (): string | null => {
-  if (typeof window === "undefined") return null
-  // Try localStorage first
-  const token = localStorage.getItem("auth-token")
-  if (token) return token
-  // Try cookies
-  const cookies = document.cookie.split("; ")
-  const authCookie = cookies.find((row) => row.startsWith("auth-token="))
-  if (authCookie) {
-    return authCookie.split("=")[1]
-  }
-  return null
-}
-
-// Helper function to get auth headers
-const getAuthHeaders = (): HeadersInit => {
-  const token = getAuthToken()
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  }
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`
-  }
-  return headers
-}
-
-// Refresh token if expired
-const refreshTokenIfNeeded = async (): Promise<string | null> => {
-  const token = getAuthToken()
-  if (!token) return null
-  
-  try {
-    // Try to verify token is still valid by calling /auth/me
-    const response = await fetch(`${API_BASE_URL}/auth/me`, {
-      headers: getAuthHeaders(),
-      credentials: "include",
-    })
-    
-    if (response.ok) {
-      return token
-    }
-    
-    // Token expired, try to refresh
-    const refreshToken = localStorage.getItem("refresh-token")
-    if (refreshToken) {
-      const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken }),
-      })
-      
-      if (refreshResponse.ok) {
-        const data = await refreshResponse.json()
-        if (data.token) {
-          localStorage.setItem("auth-token", data.token)
-          return data.token
-        }
-      }
-    }
-  } catch (error) {
-    console.error("Token refresh failed:", error)
-  }
-  
-  return null
-}
 
 export function PermissionMatrix({ roleId, readOnly = false }: PermissionMatrixProps) {
   const [state, setState] = useState<MatrixState>("loading")
@@ -120,9 +54,6 @@ export function PermissionMatrix({ roleId, readOnly = false }: PermissionMatrixP
     setError(null)
 
     try {
-      // Refresh token if needed
-      await refreshTokenIfNeeded()
-      
       const [permissionsRes, rolesRes] = await Promise.all([
         fetch(`${API_BASE_URL}/auth/permissions`, { 
           credentials: "include",
@@ -143,24 +74,73 @@ export function PermissionMatrix({ roleId, readOnly = false }: PermissionMatrixP
         rolesRes.json(),
       ])
 
-      const perms = permissionsData.permissions || []
-      const rolesList = rolesData.roles || []
+      // Backend returns { ok: true, data: { permissions: [...] } } where permissions is array of strings
+      const permsStrings = permissionsData.data?.permissions || permissionsData.permissions || []
+      
+      // Backend returns { ok: true, data: { roles: [...] } } where roles is array of { orgId, role, orgName }
+      const rolesDataList = rolesData.data?.roles || rolesData.roles || []
 
+      // Create default permission structure from available permissions
+      const defaultPerms: Permission[] = [
+        { id: "admin:*", name: "Admin Access", description: "Full administrative access", category: "Administration" },
+        { id: "finance:*", name: "Finance Access", description: "Full finance and accounting access", category: "Finance" },
+        { id: "viewer:*", name: "Viewer Access", description: "Read-only access to all data", category: "Viewer" },
+        { id: "org:read", name: "View Organization", description: "View organization details", category: "Organization" },
+        { id: "org:write", name: "Edit Organization", description: "Edit organization settings", category: "Organization" },
+        { id: "users:read", name: "View Users", description: "View user list", category: "Users" },
+        { id: "users:write", name: "Manage Users", description: "Add, edit, or remove users", category: "Users" },
+        { id: "reports:read", name: "View Reports", description: "View financial reports", category: "Reports" },
+        { id: "reports:write", name: "Create Reports", description: "Create and export reports", category: "Reports" },
+      ]
+      
+      // Filter to only show permissions that exist in backend response
+      const perms = defaultPerms.filter(p => permsStrings.length === 0 || permsStrings.includes(p.id))
       setPermissions(perms)
-      setRoles(rolesList)
 
-      if (roleId) {
-        const role = rolesList.find((r: Role) => r.id === roleId)
-        if (role) {
-          setSelectedRole(role)
-          setEditedPermissions(new Set(role.permissions))
-          setOriginalPermissions(new Set(role.permissions))
+      // Transform backend roles format to frontend format
+      // Backend returns: [{ orgId, role, orgName }]
+      // Frontend expects: [{ id, name, permissions: string[], isDefault? }]
+      const roleMap: Record<string, string[]> = {
+        admin: ["admin:*", "finance:*", "viewer:*", "org:read", "org:write", "users:read", "users:write", "reports:read", "reports:write"],
+        finance: ["finance:*", "viewer:*", "org:read", "reports:read", "reports:write"],
+        viewer: ["viewer:*", "org:read", "reports:read"],
+      }
+
+      const rolesList: Role[] = rolesDataList.map((r: any) => ({
+        id: r.role || r.id,
+        name: r.role ? r.role.charAt(0).toUpperCase() + r.role.slice(1) : r.name,
+        permissions: roleMap[r.role] || [],
+        isDefault: true,
+      }))
+
+      // If no roles from backend, create default roles
+      if (rolesList.length === 0) {
+        const defaultRoles: Role[] = [
+          { id: "admin", name: "Admin", permissions: roleMap.admin, isDefault: true },
+          { id: "finance", name: "Finance", permissions: roleMap.finance, isDefault: true },
+          { id: "viewer", name: "Viewer", permissions: roleMap.viewer, isDefault: true },
+        ]
+        setRoles(defaultRoles)
+        if (!roleId) {
+          setSelectedRole(defaultRoles[0])
+          setEditedPermissions(new Set(defaultRoles[0].permissions))
+          setOriginalPermissions(new Set(defaultRoles[0].permissions))
         }
-      } else if (rolesList.length > 0) {
-        const defaultRole = rolesList.find((r: Role) => r.name.toLowerCase() === "admin") || rolesList[0]
-        setSelectedRole(defaultRole)
-        setEditedPermissions(new Set(defaultRole.permissions))
-        setOriginalPermissions(new Set(defaultRole.permissions))
+      } else {
+        setRoles(rolesList)
+        if (roleId) {
+          const role = rolesList.find((r: Role) => r.id === roleId)
+          if (role) {
+            setSelectedRole(role)
+            setEditedPermissions(new Set(role.permissions))
+            setOriginalPermissions(new Set(role.permissions))
+          }
+        } else if (rolesList.length > 0) {
+          const defaultRole = rolesList.find((r: Role) => r.name.toLowerCase() === "admin") || rolesList[0]
+          setSelectedRole(defaultRole)
+          setEditedPermissions(new Set(defaultRole.permissions))
+          setOriginalPermissions(new Set(defaultRole.permissions))
+        }
       }
 
       setState("matrix-display")
@@ -177,10 +157,14 @@ export function PermissionMatrix({ roleId, readOnly = false }: PermissionMatrixP
       return
     }
 
+    // Only allow editing if this is the selected role
     if (roleId !== selectedRole?.id) {
+      // Switch to this role
       setSelectedRole(role)
       setEditedPermissions(new Set(role.permissions))
       setOriginalPermissions(new Set(role.permissions))
+      setState("editing")
+      return
     }
 
     setState("editing")
@@ -207,9 +191,7 @@ export function PermissionMatrix({ roleId, readOnly = false }: PermissionMatrixP
     setError(null)
 
     try {
-      // Refresh token if needed
-      await refreshTokenIfNeeded()
-      
+      // Use user-management endpoint for updating role permissions
       const response = await fetch(`${API_BASE_URL}/auth/roles/${selectedRole.id}`, {
         method: "PUT",
         headers: getAuthHeaders(),

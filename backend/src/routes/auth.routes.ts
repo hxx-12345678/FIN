@@ -12,6 +12,11 @@ router.post('/refresh', authController.refresh);
 router.post('/accept-invite', authController.acceptInvite);
 router.get('/me', authenticate, authController.getMe);
 router.get('/me/excel-perms', authenticate, authController.getExcelPerms);
+router.get('/permissions', authenticate, authController.getPermissions);
+router.get('/roles', authenticate, authController.getRoles);
+router.get('/sessions', authenticate, authController.getSessions);
+router.delete('/sessions/:sessionId', authenticate, authController.revokeSession);
+router.post('/sessions/revoke-all', authenticate, authController.revokeAllSessions);
 router.post('/logout', authenticate, authController.logout);
 router.post('/switch-org', authenticate, authController.switchOrg);
 

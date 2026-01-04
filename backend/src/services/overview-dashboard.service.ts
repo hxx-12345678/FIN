@@ -237,6 +237,22 @@ export const overviewDashboardService = {
       }
     }
     
+    // If still 0, count unique customers from revenue transactions
+    if (activeCustomers === 0 && transactions.length > 0) {
+      const uniqueCustomers = new Set<string>();
+      for (const tx of transactions) {
+        const amount = Number(tx.amount);
+        if (amount > 0) { // Revenue transactions
+          const customer = extractVendorFromDescription(tx.description, tx.rawPayload as any);
+          if (customer && customer !== 'Unknown') {
+            uniqueCustomers.add(customer);
+          }
+        }
+      }
+      activeCustomers = uniqueCustomers.size;
+      console.log(`[Overview] Calculated ${activeCustomers} unique customers from ${transactions.length} transactions`);
+    }
+    
     // Use standardized runway calculation service
     const { runwayCalculationService } = await import('./runway-calculation.service');
     const runwayData = await runwayCalculationService.calculateRunway(orgId);
@@ -266,20 +282,51 @@ export const overviewDashboardService = {
       }
     }
     
-    // Calculate health score based on available metrics
+    // Calculate health score based on available metrics - use same formula as investor dashboard
     if (healthScore === 0 || healthScore === 50) {
-      if (monthlyRevenue > 0 && monthlyBurnRate > 0) {
-        const burnRatio = monthlyBurnRate / monthlyRevenue;
-        const runwayScore = Math.min(100, Math.max(0, (runwayMonths / 24) * 100)); // 24 months = 100%
-        const growthScore = Math.min(100, Math.max(0, (revenueGrowth + 50))); // -50% to +50% mapped to 0-100
-        const burnScore = Math.max(0, 100 - (burnRatio * 50)); // Lower burn ratio = higher score
+      // Import the same calculateHealthScore function used by investor dashboard
+      const { investorDashboardService } = await import('./investor-dashboard.service');
+      // Calculate ARR for health score
+      const arr = monthlyRevenue * 12;
+      // Use the same health score calculation as investor dashboard
+      const calculateHealthScore = (params: {
+        arr: number;
+        burnRate: number;
+        runwayMonths: number;
+        arrGrowth: number;
+      }): number => {
+        let score = 50; // Base score
         
-        healthScore = Math.round((runwayScore * 0.4) + (growthScore * 0.3) + (burnScore * 0.3));
-      } else if (monthlyRevenue > 0) {
-        // Just revenue growth
-        const growthScore = Math.min(100, Math.max(0, (revenueGrowth + 50)));
-        healthScore = Math.round(growthScore);
-      }
+        // ARR growth component (0-30 points)
+        if (params.arrGrowth > 20) score += 30;
+        else if (params.arrGrowth > 15) score += 25;
+        else if (params.arrGrowth > 10) score += 20;
+        else if (params.arrGrowth > 5) score += 15;
+        else if (params.arrGrowth > 0) score += 10;
+        
+        // Runway component (0-30 points)
+        if (params.runwayMonths > 18) score += 30;
+        else if (params.runwayMonths > 12) score += 25;
+        else if (params.runwayMonths > 6) score += 20;
+        else if (params.runwayMonths > 3) score += 10;
+        
+        // Burn rate vs ARR component (0-20 points)
+        if (params.burnRate > 0 && params.arr > 0) {
+          const burnRatio = params.burnRate / params.arr;
+          if (burnRatio < 0.5) score += 20;
+          else if (burnRatio < 0.7) score += 15;
+          else if (burnRatio < 1.0) score += 10;
+        }
+        
+        return Math.min(100, Math.max(0, score));
+      };
+      
+      healthScore = calculateHealthScore({
+        arr,
+        burnRate: monthlyBurnRate,
+        runwayMonths,
+        arrGrowth: revenueGrowth,
+      });
     }
     
     // Generate revenue vs forecast data from actual transactions

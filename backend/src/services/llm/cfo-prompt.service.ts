@@ -408,7 +408,7 @@ export async function generateCFOExplanation(
 
   if (!llmConfig.apiKey || llmConfig.provider === 'fallback') {
     console.log('CFO Explanation Service: No Gemini API key, using fallback');
-    return generateFallbackExplanation(analysis);
+    return generateFallbackExplanation(analysis, userQuery);
   }
 
   try {
@@ -449,12 +449,12 @@ OUTPUT: Plain text explanation (no JSON, no markdown)`;
       } else {
         console.error('CFO explanation generation failed:', error.message);
       }
-      return generateFallbackExplanation(analysis);
+      return generateFallbackExplanation(analysis, userQuery);
     }
   } catch (error: any) {
     // Outer catch for any unexpected errors
     console.error('CFO explanation generation failed:', error.message);
-    return generateFallbackExplanation(analysis);
+    return generateFallbackExplanation(analysis, userQuery);
   }
 }
 
@@ -484,34 +484,116 @@ function removeDuplicates(recommendations: CFORecommendation[]): CFORecommendati
 
 /**
  * Generate fallback explanation when LLM unavailable
+ * Makes it question-specific and uses real financial data
  */
-function generateFallbackExplanation(analysis: CFOAnalysis): string {
-  let explanation = `Based on the financial analysis, `;
+function generateFallbackExplanation(analysis: CFOAnalysis, userQuery?: string): string {
+  const query = (userQuery || '').toLowerCase();
+  let explanation = '';
 
-  if (analysis.calculations) {
-    const calcEntries = Object.entries(analysis.calculations);
-    if (calcEntries.length > 0) {
-      explanation += `the calculated metrics show: ${calcEntries.map(([k, v]) => `${k} = ${v}`).join(', ')}. `;
+  // Question-specific opening based on intent
+  if (query.includes('runway') || query.includes('cash') || query.includes('survive')) {
+    if (analysis.calculations?.runway || analysis.calculations?.runwayMonths) {
+      const runway = analysis.calculations.runway || analysis.calculations.runwayMonths;
+      explanation = `Your current cash runway is approximately ${typeof runway === 'number' ? runway.toFixed(1) : runway} months. `;
+    } else {
+      explanation = `Based on your current financial position, `;
+    }
+  } else if (query.includes('burn rate') || query.includes('burn')) {
+    if (analysis.calculations?.burnRate) {
+      const burn = analysis.calculations.burnRate;
+      explanation = `Your monthly burn rate is $${typeof burn === 'number' ? burn.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : burn}. `;
+    } else {
+      explanation = `Analyzing your burn rate, `;
+    }
+  } else if (query.includes('fundraising') || query.includes('raise funding') || query.includes('raise capital')) {
+    explanation = `From a fundraising readiness perspective, `;
+  } else if (query.includes('cost') && (query.includes('optimize') || query.includes('reduce') || query.includes('cut'))) {
+    explanation = `For cost optimization, `;
+  } else if (query.includes('revenue') && (query.includes('growth') || query.includes('increase') || query.includes('accelerate'))) {
+    explanation = `To accelerate revenue growth, `;
+  } else if (query.includes('extend') && query.includes('runway')) {
+    explanation = `To extend your runway, `;
+  } else {
+    // Default: Use calculations if available
+    if (analysis.calculations && Object.keys(analysis.calculations).length > 0) {
+      const firstCalc = Object.entries(analysis.calculations)[0];
+      const key = firstCalc[0].replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      const value = typeof firstCalc[1] === 'number' 
+        ? (firstCalc[0].includes('month') || firstCalc[0].includes('runway')
+            ? `${firstCalc[1].toFixed(1)} months`
+            : firstCalc[0].includes('percent') || firstCalc[0].includes('rate')
+            ? `${(firstCalc[1] * 100).toFixed(1)}%`
+            : `$${firstCalc[1].toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`)
+        : firstCalc[1];
+      explanation = `Your ${key} is ${value}. `;
+    } else {
+      explanation = `Based on your financial data, `;
     }
   }
 
+  // Add key metrics if available
+  if (analysis.calculations && Object.keys(analysis.calculations).length > 0) {
+    const relevantCalcs = Object.entries(analysis.calculations)
+      .filter(([k]) => !k.includes('operation') && !k.includes('calculated_'))
+      .slice(0, 2);
+    
+    if (relevantCalcs.length > 0) {
+      const calcText = relevantCalcs.map(([k, v]) => {
+        const key = k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        if (typeof v === 'number') {
+          if (k.includes('month') || k.includes('runway')) {
+            return `${key}: ${v.toFixed(1)} months`;
+          } else if (k.includes('percent') || k.includes('rate') || k.includes('growth')) {
+            return `${key}: ${(v * 100).toFixed(1)}%`;
+          } else {
+            return `${key}: $${v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+          }
+        }
+        return `${key}: ${v}`;
+      }).join(', ');
+      explanation += `Key metrics: ${calcText}. `;
+    }
+  }
+
+  // Add recommendations with specific details
   if (analysis.recommendations.length > 0) {
-    explanation += `I recommend the following strategic actions: `;
-    explanation += analysis.recommendations
-      .slice(0, 3)
-      .map((r, i) => `${i + 1}. ${r.action}: ${r.explain}`)
-      .join(' ');
-    explanation += '. ';
+    explanation += `\n\n**Strategic Recommendations:**\n\n`;
+    analysis.recommendations.slice(0, 3).forEach((r, i) => {
+      explanation += `${i + 1}. **${r.action}** (${r.priority} priority)\n`;
+      explanation += `   ${r.explain || r.reasoning || 'Based on financial analysis'}\n`;
+      
+      // Add impact if available
+      if (r.impact && Object.keys(r.impact).length > 0) {
+        const impactEntries = Object.entries(r.impact)
+          .filter(([_, v]) => v !== null && v !== undefined)
+          .slice(0, 2);
+        if (impactEntries.length > 0) {
+          const impactText = impactEntries.map(([k, v]) => {
+            const key = k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            if (typeof v === 'number') {
+              if (k.includes('month') || k.includes('runway')) {
+                return `${key}: ${v.toFixed(1)} months`;
+              } else if (k.includes('percent') || k.includes('rate')) {
+                return `${key}: ${(v * 100).toFixed(1)}%`;
+              } else {
+                return `${key}: $${v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+              }
+            }
+            return `${key}: ${v}`;
+          }).join(', ');
+          explanation += `   *Expected Impact: ${impactText}*\n`;
+        }
+      }
+      
+      explanation += `\n`;
+    });
   }
 
+  // Add risks if available
   if (analysis.risks.length > 0) {
-    explanation += `Key risks to consider: ${analysis.risks.join(', ')}. `;
+    explanation += `\n**Key Risks:** ${analysis.risks.slice(0, 2).join(', ')}.`;
   }
 
-  if (analysis.warnings.length > 0) {
-    explanation += `Warnings: ${analysis.warnings.join(', ')}.`;
-  }
-
-  return explanation;
+  return explanation.trim() || 'I\'ve analyzed your financial situation and prepared strategic recommendations. Please review the staged changes tab for detailed action items.';
 }
 

@@ -55,20 +55,71 @@ def handle_auto_model_trigger(job_id: str, org_id: str, object_id: str, logs: di
         
         logger.info(f"Auto-model trigger: startingCustomers={starting_customers}, cashOnHand={cash_on_hand}")
         
-        # Check if org has models
+        # Check if org has models - if not, create a default one
         cursor.execute("""
             SELECT COUNT(*) FROM models WHERE "orgId" = %s
         """, (org_id,))
         
         model_count = cursor.fetchone()[0]
         if model_count == 0:
-            logger.info(f"Auto-model: Org {org_id} has no models, skipping")
+            logger.info(f"Auto-model: Org {org_id} has no models, creating default model")
+            
+            # Create a default model with basic assumptions
+            default_model_json = {
+                'name': 'Default Financial Model',
+                'version': 1,
+                'assumptions': {
+                    'baselineRevenue': 100000,
+                    'baselineExpenses': 80000,
+                    'revenueGrowth': 0.08,
+                    'expenseGrowth': 0.05,
+                    'cash': {
+                        'initialCash': float(cash_on_hand) if cash_on_hand and float(cash_on_hand) > 0 else 500000
+                    },
+                    'revenue': {
+                        'customerCount': int(starting_customers) if starting_customers and int(starting_customers) > 0 else 100
+                    }
+                },
+                'metadata': {
+                    'startMonth': datetime.now(timezone.utc).strftime('%Y-%m'),
+                    'createdBy': 'auto_model_trigger',
+                    'createdAt': datetime.now(timezone.utc).isoformat()
+                }
+            }
+            
             cursor.execute("""
-                UPDATE jobs SET progress = 100, status = 'done', logs = %s, updated_at = NOW()
-                WHERE id = %s
-            """, (json.dumps({**logs, 'status': 'skipped', 'reason': 'no_models'}), job_id))
+                INSERT INTO models (id, "orgId", name, model_json, version, created_at)
+                VALUES (gen_random_uuid(), %s, %s, %s::jsonb, 1, NOW())
+                RETURNING id
+            """, (
+                org_id,
+                'Default Financial Model',
+                json.dumps(default_model_json)
+            ))
+            
+            model_id = cursor.fetchone()[0]
+            logger.info(f"Created default model {model_id} for org {org_id}")
             conn.commit()
-            return
+        else:
+            # Get primary model (most recent)
+            cursor.execute("""
+                SELECT id FROM models
+                WHERE "orgId" = %s
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (org_id,))
+            
+            model_row = cursor.fetchone()
+            if not model_row:
+                logger.warning(f"Auto-model: No model found for org {org_id} after count check")
+                cursor.execute("""
+                    UPDATE jobs SET progress = 100, status = 'done', logs = %s, updated_at = NOW()
+                    WHERE id = %s
+                """, (json.dumps({**logs, 'status': 'skipped', 'reason': 'no_model'}), job_id))
+                conn.commit()
+                return
+            
+            model_id = model_row[0]
         
         # Check if there's already a running model run
         cursor.execute("""
@@ -109,27 +160,18 @@ def handle_auto_model_trigger(job_id: str, org_id: str, object_id: str, logs: di
                 conn.commit()
                 return
         
-        update_progress(job_id, 30, {'status': 'getting_primary_model'})
+        update_progress(job_id, 30, {'status': 'model_ready'})
         
-        # Get primary model (most recent)
-        cursor.execute("""
-            SELECT id FROM models
-            WHERE "orgId" = %s
-            ORDER BY created_at DESC
-            LIMIT 1
-        """, (org_id,))
-        
-        model_row = cursor.fetchone()
-        if not model_row:
-            logger.warning(f"Auto-model: No model found for org {org_id}")
+        # Ensure model_id is set (either from creation above or from existing model)
+        if 'model_id' not in locals():
+            # This shouldn't happen, but handle it gracefully
+            logger.error(f"Auto-model: model_id not set for org {org_id}")
             cursor.execute("""
                 UPDATE jobs SET progress = 100, status = 'done', logs = %s, updated_at = NOW()
                 WHERE id = %s
-            """, (json.dumps({**logs, 'status': 'skipped', 'reason': 'no_model'}), job_id))
+            """, (json.dumps({**logs, 'status': 'failed', 'reason': 'model_id_not_set'}), job_id))
             conn.commit()
             return
-        
-        model_id = model_row[0]
         
         update_progress(job_id, 50, {'status': 'creating_model_run'})
         

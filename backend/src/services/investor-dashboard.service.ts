@@ -65,8 +65,8 @@ export const investorDashboardService = {
     });
 
     if (!latestModelRun || !latestModelRun.summaryJson) {
-      // Return default/empty data if no model run exists
-      return getDefaultDashboardData();
+      // Fall back to transaction data if no model run exists
+      return await getDashboardDataFromTransactions(orgId);
     }
 
     const summary = latestModelRun.summaryJson as any;
@@ -112,24 +112,104 @@ export const investorDashboardService = {
     const milestones = getMilestones(arr, runwayMonths);
     const keyUpdates = getKeyUpdates(orgId, latestModelRun.createdAt);
 
-    // Calculate unit economics (if available in summary or use zeros)
+    // Get active customers from model run, but fallback to transaction count if 0
+    let activeCustomers = Number(summary.activeCustomers || summary.customers || summary.customerCount || 0);
+
+    // If model run shows 0 customers but we have revenue, count from transactions
+    if (activeCustomers === 0 && arr > 0) {
+      const transactions = await prisma.rawTransaction.findMany({
+        where: {
+          orgId,
+          isDuplicate: false,
+          amount: { gt: 0 }, // Revenue transactions only
+        },
+        take: 1000,
+      });
+      
+      const uniqueCustomers = new Set<string>();
+      for (const tx of transactions) {
+        let customer = tx.description?.trim() || '';
+        if (customer) {
+          customer = customer.replace(/\b(REF|REF#|REFERENCE|TXN|ID|#)\s*:?\s*[A-Z0-9-]+\b/gi, '').trim();
+          customer = customer.replace(/\$[\d,]+\.?\d*/g, '').trim();
+          customer = customer.replace(/\d{1,2}\/\d{1,2}\/\d{2,4}/g, '').trim();
+          const words = customer.split(/\s+/).filter(w => w.length > 2);
+          if (words.length > 0) {
+            customer = words.slice(0, 3).join(' ').substring(0, 50);
+            if (customer && customer !== 'Unknown') {
+              uniqueCustomers.add(customer);
+            }
+          }
+        }
+      }
+      activeCustomers = uniqueCustomers.size;
+      if (activeCustomers > 0) {
+        console.log(`[InvestorDashboard] Calculated ${activeCustomers} unique customers from transactions (model run had 0)`);
+      }
+    }
+
+    // Calculate unit economics - try summary first, then model assumptions, then calculate from data
+    let ltv = Number(summary.ltv || summary.customerLTV || 0);
+    let cac = Number(summary.cac || summary.customerCAC || 0);
+    
+    // If not in summary, try to get from model assumptions
+    if ((ltv === 0 || cac === 0) && latestModelRun.modelId) {
+      const model = await prisma.model.findUnique({
+        where: { id: latestModelRun.modelId },
+      });
+      
+      if (model && model.modelJson) {
+        const modelJson = typeof model.modelJson === 'string' 
+          ? JSON.parse(model.modelJson) 
+          : model.modelJson;
+        const assumptions = modelJson.assumptions || {};
+        
+        if (ltv === 0) {
+          ltv = Number(assumptions.ltv || assumptions.unitEconomics?.ltv || 0);
+        }
+        if (cac === 0) {
+          cac = Number(assumptions.cac || assumptions.unitEconomics?.cac || 0);
+        }
+      }
+    }
+    
+    // If still 0, try to calculate from available data
+    if (ltv === 0 && arr > 0 && activeCustomers > 0) {
+      // LTV = (MRR * 12) / churnRate, or ARR / (activeCustomers * churnRate)
+      const churnRate = Number(summary.churnRate || 0.05);
+      const mrr = arr / 12;
+      if (churnRate > 0) {
+        ltv = (mrr / churnRate) * 12; // Simplified LTV calculation: LTV = MRR / churnRate
+      }
+    }
+    
+    if (cac === 0 && arr > 0 && activeCustomers > 0) {
+      // CAC = Marketing Spend / New Customers, or estimate from ARR
+      // Estimate: CAC = (ARR * 0.1) / (activeCustomers * growthRate)
+      const growthRate = arrGrowth / 100 || 0.08;
+      if (growthRate > 0) {
+        cac = (arr * 0.1) / (activeCustomers * growthRate); // Rough estimate
+      }
+    }
+    
     const unitEconomics = {
-      ltv: Number(summary.ltv || summary.customerLTV || 0),
-      cac: Number(summary.cac || summary.customerCAC || 0),
+      ltv: Math.round(ltv),
+      cac: Math.round(cac),
       ltvCacRatio: 0,
       paybackPeriod: 0,
     };
     unitEconomics.ltvCacRatio = unitEconomics.ltv > 0 && unitEconomics.cac > 0 
       ? unitEconomics.ltv / unitEconomics.cac 
       : 0;
+    
     unitEconomics.paybackPeriod = unitEconomics.ltv > 0 && unitEconomics.cac > 0 && arr > 0
-      ? (unitEconomics.cac / (arr / (Number(summary.activeCustomers) || 1))) * 12
+      ? (unitEconomics.cac / (arr / (activeCustomers || 1))) * 12
       : 0;
 
     return {
       executiveSummary: {
         arr: Math.round(arr),
-        activeCustomers: Number(summary.activeCustomers || summary.customers || summary.customerCount || 0),
+        activeCustomers: activeCustomers,
         monthsRunway: Math.round(runwayMonths * 10) / 10,
         healthScore: Math.round(healthScore),
         arrGrowth: Math.round(arrGrowth * 10) / 10,
@@ -363,6 +443,182 @@ function formatMonth(monthKey: string): string {
   }
 
   return monthKey;
+}
+
+/**
+ * Get dashboard data from transactions when no model run exists
+ */
+async function getDashboardDataFromTransactions(orgId: string): Promise<InvestorDashboardData> {
+  // Get transactions from last 12 months
+  const now = new Date();
+  const startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+  const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  
+  let transactions = await prisma.rawTransaction.findMany({
+    where: {
+      orgId,
+      isDuplicate: false,
+      date: {
+        gte: startDate,
+        lte: endDate,
+      },
+    },
+    orderBy: {
+      date: 'desc',
+    },
+  });
+  
+  // If no recent transactions, get all transactions
+  if (transactions.length === 0) {
+    transactions = await prisma.rawTransaction.findMany({
+      where: {
+        orgId,
+        isDuplicate: false,
+      },
+      orderBy: {
+        date: 'desc',
+      },
+      take: 1000,
+    });
+  }
+  
+  // Calculate monthly revenue and expenses
+  const monthlyRevenueMap = new Map<string, number>();
+  const monthlyExpenseMap = new Map<string, number>();
+  
+  for (const tx of transactions) {
+    const month = String(tx.date.getMonth() + 1).padStart(2, '0');
+    const period = `${tx.date.getFullYear()}-${month}`;
+    const amount = Number(tx.amount);
+    
+    if (amount > 0) {
+      monthlyRevenueMap.set(period, (monthlyRevenueMap.get(period) || 0) + amount);
+    } else {
+      monthlyExpenseMap.set(period, (monthlyExpenseMap.get(period) || 0) + Math.abs(amount));
+    }
+  }
+  
+  // Get all periods and sort
+  const allPeriods = Array.from(new Set([
+    ...monthlyRevenueMap.keys(),
+    ...monthlyExpenseMap.keys()
+  ])).sort();
+  
+  // Calculate ARR from latest month revenue
+  let arr = 0;
+  let monthlyRevenue = 0;
+  let monthlyBurnRate = 0;
+  let arrGrowth = 0;
+  
+  if (allPeriods.length > 0) {
+    const latestPeriod = allPeriods[allPeriods.length - 1];
+    monthlyRevenue = monthlyRevenueMap.get(latestPeriod) || 0;
+    monthlyBurnRate = monthlyExpenseMap.get(latestPeriod) || 0;
+    arr = monthlyRevenue * 12;
+    
+    // Calculate growth from previous period
+    if (allPeriods.length >= 2) {
+      const prevPeriod = allPeriods[allPeriods.length - 2];
+      const prevRevenue = monthlyRevenueMap.get(prevPeriod) || 0;
+      arrGrowth = prevRevenue > 0 ? ((monthlyRevenue - prevRevenue) / prevRevenue) * 100 : 0;
+    }
+  }
+  
+  // Use standardized runway calculation
+  const { runwayCalculationService } = await import('./runway-calculation.service');
+  const runwayData = await runwayCalculationService.calculateRunway(orgId);
+  const runwayMonths = runwayData.runwayMonths;
+  
+  // Calculate health score
+  const healthScore = calculateHealthScore({
+    arr,
+    burnRate: monthlyBurnRate,
+    runwayMonths,
+    arrGrowth,
+  });
+  
+  // Generate monthly metrics from transactions
+  const monthlyMetrics: Array<{
+    month: string;
+    revenue: number;
+    customers: number;
+    burn: number;
+    arr: number;
+  }> = [];
+  
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const last6Periods = allPeriods.slice(-6);
+  
+  for (const period of last6Periods) {
+    const [year, month] = period.split('-').map(Number);
+    const monthIndex = month - 1;
+    const monthName = monthNames[monthIndex];
+    const revenue = monthlyRevenueMap.get(period) || 0;
+    const burn = monthlyExpenseMap.get(period) || 0;
+    
+    monthlyMetrics.push({
+      month: monthName,
+      revenue: Math.round(revenue),
+      customers: 0, // Can't determine from transactions alone
+      burn: Math.round(burn),
+      arr: Math.round(revenue * 12),
+    });
+  }
+  
+  // Get milestones and updates
+  const milestones = getMilestones(arr, runwayMonths);
+  const keyUpdates = getKeyUpdates(orgId, new Date());
+  
+  // Count unique customers from revenue transactions
+  let activeCustomers = 0;
+  const uniqueCustomers = new Set<string>();
+  for (const tx of transactions) {
+    const amount = Number(tx.amount);
+    if (amount > 0) { // Revenue transactions
+      // Extract customer name from description
+      let customer = tx.description?.trim() || '';
+      if (customer) {
+        // Remove common prefixes/suffixes
+        customer = customer.replace(/\b(REF|REF#|REFERENCE|TXN|ID|#)\s*:?\s*[A-Z0-9-]+\b/gi, '').trim();
+        customer = customer.replace(/\$[\d,]+\.?\d*/g, '').trim();
+        customer = customer.replace(/\d{1,2}\/\d{1,2}\/\d{2,4}/g, '').trim();
+        
+        // Take first meaningful words
+        const words = customer.split(/\s+/).filter(w => w.length > 2);
+        if (words.length > 0) {
+          customer = words.slice(0, 3).join(' ').substring(0, 50);
+          if (customer && customer !== 'Unknown') {
+            uniqueCustomers.add(customer);
+          }
+        }
+      }
+    }
+  }
+  activeCustomers = uniqueCustomers.size;
+  if (activeCustomers > 0) {
+    console.log(`[InvestorDashboard] Calculated ${activeCustomers} unique customers from ${transactions.length} transactions`);
+  }
+
+  return {
+    executiveSummary: {
+      arr: Math.round(arr),
+      activeCustomers: activeCustomers,
+      monthsRunway: Math.round(runwayMonths * 10) / 10,
+      healthScore: Math.round(healthScore),
+      arrGrowth: Math.round(arrGrowth * 10) / 10,
+      customerGrowth: 0, // Can't calculate growth without historical customer data
+      runwayChange: 0,
+    },
+    monthlyMetrics,
+    milestones,
+    keyUpdates,
+    unitEconomics: {
+      ltv: 0,
+      cac: 0,
+      ltvCacRatio: 0,
+      paybackPeriod: 0,
+    },
+  };
 }
 
 /**

@@ -145,11 +145,11 @@ export function ScenarioSnapshotManager({ modelId, orgId }: ScenarioSnapshotMana
           const transformed = result.scenarios
             .filter((s: any) => s.status === "done" && s.summary)
             .map((s: any) => {
-              const summary = s.summary || {}
+              const summary = typeof s.summary === 'string' ? JSON.parse(s.summary) : (s.summary || {})
               return {
                 id: s.id,
-                name: s.scenarioName || "Unnamed Scenario",
-                description: `Type: ${s.scenarioType}`,
+                name: s.scenarioName || s.name || "Unnamed Scenario",
+                description: `Type: ${s.scenarioType || "adhoc"}`,
                 tag: s.scenarioType === "optimistic" ? "best-case" : 
                      s.scenarioType === "conservative" ? "worst-case" : 
                      s.scenarioType === "baseline" ? "base-case" : "custom",
@@ -157,12 +157,18 @@ export function ScenarioSnapshotManager({ modelId, orgId }: ScenarioSnapshotMana
                 author: "System",
                 version: 1,
                 data: {
-                  revenue: summary.totalRevenue || summary.revenue || 0,
+                  revenue: summary.totalRevenue || summary.revenue || summary.mrr || 0,
                   expenses: summary.totalExpenses || summary.expenses || 0,
-                  runway: summary.runwayMonths || summary.runway || 0,
+                  runway: (() => {
+                    const burnRate = summary.burnRate || summary.monthlyBurnRate || 0;
+                    const runway = summary.runwayMonths || summary.runway || 0;
+                    // If burn rate is negative (profitable), runway is infinite
+                    if (burnRate < 0) return 999;
+                    return runway;
+                  })(),
                   cash: summary.cashBalance || summary.cash || 0,
                   burnRate: summary.burnRate || summary.monthlyBurnRate || 0,
-                  arr: summary.arr || (summary.mrr || 0) * 12,
+                  arr: summary.arr || (summary.mrr || summary.revenue || 0) * 12,
                 },
               }
             })

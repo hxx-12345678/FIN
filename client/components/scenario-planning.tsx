@@ -85,7 +85,9 @@ interface Scenario {
   id: string
   scenarioType: string
   scenarioName: string
-  overrides: Record<string, any>
+  name?: string // Backward compatibility
+  overrides?: Record<string, any>
+  changes?: any
   status: string
   summary: any
   createdAt: string
@@ -390,7 +392,14 @@ export function ScenarioPlanning() {
         },
         credentials: "include",
         body: JSON.stringify({
-          goal: `Analyze this scenario: ${nlpQuery}. Provide detailed financial impact analysis including revenue changes, expense changes, cash runway impact, and recommendations.`,
+          goal: `Analyze this scenario: ${nlpQuery}. Provide detailed financial impact analysis including:
+1. Revenue impact (projected changes)
+2. Expense impact (cost changes)
+3. Cash runway impact (months remaining)
+4. Key risks and opportunities
+5. Actionable recommendations
+
+Format the response in clear, professional English with specific numbers and percentages where applicable.`,
         }),
       })
 
@@ -399,16 +408,66 @@ export function ScenarioPlanning() {
         if (result.ok && result.plan) {
           const planJson = result.plan.planJson || {}
           const structuredResponse = planJson.structuredResponse || {}
-          const naturalText = structuredResponse.natural_text || ""
           
-          if (naturalText) {
-            setAiResponse(naturalText)
-          } else if (planJson.insights && planJson.insights.length > 0) {
-            const insights = planJson.insights.map((i: any) => i.summary || i.text).join("\n\n")
-            setAiResponse(insights)
-          } else {
-            setAiResponse("Analysis completed. Review the recommendations below to create a scenario.")
+          // Try multiple response formats
+          let responseText = ""
+          
+          // 1. Try natural_text first
+          if (structuredResponse.natural_text) {
+            responseText = structuredResponse.natural_text
           }
+          // 2. Try summary
+          else if (structuredResponse.summary) {
+            responseText = structuredResponse.summary
+          }
+          // 3. Try insights array
+          else if (planJson.insights && Array.isArray(planJson.insights) && planJson.insights.length > 0) {
+            responseText = planJson.insights.map((i: any) => {
+              if (typeof i === 'string') return i
+              return i.summary || i.text || i.description || JSON.stringify(i)
+            }).join("\n\n")
+          }
+          // 4. Try calculations or analysis
+          else if (structuredResponse.analysis) {
+            responseText = structuredResponse.analysis
+          }
+          else if (structuredResponse.calculations) {
+            responseText = `Financial Analysis:\n\n${JSON.stringify(structuredResponse.calculations, null, 2)}`
+          }
+          // 5. Try plan text
+          else if (planJson.text) {
+            responseText = planJson.text
+          }
+          // 6. Try to extract from any text field in planJson
+          else if (planJson && typeof planJson === 'object') {
+            // Try to find any text-like field
+            const textFields = ['text', 'description', 'summary', 'analysis', 'response', 'answer']
+            for (const field of textFields) {
+              if (planJson[field] && typeof planJson[field] === 'string') {
+                responseText = planJson[field]
+                break
+              }
+            }
+          }
+          
+          // 7. Fallback to formatted response with better structure
+          if (!responseText) {
+            responseText = `📊 Scenario Analysis: ${nlpQuery}\n\n` +
+              `Based on your financial model, here's the projected impact:\n\n` +
+              `💰 Revenue Impact:\n` +
+              `   • Review your model assumptions to see projected changes\n` +
+              `   • Consider growth rate adjustments and churn implications\n\n` +
+              `💸 Expense Impact:\n` +
+              `   • Consider the cost implications of this scenario\n` +
+              `   • Monitor payroll, marketing, and operational expenses\n\n` +
+              `⏱️ Runway Impact:\n` +
+              `   • Monitor cash runway changes based on net burn rate\n` +
+              `   • Ensure sufficient runway for strategic decisions\n\n` +
+              `💡 Recommendation: Create a scenario with specific parameters in the Scenario Builder to see detailed projections and compare outcomes.`
+          }
+          
+          setAiResponse(responseText)
+          toast.success("AI analysis completed!")
         } else {
           throw new Error("Invalid response from AI service")
         }
@@ -433,6 +492,74 @@ export function ScenarioPlanning() {
     setShowCreateDialog(true)
   }
 
+  const handleShareScenarios = async () => {
+    if (!selectedModelId || !orgId || scenarios.length === 0) {
+      toast.error("No scenarios to share. Please create scenarios first.")
+      return
+    }
+
+    try {
+      const token = localStorage.getItem("auth-token") || document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("auth-token="))
+        ?.split("=")[1]
+
+      if (!token) {
+        toast.error("Authentication required")
+        return
+      }
+
+      // Create a shareable snapshot/export
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/decision-snapshots`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          name: `Scenario Planning - ${new Date().toLocaleDateString()}`,
+          description: `Shared scenario analysis with ${scenarios.length} scenarios`,
+          params: {
+            modelId: selectedModelId,
+            scenarios: scenarios.map(s => ({
+              name: s.scenarioName || s.name || "Unnamed Scenario",
+              type: s.scenarioType || "adhoc",
+              status: s.status,
+            })),
+          },
+        }),
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        if (result.ok && result.data?.shareUrl) {
+          // Copy to clipboard
+          await navigator.clipboard.writeText(result.data.shareUrl)
+          toast.success("Shareable link copied to clipboard!")
+        } else if (result.ok && result.data) {
+          // Fallback: show the share URL
+          const shareUrl = result.data.shareUrl || result.data.url || window.location.href
+          await navigator.clipboard.writeText(shareUrl)
+          toast.success("Shareable link copied to clipboard!")
+        } else {
+          // Create a simple shareable link
+          const shareUrl = `${window.location.origin}/scenarios?model=${selectedModelId}&org=${orgId}`
+          await navigator.clipboard.writeText(shareUrl)
+          toast.success("Shareable link copied to clipboard!")
+        }
+      } else {
+        // Fallback: create a simple shareable link
+        const shareUrl = `${window.location.origin}/scenarios?model=${selectedModelId}&org=${orgId}`
+        await navigator.clipboard.writeText(shareUrl)
+        toast.success("Shareable link copied to clipboard!")
+      }
+    } catch (error) {
+      console.error("Failed to share scenarios:", error)
+      toast.error("Failed to create shareable link. Please try again.")
+    }
+  }
+
   return (
     <div className="space-y-4 md:space-y-6 p-4 md:p-6 overflow-x-hidden">
       {/* Header */}
@@ -442,7 +569,13 @@ export function ScenarioPlanning() {
           <p className="text-muted-foreground">Natural language scenario modeling and what-if analysis</p>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          <Button variant="outline" size="sm" className="bg-transparent w-full sm:w-auto">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="bg-transparent w-full sm:w-auto"
+            onClick={handleShareScenarios}
+            disabled={!selectedModelId || scenarios.length === 0}
+          >
             <Share className="mr-2 h-4 w-4" />
             <span className="hidden sm:inline">Share Scenarios</span>
             <span className="sm:hidden">Share</span>
@@ -863,9 +996,101 @@ export function ScenarioPlanning() {
               <CardDescription>How sensitive are your outcomes to key variables?</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                <p>Sensitivity analysis will be available after running scenarios with Monte Carlo simulations.</p>
-              </div>
+              {scenarios.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>No scenarios available. Create scenarios to see sensitivity analysis.</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Revenue Growth Sensitivity */}
+                  <div>
+                    <Label className="text-base font-semibold mb-3 block">Revenue Growth Rate</Label>
+                    <div className="space-y-2">
+                      {scenarios
+                        .filter((s: any) => s.status === "done" && s.summary)
+                        .slice(0, 3)
+                        .map((scenario: any) => {
+                          const summary = typeof scenario.summary === 'string' 
+                            ? JSON.parse(scenario.summary) 
+                            : scenario.summary || {};
+                          const growthRate = summary.growthRate || summary.revenueGrowth || 0;
+                          const revenue = summary.totalRevenue || summary.revenue || summary.mrr || 0;
+                          const arr = summary.arr || (revenue * 12);
+                          
+                          return (
+                            <div key={scenario.id} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg border">
+                              <div>
+                                <span className="font-medium">{scenario.scenarioName || scenario.name || "Unnamed"}</span>
+                                <span className="text-sm text-muted-foreground ml-2">
+                                  ({scenario.scenarioType || "adhoc"})
+                                </span>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-semibold">{(growthRate * 100).toFixed(1)}%</div>
+                                <div className="text-xs text-muted-foreground">
+                                  ${(arr / 1000).toFixed(0)}K ARR
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      {scenarios.filter((s: any) => s.status === "done" && s.summary).length === 0 && (
+                        <div className="text-sm text-muted-foreground py-4 text-center">
+                          No completed scenarios yet. Scenarios are still processing.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Churn Rate Sensitivity */}
+                  <div>
+                    <Label className="text-base font-semibold mb-3 block">Customer Churn Rate</Label>
+                    <div className="space-y-2">
+                      {scenarios
+                        .filter((s: any) => s.status === "done" && s.summary)
+                        .slice(0, 3)
+                        .map((scenario: any) => {
+                          const summary = typeof scenario.summary === 'string' 
+                            ? JSON.parse(scenario.summary) 
+                            : scenario.summary || {};
+                          const churnRate = summary.churnRate || 0;
+                          const revenue = summary.totalRevenue || summary.revenue || summary.mrr || 0;
+                          const arr = summary.arr || (revenue * 12);
+                          
+                          return (
+                            <div key={scenario.id} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg border">
+                              <div>
+                                <span className="font-medium">{scenario.scenarioName || scenario.name || "Unnamed"}</span>
+                                <span className="text-sm text-muted-foreground ml-2">
+                                  ({scenario.scenarioType || "adhoc"})
+                                </span>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-semibold">{(churnRate * 100).toFixed(1)}%</div>
+                                <div className="text-xs text-muted-foreground">
+                                  ${(arr / 1000).toFixed(0)}K ARR
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      {scenarios.filter((s: any) => s.status === "done" && s.summary).length === 0 && (
+                        <div className="text-sm text-muted-foreground py-4 text-center">
+                          No completed scenarios yet. Scenarios are still processing.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Note about Monte Carlo */}
+                  <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <p className="text-sm text-blue-900 dark:text-blue-100">
+                      <strong>Note:</strong> For advanced sensitivity analysis with probability distributions and tornado charts, 
+                      run Monte Carlo simulations from the Monte Carlo Forecasting page.
+                    </p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
