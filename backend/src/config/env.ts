@@ -51,7 +51,7 @@ export const config = {
   llm: {
     provider: process.env.LLM_PROVIDER || (process.env.GEMINI_API_KEY ? 'gemini' : 'fallback'),
     apiKey: process.env.GEMINI_API_KEY || process.env.LLM_API_KEY || '',
-    model: process.env.GEMINI_MODEL || process.env.LLM_MODEL || 'gemini-2.0-flash-exp',
+    model: process.env.GEMINI_MODEL || process.env.LLM_MODEL || 'gemini-2.5-flash',
     baseUrl: process.env.LLM_BASE_URL || '',
   },
 };

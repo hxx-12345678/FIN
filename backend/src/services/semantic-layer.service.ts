@@ -36,12 +36,31 @@ export const semanticLayerService = {
       sourceId: txn.id,
     }));
 
-    // 3. Insert into ledger (bulk)
-    const result = await prisma.$transaction(
-      ledgerEntries.map(entry =>
-        prisma.financialLedger.create({ data: entry })
-      )
-    );
+    // 3. Insert into ledger (bulk with chunking for large datasets)
+    // For large batches (100K+ entries), chunk the inserts to avoid transaction timeout
+    const CHUNK_SIZE = 10000; // Insert 10K entries per transaction
+    const result: any[] = [];
+    
+    if (ledgerEntries.length > CHUNK_SIZE) {
+      // Chunk large batches
+      for (let i = 0; i < ledgerEntries.length; i += CHUNK_SIZE) {
+        const chunk = ledgerEntries.slice(i, i + CHUNK_SIZE);
+        const chunkResult = await prisma.$transaction(
+          chunk.map(entry =>
+            prisma.financialLedger.create({ data: entry })
+          )
+        );
+        result.push(...chunkResult);
+      }
+    } else {
+      // Small batches: single transaction
+      const transactionResult = await prisma.$transaction(
+        ledgerEntries.map(entry =>
+          prisma.financialLedger.create({ data: entry })
+        )
+      );
+      result.push(...transactionResult);
+    }
 
     await auditService.log({
       orgId,

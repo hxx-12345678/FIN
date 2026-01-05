@@ -680,10 +680,19 @@ export const intentClassifierService = {
       throw new ValidationError('Input is required and must be a non-empty string');
     }
 
+    // Production optimization: default to deterministic classifier to avoid extra Gemini calls.
+    // Gemini is better spent on CFO reasoning/recommendations (the expensive part).
+    // Set AICFO_INTENT_LLM=true to enable LLM-based intent classification.
+    if (String(process.env.AICFO_INTENT_LLM || '').toLowerCase() !== 'true') {
+      return fallbackIntentClassifier(input.trim());
+    }
+
     const llmConfig: LLMConfig = config || {
-      provider: (process.env.LLM_PROVIDER as any) || (process.env.GEMINI_API_KEY ? 'gemini' : 'fallback'),
-      apiKey: process.env.GEMINI_API_KEY || process.env.LLM_API_KEY,
-      model: process.env.GEMINI_MODEL || process.env.LLM_MODEL || 'gemini-2.0-flash-exp',
+      provider: (process.env.LLM_PROVIDER as any) || (
+        (process.env.GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY_2 || process.env.GEMINI_API_KEY || process.env.LLM_API_KEY) ? 'gemini' : 'fallback'
+      ),
+      apiKey: process.env.GEMINI_API_KEY_1?.trim() || process.env.GEMINI_API_KEY_2?.trim() || process.env.GEMINI_API_KEY?.trim() || process.env.LLM_API_KEY?.trim(),
+      model: process.env.GEMINI_MODEL || process.env.LLM_MODEL || 'gemini-2.5-flash',
       baseUrl: process.env.LLM_BASE_URL,
     };
 

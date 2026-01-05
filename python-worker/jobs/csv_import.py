@@ -165,8 +165,18 @@ def handle_csv_import(job_id: str, org_id: str, object_id: str, logs: dict):
         inserted = 0
         skipped = 0
         errors = []
-        BATCH_SIZE = 50  # Commit every 50 rows to avoid losing all data on error
+        # Optimize batch size based on total rows for better performance
+        # For large files (1M+ rows), use larger batches to reduce commit overhead
         total_rows = len(rows)  # Store total rows for progress calculation
+        if total_rows > 1000000:
+            BATCH_SIZE = 10000  # 10K rows per commit for very large files
+        elif total_rows > 100000:
+            BATCH_SIZE = 5000   # 5K rows per commit for large files
+        elif total_rows > 10000:
+            BATCH_SIZE = 1000   # 1K rows per commit for medium files
+        else:
+            BATCH_SIZE = 100    # 100 rows per commit for small files
+        logger.info(f"Using batch size: {BATCH_SIZE} for {total_rows} total rows")
         
         logger.info(f"Processing {total_rows} rows with mappings: {mappings}")
         if rows:

@@ -261,7 +261,7 @@ export function AIAssistant() {
         const result = await response.json()
         if (result.ok && result.plans) {
           setPlans(result.plans)
-          // Convert plans to tasks (skip fallback/low-confidence plans)
+          // Convert plans to tasks
           const planTasks: Task[] = result.plans.flatMap((plan: AICFOPlan) => {
             const metadata = plan.planJson?.metadata || {}
             const fallbackUsed =
@@ -269,7 +269,8 @@ export function AIAssistant() {
               metadata.recommendationsSource === "fallback" ||
               (metadata.modelUsed && String(metadata.modelUsed).toLowerCase().includes("fallback"))
 
-            if (!plan.planJson?.stagedChanges || fallbackUsed) return []
+            // Keep staged changes even for fallback plans (fallback can still be actionable)
+            if (!plan.planJson?.stagedChanges) return []
 
             return plan.planJson.stagedChanges.map((change: any, idx: number) => ({
               id: `${plan.id}-${idx}`,
@@ -362,14 +363,51 @@ export function AIAssistant() {
           (metadata.modelUsed && String(metadata.modelUsed).toLowerCase().includes("fallback"))
         const lowConfidence =
           typeof metadata.intentConfidence === "number" ? metadata.intentConfidence < 0.55 : false
-        const hasActionableRecommendations = stagedChanges.length > 0 && !fallbackUsed && !lowConfidence
+        // Treat staged changes as actionable even if generated via deterministic fallback
+        // (fallback still uses real org data; we only gate on very low confidence)
+        const hasActionableRecommendations = stagedChanges.length > 0 && !lowConfidence
 
         // Build comprehensive CFO-style response
         let responseText = ""
 
-        // Start with natural text if available
-        if (structuredResponse.natural_text && hasActionableRecommendations) {
-          responseText = structuredResponse.natural_text
+        // Start with natural text if available (LLM or fallback)
+        if (structuredResponse.natural_text) {
+          let naturalText = structuredResponse.natural_text
+          
+          // Handle case where natural_text might be a JSON string
+          if (typeof naturalText === 'string') {
+            const trimmed = naturalText.trim()
+            
+            // Check if it looks like JSON
+            if (trimmed.startsWith('{') && (trimmed.includes('naturalLanguage') || trimmed.includes('"naturalLanguage"'))) {
+              try {
+                const parsed = JSON.parse(trimmed)
+                // Try multiple possible keys
+                naturalText = parsed.naturalLanguage || parsed.natural_text || parsed.text || parsed.content || parsed.explanation || naturalText
+                
+                // If still looks like JSON, try one more level
+                if (typeof naturalText === 'string' && naturalText.trim().startsWith('{')) {
+                  try {
+                    const nested = JSON.parse(naturalText)
+                    naturalText = nested.naturalLanguage || nested.text || nested.content || naturalText
+                  } catch {
+                    // Use as-is
+                  }
+                }
+              } catch {
+                // If parsing fails, try to extract text manually
+                const match = trimmed.match(/"naturalLanguage"\s*:\s*"([^"]+)"/)
+                if (match && match[1]) {
+                  naturalText = match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"')
+                } else {
+                  // Last resort: remove JSON structure and extract text
+                  naturalText = trimmed.replace(/^\{[^}]*"naturalLanguage"\s*:\s*"([^"]+)"[^}]*\}$/, '$1').replace(/\\n/g, '\n').replace(/\\"/g, '"')
+                }
+              }
+            }
+          }
+          
+          responseText = naturalText
         } else if (hasActionableRecommendations) {
           // Build CFO-style response from components
           responseText = `**CFO Analysis & Recommendations**\n\n`
@@ -454,10 +492,23 @@ export function AIAssistant() {
         const hasConnectedAccounting = metadata.hasConnectedAccounting === true
         const hasFinancialData = metadata.hasFinancialData === true
 
-        // Ensure we have a response
+        // Ensure we have a response - only use default if truly no response
         if (!responseText.trim()) {
-          responseText =
-            "I can provide more strategic recommendations once your accounting/billing data is connected. Please connect your accounting system or provide more financial context (ARR, burn, runway)."
+          // Try to build a response from staged changes if available
+          if (stagedChanges.length > 0) {
+            responseText = `**CFO Analysis & Recommendations**\n\n`;
+            stagedChanges.slice(0, 3).forEach((change: any, idx: number) => {
+              responseText += `${idx + 1}. **${change.action || 'Recommendation'}**\n`;
+              if (change.explain || change.reasoning) {
+                responseText += `   ${change.explain || change.reasoning}\n`;
+              }
+              responseText += `\n`;
+            });
+          } else {
+            // Only show default message if we truly have no data and no recommendations
+            responseText =
+              "I can provide more strategic recommendations once your accounting/billing data is connected. Please connect your accounting system or provide more financial context (ARR, burn, runway)."
+          }
         }
 
         // Add accounting system suggestion if no data and not already in response
@@ -708,21 +759,21 @@ export function AIAssistant() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="chat" className="space-y-6 overflow-x-auto overflow-y-visible">
+        <TabsContent value="chat" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Chat Interface */}
             <div className="lg:col-span-2">
-              <Card className="h-[400px] sm:h-[500px] lg:h-[600px] flex flex-col">
-                <CardHeader className="border-b">
+              <Card className="h-[400px] sm:h-[500px] lg:h-[600px] flex flex-col overflow-hidden">
+                <CardHeader className="border-b flex-shrink-0">
                   <CardTitle className="flex items-center gap-2">
                     <MessageSquare className="h-5 w-5" />
                     Chat with AI CFO
                   </CardTitle>
                   <CardDescription>Ask questions or request financial analysis plans</CardDescription>
                 </CardHeader>
-                <CardContent className="flex-1 flex flex-col p-0">
-                  <ScrollArea className="flex-1 p-4">
-                    <div className="space-y-4">
+                <CardContent className="flex-1 flex flex-col p-0 overflow-hidden min-h-0">
+                  <ScrollArea className="flex-1 min-h-0">
+                    <div className="space-y-4 p-4">
                       {messages.map((message) => (
                         <div
                           key={message.id}
@@ -740,7 +791,64 @@ export function AIAssistant() {
                               message.type === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
                             }`}
                           >
-                            <p className="text-sm whitespace-pre-line">{message.content}</p>
+                            <div className="text-sm whitespace-pre-wrap">
+                              {message.content.split('\n').map((line, idx) => {
+                                // Process markdown formatting
+                                const renderLine = (text: string): (string | JSX.Element)[] => {
+                                  const parts: (string | JSX.Element)[] = [];
+                                  let lastIndex = 0;
+                                  
+                                  // Process bold **text**
+                                  const boldRegex = /\*\*(.*?)\*\*/g;
+                                  let match;
+                                  const matches: Array<{start: number, end: number, text: string}> = [];
+                                  
+                                  while ((match = boldRegex.exec(text)) !== null) {
+                                    matches.push({
+                                      start: match.index,
+                                      end: match.index + match[0].length,
+                                      text: match[1]
+                                    });
+                                  }
+                                  
+                                  matches.forEach((boldMatch, matchIdx) => {
+                                    if (boldMatch.start > lastIndex) {
+                                      parts.push(text.substring(lastIndex, boldMatch.start));
+                                    }
+                                    parts.push(<strong key={`bold-${idx}-${matchIdx}`}>{boldMatch.text}</strong>);
+                                    lastIndex = boldMatch.end;
+                                  });
+                                  
+                                  if (lastIndex < text.length) {
+                                    parts.push(text.substring(lastIndex));
+                                  }
+                                  
+                                  return parts.length > 0 ? parts : [text];
+                                };
+                                
+                                const renderedContent = renderLine(line);
+                                
+                                // Headers
+                                if (line.trim().startsWith('## ')) {
+                                  return <h3 key={idx} className="font-bold text-base mt-4 mb-2">{line.replace('## ', '')}</h3>;
+                                }
+                                if (line.trim().startsWith('### ')) {
+                                  return <h4 key={idx} className="font-semibold text-sm mt-3 mb-1">{line.replace('### ', '')}</h4>;
+                                }
+                                
+                                // Bullet points
+                                if (line.trim().startsWith('•') || line.trim().startsWith('-')) {
+                                  return <div key={idx} className="ml-4 my-1">{renderedContent}</div>;
+                                }
+                                
+                                // Regular line
+                                if (line.trim()) {
+                                  return <p key={idx} className="my-1">{renderedContent}</p>;
+                                }
+                                
+                                return <br key={idx} />;
+                              })}
+                            </div>
                             {message.actionable && message.recommendation && (
                               <Button
                                 size="sm"
@@ -794,7 +902,7 @@ export function AIAssistant() {
                       )}
                     </div>
                   </ScrollArea>
-                  <div className="border-t p-4">
+                  <div className="border-t p-4 flex-shrink-0">
                     <div className="flex gap-2">
                       <Input
                         placeholder="Ask me anything about your finances..."

@@ -9,7 +9,7 @@ import { groundingService } from './rag/grounding.service';
 import { actionOrchestrator } from './planner/action-orchestrator.service';
 import { responseAssembler } from './response-assembler.service';
 import { observabilityService } from './monitoring/observability.service';
-import { generateCFORecommendations, generateCFOExplanation, CFOAnalysis } from './llm/cfo-prompt.service';
+import { generateCFOExplanation, generateCFOResponse, CFOAnalysis } from './llm/cfo-prompt.service';
 import { overviewDashboardService } from './overview-dashboard.service';
 
 export interface GeneratePlanParams {
@@ -64,7 +64,15 @@ export const aicfoService = {
       throw new ValidationError('Goal cannot be empty');
     }
 
-    if (sanitizedGoal.length < 5) {
+    // Check if this is a "view/show" query that should just display existing data
+    const queryLower = sanitizedGoal.toLowerCase();
+    const isViewQuery = queryLower.includes('view') || queryLower.includes('show') || 
+                        queryLower.includes('display') || queryLower.includes('see') ||
+                        (queryLower.includes('staged') && queryLower.includes('change')) ||
+                        (queryLower.includes('recommendation') && (queryLower.includes('show') || queryLower.includes('view')));
+    
+    // For view queries, we can be more lenient with length
+    if (!isViewQuery && sanitizedGoal.length < 5) {
       throw new ValidationError('Goal must be at least 5 characters long');
     }
 
@@ -106,6 +114,7 @@ export const aicfoService = {
     let groundingContext: any = null;
     let calculations: Record<string, any> = {};
     let cfoRecommendations: any[] = [];
+    let cfoNaturalLanguage: string | null = null;
     let hasConnectedAccounting = false;
     let hasFinancialData = false;
 
@@ -142,13 +151,23 @@ export const aicfoService = {
       hasConnectedAccounting = connectors.length > 0;
       // Check for actual financial data: model runs, transactions, or overview data
       const hasModelRunData = !!(modelRun && modelRun.summaryJson);
-      const hasTransactionData = await prisma.rawTransaction.count({
+      const transactionCount = await prisma.rawTransaction.count({
         where: { orgId, isDuplicate: false },
-      }).then(count => count > 0).catch(() => false);
-      const hasOverviewData = await overviewDashboardService.getOverviewData(orgId)
-        .then(data => (data.monthlyRevenue > 0 || data.monthlyBurnRate > 0))
-        .catch(() => false);
+      }).catch(() => 0);
+      const hasTransactionData = transactionCount > 0;
+      
+      let hasOverviewData = false;
+      try {
+        const overviewData = await overviewDashboardService.getOverviewData(orgId);
+        hasOverviewData = (overviewData.monthlyRevenue > 0 || overviewData.monthlyBurnRate > 0 || (overviewData as any).cashBalance > 0);
+      } catch (error) {
+        hasOverviewData = false;
+      }
+      
       hasFinancialData = hasModelRunData || hasTransactionData || hasOverviewData || groundingContext.evidence.length > 0;
+      
+      // Log data availability for debugging
+      console.log(`[AICFO] Data check - ModelRun: ${hasModelRunData}, Transactions: ${transactionCount}, Overview: ${hasOverviewData}, Evidence: ${groundingContext.evidence.length}, HasFinancialData: ${hasFinancialData}`);
 
       if (!groundingValidation.sufficient) {
         console.warn('Insufficient grounding:', groundingValidation.issues);
@@ -225,13 +244,20 @@ export const aicfoService = {
 
       // Step 6: Generate CFO recommendations using Gemini (if available)
       // ANTI-HALLUCINATION: Only use LLM if we have sufficient grounding
-      const geminiApiKey = (process.env.GEMINI_API_KEY || process.env.LLM_API_KEY)?.trim();
+      // Support multiple API keys with fallback
+      const geminiApiKeys = [
+        process.env.GEMINI_API_KEY_1?.trim(),
+        process.env.GEMINI_API_KEY_2?.trim(),
+        process.env.GEMINI_API_KEY?.trim(),
+        process.env.LLM_API_KEY?.trim(),
+      ].filter(Boolean) as string[];
+      
       const hasSufficientGrounding = groundingContext.confidence >= 0.6 && groundingContext.evidence.length >= 2;
       
-      if (geminiApiKey && intentClassification.confidence >= 0.5 && hasSufficientGrounding) {
+      if (geminiApiKeys.length > 0 && intentClassification.confidence >= 0.5 && hasSufficientGrounding) {
         try {
-          // AUDITABILITY: Pass orgId and userId to save prompts
-          cfoRecommendations = await generateCFORecommendations(
+          // One Gemini call: recommendations + natural language (reduces rate-limit pressure)
+          const cfoFull = await generateCFOResponse(
             sanitizedGoal,
             groundingContext,
             intentClassification.intent,
@@ -240,6 +266,9 @@ export const aicfoService = {
             orgId, // AUDITABILITY: For prompt saving
             userId // AUDITABILITY: For prompt saving
           );
+          cfoRecommendations = cfoFull.recommendations;
+          cfoNaturalLanguage =
+            typeof cfoFull.naturalLanguage === 'string' ? cfoFull.naturalLanguage : null;
         } catch (error: any) {
           // Gracefully handle Gemini errors (rate limits, invalid keys, etc.)
           const errorMsg = error.message || String(error);
@@ -280,10 +309,61 @@ export const aicfoService = {
             naturalLanguage: '',
           };
 
-          const naturalLanguage = await generateCFOExplanation(sanitizedGoal, cfoAnalysis);
+          // Prefer natural language from the same Gemini call, fallback to generator if empty
+          let naturalLanguage = '';
+          if (typeof cfoNaturalLanguage === 'string' && cfoNaturalLanguage.trim().length > 0) {
+            // Extract plain text if it's wrapped in JSON
+            const trimmed = cfoNaturalLanguage.trim();
+            if (trimmed.startsWith('{') && trimmed.includes('naturalLanguage')) {
+              try {
+                const parsed = JSON.parse(trimmed);
+                naturalLanguage = typeof parsed.naturalLanguage === 'string' ? parsed.naturalLanguage : trimmed;
+              } catch {
+                naturalLanguage = trimmed;
+              }
+            } else {
+              naturalLanguage = trimmed;
+            }
+          } else {
+            naturalLanguage = await generateCFOExplanation(sanitizedGoal, cfoAnalysis);
+          }
+          
+          // Ensure naturalLanguage is plain text, not JSON
+          if (naturalLanguage.startsWith('{') && naturalLanguage.includes('naturalLanguage')) {
+            try {
+              const parsed = JSON.parse(naturalLanguage);
+              naturalLanguage = typeof parsed.naturalLanguage === 'string' ? parsed.naturalLanguage : naturalLanguage;
+            } catch {
+              // If parsing fails, use as-is but log warning
+              console.warn('Natural language appears to be JSON but failed to parse');
+            }
+          }
           
           // Add accounting system connection suggestion if no data - ANTI-HALLUCINATION
+          // Ensure CFO-level professional tone
           let finalNaturalLanguage = naturalLanguage;
+          
+          // Validate CFO-level response quality
+          if (finalNaturalLanguage.length < 100) {
+            // If response is too short, enhance it with CFO context
+            if (cfoRecommendations.length > 0) {
+              finalNaturalLanguage = `As your CFO, I've analyzed your financial position. ${finalNaturalLanguage}`;
+            } else if (Object.keys(calculations).length > 0) {
+              finalNaturalLanguage = `Based on your financial metrics, ${finalNaturalLanguage}`;
+            }
+          }
+          
+          // Ensure professional CFO tone - check for strategic language
+          const hasStrategicLanguage = finalNaturalLanguage.toLowerCase().includes('strategic') ||
+                                      finalNaturalLanguage.toLowerCase().includes('recommend') ||
+                                      finalNaturalLanguage.toLowerCase().includes('analysis') ||
+                                      finalNaturalLanguage.toLowerCase().includes('consider') ||
+                                      finalNaturalLanguage.toLowerCase().includes('suggest');
+          
+          if (!hasStrategicLanguage && cfoRecommendations.length > 0) {
+            finalNaturalLanguage = `From a CFO perspective, ${finalNaturalLanguage}`;
+          }
+          
           if (!hasFinancialData || !hasConnectedAccounting) {
             finalNaturalLanguage += "\n\n⚠️ **Data Limitation:** Insufficient financial data available for accurate analysis. ";
             finalNaturalLanguage += "The recommendations above are based on limited information. ";
@@ -363,6 +443,16 @@ export const aicfoService = {
           
           let fallbackNaturalLanguage = await generateCFOExplanation(sanitizedGoal, cfoAnalysis);
           
+          // Ensure fallbackNaturalLanguage is plain text, not JSON
+          if (typeof fallbackNaturalLanguage === 'string' && fallbackNaturalLanguage.trim().startsWith('{')) {
+            try {
+              const parsed = JSON.parse(fallbackNaturalLanguage);
+              fallbackNaturalLanguage = typeof parsed.naturalLanguage === 'string' ? parsed.naturalLanguage : fallbackNaturalLanguage;
+            } catch {
+              // If parsing fails, use as-is
+            }
+          }
+          
           // Check if staged changes have evidence (meaning we used real data)
           const hasEvidenceInChanges = stagedChanges.some((sc: any) => sc.evidence && sc.evidence.length > 0);
           const hasRealDataUsed = hasFinancialData || hasEvidenceInChanges;
@@ -391,6 +481,57 @@ export const aicfoService = {
       if (stagedChanges.length === 0 || intentClassification.confidence < 0.5) {
         console.info('Using deep CFO analysis due to low confidence or empty results');
         stagedChanges = await generateDeepCFOAnalysis(sanitizedGoal, params.constraints, modelRun, orgId);
+        
+        // Regenerate natural text from the new staged changes (always regenerate after deep CFO analysis)
+        if (stagedChanges.length > 0) {
+          const cfoAnalysis: CFOAnalysis = {
+            intent: intentClassification.intent,
+            calculations: Object.keys(calculations).length > 0 ? calculations : undefined,
+            recommendations: stagedChanges.map((sc: any) => ({
+              type: sc.type || 'strategy_recommendation',
+              category: sc.category || 'recommendation',
+              action: sc.action || 'Strategic action',
+              explain: sc.explain || sc.reasoning || sc.action || 'Based on financial analysis',
+              impact: sc.impact || {},
+              priority: sc.priority || 'medium',
+              timeline: sc.timeline || '30_days',
+              confidence: sc.confidence || 0.7,
+              reasoning: sc.reasoning || sc.explain || '',
+              assumptions: sc.assumptions || {},
+              warnings: sc.warnings || [],
+              evidence: sc.evidence || [],
+            })),
+            risks: [],
+            warnings: [],
+            naturalLanguage: '',
+          };
+          
+          let fallbackNaturalLanguage = await generateCFOExplanation(sanitizedGoal, cfoAnalysis);
+          
+          // Check if staged changes have evidence (meaning we used real data)
+          const hasEvidenceInChanges = stagedChanges.some((sc: any) => sc.evidence && sc.evidence.length > 0);
+          const hasRealDataUsed = hasFinancialData || hasEvidenceInChanges;
+          
+          // Only show data limitation if we truly have no data
+          if (!hasRealDataUsed && !hasConnectedAccounting) {
+            fallbackNaturalLanguage += "\n\n⚠️ **Data Limitation:** Insufficient financial data available. ";
+            fallbackNaturalLanguage += "Recommendations are based on limited information and may not reflect your actual financial situation. ";
+            fallbackNaturalLanguage += "To get accurate, grounded insights, please connect your accounting system.";
+          } else if (hasRealDataUsed && !hasConnectedAccounting) {
+            // We have data but no connected accounting system - suggest connecting for better insights
+            fallbackNaturalLanguage += "\n\n💡 **Tip:** Connect your accounting system for real-time data sync and even more accurate insights.";
+          }
+          
+          if (!structuredResponse) {
+            structuredResponse = {
+              intent: intentClassification.intent,
+              calculations: calculations,
+              natural_text: fallbackNaturalLanguage,
+            };
+          } else {
+            structuredResponse.natural_text = fallbackNaturalLanguage;
+          }
+        }
       }
 
       // Record total latency
@@ -479,6 +620,16 @@ export const aicfoService = {
           warnings: [],
           naturalLanguage: ''
         });
+
+        // Ensure fallbackText is plain text, not JSON
+        if (typeof fallbackText === 'string' && fallbackText.trim().startsWith('{')) {
+          try {
+            const parsed = JSON.parse(fallbackText);
+            fallbackText = typeof parsed.naturalLanguage === 'string' ? parsed.naturalLanguage : fallbackText;
+          } catch {
+            // If parsing fails, use as-is
+          }
+        }
 
         // Forcefully append Evidence/Provenance to ensure it's visible (CFO Dignity)
         const uniqueEvidence = Array.from(new Set(stagedChanges.flatMap((sc: any) => sc.evidence || [])));
@@ -1136,6 +1287,7 @@ async function generateDeepCFOAnalysis(
         type: 'efficiency_audit',
         category: 'opEx',
         action: 'Conduct vendor efficiency audit',
+        explain: `Your current runway is ${context.runwayMonths.toFixed(1)} months, which is stable. However, efficiency improvements can free up capital to fund growth initiatives.`,
         reasoning: `Runway is stable (${context.runwayMonths.toFixed(1)} months), but efficiency can be improved to fund growth.`,
         impact: {
           potentialSavings: context.burnRate * 0.05,
@@ -1146,6 +1298,26 @@ async function generateDeepCFOAnalysis(
         confidence: 0.80,
         evidence
       });
+      
+      // Add runway calculation for runway questions
+      if (lowerGoal.includes('runway') || lowerGoal.includes('cash')) {
+        changes.push({
+          type: 'runway_calculation',
+          category: 'cash_management',
+          action: `Your cash runway is ${context.runwayMonths.toFixed(1)} months`,
+          explain: `Based on your current cash balance of $${context.cashBalance.toLocaleString()} and monthly burn rate of $${context.burnRate.toLocaleString()}, you have approximately ${context.runwayMonths.toFixed(1)} months of runway remaining.`,
+          reasoning: `Calculated as: Cash Balance ($${context.cashBalance.toLocaleString()}) ÷ Monthly Burn Rate ($${context.burnRate.toLocaleString()}) = ${context.runwayMonths.toFixed(1)} months`,
+          impact: {
+            currentRunway: context.runwayMonths,
+            cashBalance: context.cashBalance,
+            monthlyBurn: context.burnRate,
+          },
+          priority: 'high',
+          timeline: 'immediate',
+          confidence: 0.95,
+          evidence
+        });
+      }
     }
   }
 

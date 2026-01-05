@@ -148,87 +148,147 @@ async function callAnthropic(request: LLMRequest, config: LLMConfig): Promise<LL
 }
 
 /**
- * Google Gemini client
+ * Get Gemini API keys with fallback support
+ */
+function getGeminiApiKeys(): string[] {
+  const keys: string[] = [];
+  
+  // Try multiple API keys
+  if (process.env.GEMINI_API_KEY_1?.trim()) {
+    keys.push(process.env.GEMINI_API_KEY_1.trim());
+  }
+  if (process.env.GEMINI_API_KEY_2?.trim()) {
+    keys.push(process.env.GEMINI_API_KEY_2.trim());
+  }
+  if (process.env.GEMINI_API_KEY?.trim()) {
+    keys.push(process.env.GEMINI_API_KEY.trim());
+  }
+  if (process.env.LLM_API_KEY?.trim()) {
+    keys.push(process.env.LLM_API_KEY.trim());
+  }
+  
+  return keys;
+}
+
+/**
+ * Google Gemini client with multiple API key support and retry logic
  */
 async function callGemini(request: LLMRequest, config: LLMConfig): Promise<LLMResponse> {
-  if (!config.apiKey) {
+  // Get all available API keys (always include env keys so we can rotate even if caller passed apiKey)
+  const apiKeys = Array.from(
+    new Set([...(config.apiKey ? [config.apiKey] : []), ...getGeminiApiKeys()].filter(Boolean))
+  );
+  
+  if (apiKeys.length === 0) {
     throw new ValidationError('Gemini API key not configured');
   }
 
-  const model = config.model || 'gemini-2.0-flash-exp';
-  const url = config.baseUrl || `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.apiKey}`;
+  // Prefer stable, high-availability Gemini model by default
+  const model = config.model || 'gemini-2.5-flash';
+  let lastError: Error | null = null;
 
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: `${request.systemPrompt || ''}\n\n${request.prompt}`,
-          }],
-        }],
-        generationConfig: {
-          temperature: request.temperature || 0.3,
-          maxOutputTokens: request.maxTokens || 1000,
-          responseMimeType: 'application/json',
-        },
-      }),
-    });
+  // Try each API key with retry logic
+  for (const apiKey of apiKeys) {
+    const url = config.baseUrl || `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    
+    // Retry up to 4 times per key with exponential backoff (helps with transient 429s)
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        // Add delay between retries (exponential backoff + jitter)
+        if (attempt > 0) {
+          const baseMs = Math.min(30_000, 1000 * Math.pow(2, attempt)); // 2s, 4s, 8s, 16s...
+          const jitterMs = Math.floor(Math.random() * 250);
+          await new Promise(resolve => setTimeout(resolve, baseMs + jitterMs));
+        }
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: response.statusText })) as { error?: { message?: string }; message?: string };
-      const errorMessage = error.error?.message || error.message || response.statusText;
-      
-      // Handle rate limiting gracefully
-      if (response.status === 429) {
-        console.warn('Gemini API rate limit exceeded, will use fallback');
-        throw new ValidationError('Gemini API rate limit exceeded - using fallback');
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{
+                text: `${request.systemPrompt || ''}\n\n${request.prompt}`,
+              }],
+            }],
+            generationConfig: {
+              temperature: request.temperature || 0.3,
+              maxOutputTokens: request.maxTokens || 1000,
+              responseMimeType: 'application/json',
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({ message: response.statusText })) as { error?: { message?: string }; message?: string };
+          const errorMessage = error.error?.message || error.message || response.statusText;
+          
+          // Handle rate limiting - backoff and retry same key, then try next key
+          if (response.status === 429) {
+            lastError = new ValidationError('Gemini API rate limit exceeded');
+            // Retry same key a few times with increasing backoff
+            if (attempt < 3) {
+              continue;
+            }
+            break; // move to next key
+          }
+          
+          // Handle invalid API key - try next key
+          if (response.status === 401) {
+            lastError = new ValidationError('Gemini API key invalid');
+            break; // Try next key
+          }
+          
+          // Handle quota exceeded - try next key
+          if (response.status === 403) {
+            lastError = new ValidationError('Gemini API quota exceeded');
+            break; // Try next key
+          }
+          
+          // Other errors - retry same key
+          lastError = new Error(`Gemini API error: ${errorMessage}`);
+          continue; // Retry same key
+        }
+
+        // Success - parse and return
+        const data = await response.json() as {
+          candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+          model?: string;
+          usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number };
+        };
+        const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+        return {
+          content,
+          model: data.model || model,
+          usage: data.usageMetadata ? {
+            promptTokenCount: data.usageMetadata.promptTokenCount || 0,
+            candidatesTokenCount: data.usageMetadata.candidatesTokenCount || 0,
+            totalTokenCount: data.usageMetadata.totalTokenCount || 0,
+            prompt_tokens: data.usageMetadata.promptTokenCount || 0,
+            completion_tokens: data.usageMetadata.candidatesTokenCount || 0,
+            total_tokens: data.usageMetadata.totalTokenCount || 0,
+          } : undefined,
+        };
+      } catch (error: any) {
+        lastError = error;
+        // Continue to next attempt or next key
+        continue;
       }
-      
-      // Handle invalid API key (401) or quota exceeded (403)
-      if (response.status === 401) {
-        console.warn('Gemini API key invalid or expired, will use fallback');
-        throw new ValidationError('Gemini API key invalid - using fallback');
-      }
-      
-      if (response.status === 403) {
-        console.warn('Gemini API quota exceeded or access denied, will use fallback');
-        throw new ValidationError('Gemini API quota exceeded - using fallback');
-      }
-      
-      throw new Error(`Gemini API error: ${errorMessage}`);
     }
-
-    const data = await response.json() as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-      model?: string;
-      usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number };
-    };
-    const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-    return {
-      content,
-      model: data.model || model,
-      usage: data.usageMetadata ? {
-        promptTokenCount: data.usageMetadata.promptTokenCount || 0,
-        candidatesTokenCount: data.usageMetadata.candidatesTokenCount || 0,
-        totalTokenCount: data.usageMetadata.totalTokenCount || 0,
-        prompt_tokens: data.usageMetadata.promptTokenCount || 0,
-        completion_tokens: data.usageMetadata.candidatesTokenCount || 0,
-        total_tokens: data.usageMetadata.totalTokenCount || 0,
-      } : undefined,
-    };
-  } catch (error: any) {
-    // Re-throw ValidationError (rate limits, invalid keys) to trigger fallback
-    if (error instanceof ValidationError) {
-      throw error;
-    }
-    // For other errors, wrap and throw
-    throw new Error(`Gemini API call failed: ${error.message}`);
   }
+
+  // All API keys failed
+  if (lastError) {
+    // Re-throw ValidationError (rate limits, invalid keys) to trigger fallback
+    if (lastError instanceof ValidationError) {
+      throw lastError;
+    }
+    throw new Error(`All Gemini API keys failed. Last error: ${lastError.message}`);
+  }
+  
+  throw new ValidationError('No valid Gemini API keys available');
 }
 
 export const llmClient = {
@@ -243,7 +303,11 @@ export const llmClient = {
       baseUrl: process.env.LLM_BASE_URL,
     };
 
-    if (llmConfig.provider === 'fallback' || !llmConfig.apiKey) {
+    if (llmConfig.provider === 'fallback') {
+      throw new ValidationError('LLM not configured - using fallback');
+    }
+    // Gemini can source keys from GEMINI_API_KEY(_1/_2) even if apiKey isn't passed in config
+    if (llmConfig.provider !== 'gemini' && !llmConfig.apiKey) {
       throw new ValidationError('LLM not configured - using fallback');
     }
 
