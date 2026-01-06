@@ -611,6 +611,9 @@ function generateFallbackExplanation(analysis: CFOAnalysis, userQuery?: string):
     'From a CFO standpoint, ',
     'Analyzing your financial position, ',
     'From a strategic financial perspective, ',
+    'Reviewing your company\'s financial health, ',
+    'Based on my analysis of your balance sheet and cash flow, ',
+    'Looking at your current growth trajectory and efficiency, ',
   ];
   const randomOpening = cfoOpenings[Math.floor(Math.random() * cfoOpenings.length)];
 
