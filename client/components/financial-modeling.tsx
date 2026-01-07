@@ -966,8 +966,9 @@ export function FinancialModeling() {
                 },
                 credentials: "include",
               })
+              let runsResult: any = null
               if (runsResponse.ok) {
-                const runsResult = await runsResponse.json()
+                runsResult = await runsResponse.json()
                 if (runsResult.ok && runsResult.runs && runsResult.runs.length > 0) {
                   const latestRun = runsResult.runs.find((r: ModelRun) => r.status === "done") || runsResult.runs[0]
                   if (latestRun) {
@@ -979,8 +980,10 @@ export function FinancialModeling() {
               // Wait a bit for state to update, then pass the latest run directly
               await new Promise(resolve => setTimeout(resolve, 500))
               // Get the latest run again to pass it directly
-              const latestRunForDetails = runsResult.runs.find((r: ModelRun) => r.status === "done") || runsResult.runs[0]
-              await fetchModelDetails(orgId, modelId, token, true, latestRunForDetails) // Force regenerate sensitivity
+              if (runsResult && runsResult.ok && runsResult.runs && runsResult.runs.length > 0) {
+                const latestRunForDetails = runsResult.runs.find((r: ModelRun) => r.status === "done") || runsResult.runs[0]
+                await fetchModelDetails(orgId, modelId, token, true, latestRunForDetails) // Force regenerate sensitivity
+              }
               return
             } else if (jobStatus === "failed") {
               toast.error("Model run failed. Please check the logs and try again.")

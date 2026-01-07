@@ -239,10 +239,14 @@ export const aicfoService = {
     await jobService.createJob({ jobType: 'model_run', orgId, objectId: modelRun.id, createdByUserId: userId, params: { modelRunId: modelRun.id } });
     return { modelRunId: modelRun.id };
   },
-  listPlans: async (orgId: string) => prisma.aICFOPlan.findMany({ where: { orgId }, orderBy: { createdAt: 'desc' } }),
-  getPlan: async (planId: string) => prisma.aICFOPlan.findUnique({ where: { id: planId } }),
-  updatePlan: async (planId: string, updateData: any) => prisma.aICFOPlan.update({ where: { id: planId }, data: updateData }),
-  deletePlan: async (planId: string) => prisma.aICFOPlan.delete({ where: { id: planId } }),
+  listPlans: async (orgId: string, userId?: string, status?: string) => {
+    const where: any = { orgId };
+    if (status) where.status = status;
+    return prisma.aICFOPlan.findMany({ where, orderBy: { createdAt: 'desc' } });
+  },
+  getPlan: async (planId: string, userId?: string) => prisma.aICFOPlan.findUnique({ where: { id: planId } }),
+  updatePlan: async (planId: string, userId: string, updateData: any) => prisma.aICFOPlan.update({ where: { id: planId }, data: updateData }),
+  deletePlan: async (planId: string, userId: string) => prisma.aICFOPlan.delete({ where: { id: planId } }),
   getPrompt: async (promptId: string, userId?: string) => {
     // Validate UUID format - synthetic IDs (deterministic_audit_*) are not real prompts
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

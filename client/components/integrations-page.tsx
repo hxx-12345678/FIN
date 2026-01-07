@@ -627,9 +627,27 @@ export function IntegrationsPage() {
                       </span>
                     </div>
                     {job.logs && typeof job.logs === 'object' && (
-                      <div className="text-xs text-muted-foreground mt-1">
+                      <div className="text-xs text-muted-foreground mt-1 space-x-3">
                         {Array.isArray(job.logs) && job.logs.length > 0 && (
-                          <span>Rows: {job.logs[job.logs.length - 1]?.meta?.rows_imported || 'N/A'}</span>
+                          <>
+                            <span>Rows Imported: {job.logs[job.logs.length - 1]?.meta?.rows_imported || job.logs[job.logs.length - 1]?.meta?.params?.rowsImported || 'N/A'}</span>
+                            {job.logs[job.logs.length - 1]?.meta?.rows_skipped && (
+                              <span className="text-orange-600">Duplicates Skipped: {job.logs[job.logs.length - 1]?.meta?.rows_skipped}</span>
+                            )}
+                            {job.logs[job.logs.length - 1]?.meta?.params?.initialCustomers && (
+                              <span className="text-blue-600">Active Customers: {job.logs[job.logs.length - 1]?.meta?.params?.initialCustomers}</span>
+                            )}
+                          </>
+                        )}
+                        {typeof job.logs === 'object' && job.logs.params && (
+                          <>
+                            {job.logs.params.rowsImported && (
+                              <span>Rows Imported: {job.logs.params.rowsImported}</span>
+                            )}
+                            {job.logs.params.initialCustomers && (
+                              <span className="text-blue-600">Active Customers: {job.logs.params.initialCustomers}</span>
+                            )}
+                          </>
                         )}
                       </div>
                     )}

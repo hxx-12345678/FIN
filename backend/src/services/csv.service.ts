@@ -182,6 +182,8 @@ export const csvService = {
           dateFormat: dateFormat || 'YYYY-MM-DD',
           currency: currency || 'USD',
           defaultCategory,
+          initialCash: initialCash || 0,
+          initialCustomers: initialCustomers || 0,
         } as any,
         status: 'created',
         createdByUserId: userId,

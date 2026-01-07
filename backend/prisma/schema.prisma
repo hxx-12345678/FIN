@@ -22,23 +22,22 @@ model User {
 
   roles                       UserOrgRole[]
   prompts                     Prompt[]
-  exports                     Export[]                @relation("export_createdBy")
-  auditLogs                   AuditLog[]              @relation("audit_actor")
-  models                      Model[]                 @relation("model_createdBy")
-  shareTokens                 ShareToken[]            @relation("shareToken_createdBy")
-  invitations                 InvitationToken[]       @relation("invitation_createdBy")
-  alertRules                  AlertRule[]             @relation("alert_createdBy")
-  aiCFOPlans                  AICFOPlan[]             @relation("plan_createdBy")
-  orgSettingsUpdated          OrgSettings[]           @relation("settings_updatedBy")
-  budgetsCreated              Budget[]                @relation("budget_createdBy")
-  excelMappings               ExcelMapping[]          @relation("excelMapping_createdBy")
+  exports                     Export[]              @relation("export_createdBy")
+  auditLogs                   AuditLog[]            @relation("audit_actor")
+  models                      Model[]               @relation("model_createdBy")
+  shareTokens                 ShareToken[]          @relation("shareToken_createdBy")
+  invitations                 InvitationToken[]     @relation("invitation_createdBy")
+  alertRules                  AlertRule[]           @relation("alert_createdBy")
+  aiCFOPlans                  AICFOPlan[]           @relation("plan_createdBy")
+  orgSettingsUpdated          OrgSettings[]         @relation("settings_updatedBy")
+  budgetsCreated              Budget[]              @relation("budget_createdBy")
+  excelMappings               ExcelMapping[]        @relation("excelMapping_createdBy")
   realtimeSimulations         RealtimeSimulation[]
-  boardReportSchedulesCreated BoardReportSchedule[]   @relation("boardSchedule_createdBy")
+  boardReportSchedulesCreated BoardReportSchedule[] @relation("boardSchedule_createdBy")
   preferences                 UserPreferences?
-  reportApprovals             ReportApprovalHistory[]
   usageRecords                UserUsage[]
-  approvalRequestsRequested   ApprovalRequest[]       @relation("approval_requester")
-  approvalRequestsApproved    ApprovalRequest[]       @relation("approval_approver")
+  approvalRequestsRequested   ApprovalRequest[]     @relation("approval_requester")
+  approvalRequestsApproved    ApprovalRequest[]     @relation("approval_approver")
 
   @@map("users")
 }
@@ -319,46 +318,12 @@ model Export {
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  // Approval workflow fields (Abacum feature)
-  approvalStatus     String?   @default("draft") @map("approval_status") // draft|pending_approval|approved|rejected|published
-  approvalRequired   Boolean   @default(false) @map("approval_required")
-  approverIds        String[]  @default([]) @map("approver_ids") @db.Uuid
-  approvedBy         String[]  @default([]) @map("approved_by") @db.Uuid
-  rejectedBy         String?   @map("rejected_by") @db.Uuid
-  rejectionReason    String?   @map("rejection_reason")
-  rejectedAt         DateTime? @map("rejected_at") @db.Timestamptz(6)
-  approvedAt         DateTime? @map("approved_at") @db.Timestamptz(6)
-  publishedAt        DateTime? @map("published_at") @db.Timestamptz(6)
-  version            Int       @default(1)
-  parentExportId     String?   @map("parent_export_id") @db.Uuid
-  distributionList   String[]  @default([]) @map("distribution_list") // Array of email addresses
-  distributionMethod String?   @map("distribution_method") // email|slack|download|share_link
-  scheduledAt        DateTime? @map("scheduled_at") @db.Timestamptz(6) // For scheduled reports
-  scheduleFrequency  String?   @map("schedule_frequency") // daily|weekly|monthly|quarterly|yearly
-
-  approvalHistory ReportApprovalHistory[]
-
   @@index([orgId])
   @@index([status])
-  @@index([approvalStatus])
-  @@index([orgId, approvalStatus])
   @@map("exports")
 }
 
-model ReportApprovalHistory {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  export     Export   @relation(fields: [exportId], references: [id], onDelete: Cascade)
-  exportId   String   @db.Uuid
-  approver   User     @relation(fields: [approverId], references: [id], onDelete: Cascade)
-  approverId String   @db.Uuid
-  action     String // approve|reject|request_changes
-  comment    String?
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  @@index([exportId])
-  @@index([approverId])
-  @@map("report_approval_history")
-}
+// ReportApprovalHistory model removed - not in database
 
 model Job {
   id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid

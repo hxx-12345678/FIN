@@ -1330,15 +1330,28 @@ export function CSVImportWizard() {
                       )}
 
                       {/* Initial Values */}
-                      <div className="mt-6 p-4 border rounded-lg space-y-3 bg-muted/20">
-                        <h4 className="font-medium text-sm">Additional Model Parameters (Optional)</h4>
-                        <p className="text-xs text-muted-foreground">
-                          These values are optional and help improve model accuracy. They are used when auto-generating financial models after CSV import.
-                          <br />
-                          <strong>Initial Cash on Hand:</strong> Used as starting cash balance in financial projections.
-                          <br />
-                          <strong>Active Customers Count:</strong> Used for customer-based revenue calculations and unit economics.
-                        </p>
+                      <div className="mt-6 p-4 border rounded-lg space-y-3 bg-blue-50 dark:bg-blue-950/20">
+                        <div className="flex items-start gap-2">
+                          <div className="h-5 w-5 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <span className="text-white text-xs">i</span>
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-medium text-sm mb-1">Additional Model Parameters</h4>
+                            <p className="text-xs text-muted-foreground mb-3">
+                              These values help improve model accuracy and are used when auto-generating financial models after CSV import.
+                            </p>
+                            <div className="space-y-2 text-xs">
+                              <div className="flex items-start gap-2">
+                                <span className="font-medium">💰 Initial Cash on Hand:</span>
+                                <span className="text-muted-foreground">Starting cash balance for financial projections and runway calculations</span>
+                              </div>
+                              <div className="flex items-start gap-2">
+                                <span className="font-medium">👥 Active Customers Count:</span>
+                                <span className="text-muted-foreground">Used for customer-based revenue calculations, unit economics (LTV/CAC), and investor dashboard metrics</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <Label htmlFor="initial-cash">Initial Cash on Hand</Label>

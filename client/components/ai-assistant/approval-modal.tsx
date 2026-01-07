@@ -28,6 +28,10 @@ interface StagedChange {
   aiExplanation?: string
   promptId?: string
   dataSources?: Array<{ type: string; id: string; snippet: string }>
+  planId?: string
+  changeIndex?: number
+  type?: string
+  action?: string
 }
 
 interface ApprovalModalProps {

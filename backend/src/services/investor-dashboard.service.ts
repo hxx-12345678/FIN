@@ -93,8 +93,70 @@ export const investorDashboardService = {
       }
     }
 
-    // Extract monthly metrics
-    const monthlyMetrics = extractMonthlyMetrics(summary);
+    // Get active customers from model run, but fallback to CSV import or transaction count
+    // Do this BEFORE extracting monthly metrics so we can use it there
+    let activeCustomers = Number(summary.activeCustomers || summary.customers || summary.customerCount || 0);
+
+    // If model run shows 0 or suspiciously high customers, check CSV import first
+    // Model run might have calculated customers incorrectly, so prefer user-provided value
+    if ((activeCustomers === 0 || activeCustomers > 1000) && arr > 0) {
+      // First check data import batch mapping (most reliable - stored when CSV is mapped)
+      const importBatch = await prisma.dataImportBatch.findFirst({
+        where: { orgId, sourceType: 'csv' },
+        orderBy: { createdAt: 'desc' },
+        select: { mappingJson: true },
+      });
+
+      if (importBatch && importBatch.mappingJson) {
+        const mapping = importBatch.mappingJson as any;
+        const batchCustomers = mapping.initialCustomers || mapping.startingCustomers;
+        if (batchCustomers && Number(batchCustomers) > 0) {
+          activeCustomers = Number(batchCustomers);
+          console.log(`[InvestorDashboard] Using initialCustomers from import batch: ${activeCustomers}`);
+        }
+      }
+
+      // Also check CSV import jobs for initialCustomers (fallback)
+      if (activeCustomers === 0 || activeCustomers > 1000) {
+        const csvJob = await prisma.job.findFirst({
+          where: {
+            orgId,
+            jobType: 'csv_import',
+            status: { in: ['done', 'completed'] },
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { logs: true },
+        });
+
+        if (csvJob && csvJob.logs) {
+          const logs = typeof csvJob.logs === 'string' ? JSON.parse(csvJob.logs) : csvJob.logs;
+          
+          // Check logs.params directly (job repository stores params here)
+          if (typeof logs === 'object' && logs.params) {
+            const initialCustomers = logs.params.initialCustomers || logs.params.startingCustomers;
+            if (initialCustomers && Number(initialCustomers) > 0) {
+              activeCustomers = Number(initialCustomers);
+              console.log(`[InvestorDashboard] Using initialCustomers from job logs.params: ${activeCustomers}`);
+            }
+          }
+          
+          // Also check array format (if params are in log entries)
+          if ((activeCustomers === 0 || activeCustomers > 1000) && Array.isArray(logs)) {
+            for (const entry of logs) {
+              const initialCustomers = entry.meta?.params?.initialCustomers || entry.meta?.params?.startingCustomers || entry.params?.initialCustomers || entry.params?.startingCustomers;
+              if (initialCustomers && Number(initialCustomers) > 0) {
+                activeCustomers = Number(initialCustomers);
+                console.log(`[InvestorDashboard] Using initialCustomers from job log entry: ${activeCustomers}`);
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Extract monthly metrics (after we have activeCustomers)
+    const monthlyMetrics = extractMonthlyMetrics(summary, activeCustomers);
 
     // Calculate growth rates
     const arrGrowth = calculateGrowthRate(monthlyMetrics, 'arr');
@@ -108,14 +170,11 @@ export const investorDashboardService = {
       arrGrowth,
     });
 
-    // Get milestones and updates (could be stored in database or calculated)
+    // Get milestones and updates (data-driven from actual metrics and audit logs)
     const milestones = getMilestones(arr, runwayMonths);
-    const keyUpdates = getKeyUpdates(orgId, latestModelRun.createdAt);
+    const keyUpdates = await getKeyUpdates(orgId, latestModelRun.createdAt);
 
-    // Get active customers from model run, but fallback to transaction count if 0
-    let activeCustomers = Number(summary.activeCustomers || summary.customers || summary.customerCount || 0);
-
-    // If model run shows 0 customers but we have revenue, count from transactions
+    // If still 0 customers but we have revenue, count from transactions
     if (activeCustomers === 0 && arr > 0) {
       const transactions = await prisma.rawTransaction.findMany({
         where: {
@@ -227,7 +286,7 @@ export const investorDashboardService = {
 /**
  * Extract monthly metrics from model summary
  */
-function extractMonthlyMetrics(summary: any): Array<{
+function extractMonthlyMetrics(summary: any, activeCustomers: number = 0): Array<{
   month: string;
   revenue: number;
   customers: number;
@@ -250,7 +309,8 @@ function extractMonthlyMetrics(summary: any): Array<{
       const monthData = monthlyData[monthKey];
       const revenue = Number(monthData.revenue || monthData.mrr || 0);
       const expenses = Number(monthData.expenses || 0);
-      const customers = Number(monthData.customers || monthData.activeCustomers || 0);
+      // Use provided activeCustomers if monthly data doesn't have it
+      const customers = Number(monthData.customers || monthData.activeCustomers || activeCustomers || 0);
 
       metrics.push({
         month: formatMonth(monthKey),
@@ -265,7 +325,7 @@ function extractMonthlyMetrics(summary: any): Array<{
   // If no monthly data, generate sample data from current values
   if (metrics.length === 0) {
     const baseRevenue = Number(summary.revenue || summary.mrr || 45000);
-    const baseCustomers = Number(summary.activeCustomers || summary.customers || 152);
+    const baseCustomers = activeCustomers || Number(summary.activeCustomers || summary.customers || 152);
     const baseBurn = Number(summary.expenses || summary.burnRate || 35000);
 
     // Generate last 6 months with growth
@@ -537,39 +597,7 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
     arrGrowth,
   });
   
-  // Generate monthly metrics from transactions
-  const monthlyMetrics: Array<{
-    month: string;
-    revenue: number;
-    customers: number;
-    burn: number;
-    arr: number;
-  }> = [];
-  
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const last6Periods = allPeriods.slice(-6);
-  
-  for (const period of last6Periods) {
-    const [year, month] = period.split('-').map(Number);
-    const monthIndex = month - 1;
-    const monthName = monthNames[monthIndex];
-    const revenue = monthlyRevenueMap.get(period) || 0;
-    const burn = monthlyExpenseMap.get(period) || 0;
-    
-    monthlyMetrics.push({
-      month: monthName,
-      revenue: Math.round(revenue),
-      customers: 0, // Can't determine from transactions alone
-      burn: Math.round(burn),
-      arr: Math.round(revenue * 12),
-    });
-  }
-  
-  // Get milestones and updates
-  const milestones = getMilestones(arr, runwayMonths);
-  const keyUpdates = getKeyUpdates(orgId, new Date());
-  
-  // Count unique customers from revenue transactions
+  // Count unique customers from revenue transactions FIRST (before using in monthly metrics)
   let activeCustomers = 0;
   const uniqueCustomers = new Set<string>();
   for (const tx of transactions) {
@@ -598,6 +626,38 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
   if (activeCustomers > 0) {
     console.log(`[InvestorDashboard] Calculated ${activeCustomers} unique customers from ${transactions.length} transactions`);
   }
+
+  // Generate monthly metrics from transactions (after activeCustomers is calculated)
+  const monthlyMetrics: Array<{
+    month: string;
+    revenue: number;
+    customers: number;
+    burn: number;
+    arr: number;
+  }> = [];
+  
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const last6Periods = allPeriods.slice(-6);
+  
+  for (const period of last6Periods) {
+    const [year, month] = period.split('-').map(Number);
+    const monthIndex = month - 1;
+    const monthName = monthNames[monthIndex];
+    const revenue = monthlyRevenueMap.get(period) || 0;
+    const burn = monthlyExpenseMap.get(period) || 0;
+    
+    monthlyMetrics.push({
+      month: monthName,
+      revenue: Math.round(revenue),
+      customers: activeCustomers, // Use calculated activeCustomers for all months
+      burn: Math.round(burn),
+      arr: Math.round(revenue * 12),
+    });
+  }
+  
+  // Get milestones and updates
+  const milestones = getMilestones(arr, runwayMonths);
+  const keyUpdates = await getKeyUpdates(orgId, new Date());
 
   return {
     executiveSummary: {
