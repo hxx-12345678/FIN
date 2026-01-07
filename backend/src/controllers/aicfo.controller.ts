@@ -167,6 +167,23 @@ export const aicfoController = {
       const { promptId } = req.params;
       const prompt = await aicfoService.getPrompt(promptId, req.user.id);
 
+      if (!prompt) {
+        // Synthetic prompt ID (deterministic fallback) - return informative response
+        return res.json({
+          ok: true,
+          prompt: {
+            id: promptId,
+            provider: 'deterministic',
+            modelUsed: 'fallback',
+            promptTemplate: 'This recommendation was generated using deterministic CFO logic (no LLM call).',
+            renderedPrompt: 'Deterministic analysis based on financial data.',
+            responseText: 'Recommendation generated using local CFO Brain logic.',
+            createdAt: new Date().toISOString(),
+            synthetic: true,
+          },
+        });
+      }
+
       res.json({
         ok: true,
         prompt,

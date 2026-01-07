@@ -324,13 +324,13 @@ export function StagedChangesPanel() {
           setSelectedChangeForAudit(null)
         }}
         promptId={selectedChangeForAudit?.promptId}
-        dataSources={selectedChangeForAudit?.dataSources}
+        dataSources={selectedChangeForAudit?.dataSources || []}
         recommendation={
           selectedChangeForAudit
             ? {
                 type: selectedChangeForAudit.type || "recommendation",
                 action: selectedChangeForAudit.action || selectedChangeForAudit.description,
-                explain: selectedChangeForAudit.reasoning || selectedChangeForAudit.impactSummary,
+                explain: selectedChangeForAudit.reasoning || selectedChangeForAudit.impactSummary || selectedChangeForAudit.aiExplanation,
                 confidence: selectedChangeForAudit.confidenceScore || 0.7,
               }
             : undefined

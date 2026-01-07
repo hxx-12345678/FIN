@@ -15,9 +15,12 @@ interface StagedChange {
   status: "pending" | "approved" | "rejected"
   aiExplanation?: string
   promptId?: string
-  dataSources?: Array<{ type: string; id: string; name?: string }>
+  dataSources?: Array<{ type: string; id: string; snippet: string }>
   planId?: string
   changeIndex?: number
+  type?: string
+  action?: string
+  reasoning?: string
 }
 
 interface UseStagedChangesReturn {
@@ -165,6 +168,31 @@ export function useStagedChanges(statusFilter?: string): UseStagedChangesReturn 
               return
             }
 
+            // Extract dataSources - check both dataSources and evidence fields
+            let dataSources: Array<{ type: string; id: string; snippet: string }> = []
+            
+            if (Array.isArray(change.dataSources) && change.dataSources.length > 0) {
+              // Use dataSources if available (preferred format)
+              dataSources = change.dataSources.map((ds: any) => ({
+                type: ds.type || 'data_source',
+                id: ds.id || String(ds),
+                snippet: ds.snippet || String(ds)
+              }))
+            } else if (Array.isArray(change.evidence) && change.evidence.length > 0) {
+              // Fallback to evidence if dataSources not available
+              dataSources = change.evidence.map((e: any) => ({
+                type: e.doc_type || e.type || 'evidence',
+                id: e.doc_id || e.id || String(e),
+                snippet: typeof e === 'string' ? e : (e.snippet || e.content || String(e))
+              }))
+            }
+
+            // Extract promptId - check change level first, then plan metadata
+            const promptId = change.promptId || 
+                           (Array.isArray(plan.planJson.metadata?.promptIds) && plan.planJson.metadata.promptIds.length > 0 
+                             ? plan.planJson.metadata.promptIds[0] 
+                             : undefined)
+
             // Only add valid, meaningful changes
             allChanges.push({
               id: changeId,
@@ -176,10 +204,13 @@ export function useStagedChanges(statusFilter?: string): UseStagedChangesReturn 
               createdAt: plan.createdAt || new Date().toISOString(),
               status,
               aiExplanation: (change.reasoning || change.explain || "").trim(),
-              promptId: plan.promptId,
-              dataSources: Array.isArray(change.evidence) ? change.evidence : [],
+              promptId,
+              dataSources,
               planId: plan.id,
               changeIndex: idx,
+              type: change.type || "recommendation",
+              action: change.action || action.trim(),
+              reasoning: change.reasoning || change.explain || "",
             })
           })
         })

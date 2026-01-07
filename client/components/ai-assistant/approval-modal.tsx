@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Loader2, CheckCircle2, XCircle, AlertCircle, Info, ArrowRight } from "lucide-react"
+import { API_BASE_URL } from "@/lib/api-config"
 
 interface StagedChange {
   id: string
@@ -25,6 +26,8 @@ interface StagedChange {
   createdAt: string
   status: "pending" | "approved" | "rejected"
   aiExplanation?: string
+  promptId?: string
+  dataSources?: Array<{ type: string; id: string; snippet: string }>
 }
 
 interface ApprovalModalProps {
@@ -34,8 +37,6 @@ interface ApprovalModalProps {
   onApprove: (changeId: string) => Promise<void>
   onReject: (changeId: string) => Promise<void>
 }
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
 
 export function ApprovalModal({ changeId, open, onClose, onApprove, onReject }: ApprovalModalProps) {
   const [change, setChange] = useState<StagedChange | null>(null)
@@ -57,8 +58,26 @@ export function ApprovalModal({ changeId, open, onClose, onApprove, onReject }: 
     setError(null)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/aicfo/staged-changes?status=all`, {
-        method: "GET",
+      const orgId = localStorage.getItem("orgId")
+      if (!orgId) {
+        throw new Error("Organization ID not found")
+      }
+
+      const token = localStorage.getItem("auth-token") || document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("auth-token="))
+        ?.split("=")[1]
+
+      if (!token) {
+        throw new Error("Authentication token not found")
+      }
+
+      // Use the same endpoint as use-staged-changes hook (with /api/v1 prefix)
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/ai-plans`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
         credentials: "include",
       })
 
@@ -66,8 +85,42 @@ export function ApprovalModal({ changeId, open, onClose, onApprove, onReject }: 
         throw new Error("Failed to fetch change details")
       }
 
-      const data = await response.json()
-      const foundChange = (data.changes || []).find((c: StagedChange) => c.id === changeId)
+      const result = await response.json()
+      if (!result.ok || !result.plans) {
+        throw new Error("Invalid response format")
+      }
+
+      // Find the change in all plans
+      let foundChange: StagedChange | null = null
+      for (const plan of result.plans) {
+        if (plan.planJson?.stagedChanges) {
+          const changeIndex = plan.planJson.stagedChanges.findIndex((_: any, idx: number) => `${plan.id}-${idx}` === changeId)
+          if (changeIndex !== -1) {
+            const change = plan.planJson.stagedChanges[changeIndex]
+            const storedStatus = localStorage.getItem(`staged-change-${changeId}`)
+            foundChange = {
+              id: changeId,
+              description: change.action || change.explain || "",
+              impactSummary: change.explain || change.reasoning || "",
+              oldValue: change.impact?.oldValue || null,
+              newValue: change.impact?.newValue || change.impact || null,
+              confidenceScore: typeof change.confidence === 'number' ? change.confidence : 0.7,
+              createdAt: plan.createdAt || new Date().toISOString(),
+              status: (storedStatus as "pending" | "approved" | "rejected") || "pending",
+              aiExplanation: change.reasoning || change.explain || "",
+              promptId: change.promptId || plan.planJson.metadata?.promptIds?.[0],
+              dataSources: change.dataSources || (Array.isArray(change.evidence) ? change.evidence.map((e: any) => ({
+                type: e.doc_type || 'evidence',
+                id: e.doc_id || String(e),
+                snippet: typeof e === 'string' ? e : (e.snippet || e.content || String(e))
+              })) : []),
+              planId: plan.id,
+              changeIndex,
+            }
+            break
+          }
+        }
+      }
       
       if (foundChange) {
         setChange(foundChange)

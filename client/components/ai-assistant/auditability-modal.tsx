@@ -17,6 +17,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { FileText, Database, Code, Link as LinkIcon, AlertCircle, CheckCircle2 } from "lucide-react"
 import { AlertTriangle } from "lucide-react"
+import { API_BASE_URL } from "@/lib/api-config"
+import { getAuthHeaders } from "@/lib/api-config"
 
 interface PromptDetails {
   id: string
@@ -80,7 +82,11 @@ export function AuditabilityModal({
     setError(null)
 
     try {
-      const response = await fetch(`/api/v1/prompts/${promptId}`)
+      const response = await fetch(`${API_BASE_URL}/prompts/${promptId}`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
+      
       if (!response.ok) {
         throw new Error("Failed to fetch prompt details")
       }

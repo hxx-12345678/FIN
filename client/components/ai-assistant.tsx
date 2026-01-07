@@ -511,14 +511,21 @@ export function AIAssistant() {
           }
         }
 
-        // Add accounting system suggestion if no data and not already in response
-        if ((!hasFinancialData || !hasConnectedAccounting) && !responseText.toLowerCase().includes("connect") && !responseText.toLowerCase().includes("accounting")) {
-          responseText += "\n\n💡 **To dive deeper and get more accurate insights**, I recommend connecting your accounting system. This will allow me to:\n"
+        // Add accounting system suggestion ONLY if user has NO financial data at all
+        // If user has CSV-imported data, they don't need to connect accounting system
+        if (!hasFinancialData && !responseText.toLowerCase().includes("connect") && !responseText.toLowerCase().includes("accounting")) {
+          responseText += "\n\n💡 **To dive deeper and get more accurate insights**, I recommend connecting your accounting system or importing your financial data via CSV. This will allow me to:\n"
           responseText += "• Analyze your real financial transactions\n"
           responseText += "• Provide personalized recommendations based on your actual data\n"
           responseText += "• Track trends and patterns specific to your business\n"
           responseText += "• Generate more accurate forecasts and scenarios\n\n"
-          responseText += "**Let's connect your accounting system** to unlock the full potential of AI CFO insights!"
+          responseText += "**Connect your accounting system or import CSV data** to unlock the full potential of AI CFO insights!"
+        } else if (hasFinancialData && !hasConnectedAccounting && !responseText.toLowerCase().includes("connect") && !responseText.toLowerCase().includes("accounting")) {
+          // User has CSV data but no live integrations - suggest live sync for real-time updates
+          responseText += "\n\n💡 **For real-time data sync and automatic updates**, consider connecting your accounting system. This will:\n"
+          responseText += "• Automatically sync transactions without manual CSV imports\n"
+          responseText += "• Provide real-time financial insights\n"
+          responseText += "• Keep your data always up-to-date\n"
         }
 
         const aiResponse: Message = {

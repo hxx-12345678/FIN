@@ -63,6 +63,9 @@ export const aicfoService = {
     let groundingContext: any = null;
     let calculations: Record<string, any> = {};
     let allPromptIds: string[] = [];
+    let hasConnectedAccounting = false;
+    let hasFinancialData = false;
+    let transactionCount = 0;
 
     const startTime = Date.now();
 
@@ -71,7 +74,7 @@ export const aicfoService = {
       intentClassification = await intentClassifierService.classify(sanitizedGoal);
       
       // Step 2: Grounding & Data Checks in parallel
-      const [groundingRes, connectors, transactionCount, overviewDataResult] = await Promise.all([
+      const [groundingRes, connectors, transactionCountResult, overviewDataResult] = await Promise.all([
         groundingService.retrieve(orgId, intentClassification.intent, intentClassification.slots),
         prisma.connector.findMany({ where: { orgId, status: { in: ['connected', 'syncing'] } }, select: { id: true } }),
         prisma.rawTransaction.count({ where: { orgId, isDuplicate: false } }).catch(() => 0),
@@ -79,7 +82,9 @@ export const aicfoService = {
       ]);
       
       groundingContext = groundingRes;
-      const hasConnectedAccounting = connectors.length > 0;
+      transactionCount = transactionCountResult;
+      hasConnectedAccounting = connectors.length > 0;
+      hasFinancialData = transactionCount > 0 || (overviewDataResult && (overviewDataResult.monthlyRevenue > 0 || overviewDataResult.monthlyBurnRate > 0));
 
       // Step 3: Planning & Calculations
       const plannerResult = await actionOrchestrator.plan(orgId, userId, intentClassification.intent, intentClassification.slots, params.modelRunId || undefined);
@@ -170,6 +175,19 @@ export const aicfoService = {
 
     } catch (error: any) {
       console.error('AICFO Pipeline Error:', error);
+      // Re-check data status in error case
+      try {
+        const [connectorsCheck, transactionCountCheck, overviewDataCheck] = await Promise.all([
+          prisma.connector.count({ where: { orgId, status: { in: ['connected', 'syncing'] } } }).catch(() => 0),
+          prisma.rawTransaction.count({ where: { orgId, isDuplicate: false } }).catch(() => 0),
+          overviewDashboardService.getOverviewData(orgId).catch(() => null)
+        ]);
+        hasConnectedAccounting = connectorsCheck > 0;
+        hasFinancialData = transactionCountCheck > 0 || (overviewDataCheck && (overviewDataCheck.monthlyRevenue > 0 || overviewDataCheck.monthlyBurnRate > 0));
+        transactionCount = transactionCountCheck;
+      } catch {
+        // If even the check fails, use defaults (false)
+      }
       stagedChanges = await generateDeepCFOAnalysis(sanitizedGoal, params.constraints, modelRun, orgId, 'strategy_recommendation');
       structuredResponse = { 
           intent: 'strategy_recommendation',
@@ -200,6 +218,9 @@ export const aicfoService = {
             processingTimeMs: Date.now() - startTime,
             promptIds: Array.from(new Set(allPromptIds)),
             totalDataSources: stagedChanges.reduce((sum, sc: any) => sum + (sc.evidence?.length || 0), 0) || 5,
+            hasConnectedAccounting: hasConnectedAccounting,
+            hasFinancialData: hasFinancialData,
+            transactionCount: transactionCount,
           },
         },
         status: 'draft',
@@ -222,7 +243,15 @@ export const aicfoService = {
   getPlan: async (planId: string) => prisma.aICFOPlan.findUnique({ where: { id: planId } }),
   updatePlan: async (planId: string, updateData: any) => prisma.aICFOPlan.update({ where: { id: planId }, data: updateData }),
   deletePlan: async (planId: string) => prisma.aICFOPlan.delete({ where: { id: planId } }),
-  getPrompt: async (promptId: string) => prisma.prompt.findUnique({ where: { id: promptId } }),
+  getPrompt: async (promptId: string, userId?: string) => {
+    // Validate UUID format - synthetic IDs (deterministic_audit_*) are not real prompts
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(promptId)) {
+      // Synthetic prompt ID (deterministic fallback) - return null instead of error
+      return null;
+    }
+    return prisma.prompt.findUnique({ where: { id: promptId } });
+  },
 };
 
 /**
@@ -276,6 +305,13 @@ async function generateDeepCFOAnalysis(
     `Runway: ${(context.runwayMonths || 0).toFixed(1)}m` 
   ];
 
+  // Convert evidence strings to dataSources format for auditability
+  const baseDataSources = baseEvidence.map((ev, idx) => ({
+    type: 'financial_metric',
+    id: `metric_${idx}`,
+    snippet: ev
+  }));
+
   // Logic based on Intent - MUCH MORE VARIED
   if (intent === 'runway_calculation' || lowerGoal.includes('runway') || lowerGoal.includes('how long')) {
       changes.push({
@@ -287,7 +323,8 @@ async function generateDeepCFOAnalysis(
       impact: { runwayStability: 'High', bufferSafety: 'Excellent' }, 
         priority: 'high',
       confidence: 1.0, 
-      evidence: baseEvidence 
+      evidence: baseEvidence,
+      dataSources: baseDataSources
       });
   } else if (intent === 'burn_rate_calculation' || lowerGoal.includes('burn')) {
       changes.push({
@@ -299,7 +336,8 @@ async function generateDeepCFOAnalysis(
       impact: { burnReduction: '5-10%', capitalEfficiency: '+15%' }, 
         priority: 'medium',
       confidence: 0.9, 
-      evidence: baseEvidence 
+      evidence: baseEvidence,
+      dataSources: baseDataSources
       });
   } else if (intent === 'fundraising_readiness' || lowerGoal.includes('raise') || lowerGoal.includes('funding')) {
         changes.push({
@@ -311,7 +349,12 @@ async function generateDeepCFOAnalysis(
       impact: { valuationPremium: 'Targeted', dilutionControl: 'High' }, 
           priority: 'high',
       confidence: 0.85, 
-      evidence: [...baseEvidence, `Growth: ${(context.revenueGrowth * 100).toFixed(1)}% MoM`] 
+      evidence: [...baseEvidence, `Growth: ${(context.revenueGrowth * 100).toFixed(1)}% MoM`],
+      dataSources: [...baseDataSources, {
+        type: 'growth_metric',
+        id: 'growth_rate',
+        snippet: `Growth: ${(context.revenueGrowth * 100).toFixed(1)}% MoM`
+      }]
     });
   } else if (intent === 'revenue_forecast' || lowerGoal.includes('revenue') || lowerGoal.includes('growth')) {
       changes.push({
@@ -323,7 +366,12 @@ async function generateDeepCFOAnalysis(
       impact: { arrGrowth: '+12%', ltvExpansion: 'Significant' }, 
         priority: 'high',
       confidence: 0.95, 
-      evidence: [...baseEvidence, `MRR: $${(context.revenue || 0).toLocaleString()}`] 
+      evidence: [...baseEvidence, `MRR: $${(context.revenue || 0).toLocaleString()}`],
+      dataSources: [...baseDataSources, {
+        type: 'revenue_metric',
+        id: 'mrr',
+        snippet: `MRR: $${(context.revenue || 0).toLocaleString()}`
+      }]
       });
   } else if (intent === 'cost_optimization' || lowerGoal.includes('cost') || lowerGoal.includes('save') || lowerGoal.includes('reduce')) {
       changes.push({
@@ -335,7 +383,8 @@ async function generateDeepCFOAnalysis(
       impact: { monthlySavings: `$${((context.burnRate || 0) * 0.07).toLocaleString()}`, runwayExtension: '+2 months' }, 
       priority: 'medium', 
       confidence: 0.9, 
-      evidence: baseEvidence 
+      evidence: baseEvidence,
+      dataSources: baseDataSources
     });
   } else if (intent === 'unit_economics_analysis' || lowerGoal.includes('metric') || lowerGoal.includes('kpi')) {
       changes.push({
@@ -347,7 +396,8 @@ async function generateDeepCFOAnalysis(
       impact: { paybackPeriod: '< 12 months', unitProfitability: 'Positive' }, 
       priority: 'medium', 
       confidence: 0.8, 
-      evidence: baseEvidence 
+      evidence: baseEvidence,
+      dataSources: baseDataSources
     });
   } else {
     // Default strategic review
@@ -360,7 +410,8 @@ async function generateDeepCFOAnalysis(
       impact: { strategicClarity: 'High', executionAlignment: 'Verified' }, 
       priority: 'medium',
       confidence: 0.8, 
-      evidence: baseEvidence 
+      evidence: baseEvidence,
+      dataSources: baseDataSources
     });
   }
 
@@ -379,7 +430,8 @@ async function generateDeepCFOAnalysis(
         impact: { riskMitigation: 'High', capitalizationReadiness: '100%' }, 
         priority: 'medium',
         confidence: 0.9, 
-        evidence: baseEvidence 
+        evidence: baseEvidence,
+        dataSources: baseDataSources
       });
     }
     
@@ -393,7 +445,12 @@ async function generateDeepCFOAnalysis(
         impact: { insightLatency: '-90%', decisionSpeed: 'Accelerated' }, 
       priority: 'low',
         confidence: 1.0, 
-        evidence: [`Data Source: ${context.hasRealData ? 'Connected' : 'Sync Required'}`] 
+        evidence: [`Data Source: ${context.hasRealData ? 'Connected' : 'Sync Required'}`],
+        dataSources: [{
+          type: 'data_connection',
+          id: 'connector_status',
+          snippet: `Data Source: ${context.hasRealData ? 'Connected' : 'Sync Required'}`
+        }]
       });
     }
   }
