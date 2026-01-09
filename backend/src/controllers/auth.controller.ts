@@ -13,6 +13,19 @@ export const authController = {
       }
 
       const result = await authService.signup(email, password, orgName, name);
+      
+      // Check if signup resulted in access request instead of new org
+      if ((result as any).requiresAccessRequest) {
+        return res.status(202).json({
+          ok: true,
+          requiresAccessRequest: true,
+          orgId: (result as any).orgId,
+          orgName: (result as any).orgName,
+          message: (result as any).message,
+          email: (result as any).email
+        });
+      }
+      
       res.status(201).json({
         ok: true,
         user: result.user,

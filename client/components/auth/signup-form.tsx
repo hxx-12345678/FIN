@@ -76,6 +76,16 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
         throw new Error(data.message || "Signup failed")
       }
 
+      // Check if signup resulted in access request instead of new account
+      if (data.requiresAccessRequest) {
+        toast.success(`Access request submitted for ${data.orgName}!`, {
+          description: "An admin will review your request. You'll be notified once approved."
+        })
+        setError(null)
+        // Show success message but don't redirect - user needs to wait for approval
+        return
+      }
+
       // Store tokens
       if (data.token) {
         localStorage.setItem("auth-token", data.token)

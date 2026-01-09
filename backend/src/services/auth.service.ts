@@ -17,6 +17,13 @@ export const authService = {
 
       // Normalize email (lowercase, trim)
       const normalizedEmail = email.trim().toLowerCase();
+      
+      // Extract domain from email
+      const emailParts = normalizedEmail.split('@');
+      if (emailParts.length !== 2) {
+        throw new ValidationError('Invalid email format');
+      }
+      const domain = emailParts[1].toLowerCase();
 
       // Sanitize optional name
       const sanitizedName = name ? sanitizeString(name, 255) : undefined;
@@ -25,6 +32,117 @@ export const authService = {
       const existing = await userRepository.findByEmail(normalizedEmail);
       if (existing) {
         throw new ValidationError('Email already registered');
+      }
+
+      // Check for existing orgs with users from same domain
+      // Find all users with emails ending in the same domain
+      console.log(`[Signup] Checking for users with domain: ${domain}`);
+      const usersWithSameDomain = await prisma.user.findMany({
+        where: {
+          email: { endsWith: `@${domain}` },
+          roles: { some: {} } // Has at least one org role
+        },
+        include: {
+          roles: {
+            include: { org: true }
+          }
+        },
+        take: 100 // Limit to prevent performance issues
+      });
+
+      console.log(`[Signup] Found ${usersWithSameDomain.length} users with domain ${domain}`);
+      
+      // Filter to only users that have at least one org role
+      const usersWithRoles = usersWithSameDomain.filter(user => user.roles && user.roles.length > 0);
+      console.log(`[Signup] Found ${usersWithRoles.length} users with org roles`);
+
+      // Extract unique org IDs from users with same domain
+      const orgIdsWithSameDomain = new Set<string>();
+      usersWithRoles.forEach(user => {
+        user.roles.forEach(role => {
+          orgIdsWithSameDomain.add(role.orgId);
+        });
+      });
+
+      console.log(`[Signup] Found ${orgIdsWithSameDomain.size} orgs with same domain`);
+
+      // If orgs with same domain exist, create access request instead of new org
+      if (orgIdsWithSameDomain.size > 0) {
+        console.log(`[Signup] Same domain detected, creating access request instead of new org`);
+        const targetOrgId = Array.from(orgIdsWithSameDomain)[0]; // Use first matching org
+        
+        // Check if accessRequest model exists and table exists in database
+        try {
+          // Try to check if access request already exists
+          const existingRequest = await prisma.$queryRaw`
+            SELECT id FROM access_requests 
+            WHERE email = ${normalizedEmail} 
+            AND org_id = ${targetOrgId}::uuid 
+            AND status = 'pending'
+            LIMIT 1
+          `.catch(() => null);
+
+          if (existingRequest && Array.isArray(existingRequest) && existingRequest.length > 0) {
+            throw new ValidationError('Access request already pending for this organization. Please wait for admin approval.');
+          }
+
+          // Get org name for response
+          let targetOrg = null;
+          try {
+            targetOrg = await prisma.org.findUnique({
+              where: { id: targetOrgId },
+              select: { name: true }
+            });
+          } catch (error: any) {
+            console.warn('Failed to fetch org name:', error.message);
+          }
+
+          // Create access request using raw query (works even if Prisma client not regenerated)
+          try {
+            await prisma.$executeRaw`
+              INSERT INTO access_requests (id, org_id, email, domain, status, requested_at)
+              VALUES (gen_random_uuid(), ${targetOrgId}::uuid, ${normalizedEmail}, ${domain}, 'pending', NOW())
+            `;
+            console.log(`[Signup] ✅ Access request created for ${normalizedEmail} to org ${targetOrgId}`);
+
+            // Return special response indicating access request created
+            return {
+              requiresAccessRequest: true,
+              orgId: targetOrgId,
+              orgName: targetOrg?.name || 'Organization',
+              message: 'Access request created. Please wait for admin approval before signing up.',
+              email: normalizedEmail
+            };
+          } catch (dbError: any) {
+            // If access_requests table doesn't exist, log warning and continue with normal signup
+            const errorMsg = dbError.message || String(dbError);
+            if (errorMsg.includes('access_requests') || errorMsg.includes('does not exist') || 
+                dbError.code === '42P01') { // PostgreSQL error code for table doesn't exist
+              console.warn(`[Signup] ⚠️ AccessRequest table not available: ${errorMsg}`);
+              console.warn('[Signup] Falling back to normal signup (creating new org)');
+              // Continue with normal signup flow (fall through)
+            } else {
+              // Re-throw other errors (like duplicate request)
+              console.error(`[Signup] ❌ Error creating access request: ${errorMsg}`);
+              throw dbError;
+            }
+          }
+        } catch (error: any) {
+          // If access_requests table doesn't exist, log warning and continue with normal signup
+          const errorMsg = error.message || String(error);
+          if (errorMsg.includes('access_requests') || errorMsg.includes('does not exist') ||
+              error.code === '42P01') {
+            console.warn(`[Signup] ⚠️ AccessRequest table not available: ${errorMsg}`);
+            console.warn('[Signup] Falling back to normal signup (creating new org)');
+            // Continue with normal signup flow (fall through)
+          } else {
+            // Re-throw other errors (like duplicate request)
+            console.error(`[Signup] ❌ Error in access request flow: ${errorMsg}`);
+            throw error;
+          }
+        }
+      } else {
+        console.log(`[Signup] No orgs found with same domain ${domain}, creating new org`);
       }
 
       // Hash password

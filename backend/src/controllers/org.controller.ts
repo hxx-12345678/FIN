@@ -57,5 +57,62 @@ export const orgController = {
       next(error);
     }
   },
+
+  /**
+   * GET /api/v1/orgs/:id/access-requests - List access requests (admin only)
+   */
+  listAccessRequests: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        throw new ValidationError('User not authenticated');
+      }
+
+      const { id: orgId } = req.params;
+      const status = req.query.status as string | undefined;
+
+      const requests = await orgService.listAccessRequests(orgId, req.user.id, status);
+      res.json({ ok: true, requests });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  /**
+   * POST /api/v1/orgs/:id/access-requests/:requestId/approve - Approve access request (admin only)
+   */
+  approveAccessRequest: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        throw new ValidationError('User not authenticated');
+      }
+
+      const { id: orgId, requestId } = req.params;
+      const { role = 'viewer' } = req.body;
+
+      const result = await orgService.approveAccessRequest(orgId, requestId, req.user.id, role);
+      res.json({ ok: true, ...result });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  /**
+   * POST /api/v1/orgs/:id/access-requests/:requestId/reject - Reject access request (admin only)
+   */
+  rejectAccessRequest: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        throw new ValidationError('User not authenticated');
+      }
+
+      const { id: orgId, requestId } = req.params;
+      const { message } = req.body;
+
+      await orgService.rejectAccessRequest(orgId, requestId, req.user.id, message);
+      res.json({ ok: true, message: 'Access request rejected' });
+    } catch (error) {
+      next(error);
+    }
+  },
 };
 

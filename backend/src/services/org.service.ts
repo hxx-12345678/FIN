@@ -112,6 +112,202 @@ export const orgService = {
 
     return updated;
   },
+
+  /**
+   * List access requests for an organization (admin only)
+   */
+  listAccessRequests: async (orgId: string, userId: string, status?: string) => {
+    // Verify user has admin access
+    const userRole = await orgRepository.getUserRole(userId, orgId);
+    if (!userRole || userRole.role !== 'admin') {
+      throw new ForbiddenError('Only admins can view access requests');
+    }
+
+    const where: any = { orgId };
+    if (status) {
+      where.status = status;
+    }
+
+    // Check if accessRequest model exists in Prisma client
+    if (!prisma.accessRequest) {
+      // Fallback: return empty array if model doesn't exist (Prisma client not regenerated)
+      console.warn('prisma.accessRequest not available - Prisma client may need regeneration');
+      return [];
+    }
+
+    try {
+      const requests = await prisma.accessRequest.findMany({
+        where,
+        orderBy: { requestedAt: 'desc' },
+        include: {
+          reviewer: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      return requests;
+    } catch (error: any) {
+      // If model doesn't exist in database or Prisma client, return empty array
+      if (error.message?.includes('accessRequest') || error.message?.includes('access_requests')) {
+        console.warn('AccessRequest model not available:', error.message);
+        return [];
+      }
+      throw error;
+    }
+  },
+
+  /**
+   * Approve access request and create user/role
+   */
+  approveAccessRequest: async (orgId: string, requestId: string, reviewerId: string, role: string = 'viewer') => {
+    // Verify reviewer has admin access
+    const reviewerRole = await orgRepository.getUserRole(reviewerId, orgId);
+    if (!reviewerRole || reviewerRole.role !== 'admin') {
+      throw new ForbiddenError('Only admins can approve access requests');
+    }
+
+    // Validate role
+    if (!['admin', 'finance', 'viewer'].includes(role)) {
+      throw new ValidationError('Invalid role. Must be admin, finance, or viewer');
+    }
+
+    // Check if accessRequest model exists
+    if (!prisma.accessRequest) {
+      throw new NotFoundError('Access request feature not available - Prisma client needs regeneration');
+    }
+
+    // Get access request
+    const request = await prisma.accessRequest.findUnique({
+      where: { id: requestId },
+    });
+
+    if (!request) {
+      throw new NotFoundError('Access request not found');
+    }
+
+    if (request.orgId !== orgId) {
+      throw new ForbiddenError('Access request does not belong to this organization');
+    }
+
+    if (request.status !== 'pending') {
+      throw new ValidationError(`Access request is already ${request.status}`);
+    }
+
+    // Check if user already exists
+    let user = await prisma.user.findUnique({
+      where: { email: request.email },
+    });
+
+    if (!user) {
+      // User doesn't exist yet - they need to sign up first
+      // For now, mark request as approved but user must sign up
+      await prisma.accessRequest.update({
+        where: { id: requestId },
+        data: {
+          status: 'approved',
+          reviewedAt: new Date(),
+          reviewedBy: reviewerId,
+          message: `Approved. User can now sign up with email ${request.email} and will be automatically added to the organization.`,
+        },
+      });
+
+      return {
+        message: 'Access request approved. User must sign up to complete the process.',
+        email: request.email,
+        role,
+      };
+    }
+
+    // User exists - add them to org
+    const existingRole = await prisma.userOrgRole.findUnique({
+      where: {
+        userId_orgId: {
+          userId: user.id,
+          orgId,
+        },
+      },
+    });
+
+    if (existingRole) {
+      throw new ValidationError('User is already a member of this organization');
+    }
+
+    // Create role and update request
+    await prisma.$transaction(async (tx) => {
+      await tx.userOrgRole.create({
+        data: {
+          userId: user.id,
+          orgId,
+          role,
+        },
+      });
+
+      await tx.accessRequest.update({
+        where: { id: requestId },
+        data: {
+          status: 'approved',
+          reviewedAt: new Date(),
+          reviewedBy: reviewerId,
+        },
+      });
+    });
+
+    return {
+      message: 'Access request approved. User has been added to the organization.',
+      userId: user.id,
+      email: user.email,
+      role,
+    };
+  },
+
+  /**
+   * Reject access request
+   */
+  rejectAccessRequest: async (orgId: string, requestId: string, reviewerId: string, message?: string) => {
+    // Verify reviewer has admin access
+    const reviewerRole = await orgRepository.getUserRole(reviewerId, orgId);
+    if (!reviewerRole || reviewerRole.role !== 'admin') {
+      throw new ForbiddenError('Only admins can reject access requests');
+    }
+
+    // Check if accessRequest model exists
+    if (!prisma.accessRequest) {
+      throw new NotFoundError('Access request feature not available - Prisma client needs regeneration');
+    }
+
+    // Get access request
+    const request = await prisma.accessRequest.findUnique({
+      where: { id: requestId },
+    });
+
+    if (!request) {
+      throw new NotFoundError('Access request not found');
+    }
+
+    if (request.orgId !== orgId) {
+      throw new ForbiddenError('Access request does not belong to this organization');
+    }
+
+    if (request.status !== 'pending') {
+      throw new ValidationError(`Access request is already ${request.status}`);
+    }
+
+    // Update request status
+    await prisma.accessRequest.update({
+      where: { id: requestId },
+      data: {
+        status: 'rejected',
+        reviewedAt: new Date(),
+        reviewedBy: reviewerId,
+        message: message || 'Access request rejected by admin',
+      },
+    });
+  },
 };
 
 

@@ -28,6 +28,8 @@ import {
   Unlock,
   Loader2,
   AlertCircle,
+  CheckCircle,
+  X,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -95,6 +97,22 @@ interface Invitation {
   expiresAt: Date
 }
 
+interface AccessRequest {
+  id: string
+  email: string
+  domain: string
+  status: "pending" | "approved" | "rejected"
+  requestedAt: Date
+  reviewedAt: Date | null
+  reviewedBy: string | null
+  message: string | null
+  reviewer?: {
+    id: string
+    name: string | null
+    email: string
+  } | null
+}
+
 interface ActivityLogEntry {
   id: string
   user: string
@@ -160,8 +178,11 @@ export function UserManagement() {
   const [selectedUser, setSelectedUser] = useState<TeamMember | null>(null)
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [invitations, setInvitations] = useState<Invitation[]>([])
+  const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([])
   const [activities, setActivities] = useState<ActivityLogEntry[]>([])
   const [roles, setRoles] = useState<Role[]>([])
+  const [approvingRequestId, setApprovingRequestId] = useState<string | null>(null)
+  const [rejectingRequestId, setRejectingRequestId] = useState<string | null>(null)
 
   // Get orgId from user context or localStorage
   useEffect(() => {
@@ -239,6 +260,7 @@ export function UserManagement() {
       await Promise.all([
         fetchTeamMembers(),
         fetchInvitations(),
+        fetchAccessRequests(),
         fetchActivityLog(),
         fetchRoles(),
       ])
@@ -324,6 +346,93 @@ export function UserManagement() {
       }
     } catch (error) {
       console.error("Failed to fetch invitations:", error)
+    }
+  }
+
+  const fetchAccessRequests = async () => {
+    if (!orgId) return
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/access-requests`, {
+        credentials: "include",
+        headers: getAuthHeaders(),
+      })
+      if (response.ok) {
+        const data = await response.json()
+        const requests = (data.requests || []).map((req: any) => {
+          try {
+            return {
+              ...req,
+              requestedAt: req.requestedAt ? new Date(req.requestedAt) : new Date(),
+              reviewedAt: req.reviewedAt ? new Date(req.reviewedAt) : null,
+            }
+          } catch (e) {
+            return {
+              ...req,
+              requestedAt: new Date(),
+              reviewedAt: null,
+            }
+          }
+        })
+        setAccessRequests(requests)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        const errorMessage = errorData.error?.message || errorData.message || response.statusText
+        console.error("Failed to fetch access requests:", errorMessage)
+        if (response.status === 401) {
+          toast.error("Authentication failed. Please log in again.")
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch access requests:", error)
+    }
+  }
+
+  const handleApproveAccessRequest = async (requestId: string, role: string = 'viewer') => {
+    if (!orgId) return
+    setApprovingRequestId(requestId)
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/access-requests/${requestId}/approve`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        credentials: "include",
+        body: JSON.stringify({ role }),
+      })
+      if (response.ok) {
+        toast.success("Access request approved")
+        fetchAccessRequests()
+        fetchTeamMembers()
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || "Failed to approve access request")
+      }
+    } catch (error) {
+      toast.error("Failed to approve access request")
+    } finally {
+      setApprovingRequestId(null)
+    }
+  }
+
+  const handleRejectAccessRequest = async (requestId: string, message?: string) => {
+    if (!orgId) return
+    setRejectingRequestId(requestId)
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/access-requests/${requestId}/reject`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        credentials: "include",
+        body: JSON.stringify({ message }),
+      })
+      if (response.ok) {
+        toast.success("Access request rejected")
+        fetchAccessRequests()
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || "Failed to reject access request")
+      }
+    } catch (error) {
+      toast.error("Failed to reject access request")
+    } finally {
+      setRejectingRequestId(null)
     }
   }
 
@@ -696,6 +805,14 @@ export function UserManagement() {
             <TabsTrigger value="roles" className="text-xs sm:text-sm">Roles & Permissions</TabsTrigger>
             <TabsTrigger value="permissions" className="text-xs sm:text-sm">Permission Matrix</TabsTrigger>
             <TabsTrigger value="invitations" className="text-xs sm:text-sm">Invitations</TabsTrigger>
+            <TabsTrigger value="access-requests" className="text-xs sm:text-sm">
+              Access Requests
+              {accessRequests.filter((r) => r.status === "pending").length > 0 && (
+                <Badge variant="destructive" className="ml-2">
+                  {accessRequests.filter((r) => r.status === "pending").length}
+                </Badge>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="activity" className="text-xs sm:text-sm">Activity Log</TabsTrigger>
         </TabsList>
         </div>
@@ -1017,6 +1134,133 @@ export function UserManagement() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="access-requests" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Access Requests</CardTitle>
+              <CardDescription>
+                Users from the same email domain requesting access to your organization
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {(!accessRequests || accessRequests.length === 0) ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No access requests
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {accessRequests.map((request) => {
+                      if (!request) return null
+                      const isPending = request.status === "pending"
+                      return (
+                        <div key={request.id} className="p-4 border rounded-lg">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <Mail className="h-4 w-4 text-muted-foreground" />
+                                <div className="font-medium">{request.email}</div>
+                                <Badge variant="outline" className="text-xs">
+                                  {request.domain}
+                                </Badge>
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                Requested {formatTimeAgo(request.requestedAt)}
+                              </div>
+                              {request.message && (
+                                <div className="text-sm text-muted-foreground mt-2 italic">
+                                  "{request.message}"
+                                </div>
+                              )}
+                              {request.reviewedAt && request.reviewer && (
+                                <div className="text-sm text-muted-foreground mt-2">
+                                  {request.status === "approved" ? "Approved" : "Rejected"} by{" "}
+                                  {request.reviewer.name || request.reviewer.email} on{" "}
+                                  {new Date(request.reviewedAt).toLocaleDateString()}
+                                </div>
+                              )}
+                            </div>
+                            <Badge
+                              className={
+                                request.status === "approved"
+                                  ? "bg-green-100 text-green-800"
+                                  : request.status === "rejected"
+                                    ? "bg-red-100 text-red-800"
+                                    : "bg-yellow-100 text-yellow-800"
+                              }
+                            >
+                              {request.status}
+                            </Badge>
+                          </div>
+                          {isPending && (
+                            <div className="flex gap-2 mt-3">
+                              <Select
+                                defaultValue="viewer"
+                                onValueChange={(role) => {
+                                  // Store role for approval
+                                  ;(request as any).selectedRole = role
+                                }}
+                              >
+                                <SelectTrigger className="w-32">
+                                  <SelectValue placeholder="Role" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="viewer">Viewer</SelectItem>
+                                  <SelectItem value="finance">Finance</SelectItem>
+                                  <SelectItem value="admin">Admin</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => {
+                                  const role = (request as any).selectedRole || "viewer"
+                                  handleApproveAccessRequest(request.id, role)
+                                }}
+                                disabled={approvingRequestId === request.id}
+                              >
+                                {approvingRequestId === request.id ? (
+                                  <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Approving...
+                                  </>
+                                ) : (
+                                  <>
+                                    <CheckCircle className="mr-2 h-4 w-4" />
+                                    Approve
+                                  </>
+                                )}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleRejectAccessRequest(request.id)}
+                                disabled={rejectingRequestId === request.id}
+                              >
+                                {rejectingRequestId === request.id ? (
+                                  <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Rejecting...
+                                  </>
+                                ) : (
+                                  <>
+                                    <X className="mr-2 h-4 w-4" />
+                                    Reject
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="permissions" className="space-y-4">

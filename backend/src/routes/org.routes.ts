@@ -14,5 +14,10 @@ router.post('/:id/invite', authenticate, requireAdmin('id'), orgController.invit
 // Update user role (admin only)
 router.post('/:id/roles', authenticate, requireAdmin('id'), orgController.updateRole);
 
+// Access requests (admin only)
+router.get('/:id/access-requests', authenticate, requireAdmin('id'), orgController.listAccessRequests);
+router.post('/:id/access-requests/:requestId/approve', authenticate, requireAdmin('id'), orgController.approveAccessRequest);
+router.post('/:id/access-requests/:requestId/reject', authenticate, requireAdmin('id'), orgController.rejectAccessRequest);
+
 export default router;
 

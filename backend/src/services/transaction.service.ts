@@ -25,6 +25,8 @@ export interface Transaction {
   amount: number;
   currency: string;
   connectorId: string | null;
+  importBatchId: string | null; // For CSV/Excel import lineage
+  sourceId: string | null; // For deduplication
   isDuplicate: boolean;
   description?: string | null;
 }
@@ -181,6 +183,8 @@ export const transactionService = {
           category: true,
           description: true,
           connectorId: true,
+          importBatchId: true, // Include for lineage tracking
+          sourceId: true, // Include for deduplication tracking
           rawPayload: true,
         },
       });
@@ -251,6 +255,8 @@ export const transactionService = {
       amount: Number(tx.amount),
       currency: tx.currency,
       connectorId: tx.connectorId,
+      importBatchId: tx.importBatchId, // Include for lineage tracking
+      sourceId: tx.sourceId, // Include for deduplication tracking
       isDuplicate: duplicateIds.has(tx.id),
       description: tx.description,
     }));
@@ -333,6 +339,8 @@ export const transactionService = {
         amount: true,
         category: true,
         description: true,
+        importBatchId: true,
+        sourceId: true,
         rawPayload: true,
       },
     });
@@ -440,6 +448,8 @@ export const transactionService = {
         amount: true,
         category: true,
         description: true,
+        importBatchId: true,
+        sourceId: true,
         rawPayload: true,
       },
     });

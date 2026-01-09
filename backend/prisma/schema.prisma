@@ -38,6 +38,7 @@ model User {
   usageRecords                UserUsage[]
   approvalRequestsRequested   ApprovalRequest[]     @relation("approval_requester")
   approvalRequestsApproved    ApprovalRequest[]     @relation("approval_approver")
+  accessRequestsReviewed      AccessRequest[]       @relation("access_request_reviewer")
 
   @@map("users")
 }
@@ -52,6 +53,7 @@ model Org {
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   roles                UserOrgRole[]
+  accessRequests       AccessRequest[]
   connectors           Connector[]
   rawTransactions      RawTransaction[]
   chartOfAccounts      ChartOfAccount[]
@@ -781,4 +783,25 @@ model ApprovalRequest {
   @@index([status])
   @@index([requesterId])
   @@map("approval_requests")
+}
+
+model AccessRequest {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org         Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId       String    @map("org_id") @db.Uuid
+  email       String
+  domain      String // Extracted email domain (e.g., "company.com")
+  status      String    @default("pending") @db.VarChar(50) // pending|approved|rejected
+  requestedAt DateTime  @default(now()) @map("requested_at") @db.Timestamptz(6)
+  reviewedAt  DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  reviewedBy  String?   @map("reviewed_by") @db.Uuid
+  message     String?
+  reviewer    User?     @relation("access_request_reviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@index([orgId])
+  @@index([email])
+  @@index([domain])
+  @@index([status])
+  @@index([orgId, status])
+  @@map("access_requests")
 }
