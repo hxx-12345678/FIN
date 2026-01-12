@@ -177,13 +177,15 @@ app.get('/api/v1', (req, res) => {
 });
 
 // API Routes
+// IMPORTANT: More specific routes must be registered before less specific ones
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/orgs', orgRoutes);
 app.use('/api/v1/connectors', connectorRoutes);
 app.use('/api/v1', csvRoutes);
 app.use('/api/v1', excelRoutes);
-app.use('/api/v1', modelRoutes);
+// Monte Carlo routes must come before model routes to prevent /models/:model_id from matching /models/:model_id/montecarlo
 app.use('/api/v1', monteCarloRoutes);
+app.use('/api/v1', modelRoutes);
 app.use('/api/v1/provenance', provenanceRoutes);
 app.use('/api/v1', exportRoutes);
 app.use('/api/v1/jobs', jobRoutes);

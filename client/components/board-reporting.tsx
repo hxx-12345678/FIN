@@ -274,11 +274,11 @@ export function BoardReporting() {
           const chartResult = await chartResponse.json()
           if (chartResult.ok && chartResult.data?.monthlyMetrics) {
             const processedChartData = chartResult.data.monthlyMetrics.slice(-6).map((metric: any) => ({
-              month: metric.month || "Unknown",
-              revenue: metric.revenue || 0,
-              customers: metric.customers || 0,
-              burn: metric.burn || 0,
-            }))
+              month: metric.month || metric.date || "Unknown",
+              revenue: Number(metric.revenue || metric.mrr || metric.revenue || 0),
+              customers: Number(metric.customers || metric.activeCustomers || 0),
+              burn: Number(metric.burn || metric.burnRate || 0),
+            })).filter((item: any) => item.month !== "Unknown" || item.revenue > 0 || item.customers > 0)
             setChartData(processedChartData)
             setAvailablePeriods(processedChartData.map((item: any) => item.month))
           }
@@ -373,22 +373,61 @@ export function BoardReporting() {
             selectedMetrics,
           },
         }),
+        // Add timeout signal to prevent hanging requests
+        signal: AbortSignal.timeout(55000), // 55 second timeout (less than server's 60s)
       })
 
       if (response.ok) {
         const result = await response.json()
         if (result.ok && result.plan) {
+          // Handle different response formats
+          const planData = result.plan.planJson || result.plan;
+          const insights = planData?.insights || planData?.stagedChanges || [];
+          const recommendations = planData?.recommendations || planData?.stagedChanges || [];
+          
           setAiContent({
-            executiveSummary: result.plan.insights?.[0]?.summary || "No summary available",
-            keyHighlights: result.plan.recommendations?.slice(0, 4) || [],
-            areasOfFocus: result.plan.insights?.find((i: any) => i.type === "risk")?.summary || "No focus areas identified",
+            executiveSummary: insights[0]?.summary || insights[0]?.explain || planData?.natural_text || planData?.summary || "No summary available",
+            keyHighlights: recommendations.slice(0, 4).map((r: any) => r.title || r.summary || r.explain || r),
+            areasOfFocus: insights.find((i: any) => i.type === "risk")?.summary || planData?.areasOfFocus || "No focus areas identified",
           })
         }
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        const errorMsg = errorData.error?.message || errorData.message || `Failed to generate AI content: ${response.statusText}`;
+        
+        // Handle specific error codes
+        if (response.status === 504 || errorData.error?.code === 'TIMEOUT') {
+          throw new Error('AI generation is taking longer than expected. Please try again with a simpler request.');
+        } else if (response.status === 403) {
+          throw new Error('You do not have permission to generate AI content. Please contact an admin.');
+        } else if (response.status === 401) {
+          throw new Error('Your session has expired. Please log in again.');
+        }
+        
+        throw new Error(errorMsg);
       }
     } catch (error) {
-      console.error("Failed to fetch AI content:", error)
+      console.error("Failed to fetch AI content:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to generate AI content. Please try again.";
+      
+      // Check if it's a timeout/abort error
+      if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('timeout'))) {
+        setAiContent({
+          executiveSummary: "AI generation timed out. The request is too complex or the server is busy. Please try again with a simpler request.",
+          keyHighlights: [],
+          areasOfFocus: "Request timed out",
+        });
+      } else {
+        setAiContent({
+          executiveSummary: errorMessage,
+          keyHighlights: [],
+          areasOfFocus: "Error occurred",
+        });
+      }
+      
+      toast.error(errorMessage);
     } finally {
-      setLoadingAiContent(false)
+      setLoadingAiContent(false);
     }
   }
 
@@ -754,8 +793,8 @@ export function BoardReporting() {
                           Regenerate
                         </Button>
                       </div>
-                      <p className="text-sm text-blue-700 mt-2">
-                        {aiContent.executiveSummary || "No summary available."}
+                      <p className="text-sm text-blue-700 mt-2 whitespace-pre-wrap">
+                        {aiContent.executiveSummary || aiContent.summary || "No summary available."}
                       </p>
                     </div>
                     <div className="p-4 rounded-lg bg-green-50 border border-green-200">
@@ -763,7 +802,7 @@ export function BoardReporting() {
                       {aiContent.keyHighlights?.length ? (
                         <ul className="text-sm text-green-700 space-y-1">
                           {aiContent.keyHighlights.map((highlight: any, index: number) => (
-                            <li key={index}>• {highlight.title || highlight.summary || highlight}</li>
+                            <li key={index}>• {highlight.title || highlight.summary || highlight.explain || highlight || "Highlight"}</li>
                           ))}
                         </ul>
                       ) : (
@@ -772,8 +811,8 @@ export function BoardReporting() {
                     </div>
                     <div className="p-4 rounded-lg bg-yellow-50 border border-yellow-200">
                       <h3 className="font-medium text-yellow-800 mb-2">Areas of Focus</h3>
-                      <p className="text-sm text-yellow-700">
-                        {aiContent.areasOfFocus || "No risk areas highlighted."}
+                      <p className="text-sm text-yellow-700 whitespace-pre-wrap">
+                        {aiContent.areasOfFocus || aiContent.risks || "No risk areas highlighted."}
                       </p>
                     </div>
                   </>
@@ -820,10 +859,10 @@ export function BoardReporting() {
                           <TrendingUp className="h-4 w-4 text-red-500 rotate-180" />
                         )}
                       </div>
-                      <h3 className="font-medium text-sm mb-1">{metric.name}</h3>
-                      <div className="text-lg font-bold">{metric.value}</div>
+                      <h3 className="font-medium text-sm mb-1">{metric.name || "Unknown Metric"}</h3>
+                      <div className="text-lg font-bold">{metric.value || "N/A"}</div>
                       <div className={`text-xs ${metric.trend === "up" ? "text-green-600" : "text-red-600"}`}>
-                        {metric.change}
+                        {metric.change || "N/A"}
                       </div>
                     </div>
                   ))}
@@ -862,13 +901,19 @@ export function BoardReporting() {
                         const metric = kpiMetrics.find((m) => m.name === metricName)
                         return metric ? (
                           <div key={metricName} className="text-center">
-                            <div className="text-2xl font-bold text-blue-600">{metric.value}</div>
-                            <div className="text-sm text-muted-foreground">{metric.name}</div>
+                            <div className="text-2xl font-bold text-blue-600">{metric.value || "N/A"}</div>
+                            <div className="text-sm text-muted-foreground">{metric.name || "Unknown Metric"}</div>
                             <div className={`text-xs ${metric.trend === "up" ? "text-green-600" : "text-red-600"}`}>
-                              {metric.change}
+                              {metric.change || "N/A"}
                             </div>
                           </div>
-                        ) : null
+                        ) : (
+                          <div key={metricName} className="text-center">
+                            <div className="text-2xl font-bold text-muted-foreground">N/A</div>
+                            <div className="text-sm text-muted-foreground">{metricName}</div>
+                            <div className="text-xs text-muted-foreground">No data</div>
+                          </div>
+                        )
                       })}
                     </div>
                   ) : (

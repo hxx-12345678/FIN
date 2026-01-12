@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { toast } from "sonner"
 
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthToken } from "@/lib/api-config"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -102,6 +102,9 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
   const [survivalProbability, setSurvivalProbability] = useState<SurvivalProbability | null>(null)
   const [percentiles, setPercentiles] = useState<any>(null)
   const [monteCarloResults, setMonteCarloResults] = useState<any>(null)
+  const [existingMonteCarloJobs, setExistingMonteCarloJobs] = useState<any[]>([])
+  const [loadingJobs, setLoadingJobs] = useState(false)
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
 
   // Key financial drivers with uncertainty ranges
   const [drivers, setDrivers] = useState<Driver[]>([
@@ -220,29 +223,91 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
 
   // Tornado chart (sensitivity analysis) - use sensitivityJson from results if available
   const getTornadoData = () => {
-    // Try to get from monteCarloResults.sensitivityJson
+    // Try to get from monteCarloResults.sensitivityJson (preferred - array format)
     if (monteCarloResults?.sensitivityJson) {
-      const sensitivity = typeof monteCarloResults.sensitivityJson === 'string'
+      let sensitivity = typeof monteCarloResults.sensitivityJson === 'string'
         ? JSON.parse(monteCarloResults.sensitivityJson)
         : monteCarloResults.sensitivityJson;
       
-      if (sensitivity && Array.isArray(sensitivity)) {
-        return sensitivity.map((item: any) => ({
-          driver: item.driver || item.name || "Unknown",
-          low: item.low || item.downside || 0,
-          high: item.high || item.upside || 0,
-          impact: item.impact || Math.abs(item.low || 0) + Math.abs(item.high || 0),
-        })).sort((a, b) => b.impact - a.impact);
+      // Handle both array and object formats
+      if (Array.isArray(sensitivity) && sensitivity.length > 0) {
+        // Already in array format - convert to tornado chart format
+        return sensitivity.map((item: any) => {
+          const correlation = item.correlation || item.pearson_correlation || item.abs_correlation || 0.0;
+          const impact = Math.abs(correlation) * 100000; // Scale for visualization
+          return {
+            driver: item.driver || item.name || 'Unknown',
+            correlation: correlation,
+            abs_correlation: Math.abs(correlation),
+            p_value: item.p_value || 0.0,
+            impact: impact,
+            low: correlation < 0 ? impact : -impact / 2,
+            high: correlation > 0 ? impact : impact / 2,
+          };
+        }).sort((a, b) => b.abs_correlation - a.abs_correlation);
+      } else if (typeof sensitivity === 'object' && sensitivity !== null && !Array.isArray(sensitivity)) {
+        // Convert object format (dict) to array format
+        return Object.entries(sensitivity).map(([driver, data]: [string, any]) => {
+          const correlation = data.pearson_correlation || data.correlation || data.abs_correlation || 0.0;
+          const impact = Math.abs(correlation) * 100000;
+          return {
+            driver,
+            correlation: correlation,
+            abs_correlation: Math.abs(correlation),
+            p_value: data.p_value || 0.0,
+            impact: impact,
+            low: correlation < 0 ? impact : -impact / 2,
+            high: correlation > 0 ? impact : impact / 2,
+          };
+        }).sort((a, b) => b.abs_correlation - a.abs_correlation);
+      }
+    }
+    
+    // Also try to get from percentiles if sensitivity_json is not available
+    if (percentiles && typeof percentiles === 'object') {
+      const percentilesObj = percentiles as any;
+      if (percentilesObj.tornado_sensitivity || percentilesObj.tornadoSensitivity) {
+        const tornadoSens = percentilesObj.tornado_sensitivity || percentilesObj.tornadoSensitivity;
+        if (typeof tornadoSens === 'object' && !Array.isArray(tornadoSens)) {
+          // Convert dict format to array format
+          return Object.entries(tornadoSens).map(([driver, data]: [string, any]) => {
+            const correlation = data.pearson_correlation || data.correlation || data.abs_correlation || 0.0;
+            const impact = Math.abs(correlation) * 100000;
+            return {
+              driver,
+              correlation: correlation,
+              abs_correlation: Math.abs(correlation),
+              p_value: data.p_value || 0.0,
+              impact: impact,
+              low: correlation < 0 ? impact : -impact / 2,
+              high: correlation > 0 ? impact : impact / 2,
+            };
+          }).sort((a, b) => b.abs_correlation - a.abs_correlation);
+        } else if (Array.isArray(tornadoSens) && tornadoSens.length > 0) {
+          return tornadoSens.map((item: any) => {
+            const correlation = item.correlation || item.pearson_correlation || item.abs_correlation || 0.0;
+            const impact = Math.abs(correlation) * 100000;
+            return {
+              driver: item.driver || item.name || 'Unknown',
+              correlation: correlation,
+              abs_correlation: Math.abs(correlation),
+              p_value: item.p_value || 0.0,
+              impact: impact,
+              low: correlation < 0 ? impact : -impact / 2,
+              high: correlation > 0 ? impact : impact / 2,
+            };
+          }).sort((a, b) => b.abs_correlation - a.abs_correlation);
+        }
       }
     }
     
     // Fallback to default hardcoded data if no results available
     return [
-      { driver: "Revenue Growth", low: -180000, high: 220000, impact: 400000 },
-      { driver: "Churn Rate", low: -150000, high: 180000, impact: 330000 },
-      { driver: "Conversion Rate", low: -120000, high: 140000, impact: 260000 },
-      { driver: "CAC", low: -80000, high: 95000, impact: 175000 },
-      { driver: "Deal Size", low: -70000, high: 85000, impact: 155000 },
+      { driver: "Revenue Growth", low: -180000, high: 220000, impact: 400000, correlation: 0.8, abs_correlation: 0.8, p_value: 0.0 },
+      { driver: "Churn Rate", low: -150000, high: 180000, impact: 330000, correlation: 0.65, abs_correlation: 0.65, p_value: 0.0 },
+      { driver: "Conversion Rate", low: -120000, high: 140000, impact: 260000, correlation: 0.52, abs_correlation: 0.52, p_value: 0.0 },
+      { driver: "CAC", low: -80000, high: 95000, impact: 175000, correlation: 0.35, abs_correlation: 0.35, p_value: 0.0 },
+      { driver: "Deal Size", low: -70000, high: 85000, impact: 155000, correlation: 0.31, abs_correlation: 0.31, p_value: 0.0 },
     ].sort((a, b) => b.impact - a.impact);
   }
   
@@ -286,6 +351,145 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
   
   const topDrivers = getTopDrivers();
 
+  // Fetch existing Monte Carlo jobs when component loads or modelId changes
+  useEffect(() => {
+    if (modelId && orgId) {
+      fetchExistingMonteCarloJobs()
+    }
+  }, [modelId, orgId])
+
+  const fetchExistingMonteCarloJobs = async () => {
+    if (!modelId || !orgId) return
+
+    setLoadingJobs(true)
+    try {
+      const token = getAuthToken()
+
+      if (!token) {
+        console.error('No auth token found')
+        setLoadingJobs(false)
+        return
+      }
+
+      // Ensure API_BASE_URL includes /api/v1
+      let baseUrl = API_BASE_URL
+      if (!baseUrl.endsWith('/api/v1')) {
+        baseUrl = baseUrl.replace(/\/$/, '') + '/api/v1'
+      }
+
+      const response = await fetch(`${baseUrl}/models/${modelId}/montecarlo`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          console.error('Authentication failed - token may be expired')
+          toast.error("Your session has expired. Please log in again.")
+          return
+        }
+        const errorText = await response.text()
+        console.error(`Failed to fetch Monte Carlo jobs: ${response.status} - ${errorText}`)
+        return
+      }
+
+      const result = await response.json()
+      if (result.ok && Array.isArray(result.monteCarloJobs)) {
+        setExistingMonteCarloJobs(result.monteCarloJobs)
+        
+        // If there are completed jobs, load the most recent one
+        const completedJobs = result.monteCarloJobs.filter((job: any) => job.status === 'done' && job.hasResults)
+        if (completedJobs.length > 0 && !selectedJobId) {
+          const latestJob = completedJobs[0] // Already sorted by createdAt desc
+          loadMonteCarloJobResults(latestJob.jobId || latestJob.id, token)
+          setSelectedJobId(latestJob.jobId || latestJob.id)
+        }
+      } else {
+        console.error('Invalid response format:', result)
+      }
+    } catch (error) {
+      console.error('Failed to fetch existing Monte Carlo jobs:', error)
+      toast.error("Failed to load Monte Carlo jobs. Please try again.")
+    } finally {
+      setLoadingJobs(false)
+    }
+  }
+
+  const loadMonteCarloJobResults = async (jobId: string, token: string) => {
+    if (!jobId || !token) return;
+    
+    try {
+      let baseUrl = API_BASE_URL
+      if (!baseUrl.endsWith('/api/v1')) {
+        baseUrl = baseUrl.replace(/\/$/, '') + '/api/v1'
+      }
+
+      const response = await fetch(`${baseUrl}/montecarlo/${jobId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          console.error('Authentication failed when loading job results')
+          toast.error("Your session has expired. Please log in again.")
+          return
+        }
+        console.error('Failed to load Monte Carlo job results:', response.status, await response.text().catch(() => 'Unknown error'))
+        return
+      }
+
+      const result = await response.json()
+      if (result.ok) {
+        // Set all result data
+        setMonteCarloResults(result)
+        
+        // Parse and set percentiles
+        if (result.percentiles) {
+          setPercentiles(result.percentiles)
+        } else if (result.summary) {
+          setPercentiles(result.summary)
+        }
+        
+        // Set survival probability
+        if (result.survivalProbability) {
+          setSurvivalProbability(result.survivalProbability)
+        }
+        
+        // Ensure sensitivity data is set (from sensitivityJson)
+        if (result.sensitivityJson) {
+          // Already included in monteCarloResults above
+        }
+        
+        // Update completion state
+        if (result.status === 'done' || result.status === 'completed') {
+          setSimulationComplete(true)
+          setSimulationProgress(100)
+        } else {
+          setSimulationComplete(false)
+          setSimulationProgress(result.progress || 0)
+        }
+        
+        // Switch to Monte Carlo mode if we have results
+        if (result.percentiles || result.sensitivityJson) {
+          setForecastMode("montecarlo")
+        }
+      } else {
+        console.error('Invalid response format:', result)
+        toast.error("Failed to load simulation results: Invalid response format")
+      }
+    } catch (error) {
+      console.error('Failed to load Monte Carlo job results:', error)
+      toast.error("Failed to load simulation results. Please try again.")
+    }
+  }
+
   const handleRunSimulation = async () => {
     if (!modelId || !orgId) {
       toast.error("Please select a model first")
@@ -298,13 +502,10 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
     setSurvivalProbability(null)
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
+      const token = getAuthToken()
 
       if (!token) {
-        toast.error("Authentication token not found")
+        toast.error("Authentication token not found. Please log in again.")
         setIsSimulating(false)
         return
       }
@@ -681,9 +882,13 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
         <TabsContent value="drivers" className="space-y-4 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
-              <CardTitle>Configure Key Drivers</CardTitle>
+              <CardTitle>
+                {forecastMode === "deterministic" ? "Configure Drivers (Deterministic)" : "Configure Key Drivers (Monte Carlo)"}
+              </CardTitle>
               <CardDescription>
-                Set uncertainty ranges and probability distributions for each financial driver
+                {forecastMode === "deterministic" 
+                  ? "Set mean values for deterministic forecast (single-point estimates)"
+                  : "Set uncertainty ranges and probability distributions for each financial driver"}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -1034,16 +1239,18 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
 
         {/* Fan Chart */}
         <TabsContent value="fanChart" className="space-y-4 overflow-x-auto overflow-y-visible">
-          <Card>
-            <CardHeader>
-              <CardTitle>Cash Flow Fan Chart</CardTitle>
-              <CardDescription>
-                Probabilistic cash flow projections with 5th-95th percentile confidence bands
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300} className="min-h-[300px] sm:min-h-[400px]">
-                <AreaChart data={chartData}>
+          {chartData && chartData.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Cash Flow Fan Chart - Probabilistic Forecast</CardTitle>
+                <CardDescription>
+                  Probabilistic cash flow projections with 5th-95th percentile confidence bands. 
+                  Shows the range of possible outcomes from Monte Carlo simulations.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300} className="min-h-[300px] sm:min-h-[400px]">
+                  <AreaChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
                   <YAxis />
@@ -1191,50 +1398,104 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                       return "N/A";
                     })()}
                   </div>
-                  <div className="text-xs text-muted-foreground">Relative to median</div>
+                  <div className="text-xs text-muted-foreground">Coefficient of variation relative to median</div>
                 </div>
               </div>
             </CardContent>
           </Card>
+          ) : (
+            <Card>
+              <CardContent className="p-12 text-center">
+                <BarChart3 className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">No Fan Chart Data Available</h3>
+                <p className="text-muted-foreground mb-4">
+                  Run a Monte Carlo simulation to generate percentile data for the fan chart visualization.
+                </p>
+                {forecastMode === "montecarlo" && (
+                  <Button onClick={() => handleRunSimulation()} disabled={isSimulating || !modelId || !orgId}>
+                    <Play className="mr-2 h-4 w-4" />
+                    Run Simulation
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* Sensitivity Analysis */}
         <TabsContent value="sensitivity" className="space-y-4 overflow-x-auto overflow-y-visible">
-          <Card>
-            <CardHeader>
-              <CardTitle>Tornado Chart - Sensitivity Analysis</CardTitle>
-              <CardDescription>Impact of each driver on forecast uncertainty (sorted by magnitude)</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300} className="min-h-[300px] sm:min-h-[400px]">
-                <BarChart data={tornadoData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis dataKey="driver" type="category" width={150} />
-                  <Tooltip formatter={(value) => [`$${Math.abs(value as number).toLocaleString()}`, ""]} />
-                  <Legend />
-                  <Bar dataKey="low" fill="#ef4444" name="Downside Impact" stackId="a" />
-                  <Bar dataKey="high" fill="#10b981" name="Upside Impact" stackId="a" />
-                </BarChart>
-              </ResponsiveContainer>
+          {tornadoData && tornadoData.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Tornado Chart - Sensitivity Analysis</CardTitle>
+                <CardDescription>Impact of each driver on forecast uncertainty (sorted by magnitude). Higher correlation indicates stronger influence.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300} className="min-h-[300px] sm:min-h-[400px]">
+                  <BarChart data={tornadoData} layout="vertical" margin={{ top: 5, right: 30, left: 100, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      type="number" 
+                      domain={['auto', 'auto']}
+                      label={{ value: 'Impact (Correlation × Scale)', position: 'insideBottom', offset: -5 }}
+                    />
+                    <YAxis dataKey="driver" type="category" width={150} />
+                    <Tooltip 
+                      formatter={(value: any, name: string, props: any) => {
+                        if (name === 'Correlation') {
+                          return [`${(value as number).toFixed(4)}`, 'Correlation'];
+                        }
+                        return [`${Math.abs(value as number).toLocaleString()}`, name];
+                      }}
+                      labelFormatter={(label) => `Driver: ${label}`}
+                    />
+                    <Legend />
+                    <Bar dataKey="correlation" fill="#8884d8" name="Correlation" />
+                  </BarChart>
+                </ResponsiveContainer>
 
               <div className="mt-6 space-y-3">
-                <h4 className="font-semibold">Sensitivity Rankings:</h4>
-                {tornadoData.map((item, index) => (
+                <h4 className="font-semibold">Sensitivity Rankings (Sorted by Absolute Correlation):</h4>
+                {tornadoData.map((item: any, index: number) => (
                   <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
                     <div className="flex items-center gap-3">
-                      <Badge variant="outline">#{index + 1}</Badge>
+                      <Badge variant={index === 0 ? "default" : index === 1 ? "secondary" : "outline"}>#{index + 1}</Badge>
                       <span className="font-medium">{item.driver}</span>
                     </div>
                     <div className="text-right">
-                      <div className="font-semibold">${item.impact.toLocaleString()}</div>
-                      <div className="text-xs text-muted-foreground">Total impact range</div>
+                      <div className="font-semibold">
+                        {item.correlation > 0 ? '+' : ''}{item.correlation.toFixed(4)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Correlation | P-value: {item.p_value?.toFixed(4) || 'N/A'}
+                      </div>
                     </div>
                   </div>
                 ))}
-              </div>
-            </CardContent>
-          </Card>
+                  <p className="text-sm text-muted-foreground mt-4">
+                    <strong>Interpretation:</strong> Correlation values range from -1 to +1. Positive values indicate the driver increases the outcome, 
+                    negative values indicate it decreases the outcome. Higher absolute values indicate stronger influence.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="p-12 text-center">
+                <BarChart3 className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">No Sensitivity Data Available</h3>
+                <p className="text-muted-foreground mb-4">
+                  Run a Monte Carlo simulation to generate sensitivity analysis data for the tornado chart.
+                </p>
+                {forecastMode === "montecarlo" && (
+                  <Button onClick={() => handleRunSimulation()} disabled={isSimulating || !modelId || !orgId}>
+                    <Play className="mr-2 h-4 w-4" />
+                    Run Simulation
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* Explainability */}

@@ -181,6 +181,125 @@ export const monteCarloController = {
     }
   },
 
+  listMonteCarlo: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        throw new ValidationError('User not authenticated');
+      }
+
+      const { model_id: modelId } = req.params;
+
+      // Get model to verify access
+      const model = await prisma.model.findUnique({
+        where: { id: modelId },
+      });
+
+      if (!model) {
+        throw new NotFoundError('Model not found');
+      }
+
+      // Verify user has access to model's org
+      const role = await prisma.userOrgRole.findUnique({
+        where: {
+          userId_orgId: {
+            userId: req.user.id,
+            orgId: model.orgId,
+          },
+        },
+      });
+
+      if (!role) {
+        throw new ValidationError('No access to this model');
+      }
+
+      // Get all Monte Carlo jobs for this model directly by modelId
+      // Since MonteCarloJob has modelRunId, and ModelRun has modelId, we can join
+      const mcJobs = await prisma.monteCarloJob.findMany({
+        where: {
+          orgId: model.orgId,
+          modelRun: {
+            modelId: modelId,
+          },
+        },
+        include: {
+          modelRun: {
+            select: {
+              id: true,
+              status: true,
+              createdAt: true,
+              modelId: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 100, // Limit to last 100 jobs
+      });
+
+      // Get associated jobs for status and progress
+      const mcJobIds = mcJobs.map(j => j.id);
+      const jobs = await prisma.job.findMany({
+        where: {
+          objectId: { in: mcJobIds },
+          jobType: 'monte_carlo',
+        },
+        select: {
+          id: true,
+          objectId: true,
+          status: true,
+          progress: true,
+          createdAt: true,
+          finishedAt: true,
+        },
+      });
+
+      // Map jobs to Monte Carlo jobs
+      const jobMap = new Map(jobs.map(j => [j.objectId, j]));
+
+      // Format response
+      const monteCarloJobs = mcJobs.map(mcJob => {
+        const job = jobMap.get(mcJob.id);
+        let resultUrl = null;
+        
+        // Try to get signed URL if result exists
+        if (mcJob.resultS3) {
+          try {
+            // We'll get signed URL on-demand in getMonteCarlo, not here
+            resultUrl = null; // Will be null in list, fetched on detail view
+          } catch (error) {
+            // Ignore S3 errors
+          }
+        }
+
+        return {
+          id: mcJob.id,
+          jobId: job?.id || null,
+          modelRunId: mcJob.modelRunId,
+          numSimulations: mcJob.numSimulations,
+          status: mcJob.status || job?.status || 'queued',
+          progress: job?.progress || 0,
+          resultS3: mcJob.resultS3,
+          resultUrl, // Will be null in list view
+          hasResults: !!mcJob.resultS3,
+          hasPercentiles: !!mcJob.percentilesJson,
+          hasSensitivity: !!mcJob.sensitivityJson,
+          confidenceLevel: mcJob.confidenceLevel,
+          cpuSecondsEstimate: mcJob.cpuSecondsEstimate,
+          cpuSecondsActual: mcJob.cpuSecondsActual,
+          createdAt: mcJob.createdAt.toISOString(),
+          finishedAt: mcJob.finishedAt?.toISOString() || null,
+        };
+      });
+
+      res.json({
+        ok: true,
+        monteCarloJobs,
+        count: monteCarloJobs.length,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   getMonteCarlo: async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.user) {
@@ -215,19 +334,25 @@ export const monteCarloController = {
         throw new ValidationError('No access to this job');
       }
 
+      // result already includes sensitivityJson from service
       res.json({
         ok: true,
         jobId: result.jobId,
+        monteCarloJobId: result.monteCarloJobId,
         status: result.status,
         progress: result.progress,
         numSimulations: result.numSimulations,
         percentilesS3: result.resultS3,
         resultUrl: result.resultUrl,
-        summary: result.percentiles,
+        percentiles: result.percentiles,
+        summary: result.percentiles, // Alias for backward compatibility
+        sensitivityJson: result.sensitivityJson, // Sensitivity data for tornado chart
         survivalProbability: result.survivalProbability, // MVP FEATURE: Probability of survival, not point forecast
+        confidenceLevel: result.confidenceLevel,
         cpuSecondsEstimate: result.cpuSecondsEstimate,
-        createdAt: result.createdAt,
-        finishedAt: result.finishedAt,
+        cpuSecondsActual: result.cpuSecondsActual,
+        createdAt: result.createdAt?.toISOString() || new Date(result.createdAt).toISOString(),
+        finishedAt: result.finishedAt?.toISOString() || null,
       });
     } catch (error) {
       next(error);

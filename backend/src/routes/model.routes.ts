@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { modelController } from '../controllers/model.controller';
+import { monteCarloController } from '../controllers/montecarlo.controller';
 import { authenticate } from '../middlewares/auth';
 import { requireOrgAccess, requireFinanceOrAdmin } from '../middlewares/rbac';
 
@@ -8,6 +9,12 @@ const router = Router();
 router.post('/orgs/:org_id/models', authenticate, requireFinanceOrAdmin('org_id'), modelController.createModel);
 router.get('/orgs/:org_id/models', authenticate, requireOrgAccess('org_id'), modelController.getModels);
 router.delete('/orgs/:org_id/models/:model_id', authenticate, requireFinanceOrAdmin('org_id'), modelController.deleteModel);
+
+// Monte Carlo routes must come BEFORE /models/:model_id to prevent route conflicts
+// More specific routes should be registered first
+router.get('/models/:model_id/montecarlo', authenticate, monteCarloController.listMonteCarlo);
+router.post('/models/:model_id/montecarlo', authenticate, monteCarloController.createMonteCarlo);
+
 router.get('/models/:model_id', authenticate, modelController.getModel);
 router.patch('/models/:model_id', authenticate, modelController.updateModel);
 router.get('/models/:model_id/runs', authenticate, modelController.getModelRuns);

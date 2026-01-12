@@ -48,6 +48,44 @@ export const quotaMiddleware = async (
       return next();
     }
 
+    // Check if org has unlimited/enterprise plan
+    // For unlimited usage, skip all job quota checks
+    try {
+      const org = await prisma.org.findUnique({
+        where: { id: orgId },
+        select: { planTier: true },
+      });
+
+      // Check if org has enterprise plan (unlimited usage)
+      if (org?.planTier === 'enterprise') {
+        // Skip all quota checks for enterprise/unlimited orgs
+        return next();
+      }
+
+      // Also check if org has unlimited quotas set
+      const orgQuota = await prisma.orgQuota.findUnique({
+        where: { orgId },
+        select: {
+          monteCarloSimsLimit: true,
+          exportsLimit: true,
+          alertsLimit: true,
+        },
+      });
+
+      // If any quota is >= 999999999, consider it unlimited and skip job quotas too
+      if (orgQuota && (
+        (orgQuota.monteCarloSimsLimit >= 999999999) ||
+        (orgQuota.exportsLimit >= 999999999) ||
+        (orgQuota.alertsLimit >= 999999999)
+      )) {
+        // Skip all quota checks for unlimited orgs
+        return next();
+      }
+    } catch (error: any) {
+      // If org or quota check fails, continue with normal quota checks
+      console.warn('Error checking org plan/quota, using default limits:', error.message);
+    }
+
     // Get quota config for this job type
     const quota = QUOTA_CONFIG[jobType] || {};
 

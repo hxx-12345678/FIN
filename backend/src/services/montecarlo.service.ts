@@ -6,6 +6,7 @@ import prisma from '../config/database';
 import { getSignedUrlForS3 } from '../utils/s3';
 import { config } from '../config/env';
 import { MonteCarloJob } from '@prisma/client';
+import { logger } from '../utils/logger';
 
 /**
  * Compute deterministic paramsHash from Monte Carlo parameters
@@ -149,8 +150,18 @@ export const getMonteCarloResult = async (jobId: string) => {
     throw new NotFoundError('Monte Carlo job not found');
   }
 
+  // Create a virtual job object if not found (for backward compatibility)
+  // Note: This is a minimal job object for the return value, not a full Prisma Job
+  const virtualJob = {
+    id: jobId,
+    status: mcJob.status || 'queued',
+    progress: mcJob.status === 'done' ? 100 : 0,
+    jobType: 'monte_carlo' as const,
+    objectId: mcJob.id,
+  };
+  
   if (!job) {
-    throw new NotFoundError('Job not found');
+    job = virtualJob as any; // Type assertion needed for virtual job
   }
 
   // Get signed URL for result if available
@@ -159,14 +170,24 @@ export const getMonteCarloResult = async (jobId: string) => {
     try {
       resultUrl = await getSignedUrlForS3(mcJob.resultS3, 3600);
     } catch (error) {
-      // Ignore S3 errors
+      console.warn(`Failed to get signed URL for ${mcJob.resultS3}: ${error}`);
+      // Ignore S3 errors - continue with null URL
     }
   }
 
   // Parse percentiles JSON if available
+  // Handle both JSONB object and string formats
   let percentiles = null;
-  if (mcJob.percentilesJson && typeof mcJob.percentilesJson === 'object') {
-    percentiles = mcJob.percentilesJson;
+  if (mcJob.percentilesJson) {
+    try {
+      if (typeof mcJob.percentilesJson === 'string') {
+        percentiles = JSON.parse(mcJob.percentilesJson);
+      } else if (typeof mcJob.percentilesJson === 'object') {
+        percentiles = mcJob.percentilesJson;
+      }
+    } catch (parseError) {
+      console.warn(`Error parsing percentilesJson: ${parseError}`);
+    }
   }
 
   // Extract survival probability (MVP FEATURE: Probability of survival, not point forecast)
@@ -180,18 +201,69 @@ export const getMonteCarloResult = async (jobId: string) => {
     }
   }
 
+  // Get sensitivity data if available
+  // Check both sensitivity_json field and percentiles_json->tornado_sensitivity
+  let sensitivityJson = null;
+  
+  // First, try sensitivity_json field (preferred)
+  if (mcJob.sensitivityJson) {
+    try {
+      sensitivityJson = typeof mcJob.sensitivityJson === 'string'
+        ? JSON.parse(mcJob.sensitivityJson)
+        : mcJob.sensitivityJson;
+    } catch (parseError) {
+      console.warn(`Error parsing sensitivityJson: ${parseError}`);
+    }
+  }
+  
+  // Fallback: extract from percentiles_json if sensitivity_json is not available
+  if (!sensitivityJson && percentiles && typeof percentiles === 'object') {
+    const percentilesObj = percentiles as any;
+    if (percentilesObj.tornado_sensitivity || percentilesObj.tornadoSensitivity) {
+      const tornadoSens = percentilesObj.tornado_sensitivity || percentilesObj.tornadoSensitivity;
+      // Convert dict format to array format for frontend
+      if (typeof tornadoSens === 'object' && !Array.isArray(tornadoSens)) {
+        const sensitivityArray = Object.entries(tornadoSens).map(([driver, data]: [string, any]) => ({
+          driver,
+          correlation: data.pearson_correlation || data.correlation || 0.0,
+          spearman_correlation: data.spearman_correlation || 0.0,
+          abs_correlation: data.abs_correlation || Math.abs(data.pearson_correlation || data.correlation || 0.0),
+          p_value: data.p_value || 0.0,
+        }));
+        sensitivityJson = sensitivityArray;
+      } else if (Array.isArray(tornadoSens)) {
+        sensitivityJson = tornadoSens;
+      }
+    }
+  }
+
+  // Ensure progress is a number
+  // If job is done, progress should be 100
+  let progress = typeof job.progress === 'number' ? job.progress : (typeof job.progress === 'string' ? parseFloat(job.progress) || 0 : 0);
+  
+  // If job status is 'done' or 'completed', ensure progress is 100
+  if ((job.status === 'done' || job.status === 'completed' || mcJob.status === 'done') && progress < 100) {
+    logger?.warn?.(`Job ${job.id} is done but progress is ${progress}%, setting to 100%`);
+    progress = 100;
+  }
+  
+  progress = Math.max(0, Math.min(100, progress)); // Ensure progress is between 0 and 100
+
   return {
     jobId: job.id,
     monteCarloJobId: mcJob.id,
     orgId: mcJob.orgId,
-    status: mcJob.status,
-    progress: job.progress || 0,
+    status: mcJob.status || job.status || 'queued',
+    progress,
     numSimulations: mcJob.numSimulations,
     resultS3: mcJob.resultS3,
     resultUrl,
     percentiles,
+    sensitivityJson, // Add sensitivity data for tornado chart
     survivalProbability, // MVP FEATURE: Probability of survival, not point forecast
+    confidenceLevel: mcJob.confidenceLevel,
     cpuSecondsEstimate: mcJob.cpuSecondsEstimate,
+    cpuSecondsActual: mcJob.cpuSecondsActual,
     createdAt: mcJob.createdAt,
     finishedAt: mcJob.finishedAt,
   };

@@ -42,26 +42,55 @@ export const aicfoController = {
       }
 
       const { orgId } = req.params;
-      const { modelRunId, goal, constraints } = req.body;
+      const { modelRunId, goal, constraints, context } = req.body;
 
       if (!goal) {
         throw new ValidationError('goal is required');
       }
 
-      const plan = await aicfoService.generatePlan(
+      // Set timeout to prevent connection reset - wrap in promise
+      const planPromise = aicfoService.generatePlan(
         orgId,
         req.user.id,
         {
           modelRunId,
           goal,
           constraints,
+          context, // Support context parameter from board-reporting
         }
       );
 
-      res.status(201).json({
-        ok: true,
-        plan,
-      });
+      // Add timeout handling
+      const timeoutId = setTimeout(() => {
+        // Don't actually timeout - let the service handle it
+        // But log a warning if it's taking too long
+        console.warn('[AICFO] Plan generation taking longer than expected');
+      }, 55000); // 55 seconds
+
+      try {
+        const plan = await planPromise;
+        clearTimeout(timeoutId);
+
+        res.status(201).json({
+          ok: true,
+          plan,
+        });
+      } catch (serviceError) {
+        clearTimeout(timeoutId);
+        
+        // Handle timeout specifically
+        if (serviceError instanceof Error && serviceError.message.includes('timeout')) {
+          return res.status(504).json({
+            ok: false,
+            error: {
+              code: 'TIMEOUT',
+              message: 'AI plan generation is taking longer than expected. Please try again with a simpler request.',
+            },
+          });
+        }
+        
+        throw serviceError;
+      }
     } catch (error) {
       next(error);
     }

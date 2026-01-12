@@ -502,14 +502,54 @@ def handle_monte_carlo(job_id: str, org_id: str, object_id: str, logs: dict):
                 percentiles_data['confidence_intervals'] = {}
             
             # Calculate tornado sensitivity using driver samples
+            tornado_sensitivity = {}
+            sensitivity_json_str = json.dumps([], separators=(',', ':'))  # Initialize to empty array
+            
             try:
-                tornado_sensitivity = compute_tornado_sensitivity(
-                    results, drivers, driver_samples, months
-                )
-                percentiles_data['tornado_sensitivity'] = tornado_sensitivity
+                if driver_samples and len(driver_samples) > 0:
+                    tornado_sensitivity = compute_tornado_sensitivity(
+                        results, drivers, driver_samples, months
+                    )
+                    percentiles_data['tornado_sensitivity'] = tornado_sensitivity
+                    
+                    # Also format for sensitivity_json field (array format for frontend)
+                    # Convert dict format to array format for easier frontend consumption
+                    sensitivity_array = []
+                    for driver_name, sensitivity_data in tornado_sensitivity.items():
+                        # Calculate p-value using statistical test
+                        try:
+                            from scipy.stats import pearsonr
+                            if driver_name in driver_samples:
+                                driver_values = driver_samples[driver_name][:, -1]  # Last month
+                                final_cash = results[:, -1]
+                                if len(driver_values) > 2 and np.std(driver_values) > 1e-10:
+                                    _, p_value = pearsonr(driver_values, final_cash)
+                                else:
+                                    p_value = 1.0
+                            else:
+                                p_value = 1.0
+                        except Exception as p_error:
+                            logger.warning(f"Error calculating p-value for {driver_name}: {str(p_error)}")
+                            p_value = 1.0
+                        
+                        sensitivity_array.append({
+                            'driver': driver_name,
+                            'correlation': sensitivity_data.get('pearson_correlation', 0.0),
+                            'spearman_correlation': sensitivity_data.get('spearman_correlation', 0.0),
+                            'abs_correlation': sensitivity_data.get('abs_correlation', 0.0),
+                            'p_value': float(p_value) if not np.isnan(p_value) else 1.0,
+                        })
+                    
+                    # Store as JSON string for sensitivity_json field
+                    sensitivity_json_str = json.dumps(sensitivity_array, separators=(',', ':'))
+                    logger.info(f"Computed sensitivity for {len(sensitivity_array)} drivers")
+                else:
+                    logger.warning("No driver_samples available for sensitivity analysis")
+                    percentiles_data['tornado_sensitivity'] = {}
             except Exception as e:
-                logger.warning(f"Error computing tornado sensitivity: {str(e)}")
+                logger.warning(f"Error computing tornado sensitivity: {str(e)}", exc_info=True)
                 percentiles_data['tornado_sensitivity'] = {}
+                sensitivity_json_str = json.dumps([], separators=(',', ':'))
             
             # Add distribution definitions metadata
             percentiles_data['distribution_definitions'] = DISTRIBUTION_DEFINITIONS
@@ -537,32 +577,56 @@ def handle_monte_carlo(job_id: str, org_id: str, object_id: str, logs: dict):
             percentiles_json_full = json.dumps(percentiles_data, separators=(',', ':'))
             
             # Update Monte Carlo job - CRITICAL: Commit this first
+            # Save sensitivity_json separately for frontend access
             try:
                 cursor.execute("""
                     UPDATE monte_carlo_jobs
                     SET status = 'done',
                         result_s3 = %s,
-                        percentiles_json = %s,
+                        percentiles_json = %s::jsonb,
+                        sensitivity_json = %s::jsonb,
                         cpu_seconds_estimate = %s,
+                        cpu_seconds_actual = %s,
                         finished_at = NOW()
                     WHERE id = %s
-                """, (result_key, percentiles_json_full, float(cpu_seconds), mc_job_id))
+                """, (result_key, percentiles_json_full, sensitivity_json_str, float(cpu_seconds), float(cpu_seconds), mc_job_id))
                 conn.commit()
-                logger.info(f"Monte Carlo job {mc_job_id} marked as done and committed")
+                logger.info(f"Monte Carlo job {mc_job_id} marked as done and committed with sensitivity data")
             except Exception as update_error:
                 # Rollback and retry
                 conn.rollback()
                 logger.warning(f"Error updating monte_carlo_jobs, retrying: {str(update_error)}")
-                cursor.execute("""
-                    UPDATE monte_carlo_jobs
-                    SET status = 'done',
-                        result_s3 = %s,
-                        percentiles_json = %s,
-                        cpu_seconds_estimate = %s,
-                        finished_at = NOW()
-                    WHERE id = %s
-                """, (result_key, percentiles_json_full, float(cpu_seconds), mc_job_id))
-                conn.commit()
+                try:
+                    cursor.execute("""
+                        UPDATE monte_carlo_jobs
+                        SET status = 'done',
+                            result_s3 = %s,
+                            percentiles_json = %s::jsonb,
+                            sensitivity_json = %s::jsonb,
+                            cpu_seconds_estimate = %s,
+                            cpu_seconds_actual = %s,
+                            finished_at = NOW()
+                        WHERE id = %s
+                    """, (result_key, percentiles_json_full, sensitivity_json_str, float(cpu_seconds), float(cpu_seconds), mc_job_id))
+                    conn.commit()
+                except Exception as retry_error:
+                    logger.error(f"Failed to update monte_carlo_jobs even after retry: {str(retry_error)}")
+                    # Try without sensitivity_json as fallback
+                    try:
+                        cursor.execute("""
+                            UPDATE monte_carlo_jobs
+                            SET status = 'done',
+                                result_s3 = %s,
+                                percentiles_json = %s::jsonb,
+                                cpu_seconds_estimate = %s,
+                                finished_at = NOW()
+                            WHERE id = %s
+                        """, (result_key, percentiles_json_full, float(cpu_seconds), mc_job_id))
+                        conn.commit()
+                        logger.warning(f"Updated monte_carlo_jobs without sensitivity_json due to error")
+                    except Exception as fallback_error:
+                        logger.error(f"Failed even fallback update: {str(fallback_error)}")
+                        raise
             
             # Record billing usage (non-critical - use separate transaction)
             try:
@@ -576,25 +640,41 @@ def handle_monte_carlo(job_id: str, org_id: str, object_id: str, logs: dict):
                 logger.warning(f"Error recording billing usage (non-critical, job already saved): {str(billing_error)}")
             
             # Update job status (non-critical - use separate transaction)
+            # CRITICAL: Set progress to 100 for completed jobs
             try:
                 cursor.execute("""
                     UPDATE jobs 
-                    SET progress = 100, status = 'done', updated_at = NOW(), logs = %s 
+                    SET progress = 100, status = 'done', updated_at = NOW(), finished_at = NOW(), logs = %s::jsonb
                     WHERE id = %s
                 """, (json.dumps({
                     **logs, 
                     'status': 'completed',
                     'resultS3': result_key,
                     'cpuSeconds': cpu_seconds,
-                    'months': months
+                    'cpuSecondsActual': cpu_seconds,
+                    'months': months,
+                    'numSimulations': num_simulations,
+                    'hasSensitivity': len(tornado_sensitivity) > 0,
+                    'sensitivityDrivers': len(tornado_sensitivity),
                 }), job_id))
                 conn.commit()
+                logger.info(f"Job {job_id} marked as done with progress 100%")
             except Exception as job_update_error:
                 try:
                     conn.rollback()
-                except:
-                    pass
-                logger.warning(f"Error updating job status (non-critical, monte carlo job already saved): {str(job_update_error)}")
+                    # Retry with simpler log structure
+                    cursor.execute("""
+                        UPDATE jobs 
+                        SET progress = 100, status = 'done', updated_at = NOW(), finished_at = NOW(), logs = %s::jsonb
+                        WHERE id = %s
+                    """, (json.dumps({
+                        'status': 'completed',
+                        'resultS3': result_key,
+                    }), job_id))
+                    conn.commit()
+                    logger.info(f"Job {job_id} updated on retry with progress 100%")
+                except Exception as retry_error:
+                    logger.warning(f"Error updating job status (non-critical, monte carlo job already saved): {str(retry_error)}")
             
             logger.info(f"✅ Monte Carlo job {mc_job_id} completed: {num_simulations} sims, {cpu_seconds:.2f}s CPU")
             

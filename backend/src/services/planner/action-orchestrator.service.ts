@@ -416,24 +416,8 @@ export const actionOrchestrator = {
         }
 
         case 'generate_recommendations': {
-          // Generate AI-CFO plan
-          const plan = await prisma.aICFOPlan.create({
-            data: {
-              orgId,
-              modelRunId: modelRunId || null,
-              name: `AI-CFO Plan: ${action.params.goal}`,
-              description: `Generated plan`,
-              planJson: {
-                goal: action.params.goal,
-                constraints: action.params.constraints,
-                stagedChanges: [],
-              },
-              status: 'draft',
-              createdById: userId,
-            },
-          });
-
-          results.push({ planId: plan.id });
+          // AI-CFO plan is handled by aicfo.service.ts, so we just return acknowledgment
+          results.push({ recommendationRequested: true, goal: action.params.goal });
           break;
         }
 

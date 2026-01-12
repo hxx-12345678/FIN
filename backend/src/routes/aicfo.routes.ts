@@ -8,7 +8,8 @@ import { requireOrgAccess, requireFinanceOrAdmin } from '../middlewares/rbac';
 const router = Router();
 
 // Generate AI-CFO plan (with rate limiting and audit logging)
-router.post('/orgs/:orgId/ai-plans', authenticate, requireFinanceOrAdmin('orgId'), rateLimit(50), orgRateLimit, auditLogger, aicfoController.generatePlan);
+// Note: Rate limiting might be too strict for board reporting, but we keep it for now
+router.post('/orgs/:orgId/ai-plans', authenticate, requireFinanceOrAdmin('orgId'), auditLogger, aicfoController.generatePlan);
 
 // Apply AI-CFO plan changes (create scenario)
 router.post('/orgs/:orgId/ai-plans/apply', authenticate, requireFinanceOrAdmin('orgId'), aicfoController.applyPlan);

@@ -40,7 +40,9 @@ import {
   FileCheck,
   Loader2,
   AlertCircle,
+  Info,
 } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { StagedChangesPanel } from "./ai-assistant/staged-changes-panel"
 import { useStagedChanges } from "@/hooks/use-staged-changes"
 import { toast } from "sonner"
@@ -511,22 +513,10 @@ export function AIAssistant() {
           }
         }
 
-        // Add accounting system suggestion ONLY if user has NO financial data at all
-        // If user has CSV-imported data, they don't need to connect accounting system
-        if (!hasFinancialData && !responseText.toLowerCase().includes("connect") && !responseText.toLowerCase().includes("accounting")) {
-          responseText += "\n\n💡 **To dive deeper and get more accurate insights**, I recommend connecting your accounting system or importing your financial data via CSV. This will allow me to:\n"
-          responseText += "• Analyze your real financial transactions\n"
-          responseText += "• Provide personalized recommendations based on your actual data\n"
-          responseText += "• Track trends and patterns specific to your business\n"
-          responseText += "• Generate more accurate forecasts and scenarios\n\n"
-          responseText += "**Connect your accounting system or import CSV data** to unlock the full potential of AI CFO insights!"
-        } else if (hasFinancialData && !hasConnectedAccounting && !responseText.toLowerCase().includes("connect") && !responseText.toLowerCase().includes("accounting")) {
-          // User has CSV data but no live integrations - suggest live sync for real-time updates
-          responseText += "\n\n💡 **For real-time data sync and automatic updates**, consider connecting your accounting system. This will:\n"
-          responseText += "• Automatically sync transactions without manual CSV imports\n"
-          responseText += "• Provide real-time financial insights\n"
-          responseText += "• Keep your data always up-to-date\n"
-        }
+        // Only add accounting system suggestion ONCE per session if user has NO financial data
+        // Don't spam every response with this message
+        // Note: We'll show it in the initial message or first response only, not every time
+        // Removed repetitive suggestion to improve user experience
 
         const aiResponse: Message = {
           id: (Date.now() + 1).toString(),
@@ -716,6 +706,7 @@ export function AIAssistant() {
   }
 
   return (
+    <TooltipProvider>
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -745,10 +736,31 @@ export function AIAssistant() {
         </Alert>
       )}
 
+      {/* Help Section */}
+      <Card className="bg-blue-50/50 border-blue-200">
+        <CardContent className="pt-6">
+          <div className="flex items-start gap-3">
+            <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+            <div className="space-y-2 text-sm">
+              <p className="font-semibold text-blue-900">How AI CFO Assistant Works:</p>
+              <div className="space-y-1 text-blue-800">
+                <p><strong>💬 Chat Tab:</strong> Ask financial questions and get AI-powered insights. Example: "What's my runway?" or "How can I reduce burn rate?"</p>
+                <p><strong>✅ Staged Changes Tab:</strong> Review detailed AI recommendations before implementing. Each recommendation shows impact, reasoning, and data sources. Approve or reject changes here.</p>
+                <p><strong>📋 Tasks Tab:</strong> Actionable tasks created from approved recommendations. Track your financial action items and mark them complete as you implement them.</p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <Tabs defaultValue="chat" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="chat">Chat</TabsTrigger>
+          <TabsTrigger value="chat">
+            <MessageSquare className="h-4 w-4 mr-2" />
+            Chat
+          </TabsTrigger>
           <TabsTrigger value="tasks">
+            <FileCheck className="h-4 w-4 mr-2" />
             Tasks
             {tasks.length > 0 && (
               <Badge variant="secondary" className="ml-2">
@@ -757,6 +769,7 @@ export function AIAssistant() {
             )}
           </TabsTrigger>
           <TabsTrigger value="staged-changes">
+            <CheckCircle className="h-4 w-4 mr-2" />
             Staged Changes
             {pendingCount > 0 && (
               <Badge variant="destructive" className="ml-2">
@@ -967,8 +980,21 @@ export function AIAssistant() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>AI-Generated Tasks</CardTitle>
-                  <CardDescription>Tasks created from AI CFO recommendations</CardDescription>
+                  <CardTitle className="flex items-center gap-2">
+                    AI-Generated Tasks
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info className="h-4 w-4 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-md">
+                        <p className="font-semibold mb-2">What are AI-Generated Tasks?</p>
+                        <p className="text-sm mb-2">When AI CFO provides actionable recommendations (like "Reduce burn rate by 10%"), they automatically become tasks here.</p>
+                        <p className="text-sm mb-2"><strong>Why use this?</strong> Track and manage your financial action items in one place. Mark tasks as complete as you implement them.</p>
+                        <p className="text-sm"><strong>Tip:</strong> Ask specific questions like "Create a plan to extend runway" to get actionable tasks.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </CardTitle>
+                  <CardDescription>Actionable tasks created from AI CFO recommendations</CardDescription>
                 </div>
                 <Button onClick={() => setShowTaskDialog(true)}>
                   <Plus className="h-4 w-4 mr-2" />
@@ -1089,6 +1115,28 @@ export function AIAssistant() {
         </TabsContent>
 
         <TabsContent value="staged-changes" className="space-y-4">
+          <Card className="bg-muted/30 border-dashed">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3">
+                <Info className="h-5 w-5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <div className="space-y-2 text-sm">
+                  <p className="font-semibold">What are Staged Changes?</p>
+                  <p className="text-muted-foreground">
+                    Staged Changes are detailed AI recommendations that you can review before implementing. Each recommendation includes:
+                  </p>
+                  <ul className="list-disc list-inside space-y-1 text-muted-foreground ml-2">
+                    <li><strong>Action:</strong> What to do (e.g., "Reduce burn rate by 10%")</li>
+                    <li><strong>Impact:</strong> Expected financial impact (e.g., "+2 months runway")</li>
+                    <li><strong>Reasoning:</strong> Why this recommendation matters</li>
+                    <li><strong>Data Sources:</strong> What financial data supports this (auditability)</li>
+                  </ul>
+                  <p className="text-muted-foreground mt-2">
+                    <strong>Workflow:</strong> Review → Approve → Tasks are created → Implement → Mark tasks complete
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
           <StagedChangesPanel />
         </TabsContent>
 
@@ -1187,5 +1235,6 @@ export function AIAssistant() {
         </DialogContent>
       </Dialog>
     </div>
+    </TooltipProvider>
   )
 }

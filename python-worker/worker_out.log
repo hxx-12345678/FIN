@@ -1,0 +1,953 @@
+[2026-01-12 10:01:21] [INFO] 🚀 FinaPilot Python Worker started
+[2026-01-12 10:01:21] [INFO] 📊 Polling interval: 0.5 seconds
+[2026-01-12 10:01:21] [INFO] ⚙️  Worker concurrency: 4
+[2026-01-12 10:01:21] [INFO] 🆔 Worker ID: default
+[2026-01-12 10:01:22] [INFO] ✅ Database connection successful
+[2026-01-12 10:01:22] [INFO] ✅ 'jobs' table verified
+[2026-01-12 10:01:22] [INFO] 🔍 Checking for stuck jobs...
+[2026-01-12 10:01:23] [INFO] ✅ Reserved job c1144793-52e0-4279-909a-91876cb68f15 (type: aicfo_chat)
+[2026-01-12 10:01:23] [INFO] Processing AICFO Chat job c1144793-52e0-4279-909a-91876cb68f15 for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 10:01:23] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 10:01:36] [INFO] LLM call (gemini-2.5-flash) took 12.47s
+[2026-01-12 10:01:36] [ERROR] Failed to parse LLM JSON response: Unterminated string starting at: line 7 column 17 (char 291)
+[2026-01-12 10:01:36] [ERROR] Raw content (first 500 chars): {
+  "recommendations": [
+    {
+      "type": "runway",
+      "title": "Acknowledge Cash Flow Positive Status",
+      "summary": "Recognize that the company is generating significant cash, rendering the traditional 'runway' concept (time until cash depletion) inapplicable.",
+      "action": "
+[2026-01-12 10:01:36] [INFO] Successfully completed AICFO Chat job c1144793-52e0-4279-909a-91876cb68f15
+[2026-01-12 10:01:36] [INFO] ✅ Job c1144793-52e0-4279-909a-91876cb68f15 completed
+[2026-01-12 10:01:40] [INFO] ✅ Reserved job 4a2428cf-fc52-4991-9a61-d05618a63eef (type: aicfo_chat)
+[2026-01-12 10:01:40] [INFO] Processing AICFO Chat job 4a2428cf-fc52-4991-9a61-d05618a63eef for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 10:01:41] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 10:01:50] [INFO] ✅ Reserved job 5eb8fcaa-b938-4846-af3d-bcba24f2ac0a (type: aicfo_chat)
+[2026-01-12 10:01:51] [INFO] Processing AICFO Chat job 5eb8fcaa-b938-4846-af3d-bcba24f2ac0a for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 10:01:51] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 10:01:52] [INFO] LLM call (gemini-2.5-flash) took 11.69s
+[2026-01-12 10:01:52] [ERROR] Failed to parse LLM JSON response: Unterminated string starting at: line 7 column 17 (char 291)
+[2026-01-12 10:01:52] [ERROR] Raw content (first 500 chars): {
+  "recommendations": [
+    {
+      "type": "runway",
+      "title": "Acknowledge and Leverage Positive Cash Flow",
+      "summary": "Recognize that your detailed monthly projections indicate positive net income, meaning you are currently generating cash, not burning it.",
+      "action": "Comm
+[2026-01-12 10:01:52] [INFO] Successfully completed AICFO Chat job 4a2428cf-fc52-4991-9a61-d05618a63eef
+[2026-01-12 10:01:53] [INFO] ✅ Job 4a2428cf-fc52-4991-9a61-d05618a63eef completed
+[2026-01-12 10:01:58] [INFO] ✅ Reserved job b0a475ef-7d85-4cfe-93ad-790918fdc9d4 (type: aicfo_chat)
+[2026-01-12 10:02:00] [INFO] Processing AICFO Chat job b0a475ef-7d85-4cfe-93ad-790918fdc9d4 for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 10:02:00] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 10:02:06] [INFO] LLM call (gemini-2.5-flash) took 15.36s
+[2026-01-12 10:02:06] [ERROR] Failed to parse LLM JSON response: Unterminated string starting at: line 7 column 17 (char 315)
+[2026-01-12 10:02:06] [ERROR] Raw content (first 500 chars): {
+  "recommendations": [
+    {
+      "type": "strategy",
+      "title": "Evaluate Strategic Growth Capital Needs",
+      "summary": "Given strong profitability and cash flow, assess if funding is needed to capitalize on specific, accelerated growth opportunities rather than operational solvency.",
+      "action": "Conduct a thorough
+[2026-01-12 10:02:06] [INFO] Successfully completed AICFO Chat job 5eb8fcaa-b938-4846-af3d-bcba24f2ac0a
+[2026-01-12 10:02:07] [INFO] ✅ Job 5eb8fcaa-b938-4846-af3d-bcba24f2ac0a completed
+[2026-01-12 10:02:15] [INFO] LLM call (gemini-2.5-flash) took 15.07s
+[2026-01-12 10:02:15] [ERROR] Failed to parse LLM JSON response: Expecting property name enclosed in double quotes: line 6 column 143 (char 260)
+[2026-01-12 10:02:15] [ERROR] Raw content (first 500 chars): {
+  "recommendations": [
+    {
+      "type": "revenue",
+      "title": "Accelerate Customer Acquisition & Expansion",
+      "summary": "Leverage exceptional unit economics (LTV:CAC of 24x, 0.5-month payback) to aggressively scale sales and marketing efforts.",
+[2026-01-12 10:02:15] [INFO] Successfully completed AICFO Chat job b0a475ef-7d85-4cfe-93ad-790918fdc9d4
+[2026-01-12 10:02:16] [INFO] ✅ Job b0a475ef-7d85-4cfe-93ad-790918fdc9d4 completed
+[2026-01-12 10:02:24] [INFO] ✅ Reserved job 70b5abad-6a36-4a20-ae0c-006ba2a29439 (type: aicfo_chat)
+[2026-01-12 10:02:25] [INFO] Processing AICFO Chat job 70b5abad-6a36-4a20-ae0c-006ba2a29439 for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 10:02:25] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 10:02:39] [INFO] LLM call (gemini-2.5-flash) took 14.53s
+[2026-01-12 10:02:39] [ERROR] Failed to parse LLM JSON response: Unterminated string starting at: line 8 column 7 (char 596)
+[2026-01-12 10:02:39] [ERROR] Raw content (first 500 chars): {
+  "recommendations": [
+    {
+      "type": "revenue",
+      "title": "Optimize Growth Strategies to Sustain Momentum",
+      "summary": "Capitalize on the strong monthly revenue growth by refining customer acquisition and retention tactics.",
+      "action": "Analyze the specific drivers behind the recent surges in monthly revenue (e.g., March, May) and replicate successful strategies across marketing and sales channels. Implement A/B testing on new campaigns and refine sales pitches based on 
+[2026-01-12 10:02:39] [INFO] Successfully completed AICFO Chat job 70b5abad-6a36-4a20-ae0c-006ba2a29439
+[2026-01-12 10:02:40] [INFO] ✅ Job 70b5abad-6a36-4a20-ae0c-006ba2a29439 completed
+[2026-01-12 10:02:47] [INFO] ✅ Reserved job 4fb5fecd-b828-4a65-bee4-506c36c535be (type: aicfo_chat)
+[2026-01-12 10:02:48] [INFO] Processing AICFO Chat job 4fb5fecd-b828-4a65-bee4-506c36c535be for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 10:02:48] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 10:02:58] [INFO] ✅ Reserved job c9077f37-0701-467e-9e8f-6cada3b66a73 (type: aicfo_chat)
+[2026-01-12 10:02:59] [INFO] Processing AICFO Chat job c9077f37-0701-467e-9e8f-6cada3b66a73 for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 10:02:59] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 10:03:04] [INFO] LLM call (gemini-2.5-flash) took 15.53s
+[2026-01-12 10:03:04] [ERROR] Failed to parse LLM JSON response: Unterminated string starting at: line 7 column 17 (char 262)
+[2026-01-12 10:03:04] [ERROR] Raw content (first 500 chars): {
+  "recommendations": [
+    {
+      "type": "cost",
+      "title": "Conduct Granular Operating Expense Audit",
+      "summary": "Perform a detailed analysis of all operating expenditures to identify specific areas for efficiency improvements.",
+      "action": "Categorize and analyze all monthly OPEX line items (e
+[2026-01-12 10:03:04] [INFO] Successfully completed AICFO Chat job 4fb5fecd-b828-4a65-bee4-506c36c535be
+[2026-01-12 10:03:04] [INFO] ✅ Job 4fb5fecd-b828-4a65-bee4-506c36c535be completed
+[2026-01-12 10:03:15] [INFO] LLM call (gemini-2.5-flash) took 15.20s
+[2026-01-12 10:03:15] [ERROR] Failed to parse LLM JSON response: Unterminated string starting at: line 7 column 17 (char 285)
+[2026-01-12 10:03:15] [ERROR] Raw content (first 500 chars): {
+  "recommendations": [
+    {
+      "type": "strategy",
+      "title": "Implement Integrated Accounting for Real-time Financials",
+      "summary": "Automate financial data capture and reporting to ensure real-time accuracy and reduce manual reconciliation efforts.",
+      "action": "Select and
+[2026-01-12 10:03:15] [INFO] Successfully completed AICFO Chat job c9077f37-0701-467e-9e8f-6cada3b66a73
+[2026-01-12 10:03:15] [INFO] ✅ Job c9077f37-0701-467e-9e8f-6cada3b66a73 completed
+[2026-01-12 10:03:43] [INFO] ✅ Reserved job 80996999-331e-4bc6-bc7e-3dcb8b598dd5 (type: aicfo_chat)
+[2026-01-12 10:03:44] [INFO] Processing AICFO Chat job 80996999-331e-4bc6-bc7e-3dcb8b598dd5 for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 10:03:44] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 10:03:57] [INFO] LLM call (gemini-2.5-flash) took 13.57s
+[2026-01-12 10:03:57] [ERROR] Failed to parse LLM JSON response: Expecting value: line 7 column 16 (char 301)
+[2026-01-12 10:03:57] [ERROR] Raw content (first 500 chars): {
+  "recommendations": [
+    {
+      "type": "revenue",
+      "title": "Optimize Customer Lifetime Value (LTV) and Reduce Churn",
+      "summary": "Implement targeted strategies to enhance customer retention and increase average revenue per user, leveraging the strong LTV:CAC ratio.",
+      "action":
+[2026-01-12 10:03:58] [INFO] Successfully completed AICFO Chat job 80996999-331e-4bc6-bc7e-3dcb8b598dd5
+[2026-01-12 10:03:58] [INFO] ✅ Job 80996999-331e-4bc6-bc7e-3dcb8b598dd5 completed
+[2026-01-12 10:04:24] [INFO] ✅ Reserved job e7797725-c631-48f3-a32f-cb308f96281c (type: aicfo_chat)
+[2026-01-12 10:04:24] [INFO] Processing AICFO Chat job e7797725-c631-48f3-a32f-cb308f96281c for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 10:04:25] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 10:04:38] [INFO] LLM call (gemini-2.5-flash) took 13.37s
+[2026-01-12 10:04:38] [ERROR] Failed to parse LLM JSON response: Unterminated string starting at: line 7 column 17 (char 308)
+[2026-01-12 10:04:38] [ERROR] Raw content (first 500 chars): {
+  "recommendations": [
+    {
+      "type": "strategy",
+      "title": "Evaluate Strategic Cash Deployment",
+      "summary": "With robust cash generation and a strong financial position, strategically evaluate how to best deploy excess capital for long-term growth and market leadership.",
+      "action": "Conduct a
+[2026-01-12 10:04:38] [INFO] Successfully completed AICFO Chat job e7797725-c631-48f3-a32f-cb308f96281c
+[2026-01-12 10:04:38] [INFO] ✅ Job e7797725-c631-48f3-a32f-cb308f96281c completed
+[2026-01-12 10:13:59] [INFO] ✅ Reserved job 612bf06c-2669-4169-b364-72391b6a6088 (type: aicfo_chat)
+[2026-01-12 10:14:00] [INFO] Processing AICFO Chat job 612bf06c-2669-4169-b364-72391b6a6088 for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 10:14:00] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 10:14:13] [INFO] LLM call (gemini-2.5-flash) took 13.45s
+[2026-01-12 10:14:13] [ERROR] Failed to parse LLM JSON response: Unterminated string starting at: line 7 column 17 (char 255)
+[2026-01-12 10:14:13] [ERROR] Raw content (first 500 chars): {
+  "recommendations": [
+    {
+      "type": "revenue",
+      "title": "Optimize Value-Based Pricing Strategy",
+      "summary": "Leverage robust profit margins and strong LTV to introduce premium pricing tiers or feature-rich packages.",
+      "action": "Conduct a comprehensive market
+[2026-01-12 10:14:13] [INFO] Successfully completed AICFO Chat job 612bf06c-2669-4169-b364-72391b6a6088
+[2026-01-12 10:14:13] [INFO] ✅ Job 612bf06c-2669-4169-b364-72391b6a6088 completed
+[2026-01-12 10:14:17] [INFO] ✅ Reserved job 7c230cbf-a3df-4b70-afec-36ac0ba049bb (type: aicfo_chat)
+[2026-01-12 10:14:17] [INFO] Processing AICFO Chat job 7c230cbf-a3df-4b70-afec-36ac0ba049bb for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 10:14:18] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 10:14:20] [WARNING] Gemini API (gemini-2.5-flash, v1beta) failed with key (status 429): Quota exceeded
+[2026-01-12 10:14:20] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyCe
+[2026-01-12 10:14:21] [WARNING] Gemini API (gemini-2.5-flash, v1beta) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 10:14:21] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyDp
+[2026-01-12 10:14:23] [WARNING] Gemini API (gemini-2.5-flash, v1beta) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:14:23] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1 and key starting with AIzaSyBh
+[2026-01-12 10:14:24] [WARNING] Gemini API (gemini-2.5-flash, v1) failed with key (status 429): Quota exceeded
+[2026-01-12 10:14:24] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1 and key starting with AIzaSyCe
+[2026-01-12 10:14:26] [WARNING] Gemini API (gemini-2.5-flash, v1) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 10:14:26] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1 and key starting with AIzaSyDp
+[2026-01-12 10:14:27] [WARNING] Gemini API (gemini-2.5-flash, v1) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:14:27] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1beta and key starting with AIzaSyBh
+[2026-01-12 10:14:28] [WARNING] Gemini API (gemini-2.5-pro, v1beta) failed with key (status 429): Quota exceeded
+[2026-01-12 10:14:28] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1beta and key starting with AIzaSyCe
+[2026-01-12 10:14:30] [WARNING] Gemini API (gemini-2.5-pro, v1beta) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 10:14:30] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1beta and key starting with AIzaSyDp
+[2026-01-12 10:14:31] [WARNING] Gemini API (gemini-2.5-pro, v1beta) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:14:31] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1 and key starting with AIzaSyBh
+[2026-01-12 10:14:33] [WARNING] Gemini API (gemini-2.5-pro, v1) failed with key (status 429): Quota exceeded
+[2026-01-12 10:14:33] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1 and key starting with AIzaSyCe
+[2026-01-12 10:14:34] [WARNING] Gemini API (gemini-2.5-pro, v1) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 10:14:34] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1 and key starting with AIzaSyDp
+[2026-01-12 10:14:36] [WARNING] Gemini API (gemini-2.5-pro, v1) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:14:36] [ERROR] Error in AICFO Chat job: All Gemini models, versions and keys failed. Last error: {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+Traceback (most recent call last):
+  File "D:\Fin\python-worker\jobs\aicfo_chat.py", line 203, in handle_aicfo_chat
+    raise Exception(f"All Gemini models, versions and keys failed. Last error: {last_error}")
+Exception: All Gemini models, versions and keys failed. Last error: {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:14:36] [INFO] ✅ Created query-specific fallback response for AICFO Chat job 7c230cbf-a3df-4b70-afec-36ac0ba049bb
+[2026-01-12 10:14:36] [INFO] ✅ Job 7c230cbf-a3df-4b70-afec-36ac0ba049bb completed
+[2026-01-12 10:14:39] [INFO] ✅ Reserved job a74bea2a-4151-4e5d-a4de-01213e226d55 (type: aicfo_chat)
+[2026-01-12 10:14:40] [INFO] Processing AICFO Chat job a74bea2a-4151-4e5d-a4de-01213e226d55 for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 10:14:40] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 10:14:42] [WARNING] Gemini API (gemini-2.5-flash, v1beta) failed with key (status 429): Quota exceeded
+[2026-01-12 10:14:42] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyCe
+[2026-01-12 10:14:43] [WARNING] Gemini API (gemini-2.5-flash, v1beta) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 10:14:43] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyDp
+[2026-01-12 10:14:45] [WARNING] Gemini API (gemini-2.5-flash, v1beta) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:14:45] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1 and key starting with AIzaSyBh
+[2026-01-12 10:14:46] [WARNING] Gemini API (gemini-2.5-flash, v1) failed with key (status 429): Quota exceeded
+[2026-01-12 10:14:46] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1 and key starting with AIzaSyCe
+[2026-01-12 10:14:48] [WARNING] Gemini API (gemini-2.5-flash, v1) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 10:14:48] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1 and key starting with AIzaSyDp
+[2026-01-12 10:14:49] [WARNING] Gemini API (gemini-2.5-flash, v1) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:14:49] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1beta and key starting with AIzaSyBh
+[2026-01-12 10:14:50] [WARNING] Gemini API (gemini-2.5-pro, v1beta) failed with key (status 429): Quota exceeded
+[2026-01-12 10:14:50] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1beta and key starting with AIzaSyCe
+[2026-01-12 10:14:52] [WARNING] Gemini API (gemini-2.5-pro, v1beta) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 10:14:52] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1beta and key starting with AIzaSyDp
+[2026-01-12 10:14:53] [WARNING] Gemini API (gemini-2.5-pro, v1beta) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:14:53] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1 and key starting with AIzaSyBh
+[2026-01-12 10:14:55] [WARNING] Gemini API (gemini-2.5-pro, v1) failed with key (status 429): Quota exceeded
+[2026-01-12 10:14:55] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1 and key starting with AIzaSyCe
+[2026-01-12 10:14:57] [WARNING] Gemini API (gemini-2.5-pro, v1) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 10:14:57] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1 and key starting with AIzaSyDp
+[2026-01-12 10:14:58] [WARNING] Gemini API (gemini-2.5-pro, v1) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:14:58] [ERROR] Error in AICFO Chat job: All Gemini models, versions and keys failed. Last error: {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+Traceback (most recent call last):
+  File "D:\Fin\python-worker\jobs\aicfo_chat.py", line 203, in handle_aicfo_chat
+    raise Exception(f"All Gemini models, versions and keys failed. Last error: {last_error}")
+Exception: All Gemini models, versions and keys failed. Last error: {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:14:58] [INFO] ✅ Created query-specific fallback response for AICFO Chat job a74bea2a-4151-4e5d-a4de-01213e226d55
+[2026-01-12 10:14:58] [INFO] ✅ Job a74bea2a-4151-4e5d-a4de-01213e226d55 completed
+[2026-01-12 10:15:06] [INFO] ✅ Reserved job ab3a54af-9444-4ab8-940e-c95f5ea2115b (type: aicfo_chat)
+[2026-01-12 10:15:07] [INFO] Processing AICFO Chat job ab3a54af-9444-4ab8-940e-c95f5ea2115b for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 10:15:07] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 10:15:09] [WARNING] Gemini API (gemini-2.5-flash, v1beta) failed with key (status 429): Quota exceeded
+[2026-01-12 10:15:09] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyCe
+[2026-01-12 10:15:10] [WARNING] Gemini API (gemini-2.5-flash, v1beta) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 10:15:10] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyDp
+[2026-01-12 10:15:12] [WARNING] Gemini API (gemini-2.5-flash, v1beta) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:15:12] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1 and key starting with AIzaSyBh
+[2026-01-12 10:15:14] [WARNING] Gemini API (gemini-2.5-flash, v1) failed with key (status 429): Quota exceeded
+[2026-01-12 10:15:14] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1 and key starting with AIzaSyCe
+[2026-01-12 10:15:15] [WARNING] Gemini API (gemini-2.5-flash, v1) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 10:15:15] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1 and key starting with AIzaSyDp
+[2026-01-12 10:15:17] [WARNING] Gemini API (gemini-2.5-flash, v1) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:15:17] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1beta and key starting with AIzaSyBh
+[2026-01-12 10:15:18] [WARNING] Gemini API (gemini-2.5-pro, v1beta) failed with key (status 429): Quota exceeded
+[2026-01-12 10:15:18] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1beta and key starting with AIzaSyCe
+[2026-01-12 10:15:20] [WARNING] Gemini API (gemini-2.5-pro, v1beta) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 10:15:20] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1beta and key starting with AIzaSyDp
+[2026-01-12 10:15:21] [WARNING] Gemini API (gemini-2.5-pro, v1beta) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:15:21] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1 and key starting with AIzaSyBh
+[2026-01-12 10:15:22] [WARNING] Gemini API (gemini-2.5-pro, v1) failed with key (status 429): Quota exceeded
+[2026-01-12 10:15:22] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1 and key starting with AIzaSyCe
+[2026-01-12 10:15:24] [WARNING] Gemini API (gemini-2.5-pro, v1) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 10:15:24] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1 and key starting with AIzaSyDp
+[2026-01-12 10:15:25] [WARNING] Gemini API (gemini-2.5-pro, v1) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:15:25] [ERROR] Error in AICFO Chat job: All Gemini models, versions and keys failed. Last error: {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+Traceback (most recent call last):
+  File "D:\Fin\python-worker\jobs\aicfo_chat.py", line 203, in handle_aicfo_chat
+    raise Exception(f"All Gemini models, versions and keys failed. Last error: {last_error}")
+Exception: All Gemini models, versions and keys failed. Last error: {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:15:25] [INFO] ✅ Created query-specific fallback response for AICFO Chat job ab3a54af-9444-4ab8-940e-c95f5ea2115b
+[2026-01-12 10:15:25] [INFO] ✅ Job ab3a54af-9444-4ab8-940e-c95f5ea2115b completed
+[2026-01-12 10:15:33] [INFO] ✅ Reserved job 41d6393f-1f62-4f65-a143-9dfa6767d261 (type: aicfo_chat)
+[2026-01-12 10:15:34] [INFO] Processing AICFO Chat job 41d6393f-1f62-4f65-a143-9dfa6767d261 for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 10:15:34] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 10:15:36] [WARNING] Gemini API (gemini-2.5-flash, v1beta) failed with key (status 429): Quota exceeded
+[2026-01-12 10:15:36] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyCe
+[2026-01-12 10:15:37] [WARNING] Gemini API (gemini-2.5-flash, v1beta) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 10:15:37] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyDp
+[2026-01-12 10:15:39] [WARNING] Gemini API (gemini-2.5-flash, v1beta) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:15:39] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1 and key starting with AIzaSyBh
+[2026-01-12 10:15:40] [WARNING] Gemini API (gemini-2.5-flash, v1) failed with key (status 429): Quota exceeded
+[2026-01-12 10:15:40] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1 and key starting with AIzaSyCe
+[2026-01-12 10:15:41] [WARNING] Gemini API (gemini-2.5-flash, v1) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 10:15:41] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1 and key starting with AIzaSyDp
+[2026-01-12 10:15:43] [WARNING] Gemini API (gemini-2.5-flash, v1) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:15:43] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1beta and key starting with AIzaSyBh
+[2026-01-12 10:15:45] [WARNING] Gemini API (gemini-2.5-pro, v1beta) failed with key (status 429): Quota exceeded
+[2026-01-12 10:15:45] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1beta and key starting with AIzaSyCe
+[2026-01-12 10:15:46] [WARNING] Gemini API (gemini-2.5-pro, v1beta) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 10:15:46] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1beta and key starting with AIzaSyDp
+[2026-01-12 10:15:47] [WARNING] Gemini API (gemini-2.5-pro, v1beta) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:15:47] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1 and key starting with AIzaSyBh
+[2026-01-12 10:15:49] [WARNING] Gemini API (gemini-2.5-pro, v1) failed with key (status 429): Quota exceeded
+[2026-01-12 10:15:49] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1 and key starting with AIzaSyCe
+[2026-01-12 10:15:50] [WARNING] Gemini API (gemini-2.5-pro, v1) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 10:15:50] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1 and key starting with AIzaSyDp
+[2026-01-12 10:15:52] [WARNING] Gemini API (gemini-2.5-pro, v1) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:15:52] [ERROR] Error in AICFO Chat job: All Gemini models, versions and keys failed. Last error: {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+Traceback (most recent call last):
+  File "D:\Fin\python-worker\jobs\aicfo_chat.py", line 203, in handle_aicfo_chat
+    raise Exception(f"All Gemini models, versions and keys failed. Last error: {last_error}")
+Exception: All Gemini models, versions and keys failed. Last error: {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:15:52] [INFO] ✅ Created query-specific fallback response for AICFO Chat job 41d6393f-1f62-4f65-a143-9dfa6767d261
+[2026-01-12 10:15:52] [INFO] ✅ Job 41d6393f-1f62-4f65-a143-9dfa6767d261 completed
+[2026-01-12 10:18:12] [INFO] ✅ Reserved job c84028ee-6e06-46e3-8765-4f9a0f830e93 (type: aicfo_chat)
+[2026-01-12 10:18:12] [INFO] Processing AICFO Chat job c84028ee-6e06-46e3-8765-4f9a0f830e93 for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 10:18:12] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 10:18:15] [WARNING] Gemini API (gemini-2.5-flash, v1beta) failed with key (status 429): Quota exceeded
+[2026-01-12 10:18:15] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyCe
+[2026-01-12 10:18:18] [WARNING] Gemini API (gemini-2.5-flash, v1beta) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 10:18:18] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyDp
+[2026-01-12 10:18:21] [WARNING] Gemini API (gemini-2.5-flash, v1beta) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:18:21] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1 and key starting with AIzaSyBh
+[2026-01-12 10:18:23] [WARNING] Gemini API (gemini-2.5-flash, v1) failed with key (status 429): Quota exceeded
+[2026-01-12 10:18:23] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1 and key starting with AIzaSyCe
+[2026-01-12 10:18:26] [WARNING] Gemini API (gemini-2.5-flash, v1) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 10:18:26] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1 and key starting with AIzaSyDp
+[2026-01-12 10:18:28] [WARNING] Gemini API (gemini-2.5-flash, v1) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:18:28] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1beta and key starting with AIzaSyBh
+[2026-01-12 10:18:31] [WARNING] Gemini API (gemini-2.5-pro, v1beta) failed with key (status 429): Quota exceeded
+[2026-01-12 10:18:31] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1beta and key starting with AIzaSyCe
+[2026-01-12 10:18:33] [WARNING] Gemini API (gemini-2.5-pro, v1beta) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 10:18:33] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1beta and key starting with AIzaSyDp
+[2026-01-12 10:18:34] [WARNING] Gemini API (gemini-2.5-pro, v1beta) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:18:34] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1 and key starting with AIzaSyBh
+[2026-01-12 10:18:36] [WARNING] Gemini API (gemini-2.5-pro, v1) failed with key (status 429): Quota exceeded
+[2026-01-12 10:18:36] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1 and key starting with AIzaSyCe
+[2026-01-12 10:18:38] [WARNING] Gemini API (gemini-2.5-pro, v1) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 10:18:38] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1 and key starting with AIzaSyDp
+[2026-01-12 10:18:40] [WARNING] Gemini API (gemini-2.5-pro, v1) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:18:40] [ERROR] Error in AICFO Chat job: All Gemini models, versions and keys failed. Last error: {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+Traceback (most recent call last):
+  File "D:\Fin\python-worker\jobs\aicfo_chat.py", line 203, in handle_aicfo_chat
+    raise Exception(f"All Gemini models, versions and keys failed. Last error: {last_error}")
+Exception: All Gemini models, versions and keys failed. Last error: {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 10:18:40] [INFO] ✅ Created query-specific fallback response for AICFO Chat job c84028ee-6e06-46e3-8765-4f9a0f830e93
+[2026-01-12 10:18:40] [INFO] ✅ Job c84028ee-6e06-46e3-8765-4f9a0f830e93 completed
+[2026-01-12 16:55:49] [INFO] ✅ Reserved job 06d296a4-665a-45ee-aff3-1ef3fc6ede31 (type: aicfo_chat)
+[2026-01-12 16:55:49] [INFO] Processing AICFO Chat job 06d296a4-665a-45ee-aff3-1ef3fc6ede31 for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 16:55:49] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 16:56:03] [INFO] LLM call (gemini-2.5-flash) took 13.87s
+[2026-01-12 16:56:03] [ERROR] Failed to parse LLM JSON response: Unterminated string starting at: line 20 column 18 (char 1748)
+[2026-01-12 16:56:03] [ERROR] Raw content (first 500 chars): {
+  "recommendations": [
+    {
+      "type": "revenue",
+      "title": "Aggressively Scale Customer Acquisition",
+      "summary": "Leverage the exceptionally strong LTV/CAC ratio of 24x to significantly increase investment in proven customer acquisition channels.",
+      "action": "Allocate a substantial portion of current positive cash flow to expand sales and marketing efforts. This includes scaling successful digital campaigns, expanding the sales team, and exploring new, high-potential cust
+[2026-01-12 16:56:03] [INFO] Successfully completed AICFO Chat job 06d296a4-665a-45ee-aff3-1ef3fc6ede31
+[2026-01-12 16:56:03] [INFO] ✅ Job 06d296a4-665a-45ee-aff3-1ef3fc6ede31 completed
+[2026-01-12 17:08:30] [INFO] ✅ Reserved job d8f65030-7214-4889-87b0-1cb3824bda3a (type: aicfo_chat)
+[2026-01-12 17:08:31] [INFO] Processing AICFO Chat job d8f65030-7214-4889-87b0-1cb3824bda3a for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 17:08:31] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 17:08:45] [INFO] LLM call (gemini-2.5-flash) took 13.96s
+[2026-01-12 17:08:45] [ERROR] Failed to parse LLM JSON response: Unterminated string starting at: line 7 column 17 (char 276)
+[2026-01-12 17:08:45] [ERROR] Raw content (first 500 chars): {
+  "recommendations": [
+    {
+      "type": "strategy",
+      "title": "Strategic Capital Allocation for Accelerated Growth",
+      "summary": "Optimize the deployment of anticipated significant cash flows to maximize long-term value and market leadership.",
+      "action": "Develop a detailed capital allocation framework outlining potential
+[2026-01-12 17:08:45] [INFO] Successfully completed AICFO Chat job d8f65030-7214-4889-87b0-1cb3824bda3a
+[2026-01-12 17:08:45] [INFO] ✅ Job d8f65030-7214-4889-87b0-1cb3824bda3a completed
+[2026-01-12 17:08:52] [INFO] ✅ Reserved job 728bf5bc-b6d3-4b52-8337-d4bbcb726866 (type: aicfo_chat)
+[2026-01-12 17:08:52] [INFO] Processing AICFO Chat job 728bf5bc-b6d3-4b52-8337-d4bbcb726866 for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 17:08:52] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 17:09:06] [INFO] LLM call (gemini-2.5-flash) took 13.80s
+[2026-01-12 17:09:06] [ERROR] Failed to parse LLM JSON response: Expecting value: line 7 column 16 (char 314)
+[2026-01-12 17:09:06] [ERROR] Raw content (first 500 chars): {
+  "recommendations": [
+    {
+      "type": "revenue",
+      "title": "Aggressively Scale Customer Acquisition Channels",
+      "summary": "Capitalize on the exceptional LTV/CAC ratio and fast payback period by significantly increasing investment in high-performing marketing and sales channels.",
+      "action":
+[2026-01-12 17:09:06] [INFO] Successfully completed AICFO Chat job 728bf5bc-b6d3-4b52-8337-d4bbcb726866
+[2026-01-12 17:09:06] [INFO] ✅ Job 728bf5bc-b6d3-4b52-8337-d4bbcb726866 completed
+[2026-01-12 17:13:59] [INFO] ✅ Reserved job ff4b512c-de05-462a-a603-693037a7221e (type: aicfo_chat)
+[2026-01-12 17:13:59] [INFO] Processing AICFO Chat job ff4b512c-de05-462a-a603-693037a7221e for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 17:13:59] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 17:14:15] [INFO] LLM call (gemini-2.5-flash) took 15.89s
+[2026-01-12 17:14:15] [ERROR] Failed to parse LLM JSON response: Unterminated string starting at: line 7 column 17 (char 296)
+[2026-01-12 17:14:15] [ERROR] Raw content (first 500 chars): {
+  "recommendations": [
+    {
+      "type": "cost",
+      "title": "Conduct a Strategic Zero-Based Budgeting Review",
+      "summary": "Systematically re-evaluate all operational expenditures to identify areas for efficiency gains and cost optimization, even while profitable.",
+      "action": "Implement
+[2026-01-12 17:14:15] [INFO] Successfully completed AICFO Chat job ff4b512c-de05-462a-a603-693037a7221e
+[2026-01-12 17:14:15] [INFO] ✅ Job ff4b512c-de05-462a-a603-693037a7221e completed
+[2026-01-12 17:15:33] [INFO] ✅ Reserved job 3da61e05-5b60-4520-a9da-953dcbe380fc (type: aicfo_chat)
+[2026-01-12 17:15:33] [INFO] Processing AICFO Chat job 3da61e05-5b60-4520-a9da-953dcbe380fc for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 17:15:34] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 17:15:50] [INFO] LLM call (gemini-2.5-flash) took 16.00s
+[2026-01-12 17:15:50] [ERROR] Failed to parse LLM JSON response: Unterminated string starting at: line 7 column 17 (char 304)
+[2026-01-12 17:15:50] [ERROR] Raw content (first 500 chars): {
+  "recommendations": [
+    {
+      "type": "strategy",
+      "title": "Automate Core Financial Operations",
+      "summary": "Implement an integrated accounting system to automate transaction processing and reconciliation, enhancing operational efficiency and reducing manual errors.",
+      "action": "Select and deploy a modern, cloud
+[2026-01-12 17:15:50] [INFO] Successfully completed AICFO Chat job 3da61e05-5b60-4520-a9da-953dcbe380fc
+[2026-01-12 17:15:50] [INFO] ✅ Job 3da61e05-5b60-4520-a9da-953dcbe380fc completed
+[2026-01-12 17:15:57] [INFO] ✅ Reserved job cea1fc0a-02ec-4427-aae0-9517852bef5f (type: aicfo_chat)
+[2026-01-12 17:15:57] [INFO] Processing AICFO Chat job cea1fc0a-02ec-4427-aae0-9517852bef5f for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 17:15:57] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 17:16:19] [WARNING] Error calling Gemini gemini-2.5-flash with key: HTTPSConnectionPool(host='generativelanguage.googleapis.com', port=443): Read timed out. (read timeout=20)
+[2026-01-12 17:16:19] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyCe
+[2026-01-12 17:16:21] [WARNING] Gemini API (gemini-2.5-flash, v1beta) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 17:16:21] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyDp
+[2026-01-12 17:16:23] [WARNING] Gemini API (gemini-2.5-flash, v1beta) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 17:16:23] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1 and key starting with AIzaSyBh
+[2026-01-12 17:16:39] [INFO] LLM call (gemini-2.5-flash) took 15.85s
+[2026-01-12 17:16:39] [ERROR] Failed to parse LLM JSON response: Unterminated string starting at: line 7 column 17 (char 311)
+[2026-01-12 17:16:39] [ERROR] Raw content (first 500 chars): ```json
+{
+  "recommendations": [
+    {
+      "type": "strategy",
+      "title": "Evaluate Capital Allocation for Growth & Shareholder Value",
+      "summary": "Given robust profitability and significant cash generation, strategically plan the deployment of excess capital to maximize long-term value.",
+      "action": "Conduct a comprehensive capital allocation study to identify optimal paths
+[2026-01-12 17:16:39] [INFO] Successfully completed AICFO Chat job cea1fc0a-02ec-4427-aae0-9517852bef5f
+[2026-01-12 17:16:40] [INFO] ✅ Job cea1fc0a-02ec-4427-aae0-9517852bef5f completed
+[2026-01-12 17:33:05] [INFO] ✅ Reserved job ca7d40f5-e582-45ba-80cb-cad57044e62c (type: aicfo_chat)
+[2026-01-12 17:33:05] [INFO] Processing AICFO Chat job ca7d40f5-e582-45ba-80cb-cad57044e62c for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 17:33:05] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 17:33:19] [INFO] LLM call (gemini-2.5-flash) took 13.89s
+[2026-01-12 17:33:19] [ERROR] Failed to parse LLM JSON response: Unterminated string starting at: line 7 column 7 (char 311)
+[2026-01-12 17:33:19] [ERROR] Raw content (first 500 chars): {
+  "recommendations": [
+    {
+      "type": "strategy",
+      "title": "Capitalize on Strong Financial Health for Strategic Expansion",
+      "summary": "Leverage the exceptionally long runway and high health score to pursue strategic growth initiatives, potentially including M&A or new market entry.",
+      "action
+[2026-01-12 17:33:19] [INFO] Successfully completed AICFO Chat job ca7d40f5-e582-45ba-80cb-cad57044e62c
+[2026-01-12 17:33:19] [INFO] ✅ Job ca7d40f5-e582-45ba-80cb-cad57044e62c completed
+[2026-01-12 17:35:04] [INFO] ✅ Reserved job 77751180-9664-4005-a73e-d3af91a887d6 (type: aicfo_chat)
+[2026-01-12 17:35:04] [INFO] Processing AICFO Chat job 77751180-9664-4005-a73e-d3af91a887d6 for org 9f4eaa3d-c2a4-4fa4-978d-f463b613d93a
+[2026-01-12 17:35:04] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyBh
+[2026-01-12 17:35:05] [WARNING] Gemini API (gemini-2.5-flash, v1beta) failed with key (status 429): Quota exceeded
+[2026-01-12 17:35:05] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyCe
+[2026-01-12 17:35:07] [WARNING] Gemini API (gemini-2.5-flash, v1beta) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 17:35:07] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1beta and key starting with AIzaSyDp
+[2026-01-12 17:35:07] [WARNING] Gemini API (gemini-2.5-flash, v1beta) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 17:35:07] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1 and key starting with AIzaSyBh
+[2026-01-12 17:35:08] [WARNING] Gemini API (gemini-2.5-flash, v1) failed with key (status 429): Quota exceeded
+[2026-01-12 17:35:08] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1 and key starting with AIzaSyCe
+[2026-01-12 17:35:10] [WARNING] Gemini API (gemini-2.5-flash, v1) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 17:35:10] [INFO] Attempting Gemini with model gemini-2.5-flash, version v1 and key starting with AIzaSyDp
+[2026-01-12 17:35:11] [WARNING] Gemini API (gemini-2.5-flash, v1) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 17:35:11] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1beta and key starting with AIzaSyBh
+[2026-01-12 17:35:12] [WARNING] Gemini API (gemini-2.5-pro, v1beta) failed with key (status 429): Quota exceeded
+[2026-01-12 17:35:12] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1beta and key starting with AIzaSyCe
+[2026-01-12 17:35:13] [WARNING] Gemini API (gemini-2.5-pro, v1beta) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 17:35:13] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1beta and key starting with AIzaSyDp
+[2026-01-12 17:35:14] [WARNING] Gemini API (gemini-2.5-pro, v1beta) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 17:35:14] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1 and key starting with AIzaSyBh
+[2026-01-12 17:35:15] [WARNING] Gemini API (gemini-2.5-pro, v1) failed with key (status 429): Quota exceeded
+[2026-01-12 17:35:15] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1 and key starting with AIzaSyCe
+[2026-01-12 17:35:16] [WARNING] Gemini API (gemini-2.5-pro, v1) failed with key (status 400): {
+  "error": {
+    "code": 400,
+    "message": "API key expired. Please renew the API key.",
+    "status": "INVALID_ARGUMENT",
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "API_KEY_INVALID",
+        "domain": "googleapis.com",
+        "metad
+[2026-01-12 17:35:16] [INFO] Attempting Gemini with model gemini-2.5-pro, version v1 and key starting with AIzaSyDp
+[2026-01-12 17:35:17] [WARNING] Gemini API (gemini-2.5-pro, v1) failed with key (status 403): {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 17:35:17] [ERROR] Error in AICFO Chat job: All Gemini models, versions and keys failed. Last error: {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+Traceback (most recent call last):
+  File "D:\Fin\python-worker\jobs\aicfo_chat.py", line 203, in handle_aicfo_chat
+    ]
+      
+Exception: All Gemini models, versions and keys failed. Last error: {
+  "error": {
+    "code": 403,
+    "message": "Your API key was reported as leaked. Please use another API key.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+[2026-01-12 17:35:17] [INFO] ✅ Created query-specific fallback response for AICFO Chat job 77751180-9664-4005-a73e-d3af91a887d6
+[2026-01-12 17:35:17] [INFO] ✅ Job 77751180-9664-4005-a73e-d3af91a887d6 completed

@@ -4,7 +4,8 @@ import { authenticate } from '../middlewares/auth';
 
 const router = Router();
 
-router.post('/models/:model_id/montecarlo', authenticate, monteCarloController.createMonteCarlo);
+// Get specific Monte Carlo job result (GET by jobId)
+// This route doesn't conflict with model routes since it's /montecarlo/:jobId not /models/:model_id/...
 router.get('/montecarlo/:jobId', authenticate, monteCarloController.getMonteCarlo);
 
 export default router;

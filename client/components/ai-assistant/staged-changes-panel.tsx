@@ -245,21 +245,20 @@ export function StagedChangesPanel() {
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
-                            {(change.promptId || (change.dataSources && change.dataSources.length > 0)) && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 px-2"
-                                onClick={() => {
-                                  setSelectedChangeForAudit(change)
-                                  setShowAuditabilityModal(true)
-                                }}
-                                title="View auditability (prompt & data sources)"
-                              >
-                                <FileText className="h-3 w-3 mr-1" />
-                                Audit
-                              </Button>
-                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2"
+                              onClick={() => {
+                                setSelectedChangeForAudit(change)
+                                setShowAuditabilityModal(true)
+                              }}
+                              title="View auditability (prompt & data sources)"
+                              disabled={!change.promptId && (!change.dataSources || change.dataSources.length === 0)}
+                            >
+                              <FileText className="h-3 w-3 mr-1" />
+                              Audit
+                            </Button>
                           </div>
                         </div>
 

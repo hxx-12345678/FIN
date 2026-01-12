@@ -23,7 +23,8 @@ export type JobType =
   | 'xlsx_import'
   | 'excel_export'
   | 'excel_merge'
-  | 'alert_check';
+  | 'alert_check'
+  | 'aicfo_chat';
 
 export interface CreateJobParams {
   jobType: JobType;
@@ -60,6 +61,7 @@ const JOB_TYPE_QUEUE_MAP: Record<JobType, string> = {
   excel_export: 'exports',
   excel_merge: 'default',
   alert_check: 'default',
+  aicfo_chat: 'default',
 };
 
 // Default priorities per job type
@@ -83,6 +85,7 @@ const JOB_TYPE_PRIORITY: Record<JobType, number> = {
   excel_export: 70,
   excel_merge: 50,
   alert_check: 80, // High priority for alerts
+  aicfo_chat: 90, // Real-time chat gets highest priority
 };
 
 export const jobService = {

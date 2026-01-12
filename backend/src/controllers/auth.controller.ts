@@ -49,7 +49,11 @@ export const authController = {
       }
 
       const result = await authService.login(email, password);
-      res.json(result);
+      // Return consistent response format with ok: true
+      res.json({
+        ok: true,
+        ...result,
+      });
     } catch (error) {
       next(error);
     }

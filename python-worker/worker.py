@@ -10,7 +10,12 @@ import time
 import sys
 import signal
 import threading
+from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# Load environment variables at the very top to ensure they are available for all imports
+load_dotenv()
+
 from utils.db import get_db_connection
 from utils.logger import setup_logger
 from jobs.csv_import import handle_csv_import
@@ -31,6 +36,7 @@ from jobs.scheduled_auto_model import handle_scheduled_auto_model
 from jobs.scheduled_connector_sync import handle_scheduled_connector_sync
 from jobs.connector_sync import handle_connector_sync
 from jobs.alert_check import handle_alert_check
+from jobs.aicfo_chat import handle_aicfo_chat
 from jobs.runner import reserve_job, run_job_with_retry, release_stuck_jobs
 
 logger = setup_logger()
@@ -56,9 +62,10 @@ JOB_HANDLERS = {
     'scheduled_connector_sync': handle_scheduled_connector_sync,
     'connector_sync': handle_connector_sync,
     'connector_initial_sync': handle_connector_sync,
+    'aicfo_chat': handle_aicfo_chat,
 }
 
-POLL_INTERVAL = 2  # seconds
+POLL_INTERVAL = 0.5  # Reduced from 2s for faster chat response
 WORKER_CONCURRENCY = int(os.getenv('WORKER_CONCURRENCY', '4'))
 GRACEFUL_SHUTDOWN_TIMEOUT = int(os.getenv('WORKER_GRACEFUL_SHUTDOWN_TIMEOUT', '180'))  # 3 minutes
 

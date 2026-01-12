@@ -11,6 +11,8 @@ export interface LLMRequest {
   systemPrompt?: string;
   temperature?: number;
   maxTokens?: number;
+  topP?: number;
+  topK?: number;
 }
 
 export interface LLMResponse {
@@ -184,21 +186,19 @@ async function callGemini(request: LLMRequest, config: LLMConfig): Promise<LLMRe
   }
 
   // Prefer stable, high-availability Gemini model by default
-  const model = config.model || 'gemini-2.5-flash';
+  const model = config.model || 'gemini-2.0-flash-exp';
   let lastError: Error | null = null;
 
   // Try each API key with retry logic
   for (const apiKey of apiKeys) {
-    const url = config.baseUrl || `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
     
-    // Retry up to 4 times per key with exponential backoff (helps with transient 429s)
-    for (let attempt = 0; attempt < 4; attempt++) {
+    // Reduced retries for speed (2 attempts instead of 4)
+    for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        // Add delay between retries (exponential backoff + jitter)
+        // Reduced backoff for faster response
         if (attempt > 0) {
-          const baseMs = Math.min(30_000, 1000 * Math.pow(2, attempt)); // 2s, 4s, 8s, 16s...
-          const jitterMs = Math.floor(Math.random() * 250);
-          await new Promise(resolve => setTimeout(resolve, baseMs + jitterMs));
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
 
         const response = await fetch(url, {
@@ -215,6 +215,8 @@ async function callGemini(request: LLMRequest, config: LLMConfig): Promise<LLMRe
             generationConfig: {
               temperature: request.temperature || 0.3,
               maxOutputTokens: request.maxTokens || 1000,
+              topP: request.topP,
+              topK: request.topK,
               responseMimeType: 'application/json',
             },
           }),

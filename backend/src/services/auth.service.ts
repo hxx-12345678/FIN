@@ -237,7 +237,17 @@ export const authService = {
     // Normalize email
     const normalizedEmail = email.toLowerCase().trim();
 
-    const user = await userRepository.findByEmail(normalizedEmail);
+    const user = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      include: {
+        roles: {
+          include: {
+            org: true
+          }
+        }
+      }
+    });
+
     if (!user || !user.isActive) {
       throw new UnauthorizedError('Invalid credentials');
     }
@@ -270,7 +280,15 @@ export const authService = {
       orgId: orgId,
     });
 
-    return { user, token, refreshToken };
+    return { 
+      user: {
+        ...user,
+        orgRoles: user.roles // Map for test script compatibility
+      }, 
+      token, 
+      refreshToken, 
+      orgId 
+    };
   },
 
   refresh: async (refreshToken: string) => {

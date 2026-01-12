@@ -132,6 +132,17 @@ export const quotaService = {
    */
   async consumeMonteCarloQuota(orgId: string, numSims: number): Promise<void> {
     try {
+      // Check if quota is unlimited (>= 999999999) - if so, skip incrementing used count
+      const quota = await prisma.orgQuota.findUnique({
+        where: { orgId },
+        select: { monteCarloSimsLimit: true },
+      });
+
+      // If unlimited, don't track usage
+      if (quota && quota.monteCarloSimsLimit >= 999999999) {
+        return; // Skip tracking for unlimited quotas
+      }
+
       await prisma.orgQuota.update({
         where: { orgId },
         data: {
@@ -152,8 +163,11 @@ export const quotaService = {
   async checkExportQuota(orgId: string): Promise<QuotaCheckResult> {
     const quota = await this.getOrCreateOrgQuota(orgId);
 
-    // Check if quota needs reset
-    if (quota.exportsResetAt && new Date() >= quota.exportsResetAt) {
+    // Check for unlimited quota (very high limit, typically >= 999999999)
+    const isUnlimited = quota.exportsLimit >= 999999999;
+
+    // Check if quota needs reset (only if not unlimited)
+    if (!isUnlimited && quota.exportsResetAt && new Date() >= quota.exportsResetAt) {
       try {
         await prisma.orgQuota.update({
           where: { orgId },
@@ -169,8 +183,8 @@ export const quotaService = {
       }
     }
 
-    const remaining = quota.exportsLimit - quota.exportsUsed;
-    const allowed = remaining > 0;
+    const remaining = isUnlimited ? 999999999 : (quota.exportsLimit - quota.exportsUsed);
+    const allowed = isUnlimited || remaining > 0;
 
     return {
       allowed,
@@ -178,6 +192,8 @@ export const quotaService = {
       limit: quota.exportsLimit,
       resetAt: quota.exportsResetAt,
       message: allowed
+        ? undefined
+        : isUnlimited
         ? undefined
         : `Export quota exceeded. You have used all ${quota.exportsLimit} exports this month. Resets on ${quota.exportsResetAt?.toLocaleDateString()}.`,
     };
@@ -188,6 +204,17 @@ export const quotaService = {
    */
   async consumeExportQuota(orgId: string): Promise<void> {
     try {
+      // Check if quota is unlimited (>= 999999999) - if so, skip incrementing used count
+      const quota = await prisma.orgQuota.findUnique({
+        where: { orgId },
+        select: { exportsLimit: true },
+      });
+
+      // If unlimited, don't track usage
+      if (quota && quota.exportsLimit >= 999999999) {
+        return; // Skip tracking for unlimited quotas
+      }
+
       await prisma.orgQuota.update({
         where: { orgId },
         data: {
@@ -207,13 +234,16 @@ export const quotaService = {
   async checkAlertQuota(orgId: string): Promise<QuotaCheckResult> {
     const quota = await this.getOrCreateOrgQuota(orgId);
     
+    // Check for unlimited quota (very high limit, typically >= 999999999)
+    const isUnlimited = quota.alertsLimit >= 999999999;
+    
     // Count existing alerts
     const alertCount = await prisma.alertRule.count({
       where: { orgId },
     });
 
-    const remaining = quota.alertsLimit - alertCount;
-    const allowed = remaining > 0;
+    const remaining = isUnlimited ? 999999999 : (quota.alertsLimit - alertCount);
+    const allowed = isUnlimited || remaining > 0;
 
     return {
       allowed,
@@ -221,6 +251,8 @@ export const quotaService = {
       limit: quota.alertsLimit,
       resetAt: null,
       message: allowed
+        ? undefined
+        : isUnlimited
         ? undefined
         : `Alert limit reached. You can have up to ${quota.alertsLimit} alerts. Delete existing alerts or upgrade your plan.`,
     };
@@ -236,16 +268,21 @@ export const quotaService = {
       where: { orgId },
     });
 
-    // Check if quotas need reset
+    // Check if quotas are unlimited
+    const mcUnlimited = quota.monteCarloSimsLimit >= 999999999;
+    const exportsUnlimited = quota.exportsLimit >= 999999999;
+    const alertsUnlimited = quota.alertsLimit >= 999999999;
+
+    // Check if quotas need reset (only if not unlimited)
     const now = new Date();
     let mcUsed = quota.monteCarloSimsUsed;
     let exportsUsed = quota.exportsUsed;
 
-    if (quota.monteCarloResetAt && now >= quota.monteCarloResetAt) {
+    if (!mcUnlimited && quota.monteCarloResetAt && now >= quota.monteCarloResetAt) {
       mcUsed = 0;
     }
 
-    if (quota.exportsResetAt && now >= quota.exportsResetAt) {
+    if (!exportsUnlimited && quota.exportsResetAt && now >= quota.exportsResetAt) {
       exportsUsed = 0;
     }
 
@@ -253,23 +290,26 @@ export const quotaService = {
       monteCarlo: {
         used: mcUsed,
         limit: quota.monteCarloSimsLimit,
-        remaining: quota.monteCarloSimsLimit - mcUsed,
+        remaining: mcUnlimited ? 999999999 : (quota.monteCarloSimsLimit - mcUsed),
         resetAt: quota.monteCarloResetAt,
-        percentage: (mcUsed / quota.monteCarloSimsLimit) * 100,
+        percentage: mcUnlimited ? 0 : (mcUsed / quota.monteCarloSimsLimit) * 100,
+        unlimited: mcUnlimited,
       },
       exports: {
         used: exportsUsed,
         limit: quota.exportsLimit,
-        remaining: quota.exportsLimit - exportsUsed,
+        remaining: exportsUnlimited ? 999999999 : (quota.exportsLimit - exportsUsed),
         resetAt: quota.exportsResetAt,
-        percentage: (exportsUsed / quota.exportsLimit) * 100,
+        percentage: exportsUnlimited ? 0 : (exportsUsed / quota.exportsLimit) * 100,
+        unlimited: exportsUnlimited,
       },
       alerts: {
         used: alertCount,
         limit: quota.alertsLimit,
-        remaining: quota.alertsLimit - alertCount,
+        remaining: alertsUnlimited ? 999999999 : (quota.alertsLimit - alertCount),
         resetAt: null,
-        percentage: (alertCount / quota.alertsLimit) * 100,
+        percentage: alertsUnlimited ? 0 : (alertCount / quota.alertsLimit) * 100,
+        unlimited: alertsUnlimited,
       },
     };
   },
