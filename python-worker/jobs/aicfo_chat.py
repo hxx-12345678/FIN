@@ -1,6 +1,7 @@
 """AI CFO Chat Job Handler - High Performance LLM Analysis"""
 import json
 import os
+import re
 import time
 from datetime import datetime, timezone
 import requests
@@ -207,9 +208,10 @@ Respond ONLY in valid JSON format."""
             if response: break
             for api_version in api_versions:
                 if response: break
-                for api_key in api_keys:
+                for idx, api_key in enumerate(api_keys):
                     try:
-                        logger.info(f"Attempting Gemini with model {model_name}, version {api_version} and key starting with {api_key[:8]}")
+                        # Don't log API key prefixes for security - use index instead
+                        logger.info(f"Attempting Gemini with model {model_name}, version {api_version} (key #{idx + 1})")
                         url = f"https://generativelanguage.googleapis.com/{api_version}/models/{model_name}:generateContent?key={api_key}"
                         
                         # High compatibility generation config
@@ -253,12 +255,18 @@ Respond ONLY in valid JSON format."""
                         
                         resp_text = resp.text
                         # If it's a quota error, don't spam logs with the whole thing
+                        # Also sanitize any potential API key exposure in error messages
                         log_msg = resp_text[:300] if resp.status_code != 429 else "Quota exceeded"
-                        logger.warning(f"Gemini API ({model_name}, {api_version}) failed with key (status {resp.status_code}): {log_msg}")
+                        # Remove any potential API key strings from log messages
+                        log_msg = re.sub(r'AIzaSy[A-Za-z0-9]{35}', '[REDACTED_API_KEY]', log_msg)
+                        logger.warning(f"Gemini API ({model_name}, {api_version}) failed (status {resp.status_code}): {log_msg}")
                         last_error = resp_text
                     except Exception as e:
-                        logger.warning(f"Error calling Gemini {model_name} with key: {str(e)}")
-                        last_error = str(e)
+                        # Sanitize error messages to prevent API key exposure
+                        error_msg = str(e)
+                        error_msg = re.sub(r'AIzaSy[A-Za-z0-9]{35}', '[REDACTED_API_KEY]', error_msg)
+                        logger.warning(f"Error calling Gemini {model_name}: {error_msg}")
+                        last_error = error_msg
         
         if not response:
             raise Exception(f"All Gemini models, versions and keys failed. Last error: {last_error}")
