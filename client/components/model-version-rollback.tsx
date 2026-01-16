@@ -15,6 +15,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { History, RotateCcw, Eye, Download, AlertTriangle, CheckCircle2 } from "lucide-react"
 import { toast } from "sonner"
+import { API_BASE_URL } from "@/lib/api-config"
 
 interface ModelVersion {
   id: string
@@ -118,8 +119,6 @@ export function ModelVersionRollback({ currentVersion, onVersionRollback, modelI
   const [versions, setVersions] = useState<ModelVersion[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
   
   // Fetch versions from database when dialog opens
   useEffect(() => {

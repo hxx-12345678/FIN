@@ -110,6 +110,18 @@ const navigationItems = [
     badge: "Live",
   },
   {
+    title: "AI CFO Assistant",
+    icon: MessageSquare,
+    key: "assistant",
+    badge: "AI",
+  },
+  {
+    title: "AI Forecasting",
+    icon: Brain,
+    key: "forecasting",
+    badge: "AI",
+  },
+  {
     title: "Governance & Approvals",
     icon: ShieldCheck,
     key: "approvals",
@@ -122,21 +134,9 @@ const navigationItems = [
     badge: "Truth",
   },
   {
-    title: "Job Queue",
-    icon: Activity,
-    key: "job-queue",
-    badge: null,
-  },
-  {
-    title: "AI Forecasting",
-    icon: Brain,
-    key: "forecasting",
-    badge: "AI",
-  },
-  {
-    title: "AI CFO Assistant",
-    icon: MessageSquare,
-    key: "assistant",
+    title: "Board Reporting",
+    icon: Briefcase,
+    key: "board-reporting",
     badge: null,
   },
   {
@@ -146,9 +146,9 @@ const navigationItems = [
     badge: null,
   },
   {
-    title: "Board Reporting",
-    icon: Briefcase,
-    key: "board-reporting",
+    title: "Investor Dashboard",
+    icon: PieChart,
+    key: "investor",
     badge: null,
   },
   {
@@ -158,9 +158,9 @@ const navigationItems = [
     badge: null,
   },
   {
-    title: "Investor Dashboard",
-    icon: PieChart,
-    key: "investor",
+    title: "Job Queue",
+    icon: Activity,
+    key: "job-queue",
     badge: null,
   },
 ]

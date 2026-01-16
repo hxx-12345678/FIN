@@ -162,6 +162,45 @@ export function BoardReporting() {
     }
   }, [orgId])
 
+  // Update content when template changes
+  useEffect(() => {
+    if (orgId && selectedTemplate) {
+      // Update report title based on template
+      const template = templates.find(t => t.id === selectedTemplate)
+      if (template) {
+        setReportTitle(template.name)
+      }
+      
+      // Regenerate AI content for new template
+      if (orgId) {
+        fetchAIContent()
+      }
+      
+      // Update selected metrics based on template type
+      if (selectedTemplate === "financial-review") {
+        // Financial review should include all financial metrics
+        setSelectedMetrics(kpiMetrics.filter((m: any) => 
+          m.name.includes("Revenue") || 
+          m.name.includes("Cash") || 
+          m.name.includes("Burn") || 
+          m.name.includes("Runway") ||
+          m.name.includes("Margin")
+        ).map((m: any) => m.name))
+      } else if (selectedTemplate === "executive-summary") {
+        // Executive summary should include top 4 metrics
+        setSelectedMetrics(kpiMetrics.slice(0, 4).map((m: any) => m.name))
+      } else if (selectedTemplate === "investor-update") {
+        // Investor update should include growth and financial metrics
+        setSelectedMetrics(kpiMetrics.filter((m: any) => 
+          m.name.includes("Revenue") || 
+          m.name.includes("Growth") || 
+          m.name.includes("Customers") ||
+          m.name.includes("ARR")
+        ).map((m: any) => m.name))
+      }
+    }
+  }, [selectedTemplate, orgId, templates, kpiMetrics])
+
   useEffect(() => {
     setEmailSubject(`${reportTitle} - ${formatMonthLabel(new Date())}`)
   }, [reportTitle])
@@ -359,6 +398,18 @@ export function BoardReporting() {
         return
       }
 
+      // Build context with template-specific information
+      const template = templates.find(t => t.id === selectedTemplate)
+      const templateName = template?.name || selectedTemplate
+      
+      const contextData: any = {
+        reportingPeriod,
+        selectedMetrics: selectedMetrics.length > 0 ? selectedMetrics : kpiMetrics.slice(0, 4).map((m: any) => m.name),
+        template: templateName,
+        reportTitle,
+        includeSections: activeSections,
+      }
+
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/ai-plans`, {
         method: "POST",
         headers: {
@@ -367,11 +418,8 @@ export function BoardReporting() {
         },
         credentials: "include",
         body: JSON.stringify({
-          goal: `Generate ${selectedTemplate} content for ${reportTitle}`,
-          context: {
-            reportingPeriod,
-            selectedMetrics,
-          },
+          goal: `Generate board report content for ${templateName}. Create an executive summary, key highlights, and areas of focus based on the selected metrics and reporting period.`,
+          context: contextData,
         }),
         // Add timeout signal to prevent hanging requests
         signal: AbortSignal.timeout(55000), // 55 second timeout (less than server's 60s)
@@ -382,14 +430,43 @@ export function BoardReporting() {
         if (result.ok && result.plan) {
           // Handle different response formats
           const planData = result.plan.planJson || result.plan;
+          const naturalLanguage = planData?.naturalLanguage || planData?.natural_text || planData?.summary || "";
           const insights = planData?.insights || planData?.stagedChanges || [];
           const recommendations = planData?.recommendations || planData?.stagedChanges || [];
           
+          // Extract executive summary from natural language or first insight
+          let executiveSummary = naturalLanguage;
+          if (!executiveSummary && insights.length > 0) {
+            executiveSummary = insights[0]?.summary || insights[0]?.explain || insights[0]?.description || "";
+          }
+          if (!executiveSummary) {
+            executiveSummary = "Based on the current financial data and selected metrics, this report provides a comprehensive overview of the organization's performance.";
+          }
+          
+          // Extract key highlights from recommendations
+          const highlights = recommendations.slice(0, 4).map((r: any) => {
+            if (typeof r === 'string') return r;
+            return r.title || r.summary || r.explain || r.description || JSON.stringify(r);
+          }).filter((h: any) => h && h.length > 0);
+          
+          // Extract areas of focus from insights or recommendations
+          let areasOfFocus = insights.find((i: any) => i.type === "risk" || i.category === "risk")?.summary || 
+                           insights.find((i: any) => i.type === "focus" || i.category === "focus")?.summary ||
+                           recommendations.find((r: any) => r.type === "action" || r.priority === "high")?.summary ||
+                           "Continue monitoring key financial metrics and maintain focus on revenue growth and cost optimization.";
+          
           setAiContent({
-            executiveSummary: insights[0]?.summary || insights[0]?.explain || planData?.natural_text || planData?.summary || "No summary available",
-            keyHighlights: recommendations.slice(0, 4).map((r: any) => r.title || r.summary || r.explain || r),
-            areasOfFocus: insights.find((i: any) => i.type === "risk")?.summary || planData?.areasOfFocus || "No focus areas identified",
+            executiveSummary,
+            keyHighlights: highlights.length > 0 ? highlights : ["Revenue performance", "Cost management", "Cash flow", "Growth metrics"],
+            areasOfFocus,
           })
+          
+          toast.success("AI content generated successfully!", {
+            description: "Review and edit the content as needed before generating your report",
+            duration: 5000,
+          })
+        } else {
+          throw new Error("Invalid response from AI service");
         }
       } else {
         const errorData = await response.json().catch(() => ({}))
@@ -417,15 +494,11 @@ export function BoardReporting() {
           keyHighlights: [],
           areasOfFocus: "Request timed out",
         });
+        toast.warning("AI generation timed out. Please try again.");
       } else {
-        setAiContent({
-          executiveSummary: errorMessage,
-          keyHighlights: [],
-          areasOfFocus: "Error occurred",
-        });
+        // Don't set error content, keep previous content if available
+        toast.error(errorMessage);
       }
-      
-      toast.error(errorMessage);
     } finally {
       setLoadingAiContent(false);
     }
@@ -474,8 +547,56 @@ export function BoardReporting() {
           const exportId = result.export.id || result.export.exportId
           if (exportId) {
             setExportJobId(exportId)
-            toast.success("Report generation started.")
+            toast.success("Report generation started!", {
+              description: "You can track progress in Reports & Analytics → Custom Reports tab or Export Queue",
+              duration: 5000,
+            })
             setTimeout(fetchRecentReports, 2000)
+            
+            // Poll for completion and show success toast
+            const pollForCompletion = async () => {
+              try {
+                const statusResponse = await fetch(`${API_BASE_URL}/exports/${exportId}`, {
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                  },
+                  credentials: "include",
+                })
+                
+                if (statusResponse.ok) {
+                  const statusData = await statusResponse.json()
+                  const exportData = statusData.export || statusData
+                  const status = exportData.status || statusData.status
+                  
+                  if (status === "completed" || status === "done") {
+                    toast.success("Report generated successfully!", {
+                      description: "You can download it from Reports & Analytics → Custom Reports tab or Export Queue",
+                      duration: 7000,
+                    })
+                    setIsGenerating(false)
+                    setShowExportModal(false)
+                    fetchRecentReports()
+                    return
+                  } else if (status === "failed") {
+                    toast.error("Report generation failed. Please try again.")
+                    setIsGenerating(false)
+                    setShowExportModal(false)
+                    return
+                  }
+                }
+                
+                // Continue polling if not completed
+                setTimeout(pollForCompletion, 3000)
+              } catch (error) {
+                console.error("Error polling report status:", error)
+                // Continue polling on error
+                setTimeout(pollForCompletion, 5000)
+              }
+            }
+            
+            // Start polling after 3 seconds
+            setTimeout(pollForCompletion, 3000)
           } else {
             toast.error("Failed to get export ID")
             setIsGenerating(false)
@@ -636,6 +757,49 @@ export function BoardReporting() {
   }
 
   const activeSections = useMemo(() => Object.entries(includeSections).filter(([, value]) => value).map(([key]) => key), [includeSections])
+
+  // Update sections based on template selection
+  useEffect(() => {
+    if (selectedTemplate === "executive-summary") {
+      // Executive summary should include only key sections
+      setIncludeSections({
+        "Executive Summary": true,
+        "Financial Performance": true,
+        "Key Metrics": true,
+        "Forward Outlook": true,
+        "Growth Analysis": false,
+        "Operational Updates": false,
+        "Risk Assessment": false,
+      })
+    } else if (selectedTemplate === "financial-review") {
+      // Financial review should include all financial sections
+      setIncludeSections({
+        "Executive Summary": true,
+        "Financial Performance": true,
+        "Key Metrics": true,
+        "Growth Analysis": true,
+        "Operational Updates": true,
+        "Risk Assessment": true,
+        "Forward Outlook": true,
+      })
+    } else if (selectedTemplate === "investor-update") {
+      // Investor update should focus on growth and metrics
+      setIncludeSections({
+        "Executive Summary": true,
+        "Financial Performance": true,
+        "Key Metrics": true,
+        "Growth Analysis": true,
+        "Operational Updates": false,
+        "Risk Assessment": false,
+        "Forward Outlook": true,
+      })
+    } else {
+      // Board deck includes all sections by default
+      setIncludeSections(
+        DEFAULT_SECTIONS.reduce((acc, section) => ({ ...acc, [section]: true }), {} as Record<string, boolean>)
+      )
+    }
+  }, [selectedTemplate])
 
   return (
     <div className="space-y-4 md:space-y-6 p-4 md:p-0 overflow-x-hidden">

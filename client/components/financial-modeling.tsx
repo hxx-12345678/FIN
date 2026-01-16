@@ -13,7 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts"
 import { VirtualizedTable } from "@/components/ui/virtualized-table"
 import { useChartPagination } from "@/hooks/use-chart-pagination"
-import { Download, Upload, Zap, TrendingUp, Calculator, Brain, Save, SearchIcon, Loader2, AlertCircle, Play, FileDown, FileText, HelpCircle } from "lucide-react"
+import { Download, Upload, Zap, TrendingUp, Calculator, Brain, Save, SearchIcon, Loader2, AlertCircle, Play, FileDown, FileText, HelpCircle, Pencil, Check, X } from "lucide-react"
 import { toast } from "sonner"
 import { ProvenanceDrawer } from "./provenance-drawer"
 import { ProvenanceSearch } from "./provenance-search"
@@ -149,6 +149,9 @@ export function FinancialModeling() {
   const [generatingAI, setGeneratingAI] = useState(false)
   const [assumptionEdits, setAssumptionEdits] = useState<Record<string, string>>({})
   const [savingAssumptions, setSavingAssumptions] = useState(false)
+  const [editingModelId, setEditingModelId] = useState<string | null>(null)
+  const [editingModelName, setEditingModelName] = useState<string>("")
+  const [savingModelName, setSavingModelName] = useState(false)
 
   const { chartData: paginatedChartData, hasMore, loadMore, initializeData } = useChartPagination({
     defaultMonths: 36,
@@ -545,6 +548,81 @@ export function FinancialModeling() {
     } catch (error) {
       console.error("Failed to fetch model run details:", error)
       // Keep existing financialData on error
+    }
+  }
+
+  const updateModelName = async (modelId: string, newName: string) => {
+    if (!newName.trim()) {
+      toast.error("Model name cannot be empty")
+      return false
+    }
+
+    setSavingModelName(true)
+    try {
+      const token = localStorage.getItem("auth-token") || document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("auth-token="))
+        ?.split("=")[1]
+
+      if (!token) {
+        toast.error("Authentication required")
+        return false
+      }
+
+      const response = await fetch(`${API_BASE_URL}/models/${modelId}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ name: newName.trim() }),
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        if (result.ok) {
+          // Update local state
+          setModels(models.map(m => m.id === modelId ? { ...m, name: newName.trim() } : m))
+          if (currentModel?.id === modelId) {
+            setCurrentModel({ ...currentModel, name: newName.trim() })
+          }
+          toast.success("Model name updated successfully")
+          setEditingModelId(null)
+          return true
+        }
+      }
+      
+      const errorData = await response.json().catch(() => ({}))
+      toast.error(errorData.error?.message || "Failed to update model name")
+      return false
+    } catch (error) {
+      console.error("Failed to update model name:", error)
+      toast.error("Failed to update model name")
+      return false
+    } finally {
+      setSavingModelName(false)
+    }
+  }
+
+  const handleStartEditModelName = (model: Model, e: React.MouseEvent) => {
+    e.stopPropagation() // Prevent card click
+    setEditingModelId(model.id)
+    setEditingModelName(model.name || "")
+  }
+
+  const handleCancelEditModelName = (e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    setEditingModelId(null)
+    setEditingModelName("")
+  }
+
+  const handleSaveModelName = async (modelId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    const success = await updateModelName(modelId, editingModelName)
+    if (!success) {
+      // Keep editing if save failed
+      return
     }
   }
 
@@ -1423,7 +1501,10 @@ export function FinancialModeling() {
         const exportId = result.export.id || result.export.exportId
         const jobId = result.export.jobId
 
-        toast.success("Report generation started. This may take a few moments...")
+        toast.success("Report generation started. This may take a few moments...", {
+          description: "You can track progress in Reports & Analytics → Custom Reports tab",
+          duration: 5000,
+        })
 
         // Poll for export completion
         const pollExportStatus = async () => {
@@ -1432,7 +1513,10 @@ export function FinancialModeling() {
 
           const poll = async () => {
             if (attempts >= maxAttempts) {
-              toast.warning("Report generation is taking longer than expected. Please check back later.")
+              toast.warning("Report generation is taking longer than expected. Please check back later.", {
+                description: "Check Reports & Analytics → Custom Reports or Export Queue for status",
+                duration: 6000,
+              })
               return
             }
 
@@ -1460,21 +1544,75 @@ export function FinancialModeling() {
                 const downloadUrl = exportData?.downloadUrl || statusData.downloadUrl
                 const filename = exportData?.filename || statusData.filename || `financial-model-report-${new Date().toISOString().split('T')[0]}.pdf`
                 
-                if (exportStatus === 'done' && downloadUrl) {
+                if ((exportStatus === 'done' || exportStatus === 'completed') && downloadUrl) {
                   // Download the report with proper filename
-                  const fullUrl = downloadUrl.startsWith('http') ? downloadUrl : `${API_BASE_URL}${downloadUrl}`
+                  // Handle downloadUrl - it might be a full URL, relative path, or already include /api/v1
+                  let fullUrl = downloadUrl
+                  if (downloadUrl.startsWith('http')) {
+                    // Already a full URL
+                    fullUrl = downloadUrl
+                  } else if (downloadUrl.startsWith('/api/v1')) {
+                    // Already includes /api/v1, just prepend base URL without /api/v1
+                    const baseUrl = API_BASE_URL.replace('/api/v1', '')
+                    fullUrl = `${baseUrl}${downloadUrl}`
+                  } else if (downloadUrl.startsWith('/')) {
+                    // Relative path starting with /, prepend base URL
+                    const baseUrl = API_BASE_URL.replace('/api/v1', '')
+                    fullUrl = `${baseUrl}${downloadUrl}`
+                  } else {
+                    // Relative path without leading slash
+                    fullUrl = `${API_BASE_URL}/${downloadUrl}`
+                  }
                   
-                  // Create a temporary link to trigger download
-                  const link = document.createElement('a')
-                  link.href = fullUrl
-                  link.download = filename
-                  link.target = '_blank'
-                  document.body.appendChild(link)
-                  link.click()
-                  document.body.removeChild(link)
+                  // Use the exports download endpoint directly
+                  const token = localStorage.getItem("auth-token") || document.cookie
+                    .split("; ")
+                    .find((row) => row.startsWith("auth-token="))
+                    ?.split("=")[1] || currentToken
                   
-                  toast.success(`Report "${filename}" downloaded successfully!`)
-                  return
+                  try {
+                    const downloadResponse = await fetch(`${API_BASE_URL}/exports/${exportId}/download`, {
+                      headers: {
+                        Authorization: `Bearer ${token}`,
+                      },
+                      credentials: "include",
+                    })
+                    
+                    if (downloadResponse.ok) {
+                      const blob = await downloadResponse.blob()
+                      const url = window.URL.createObjectURL(blob)
+                      const link = document.createElement('a')
+                      link.href = url
+                      link.download = filename
+                      link.target = '_blank'
+                      document.body.appendChild(link)
+                      link.click()
+                      window.URL.revokeObjectURL(url)
+                      document.body.removeChild(link)
+                      
+                      toast.success(`Report "${filename}" generated and downloaded successfully!`, {
+                        description: "You can also find this report in Reports & Analytics → Custom Reports tab or Export Queue",
+                        duration: 7000,
+                      })
+                      return
+                    } else {
+                      // Fallback to direct URL if download endpoint fails
+                      window.open(fullUrl, '_blank')
+                      toast.success(`Report "${filename}" generated successfully!`, {
+                        description: "Opening report in new tab. You can also find it in Reports & Analytics → Custom Reports tab or Export Queue",
+                        duration: 7000,
+                      })
+                      return
+                    }
+                  } catch (downloadError) {
+                    // Fallback to direct URL
+                    window.open(fullUrl, '_blank')
+                    toast.success(`Report "${filename}" generated successfully!`, {
+                      description: "Opening report in new tab. You can also find it in Reports & Analytics → Custom Reports tab or Export Queue",
+                      duration: 7000,
+                    })
+                    return
+                  }
                 } else if (exportStatus === 'failed') {
                   toast.error("Report generation failed. Please try again.")
                   return
@@ -1562,21 +1700,38 @@ export function FinancialModeling() {
 
       const result = await response.json()
       
-      if (result.ok && result.export) {
-        const exportId = result.export.id
-        toast.success("Export job created. Processing...")
+      // Handle both response formats: { ok: true, export: {...}, jobId: "..." } or { export: {...}, jobId: "..." }
+      const exportRecord = result.export || result
+      const exportId = exportRecord?.id
+      const jobId = result.jobId || exportRecord?.jobId
+      
+      if (exportId) {
+        toast.success("Export job created. Processing...", {
+          description: "You can track progress in Reports & Analytics → Custom Reports tab or Export Queue",
+          duration: 5000,
+        })
         
         // Poll for export completion
-        if (result.jobId) {
-          await pollExportStatus(result.jobId, exportId, token)
+        if (jobId) {
+          await pollExportStatus(jobId, exportId, token)
         } else {
-          // If no job, try direct download
+          // If no job, try direct download after a short delay
           setTimeout(async () => {
-            await downloadExport(exportId, token)
+            try {
+              await downloadExport(exportId, token)
+              toast.success("Model export downloaded successfully!", {
+                description: "You can also find this export in Reports & Analytics → Custom Reports tab or Export Queue",
+                duration: 7000,
+              })
+            } catch (error) {
+              toast.info("Export is still processing. Check Reports & Analytics → Custom Reports tab or Export Queue for status.", {
+                duration: 6000,
+              })
+            }
           }, 2000)
         }
       } else {
-        throw new Error("Invalid response from server")
+        throw new Error(result.error?.message || "Invalid response from server: no export ID")
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to export model"
@@ -1586,7 +1741,10 @@ export function FinancialModeling() {
 
   const downloadExport = async (exportId: string, token: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/exports/${exportId}/download`, {
+      // Ensure we use the correct API endpoint without double /api/v1
+      const downloadUrl = `${API_BASE_URL}/exports/${exportId}/download`
+      
+      const response = await fetch(downloadUrl, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -1603,13 +1761,15 @@ export function FinancialModeling() {
         a.click()
         window.URL.revokeObjectURL(url)
         document.body.removeChild(a)
-        toast.success("Export downloaded successfully!")
+        // Don't show toast here - let the caller handle success message
       } else {
-        throw new Error("Export not ready yet")
+        const errorText = await response.text().catch(() => "")
+        console.error("Export download failed:", response.status, errorText)
+        throw new Error(`Export not ready yet (status: ${response.status})`)
       }
     } catch (error) {
       console.error("Error downloading export:", error)
-      // Don't show error, export might still be processing
+      throw error // Re-throw so caller can handle
     }
   }
 
@@ -1639,7 +1799,17 @@ export function FinancialModeling() {
             const jobStatus = jobResult.job.status
             if (jobStatus === "done" || jobStatus === "completed") {
               // Try to download the export
-              await downloadExport(exportId, token)
+              try {
+                await downloadExport(exportId, token)
+                toast.success("Model export completed successfully!", {
+                  description: "You can also find this export in Reports & Analytics → Custom Reports tab or Export Queue",
+                  duration: 7000,
+                })
+              } catch (error) {
+                toast.info("Export completed. Check Reports & Analytics → Custom Reports tab or Export Queue to download.", {
+                  duration: 6000,
+                })
+              }
               return
             } else if (jobStatus === "failed") {
               toast.error("Export failed. Please try again.")
@@ -1659,10 +1829,22 @@ export function FinancialModeling() {
 
         if (exportResponse.ok) {
           const exportResult = await exportResponse.json()
-          if (exportResult.status === "completed") {
-            await downloadExport(exportId, token)
+          const exportResultData = exportResult.export || exportResult
+          const exportStatus = exportResultData.status || exportResult.status
+          if (exportStatus === "completed" || exportStatus === "done") {
+            try {
+              await downloadExport(exportId, token)
+              toast.success("Model export completed successfully!", {
+                description: "You can also find this export in Reports & Analytics → Custom Reports tab or Export Queue",
+                duration: 7000,
+              })
+            } catch (error) {
+              toast.info("Export completed. Check Reports & Analytics → Custom Reports tab or Export Queue to download.", {
+                duration: 6000,
+              })
+            }
             return
-          } else if (exportResult.status === "failed") {
+          } else if (exportStatus === "failed") {
             toast.error("Export failed. Please try again.")
             return
           }
@@ -2235,8 +2417,9 @@ export function FinancialModeling() {
               {models.map((model) => (
                 <Card
                   key={model.id}
-                  className={`cursor-pointer transition-all ${selectedModel === model.id ? "ring-2 ring-primary" : ""}`}
+                  className={`cursor-pointer transition-all group ${selectedModel === model.id ? "ring-2 ring-primary" : ""}`}
                   onClick={async () => {
+                    if (editingModelId === model.id) return // Don't select if editing
                     setSelectedModel(model.id)
                     const token = localStorage.getItem("auth-token") || document.cookie
                       .split("; ")
@@ -2249,7 +2432,61 @@ export function FinancialModeling() {
                 >
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-semibold">{model.name || "Unnamed Model"}</h3>
+                      <div className="flex-1 flex items-center gap-2">
+                        {editingModelId === model.id ? (
+                          <div className="flex items-center gap-2 flex-1" onClick={(e) => e.stopPropagation()}>
+                            <Input
+                              value={editingModelName}
+                              onChange={(e) => setEditingModelName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  handleSaveModelName(model.id, e)
+                                } else if (e.key === "Escape") {
+                                  handleCancelEditModelName(e)
+                                }
+                              }}
+                              className="h-7 text-sm font-semibold"
+                              autoFocus
+                              disabled={savingModelName}
+                            />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={(e) => handleSaveModelName(model.id, e)}
+                              disabled={savingModelName}
+                            >
+                              {savingModelName ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Check className="h-3 w-3 text-green-600" />
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={(e) => handleCancelEditModelName(e)}
+                              disabled={savingModelName}
+                            >
+                              <X className="h-3 w-3 text-red-600" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <>
+                            <h3 className="font-semibold">{model.name || "Unnamed Model"}</h3>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => handleStartEditModelName(model, e)}
+                              title="Edit model name"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
                       <Badge variant="secondary">{model.type || "Custom"}</Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">

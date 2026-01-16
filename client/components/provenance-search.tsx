@@ -896,9 +896,18 @@ export function ProvenanceSearch({ onSelectMetric, metricOverrides, orgId }: Pro
                                 {metric.sourceType}
                               </Badge>
                             )}
-                            {metric.confidenceScore && (
-                              <Badge variant="secondary" className="text-xs">
-                                {Math.round(metric.confidenceScore * 100)}% confidence
+                            {metric.confidenceScore !== undefined && metric.confidenceScore !== null && (
+                              <Badge 
+                                variant="secondary" 
+                                className={`text-xs ${
+                                  metric.confidenceScore >= 0.9 ? "bg-green-100 text-green-800" :
+                                  metric.confidenceScore >= 0.7 ? "bg-yellow-100 text-yellow-800" :
+                                  "bg-red-100 text-red-800"
+                                }`}
+                              >
+                                {Math.round((typeof metric.confidenceScore === 'number' 
+                                  ? (metric.confidenceScore < 1 ? metric.confidenceScore * 100 : metric.confidenceScore)
+                                  : parseFloat(String(metric.confidenceScore)) || 0))}% confidence
                               </Badge>
                             )}
                           </div>
@@ -906,7 +915,17 @@ export function ProvenanceSearch({ onSelectMetric, metricOverrides, orgId }: Pro
                     </div>
                     <div className="text-right">
                       <div className="font-semibold">{displayValue}</div>
-                      <div className="text-xs text-muted-foreground">{metric.lastUpdated}</div>
+                      <div className="text-xs text-muted-foreground space-y-0.5">
+                        {metric.dateRange && (
+                          <div className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            <span>
+                              {format(metric.dateRange.from, "MMM dd, yyyy")} - {format(metric.dateRange.to, "MMM dd, yyyy")}
+                            </span>
+                          </div>
+                        )}
+                        <div>{metric.lastUpdated}</div>
+                      </div>
                     </div>
                   </button>
                 )

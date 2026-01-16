@@ -110,23 +110,32 @@ export function ReportsAnalytics() {
     }
   }, [orgId])
 
-  // Auto-refresh exports list for processing reports
+  // Auto-refresh exports list for processing reports (with reduced frequency and proper cleanup)
   useEffect(() => {
     if (!orgId) return
 
     // Check if there are any processing reports
     const hasProcessingReports = customReports.some(
-      (r: any) => r.originalStatus === "processing" || r.originalStatus === "queued"
+      (r: any) => r.originalStatus === "processing" || r.originalStatus === "queued" || r.originalStatus === "pending"
     )
 
-    if (hasProcessingReports) {
-      // Poll every 3 seconds for processing reports
-      const interval = setInterval(() => {
-        fetchExports()
-      }, 3000)
-
-      return () => clearInterval(interval)
+    if (!hasProcessingReports) {
+      // No processing reports, don't poll
+      return
     }
+
+    // Poll every 15 seconds for processing reports (reduced from 10s to further reduce API calls)
+    const interval = setInterval(() => {
+      // Only poll if there are still processing reports
+      const stillProcessing = customReports.some(
+        (r: any) => r.originalStatus === "processing" || r.originalStatus === "queued" || r.originalStatus === "pending"
+      )
+      if (stillProcessing) {
+        fetchExports()
+      }
+    }, 15000) // 15 seconds to reduce API load
+
+    return () => clearInterval(interval)
   }, [orgId, customReports])
 
   // Refetch data when period changes

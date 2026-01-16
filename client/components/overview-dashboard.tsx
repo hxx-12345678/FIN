@@ -407,7 +407,25 @@ export function OverviewDashboard() {
           <p className="text-sm md:text-base text-muted-foreground">AI-powered insights for your business performance</p>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          <Button variant="outline" className="w-full sm:w-auto">
+          <Button 
+            variant="outline" 
+            className="w-full sm:w-auto"
+            onClick={async () => {
+              // Trigger data refresh for last 30 days
+              if (orgId) {
+                setLoading(true)
+                await fetchOverviewData()
+              } else {
+                const fetchedOrgId = await fetchOrgId()
+                if (fetchedOrgId) {
+                  setLoading(true)
+                  await fetchOverviewData()
+                } else {
+                  toast.error("Organization ID not found. Please log in again.")
+                }
+              }
+            }}
+          >
             <Calendar className="mr-2 h-4 w-4" />
             <span className="hidden sm:inline">Last 30 days</span>
             <span className="sm:hidden">30d</span>

@@ -124,6 +124,46 @@ export function LocalizationSettings() {
     }
   }, [orgId])
 
+  // Auto-update FX rates if enabled (runs daily)
+  useEffect(() => {
+    if (!orgId || !localization.autoFxUpdate) {
+      return
+    }
+
+    // Set up interval to update rates daily (24 hours)
+    const interval = setInterval(async () => {
+      if (localization.autoFxUpdate && orgId) {
+        try {
+          // Call update function without showing loading state
+          const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/localization/fx-rates/update`, {
+            method: "POST",
+            headers: getAuthHeaders(),
+            credentials: "include",
+            body: JSON.stringify({
+              baseCurrency: localization.baseCurrency,
+            }),
+          })
+          if (response.ok) {
+            const data = await response.json()
+            if (data.ok && data.data) {
+              const updatedRates = data.data.fxRates || {}
+              setLocalization({ 
+                ...localization, 
+                fxRates: updatedRates,
+              })
+              // Silently update - don't show toast for automatic updates
+            }
+          }
+        } catch (error) {
+          console.error("Auto FX rate update failed:", error)
+          // Don't show error toast for automatic updates
+        }
+      }
+    }, 24 * 60 * 60 * 1000) // 24 hours
+
+    return () => clearInterval(interval)
+  }, [orgId, localization.autoFxUpdate, localization.baseCurrency])
+
   const fetchLocalization = async () => {
     if (!orgId) return
     setLoading(true)

@@ -511,7 +511,7 @@ export function BudgetActual() {
             credentials: "include",
             body: JSON.stringify({
               modelRunId: latestRun.id,
-              mappingId: null, // Will use default mapping
+              // mappingId is optional - omit if not needed
             }),
           })
 
