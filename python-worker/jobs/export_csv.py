@@ -53,7 +53,8 @@ def handle_export_csv(job_id: str, org_id: str, object_id: str, logs: dict):
             for key, value in summary.items():
                 writer.writerow([key, value])
         
-        csv_content = output.getvalue().encode('utf-8')
+        csv_content_str = output.getvalue()
+        csv_content_bytes = csv_content_str.encode('utf-8')
         
         # Try to upload to S3, fallback to database storage
         import os
@@ -63,7 +64,7 @@ def handle_export_csv(job_id: str, org_id: str, object_id: str, logs: dict):
         if s3_bucket:
             try:
                 csv_key = f"exports/{export_id}/export.csv"
-                upload_bytes_to_s3(csv_key, csv_content, 'text/csv')
+                upload_bytes_to_s3(csv_key, csv_content_bytes, 'text/csv')
                 logger.info(f"CSV uploaded to S3: {csv_key}")
             except Exception as e:
                 logger.warning(f"Failed to upload CSV to S3: {str(e)}, storing in database instead")
@@ -78,10 +79,11 @@ def handle_export_csv(job_id: str, org_id: str, object_id: str, logs: dict):
             """, (csv_key, export_id))
         else:
             # S3 not configured, store in database as fallback
+            # csv_content_bytes is already bytes, don't encode again
             logger.warning("S3 not configured, storing CSV in database as fallback")
             cursor.execute("""
                 UPDATE exports SET file_data = %s, status = 'completed', updated_at = NOW() WHERE id = %s
-            """, (csv_content.encode('utf-8'), export_id))
+            """, (csv_content_bytes, export_id))
         
         cursor.execute("""
             UPDATE jobs SET progress = 100, logs = %s WHERE id = %s

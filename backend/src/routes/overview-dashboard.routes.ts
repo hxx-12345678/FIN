@@ -9,7 +9,7 @@ const router = Router();
 router.get(
   '/orgs/:orgId/overview',
   authenticate,
-  // requireOrgAccess removed - controller already checks access
+  requireOrgAccess('orgId'), // Add proper RBAC middleware
   overviewDashboardController.getOverview
 );
 

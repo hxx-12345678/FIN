@@ -1036,16 +1036,22 @@ Use the model run data to provide specific, data-driven insights about the forec
     }
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
+      // Use getAuthToken from api-config for consistency
+      const { getAuthToken } = await import("@/lib/api-config")
+      const token = getAuthToken()
 
       if (!token) {
-        throw new Error("Authentication token not found")
+        toast.error("Authentication token not found. Please log in again.")
+        return
       }
 
-      const response = await fetch(`${API_BASE_URL}/model-runs/${latestRun.id}/export`, {
+      // Ensure API_BASE_URL includes /api/v1
+      let baseUrl = API_BASE_URL
+      if (!baseUrl.endsWith('/api/v1')) {
+        baseUrl = baseUrl.replace(/\/$/, '') + '/api/v1'
+      }
+
+      const response = await fetch(`${baseUrl}/model-runs/${latestRun.id}/export`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -1091,7 +1097,13 @@ Use the model run data to provide specific, data-driven insights about the forec
       }
 
       try {
-        const response = await fetch(`${API_BASE_URL}/jobs/${jobId}`, {
+        // Ensure API_BASE_URL includes /api/v1
+        let baseUrl = API_BASE_URL
+        if (!baseUrl.endsWith('/api/v1')) {
+          baseUrl = baseUrl.replace(/\/$/, '') + '/api/v1'
+        }
+        
+        const response = await fetch(`${baseUrl}/jobs/${jobId}`, {
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
@@ -1105,7 +1117,7 @@ Use the model run data to provide specific, data-driven insights about the forec
             const status = result.job.status
             if (status === "done" || status === "completed") {
               // Download export
-              const downloadResponse = await fetch(`${API_BASE_URL}/exports/${exportId}/download`, {
+              const downloadResponse = await fetch(`${baseUrl}/exports/${exportId}/download`, {
                 headers: {
                   Authorization: `Bearer ${token}`,
                 },
@@ -1382,24 +1394,37 @@ Use the model run data to provide specific, data-driven insights about the forec
                       </Badge>
                     </div>
                     {hasData ? (
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Accuracy</span>
+                      <div className="space-y-3 text-sm">
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-1">
+                            <span className="text-muted-foreground">Accuracy</span>
+                            <FinancialTermTooltip term="Forecast Accuracy" description="The percentage of forecast values that fall within acceptable error margins. Higher is better (typically 85-95%)." />
+                          </div>
                           <span className="font-medium">{model.accuracy.toFixed(1)}%</span>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">MAPE</span>
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-1">
+                            <span className="text-muted-foreground">MAPE</span>
+                            <FinancialTermTooltip term="Mean Absolute Percentage Error" description="Average percentage error between forecasted and actual values. Lower is better (typically &lt;10% is excellent)." />
+                          </div>
                           <span className="font-medium">{model.mape > 0 ? `${model.mape.toFixed(2)}%` : "N/A"}</span>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">RMSE</span>
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-1">
+                            <span className="text-muted-foreground">RMSE</span>
+                            <FinancialTermTooltip term="Root Mean Squared Error" description="Measures the magnitude of forecast errors in the same units as the data. Lower is better." />
+                          </div>
                           <span className="font-medium">{model.rmse > 0 ? model.rmse.toFixed(2) : "N/A"}</span>
                         </div>
-                        <div className="text-xs text-muted-foreground">
-                          Last run: {model.lastTrained}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Total runs: {model.runCount}
+                        <div className="pt-2 border-t space-y-1">
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>Last run:</span>
+                            <span>{model.lastTrained}</span>
+                          </div>
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>Total runs:</span>
+                            <span>{model.runCount}</span>
+                          </div>
                         </div>
                       </div>
                     ) : (

@@ -89,15 +89,23 @@ def handle_aicfo_chat(job_id: str, org_id: str, object_id: str, logs: dict):
     # Use gemini-2.0-flash-exp or gemini-1.5-flash for reliability in 2026
     gemini_model = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash-exp')
     
-    # Try multiple API keys just like the backend
+    # Try multiple API keys - support up to 10 keys for redundancy
     api_keys = []
-    if os.getenv('GEMINI_API_KEY'): api_keys.append(os.getenv('GEMINI_API_KEY'))
-    if os.getenv('GEMINI_API_KEY_1'): api_keys.append(os.getenv('GEMINI_API_KEY_1'))
-    if os.getenv('GEMINI_API_KEY_2'): api_keys.append(os.getenv('GEMINI_API_KEY_2'))
+    # Check primary key first
+    if os.getenv('GEMINI_API_KEY'): 
+        api_keys.append(os.getenv('GEMINI_API_KEY'))
+    # Check numbered keys (1-9)
+    for i in range(1, 10):
+        key = os.getenv(f'GEMINI_API_KEY_{i}')
+        if key:
+            api_keys.append(key)
     
     if not api_keys:
         logger.error("No Gemini API keys found in environment variables")
+        logger.error("Please set GEMINI_API_KEY or GEMINI_API_KEY_1, GEMINI_API_KEY_2, etc. in your .env file")
         raise ValueError("No Gemini API keys found in environment variables")
+    
+    logger.info(f"Found {len(api_keys)} Gemini API key(s) to try")
 
     conn = None
     cursor = None
@@ -197,6 +205,8 @@ Respond ONLY in valid JSON format."""
         # Try each API key and model fallback - Gemini 2.5 models as of 2026
         last_error = None
         response = None
+        invalid_keys = set()  # Track permanently invalid keys (leaked/expired) to skip faster
+        
         # Try Gemini 2.5 models first, then fallback to 2.0 and 1.5
         models_to_try = [
             'gemini-2.5-flash',  # Fastest, best for chat
@@ -209,6 +219,10 @@ Respond ONLY in valid JSON format."""
             for api_version in api_versions:
                 if response: break
                 for idx, api_key in enumerate(api_keys):
+                    # Skip keys that are known to be permanently invalid
+                    if (idx, api_key[:8]) in invalid_keys:
+                        continue
+                    
                     try:
                         # Don't log API key prefixes for security - use index instead
                         logger.info(f"Attempting Gemini with model {model_name}, version {api_version} (key #{idx + 1})")
@@ -240,6 +254,7 @@ Respond ONLY in valid JSON format."""
                         if resp.status_code == 200:
                             response = resp
                             gemini_model = model_name # Update for metadata
+                            logger.info(f"✅ Successfully used Gemini {model_name} with key #{idx + 1}")
                             break
                         elif resp.status_code == 400 and ("responseMimeType" in resp.text or "response_mime_type" in resp.text):
                             # Retry WITHOUT response_mime_type if that was the error
@@ -251,9 +266,21 @@ Respond ONLY in valid JSON format."""
                             if resp.status_code == 200:
                                 response = resp
                                 gemini_model = model_name
+                                logger.info(f"✅ Successfully used Gemini {model_name} with key #{idx + 1} (without response_mime_type)")
                                 break
                         
                         resp_text = resp.text
+                        
+                        # Check for permanently invalid keys (leaked/expired) - skip these keys for all future attempts
+                        if resp.status_code == 403 and ("leaked" in resp_text.lower() or "reported" in resp_text.lower()):
+                            invalid_keys.add((idx, api_key[:8]))
+                            logger.warning(f"[WARN] Key #{idx + 1} is LEAKED - skipping for all future attempts in this job")
+                            logger.warning(f"[INFO] To fix: Get new API key from https://makersuite.google.com/app/apikey and add to .env file")
+                        elif resp.status_code == 400 and ("expired" in resp_text.lower() or "API_KEY_INVALID" in resp_text):
+                            invalid_keys.add((idx, api_key[:8]))
+                            logger.warning(f"[WARN] Key #{idx + 1} is EXPIRED - skipping for all future attempts in this job")
+                            logger.warning(f"[INFO] To fix: Get new API key from https://makersuite.google.com/app/apikey and add to .env file")
+                        
                         # If it's a quota error, don't spam logs with the whole thing
                         # Also sanitize any potential API key exposure in error messages
                         log_msg = resp_text[:300] if resp.status_code != 429 else "Quota exceeded"
@@ -268,124 +295,136 @@ Respond ONLY in valid JSON format."""
                         logger.warning(f"Error calling Gemini {model_name}: {error_msg}")
                         last_error = error_msg
         
-        if not response:
-            raise Exception(f"All Gemini models, versions and keys failed. Last error: {last_error}")
-            
-        llm_duration = time.time() - start_time
-        logger.info(f"LLM call ({gemini_model}) took {llm_duration:.2f}s")
-        
-        result_data = response.json()
-        content = result_data['candidates'][0]['content']['parts'][0]['text']
-        
-        # Parse JSON from content - robust parsing
+        # Parse response if we got one, otherwise use fallback
         parsed = None
         natural_language = ''
         recommendations = []
         
-        try:
-            # Handle possible markdown backticks or extra whitespace
-            json_str = content.strip()
-            if '```json' in json_str:
-                json_str = json_str.split('```json')[1].split('```')[0].strip()
-            elif '```' in json_str:
-                json_str = json_str.split('```')[1].split('```')[0].strip()
+        if not response:
+            # Sanitize last_error before logging
+            if last_error:
+                last_error = re.sub(r'AIzaSy[A-Za-z0-9]{35}', '[REDACTED_API_KEY]', last_error)
+            logger.error(f"[ERROR] All Gemini models, versions and keys failed. Last error: {last_error}")
+            logger.warning("[WARN] Falling back to query-specific deterministic response")
+            logger.warning("[INFO] To fix API keys: Run 'python test_gemini_keys.py' to test keys, then add new keys to .env file")
+            # Use fallback - natural_language and recommendations will be set below
+        else:
+            # Successfully got response from Gemini - parse it
+            llm_duration = time.time() - start_time
+            logger.info(f"LLM call ({gemini_model}) took {llm_duration:.2f}s")
             
-            # CRITICAL FIX: Handle unterminated strings and unescaped newlines
-            # Gemini sometimes returns JSON with unescaped newlines in strings
-            # We need to fix these before parsing
-            import re
+            result_data = response.json()
+            content = result_data['candidates'][0]['content']['parts'][0]['text']
             
-            # Fix unterminated strings by finding incomplete string values and completing them
-            # Pattern: "key": "value that might have newlines or be unterminated
-            # Strategy: Find all string values and ensure they're properly escaped
-            
-            # First, try to fix common issues:
-            # 1. Replace unescaped newlines in string values with \n
-            # 2. Fix unterminated strings at the end of JSON
-            # 3. Escape quotes within string values
-            
-            # More robust approach: Try to repair the JSON incrementally
             try:
-                parsed = json.loads(json_str)
-            except json.JSONDecodeError as parse_error:
-                logger.warning(f"Initial JSON parse failed: {parse_error}. Attempting repair...")
+                # Handle possible markdown backticks or extra whitespace
+                json_str = content.strip()
+                if '```json' in json_str:
+                    json_str = json_str.split('```json')[1].split('```')[0].strip()
+                elif '```' in json_str:
+                    json_str = json_str.split('```')[1].split('```')[0].strip()
                 
-                # Try to fix unterminated strings by finding the last incomplete string
-                # and closing it properly
-                error_pos = getattr(parse_error, 'pos', None) or 0
+                # CRITICAL FIX: Handle unterminated strings and unescaped newlines
+                # Gemini sometimes returns JSON with unescaped newlines in strings
+                # We need to fix these before parsing
+                # (re module is already imported at top level)
                 
-                # Strategy: Find incomplete string values and complete them
-                # Look for patterns like: "action": "text that is unterminated
-                # We'll try to find where the string should end
+                # Fix unterminated strings by finding incomplete string values and completing them
+                # Pattern: "key": "value that might have newlines or be unterminated
+                # Strategy: Find all string values and ensure they're properly escaped
                 
-                # For unterminated strings, try to find the next valid JSON structure
-                # and close the string before it
-                if 'Unterminated string' in str(parse_error):
-                    # Find the position where the string starts
-                    # Look backwards from error position to find opening quote
-                    start_pos = json_str.rfind('"', 0, error_pos)
-                    if start_pos != -1:
-                        # Try to find where the string should end (next unescaped quote or end of object)
-                        # Look for patterns that suggest string continuation
-                        # If we can't find a closing quote, try to insert one before the next structural character
-                        remaining = json_str[error_pos:]
-                        # Look for next structural character that would end the string
-                        next_comma = remaining.find(',')
-                        next_brace = remaining.find('}')
-                        next_bracket = remaining.find(']')
-                        
-                        # Find the earliest structural character
-                        end_markers = [m for m in [next_comma, next_brace, next_bracket] if m != -1]
-                        if end_markers:
-                            insert_pos = error_pos + min(end_markers)
-                            # Insert closing quote before the structural character
-                            json_str = json_str[:insert_pos] + '"' + json_str[insert_pos:]
-                            logger.info(f"Repaired unterminated string at position {insert_pos}")
+                # First, try to fix common issues:
+                # 1. Replace unescaped newlines in string values with \n
+                # 2. Fix unterminated strings at the end of JSON
+                # 3. Escape quotes within string values
                 
-                # Also fix unescaped newlines in strings
-                # Replace literal newlines within string values with \n
-                # This is tricky - we need to be careful not to break valid JSON
-                # For now, try parsing again after the repair
+                # More robust approach: Try to repair the JSON incrementally
                 try:
                     parsed = json.loads(json_str)
-                except json.JSONDecodeError as e2:
-                    logger.warning(f"Repair attempt failed: {e2}. Using fallback extraction...")
-                    # Fall through to regex extraction below
-                    raise e2
-            
-            # If we got here, parsing succeeded
-            natural_language = parsed.get('naturalLanguage', '')
-            recommendations = parsed.get('recommendations', [])
-            
-            # Validate natural_language is not JSON itself
-            if natural_language.startswith('{') or natural_language.startswith('['):
-                logger.warning("naturalLanguage appears to be JSON, extracting from recommendations")
-                # If naturalLanguage is JSON, generate from recommendations
-                if recommendations and len(recommendations) > 0:
-                    natural_language = f"Based on your query '{query}', {recommendations[0].get('summary', recommendations[0].get('explain', ''))}"
-                else:
-                    natural_language = f"Based on your query '{query}', I've analyzed your financial position and prepared recommendations."
+                except json.JSONDecodeError as parse_error:
+                    logger.warning(f"Initial JSON parse failed: {parse_error}. Attempting repair...")
                     
-        except (json.JSONDecodeError, Exception) as e:
-            logger.error(f"Failed to parse LLM JSON response: {e}")
-            logger.error(f"Raw content (first 500 chars): {content[:500]}")
-            # If JSON parsing fails, try to extract natural language from raw content
-            # Sometimes Gemini returns plain text even when asked for JSON
-            import re
-            if 'naturalLanguage' in content or 'natural_language' in content:
-                # Try regex extraction - handle multiline strings
-                nl_match = re.search(r'"naturalLanguage":\s*"((?:[^"\\]|\\.|\\n)*)"', content, re.DOTALL)
-                if not nl_match:
-                    # Try without quotes (might be unquoted)
-                    nl_match = re.search(r'"naturalLanguage":\s*([^,}\]]+)', content, re.DOTALL)
-                if nl_match:
-                    natural_language = nl_match.group(1).strip().strip('"').replace('\\n', '\n')
+                    # Try to fix unterminated strings by finding the last incomplete string
+                    # and closing it properly
+                    error_pos = getattr(parse_error, 'pos', None) or 0
+                    
+                    # Strategy: Find incomplete string values and complete them
+                    # Look for patterns like: "action": "text that is unterminated
+                    # We'll try to find where the string should end
+                    
+                    # For unterminated strings, try to find the next valid JSON structure
+                    # and close the string before it
+                    if 'Unterminated string' in str(parse_error):
+                        # Find the position where the string starts
+                        # Look backwards from error position to find opening quote
+                        start_pos = json_str.rfind('"', 0, error_pos)
+                        if start_pos != -1:
+                            # Try to find where the string should end (next unescaped quote or end of object)
+                            # Look for patterns that suggest string continuation
+                            # If we can't find a closing quote, try to insert one before the next structural character
+                            remaining = json_str[error_pos:]
+                            # Look for next structural character that would end the string
+                            next_comma = remaining.find(',')
+                            next_brace = remaining.find('}')
+                            next_bracket = remaining.find(']')
+                            
+                            # Find the earliest structural character
+                            end_markers = [m for m in [next_comma, next_brace, next_bracket] if m != -1]
+                            if end_markers:
+                                insert_pos = error_pos + min(end_markers)
+                                # Insert closing quote before the structural character
+                                json_str = json_str[:insert_pos] + '"' + json_str[insert_pos:]
+                                logger.info(f"Repaired unterminated string at position {insert_pos}")
+                    
+                    # Also fix unescaped newlines in strings
+                    # Replace literal newlines within string values with \n
+                    # This is tricky - we need to be careful not to break valid JSON
+                    # For now, try parsing again after the repair
+                    try:
+                        parsed = json.loads(json_str)
+                    except json.JSONDecodeError as e2:
+                        logger.warning(f"Repair attempt failed: {e2}. Using fallback extraction...")
+                        # Fall through to regex extraction below
+                        raise e2
+                
+                # If we got here, parsing succeeded
+                natural_language = parsed.get('naturalLanguage', '')
+                recommendations = parsed.get('recommendations', [])
+                
+                # Validate natural_language is not JSON itself
+                if natural_language.startswith('{') or natural_language.startswith('['):
+                    logger.warning("naturalLanguage appears to be JSON, extracting from recommendations")
+                    # If naturalLanguage is JSON, generate from recommendations
+                    if recommendations and len(recommendations) > 0:
+                        natural_language = f"Based on your query '{query}', {recommendations[0].get('summary', recommendations[0].get('explain', ''))}"
+                    else:
+                        natural_language = f"Based on your query '{query}', I've analyzed your financial position and prepared recommendations."
+                        
+            except (json.JSONDecodeError, Exception) as e:
+                logger.error(f"Failed to parse LLM JSON response: {e}")
+                logger.error(f"Raw content (first 500 chars): {content[:500]}")
+                # If JSON parsing fails, try to extract natural language from raw content
+                # Sometimes Gemini returns plain text even when asked for JSON
+                # (re module is already imported at top level)
+                if 'naturalLanguage' in content or 'natural_language' in content:
+                    # Try regex extraction - handle multiline strings
+                    nl_match = re.search(r'"naturalLanguage":\s*"((?:[^"\\]|\\.|\\n)*)"', content, re.DOTALL)
+                    if not nl_match:
+                        # Try without quotes (might be unquoted)
+                        nl_match = re.search(r'"naturalLanguage":\s*([^,}\]]+)', content, re.DOTALL)
+                    if nl_match:
+                        natural_language = nl_match.group(1).strip().strip('"').replace('\\n', '\n')
+                    else:
+                        # Fallback: use first 300 chars as natural language
+                        natural_language = content[:300] if len(content) > 300 else content
                 else:
-                    # Fallback: use first 300 chars as natural language
-                    natural_language = content[:300] if len(content) > 300 else content
-            else:
-                # Generate from query and calculations
-                natural_language = generateNaturalLanguageFromQuery(query, calculations)
+                    # Generate from query and calculations
+                    natural_language = generateNaturalLanguageFromQuery(query, calculations)
+                recommendations = []
+        
+        # If no response from Gemini, use fallback
+        if not response:
+            natural_language = generateNaturalLanguageFromQuery(query, calculations)
             recommendations = []
         
         # Ensure natural_language is not empty and is actually text (not JSON)

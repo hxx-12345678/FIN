@@ -22,7 +22,7 @@ export const investorDashboardController = {
 
       const { orgId } = req.params;
 
-      // Verify user has access to this org
+      // Note: requireOrgAccess middleware already verifies access, but keeping this as defense in depth
       const role = await prisma.userOrgRole.findUnique({
         where: {
           userId_orgId: {

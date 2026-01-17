@@ -142,10 +142,23 @@ export const modelController = {
       }
 
       const { model_id } = req.params;
-      const { assumptions } = req.body || {};
+      const { assumptions, name } = req.body || {};
 
-      if (!assumptions || typeof assumptions !== 'object') {
-        throw new ValidationError('assumptions is required and must be an object');
+      // Allow updating either assumptions or name (or both)
+      if (!assumptions && !name) {
+        throw new ValidationError('Either assumptions or name must be provided');
+      }
+
+      if (assumptions && typeof assumptions !== 'object') {
+        throw new ValidationError('assumptions must be an object');
+      }
+
+      if (name && typeof name !== 'string') {
+        throw new ValidationError('name must be a string');
+      }
+
+      if (name && name.trim().length === 0) {
+        throw new ValidationError('name cannot be empty');
       }
 
       const model = await prisma.model.findUnique({
@@ -194,17 +207,28 @@ export const modelController = {
         }
       }
 
-      const updatedModelJson = {
-        ...(existingModelJson && typeof existingModelJson === 'object' ? existingModelJson : {}),
-        assumptions: mergedAssumptions,
+      // Build update data
+      const updateData: any = {
+        version: { increment: 1 },
       };
+
+      // Update name if provided
+      if (name) {
+        updateData.name = name.trim();
+      }
+
+      // Update assumptions if provided
+      if (assumptions) {
+        const updatedModelJson = {
+          ...(existingModelJson && typeof existingModelJson === 'object' ? existingModelJson : {}),
+          assumptions: mergedAssumptions,
+        };
+        updateData.modelJson = updatedModelJson;
+      }
 
       const updated = await prisma.model.update({
         where: { id: model_id },
-        data: {
-          modelJson: updatedModelJson,
-          version: { increment: 1 },
-        },
+        data: updateData,
         select: {
           id: true,
           name: true,
@@ -222,13 +246,17 @@ export const modelController = {
         },
       });
 
+      const updatedFields: string[] = [];
+      if (name) updatedFields.push('name');
+      if (assumptions) updatedFields.push('assumptions');
+
       await auditService.log({
         actorUserId: req.user.id,
         orgId: model.orgId,
         action: 'model_updated',
         objectType: 'model',
         objectId: model.id,
-        metaJson: { updatedFields: ['assumptions'] },
+        metaJson: { updatedFields },
       });
 
       res.json({ ok: true, model: updated });

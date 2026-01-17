@@ -57,7 +57,7 @@ export const excelMergeSchema = z.object({
 // Excel export schema
 export const excelExportSchema = z.object({
   modelRunId: z.string().uuid(),
-  mappingId: z.string().uuid().optional(),
+  mappingId: z.string().uuid().nullable().optional().transform(val => val === null ? undefined : val),
   includeProvenance: z.boolean().default(true),
   includeChangeTracking: z.boolean().default(true),
 });
