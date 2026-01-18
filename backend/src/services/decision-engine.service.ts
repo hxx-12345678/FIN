@@ -85,10 +85,27 @@ export const decisionEngineService = {
       select: { id: true, percentilesJson: true }
     });
 
-    let currentSurvivalProbability = 0.85; // Default if no MC run yet
-    if (latestMC && latestMC.percentilesJson) {
-      const res = await montecarloService.getMonteCarloResult(latestMC.id);
-      currentSurvivalProbability = res.survivalProbability ?? 0.85;
+    // Get survival probability - default to 85% if no MC run or if calculation fails
+    let currentSurvivalProbability = 0.85;
+    try {
+      if (latestMC && latestMC.percentilesJson) {
+        const res = await montecarloService.getMonteCarloResult(latestMC.id);
+        // Extract survival probability from various possible formats
+        const sp = res?.survivalProbability || 
+                   res?.survival_probability || 
+                   res?.overall?.probabilitySurvivingFullPeriod ||
+                   res?.overall?.probability_surviving_full_period;
+        if (sp && typeof sp === 'number' && sp > 0 && sp <= 1) {
+          currentSurvivalProbability = sp;
+        }
+      }
+    } catch (error) {
+      logger.warn(`[DecisionEngine] Could not get Monte Carlo survival probability, using default: ${error}`);
+    }
+    
+    // Ensure currentSurvivalProbability is a valid number
+    if (!currentSurvivalProbability || currentSurvivalProbability <= 0 || currentSurvivalProbability > 1) {
+      currentSurvivalProbability = 0.85;
     }
 
     // 5. Calculate Deltas & Heuristic Survival Probability
@@ -96,10 +113,25 @@ export const decisionEngineService = {
     
     // Heuristic: If runway changes by 10%, survival probability shifts by ~2-5%
     // This is the "Instant" answer for the CFO.
-    const runwayChangeRatio = runwayMonths > 0 ? (runwayDelta / runwayMonths) : 0;
-    const estimatedNewSurvivalProbability = Math.min(0.99, Math.max(0.01, 
-      currentSurvivalProbability + (runwayChangeRatio * 0.25)
-    ));
+    let runwayChangeRatio = 0;
+    if (runwayMonths > 0) {
+      runwayChangeRatio = runwayDelta / runwayMonths;
+    } else if (runwayMonths === 0 && newRunwayMonths > 0) {
+      // Going from 0 to positive runway is a huge improvement
+      runwayChangeRatio = 0.5; // 50% improvement
+    } else if (runwayMonths > 0 && newRunwayMonths === 999) {
+      // Becoming profitable is a huge improvement
+      runwayChangeRatio = 1.0; // 100% improvement
+    }
+    
+    // Calculate new survival probability with bounds
+    let estimatedNewSurvivalProbability = currentSurvivalProbability + (runwayChangeRatio * 0.25);
+    estimatedNewSurvivalProbability = Math.min(0.99, Math.max(0.01, estimatedNewSurvivalProbability));
+    
+    // Ensure we always have valid probabilities
+    if (!estimatedNewSurvivalProbability || isNaN(estimatedNewSurvivalProbability) || !isFinite(estimatedNewSurvivalProbability)) {
+      estimatedNewSurvivalProbability = currentSurvivalProbability || 0.85;
+    }
 
     // Generate Recommendation
     let recommendation = "";
@@ -120,7 +152,25 @@ export const decisionEngineService = {
     const maxAdditionalBurn = Math.max(0, maxSafeBurn - newBurnRate);
     
     // Revenue Buffer: How much can revenue drop before we hit the danger zone?
-    const revenueBuffer = Math.max(0, newBurnRate - (cashBalance / dangerZoneMonths));
+    // This is the maximum reduction in revenue (or increase in expenses) before hitting 6 months runway
+    let revenueBuffer = 0;
+    if (cashBalance > 0) {
+      const safeBurnRate = cashBalance / dangerZoneMonths;
+      if (newBurnRate > 0 && newBurnRate < safeBurnRate) {
+        // We have buffer: revenue can drop by this amount (or expenses can increase)
+        // before we hit the 6-month danger zone
+        revenueBuffer = safeBurnRate - newBurnRate;
+      } else if (newBurnRate === 0) {
+        // No burn rate means we can sustain up to safeBurnRate
+        revenueBuffer = safeBurnRate;
+      }
+      // If newBurnRate >= safeBurnRate, buffer is 0 (we're at or past danger zone)
+    }
+    
+    // Ensure revenueBuffer is a valid number
+    if (!revenueBuffer || isNaN(revenueBuffer) || !isFinite(revenueBuffer) || revenueBuffer < 0) {
+      revenueBuffer = 0;
+    }
 
     // 7. Estimate Cash-out Date Impact
     const impactText = runwayDelta === 0 ? "No change" : 

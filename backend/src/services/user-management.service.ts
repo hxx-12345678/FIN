@@ -187,6 +187,33 @@ export const userManagementService = {
       createdById: invitedBy,
     });
 
+    // Send invitation email
+    try {
+      const { emailService } = await import('./email.service');
+      const org = await prisma.org.findUnique({ where: { id: orgId }, select: { name: true } });
+      const inviter = await prisma.user.findUnique({ 
+        where: { id: invitedBy }, 
+        select: { name: true, email: true } 
+      });
+      
+      const inviterName = inviter?.name || inviter?.email || 'A team member';
+      const orgName = org?.name || 'the organization';
+      
+      await emailService.sendInvitationEmail(
+        email,
+        inviterName,
+        orgName,
+        role,
+        invitation.token,
+        message // Include custom message if provided
+      );
+      
+      logger.info(`[UserManagement] Invitation email sent to ${email}`);
+    } catch (emailError) {
+      // Log error but don't fail invitation creation
+      logger.error(`[UserManagement] Failed to send invitation email to ${email}:`, emailError);
+    }
+
     // Log audit event
     await auditService.log({
       actorUserId: invitedBy,
@@ -266,7 +293,7 @@ export const userManagementService = {
   },
 
   /**
-   * Resend an invitation
+   * Resend an invitation (sends email again)
    */
   resendInvitation: async (orgId: string, invitationId: string, userId: string): Promise<Invitation> => {
     // Verify user has admin access
@@ -307,6 +334,33 @@ export const userManagementService = {
       expiresAt,
       createdById: userId,
     });
+
+    // Send invitation email
+    try {
+      const { emailService } = await import('./email.service');
+      const org = await prisma.org.findUnique({ where: { id: orgId }, select: { name: true } });
+      const inviter = await prisma.user.findUnique({ 
+        where: { id: userId }, 
+        select: { name: true, email: true } 
+      });
+      
+      const inviterName = inviter?.name || inviter?.email || invitation.createdBy?.name || 'A team member';
+      const orgName = org?.name || 'the organization';
+      
+      await emailService.sendInvitationEmail(
+        invitation.email,
+        inviterName,
+        orgName,
+        invitation.role,
+        newInvitation.token,
+        undefined // No custom message for resend
+      );
+      
+      logger.info(`[UserManagement] Resent invitation email to ${invitation.email}`);
+    } catch (emailError) {
+      // Log error but don't fail resend
+      logger.error(`[UserManagement] Failed to send resend invitation email to ${invitation.email}:`, emailError);
+    }
 
     // Log audit event
     await auditService.log({

@@ -26,8 +26,6 @@ import {
   TrendingUp,
   Users,
   Zap,
-  Bell,
-  Search,
   Target,
   MessageSquare,
   Shield,
@@ -42,6 +40,7 @@ import {
   Loader2,
   ShieldCheck,
   Database,
+  Bell,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { useStagedChanges } from "@/hooks/use-staged-changes"
@@ -176,11 +175,7 @@ const managementItems = [
     icon: Zap,
     key: "integrations",
   },
-  {
-    title: "Notifications",
-    icon: Bell,
-    key: "notifications",
-  },
+  // Notifications removed - not currently functional
   {
     title: "Compliance",
     icon: Shield,
@@ -604,14 +599,8 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
             </div>
           )}
           <div className="flex flex-1 items-center gap-4 min-w-0">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input placeholder="Search or ask AI CFO anything..." className="pl-10 bg-background" />
-            </div>
-            <Button variant="outline" size="icon" className="relative bg-transparent shrink-0">
-              <Bell className="h-4 w-4" />
-              <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full text-xs"></span>
-            </Button>
+            {/* Search and AI CFO - Removed as not currently functional */}
+            {/* Notification Bell - Removed as not currently functional */}
             <PendingApprovalsBadge />
           </div>
         </header>

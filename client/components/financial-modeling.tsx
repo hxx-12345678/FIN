@@ -611,13 +611,13 @@ export function FinancialModeling() {
     setEditingModelName(model.name || "")
   }
 
-  const handleCancelEditModelName = (e?: React.MouseEvent) => {
+  const handleCancelEditModelName = (e?: React.MouseEvent | React.KeyboardEvent) => {
     e?.stopPropagation()
     setEditingModelId(null)
     setEditingModelName("")
   }
 
-  const handleSaveModelName = async (modelId: string, e?: React.MouseEvent) => {
+  const handleSaveModelName = async (modelId: string, e?: React.MouseEvent | React.KeyboardEvent) => {
     e?.stopPropagation()
     const success = await updateModelName(modelId, editingModelName)
     if (!success) {

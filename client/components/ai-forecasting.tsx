@@ -1398,21 +1398,21 @@ Use the model run data to provide specific, data-driven insights about the forec
                         <div className="flex justify-between items-center">
                           <div className="flex items-center gap-1">
                             <span className="text-muted-foreground">Accuracy</span>
-                            <FinancialTermTooltip term="Forecast Accuracy" description="The percentage of forecast values that fall within acceptable error margins. Higher is better (typically 85-95%)." />
+                            <FinancialTermTooltip term="Forecast Accuracy" definition="The percentage of forecast values that fall within acceptable error margins. Higher is better (typically 85-95%)." />
                           </div>
                           <span className="font-medium">{model.accuracy.toFixed(1)}%</span>
                         </div>
                         <div className="flex justify-between items-center">
                           <div className="flex items-center gap-1">
                             <span className="text-muted-foreground">MAPE</span>
-                            <FinancialTermTooltip term="Mean Absolute Percentage Error" description="Average percentage error between forecasted and actual values. Lower is better (typically &lt;10% is excellent)." />
+                            <FinancialTermTooltip term="Mean Absolute Percentage Error" definition="Average percentage error between forecasted and actual values. Lower is better (typically &lt;10% is excellent)." />
                           </div>
                           <span className="font-medium">{model.mape > 0 ? `${model.mape.toFixed(2)}%` : "N/A"}</span>
                         </div>
                         <div className="flex justify-between items-center">
                           <div className="flex items-center gap-1">
                             <span className="text-muted-foreground">RMSE</span>
-                            <FinancialTermTooltip term="Root Mean Squared Error" description="Measures the magnitude of forecast errors in the same units as the data. Lower is better." />
+                            <FinancialTermTooltip term="Root Mean Squared Error" definition="Measures the magnitude of forecast errors in the same units as the data. Lower is better." />
                           </div>
                           <span className="font-medium">{model.rmse > 0 ? model.rmse.toFixed(2) : "N/A"}</span>
                         </div>
