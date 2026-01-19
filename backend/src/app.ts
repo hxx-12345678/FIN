@@ -244,39 +244,5 @@ app.use((req, res) => {
 // Error handler (must be last)
 app.use(errorHandler);
 
-// Start server (only if not in test mode and file is run directly)
-if (require.main === module && process.env.NODE_ENV !== 'test') {
-  async function startServer() {
-    try {
-      await prisma.$connect();
-      logger.info('✅ Database connected successfully');
-
-      app.listen(config.port, () => {
-        logger.info(`🚀 Server running on http://localhost:${config.port}`);
-        logger.info(`📊 Health check: http://localhost:${config.port}/health`);
-        logger.info(`🔧 Environment: ${config.nodeEnv}`);
-      });
-    } catch (error) {
-      logger.error('❌ Failed to start server:', error);
-      process.exit(1);
-    }
-  }
-
-  // Graceful shutdown
-  process.on('SIGINT', async () => {
-    logger.info('\n🛑 Shutting down gracefully...');
-    await prisma.$disconnect();
-    process.exit(0);
-  });
-
-  process.on('SIGTERM', async () => {
-    logger.info('\n🛑 Shutting down gracefully...');
-    await prisma.$disconnect();
-    process.exit(0);
-  });
-
-  startServer();
-}
-
 export default app;
 
