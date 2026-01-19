@@ -147,7 +147,7 @@ NEXT_PUBLIC_ENVIRONMENT=production
 
 **Build Command:**
 ```bash
-npm install && npm run build
+npm install && npm run build && npx prisma migrate deploy
 ```
 
 **Start Command:**
@@ -503,6 +503,19 @@ app.get('/health', (req, res) => {
 - Verify all environment variables are set
 - Check TypeScript compilation errors
 - Verify Prisma client is generated
+
+### JavaScript Heap Out of Memory (Build Error)
+
+**Problem:** Build fails with "FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory"
+
+**Solution:**
+1. The build script has been updated to use `--max-old-space-size=4096` (4GB memory)
+2. TypeScript config optimized with incremental compilation
+3. If still failing, upgrade to **Standard** instance type ($25/month) which has more memory
+4. Alternative: Use the build command directly in Render:
+   ```bash
+   NODE_OPTIONS="--max-old-space-size=4096" npm run build && npx prisma migrate deploy
+   ```
 
 ---
 
