@@ -1,6 +1,9 @@
 import prisma from '../config/database';
 import { ForbiddenError, NotFoundError } from '../utils/errors';
 
+// Type assertion for Prisma models that may not be in generated types yet
+const prismaClient = prisma as any;
+
 export const dataImportService = {
   listBatches: async (orgId: string, userId: string) => {
     const role = await prisma.userOrgRole.findUnique({
@@ -11,7 +14,7 @@ export const dataImportService = {
       throw new ForbiddenError('Only admins and finance users can view import batches');
     }
 
-    return prisma.dataImportBatch.findMany({
+    return prismaClient.dataImportBatch.findMany({
       where: { orgId },
       orderBy: { createdAt: 'desc' },
       take: 50,
@@ -37,7 +40,7 @@ export const dataImportService = {
       throw new ForbiddenError('No access to this organization');
     }
 
-    const batch = await prisma.dataImportBatch.findUnique({
+    const batch = await prismaClient.dataImportBatch.findUnique({
       where: { id: batchId },
       select: {
         id: true,

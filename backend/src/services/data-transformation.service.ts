@@ -162,7 +162,7 @@ export const dataTransformationService = {
             if (ruleResult.dbActions.markDuplicates && ruleResult.dbActions.markDuplicates.length > 0) {
               await prisma.rawTransaction.updateMany({
                 where: { id: { in: ruleResult.dbActions.markDuplicates } },
-                data: { isDuplicate: true },
+                data: { isDuplicate: true } as any,
               });
             }
           }

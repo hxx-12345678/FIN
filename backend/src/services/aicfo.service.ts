@@ -180,7 +180,7 @@ export const aicfoService = {
       const [intentRes, connectors, transactionCountResult, overviewDataResult] = await Promise.all([
         intentClassifierService.classify(sanitizedGoal),
         prisma.connector.findMany({ where: { orgId, status: { in: ['connected', 'syncing'] } }, select: { id: true } }),
-        prisma.rawTransaction.count({ where: { orgId, isDuplicate: false } }).catch(() => 0),
+        prisma.rawTransaction.count({ where: { orgId, isDuplicate: false } as any }).catch(() => 0),
         overviewDashboardService.getOverviewData(orgId).catch(() => null)
       ]);
       intentClassification = intentRes;
@@ -322,7 +322,7 @@ export const aicfoService = {
       try {
         const [connectorsCheck, transactionCountCheck, overviewDataCheck] = await Promise.all([
           prisma.connector.count({ where: { orgId, status: { in: ['connected', 'syncing'] } } }).catch(() => 0),
-          prisma.rawTransaction.count({ where: { orgId, isDuplicate: false } }).catch(() => 0),
+          prisma.rawTransaction.count({ where: { orgId, isDuplicate: false } as any }).catch(() => 0),
           overviewDashboardService.getOverviewData(orgId).catch(() => null)
         ]);
         hasConnectedAccounting = connectorsCheck > 0;

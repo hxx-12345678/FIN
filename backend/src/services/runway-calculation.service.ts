@@ -5,6 +5,9 @@
 import prisma from '../config/database';
 import { logger } from '../utils/logger';
 
+// Type assertion for Prisma models that may not be in generated types yet
+const prismaClient = prisma as any;
+
 export interface RunwayCalculationResult {
   runwayMonths: number;
   cashBalance: number;
@@ -129,7 +132,7 @@ export const runwayCalculationService = {
     
     // Priority 2: Check Financial Ledger for cash balance (most accurate for promoted data)
     // Look for cash-related account codes (case-insensitive approach)
-    const allLedgerEntries = await prisma.financialLedger.findMany({
+    const allLedgerEntries = await prismaClient.financialLedger.findMany({
       where: {
         orgId,
       },
@@ -162,7 +165,7 @@ export const runwayCalculationService = {
           gte: startDate,
           lte: endDate,
         },
-      },
+      } as any,
       orderBy: {
         date: 'desc',
       },
@@ -174,7 +177,7 @@ export const runwayCalculationService = {
         where: {
           orgId,
           isDuplicate: false,
-        },
+        } as any,
         orderBy: {
           date: 'desc',
         },

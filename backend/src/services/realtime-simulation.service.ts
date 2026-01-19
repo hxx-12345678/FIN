@@ -382,7 +382,7 @@ export const realtimeSimulationService = {
         where: {
           orgId,
           isDuplicate: false,
-        },
+        } as any,
         orderBy: {
           date: 'desc',
         },

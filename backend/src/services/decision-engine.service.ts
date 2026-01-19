@@ -89,7 +89,7 @@ export const decisionEngineService = {
     let currentSurvivalProbability = 0.85;
     try {
       if (latestMC && latestMC.percentilesJson) {
-        const res = await montecarloService.getMonteCarloResult(latestMC.id);
+        const res: any = await montecarloService.getMonteCarloResult(latestMC.id);
         // Extract survival probability from various possible formats
         const sp = res?.survivalProbability || 
                    res?.survival_probability || 

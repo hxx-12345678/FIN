@@ -69,7 +69,7 @@ export const overviewDashboardService = {
           gte: startDate,
           lte: endDate,
         },
-      },
+      } as any,
       orderBy: {
         date: 'desc',
       },
@@ -82,7 +82,7 @@ export const overviewDashboardService = {
         where: {
           orgId,
           isDuplicate: false,
-        },
+        } as any,
         orderBy: {
           date: 'desc',
         },

@@ -193,7 +193,7 @@ export const excelService = {
     }
 
     // Create import job
-    const importBatch = await prisma.dataImportBatch.create({
+    const importBatch = await (prisma as any).dataImportBatch.create({
       data: {
         orgId,
         sourceType: 'xlsx',

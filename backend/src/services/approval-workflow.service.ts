@@ -2,6 +2,9 @@ import prisma from '../config/database';
 import { auditService } from './audit.service';
 import { ValidationError, NotFoundError, ForbiddenError } from '../utils/errors';
 
+// Type assertion for Prisma models that may not be in generated types yet
+const prismaClient = prisma as any;
+
 export type ApprovalRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 
 export const approvalWorkflowService = {
@@ -17,7 +20,7 @@ export const approvalWorkflowService = {
     payloadJson: any;
     comment?: string;
   }) => {
-    const request = await prisma.approvalRequest.create({
+    const request = await prismaClient.approvalRequest.create({
       data: {
         orgId: params.orgId,
         requesterId: params.requesterId,
@@ -50,7 +53,7 @@ export const approvalWorkflowService = {
    * Approve a request.
    */
   approveRequest: async (requestId: string, approverId: string, comment?: string) => {
-    const request = await prisma.approvalRequest.findUnique({
+    const request = await prismaClient.approvalRequest.findUnique({
       where: { id: requestId },
     });
 
@@ -63,7 +66,7 @@ export const approvalWorkflowService = {
     }
 
     // Update request status
-    const updatedRequest = await prisma.approvalRequest.update({
+    const updatedRequest = await prismaClient.approvalRequest.update({
       where: { id: requestId },
       data: {
         status: 'approved',
@@ -96,7 +99,7 @@ export const approvalWorkflowService = {
    * Reject a request.
    */
   rejectRequest: async (requestId: string, approverId: string, comment: string) => {
-    const request = await prisma.approvalRequest.findUnique({
+    const request = await prismaClient.approvalRequest.findUnique({
       where: { id: requestId },
     });
 
@@ -108,7 +111,7 @@ export const approvalWorkflowService = {
       throw new ValidationError(`Request is already ${request.status}`);
     }
 
-    const updatedRequest = await prisma.approvalRequest.update({
+    const updatedRequest = await prismaClient.approvalRequest.update({
       where: { id: requestId },
       data: {
         status: 'rejected',
@@ -136,7 +139,7 @@ export const approvalWorkflowService = {
    * List pending requests for an org.
    */
   listPendingRequests: async (orgId: string) => {
-    return await prisma.approvalRequest.findMany({
+    return await prismaClient.approvalRequest.findMany({
       where: {
         orgId,
         status: 'pending',

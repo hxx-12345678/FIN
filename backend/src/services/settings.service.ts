@@ -1083,7 +1083,7 @@ export const settingsService = {
           });
         }),
         prisma.budget.findMany({ where: { orgId } }),
-        prisma.rawTransaction.findMany({ where: { orgId, isDuplicate: false }, take: 10000 }),
+        prisma.rawTransaction.findMany({ where: { orgId, isDuplicate: false } as any, take: 10000 }),
         prisma.export.findMany({ where: { orgId } }),
         prisma.auditLog.findMany({ where: { orgId }, take: 10000 }),
         prisma.alertRule.findMany({ where: { orgId } }),

@@ -134,11 +134,11 @@ export const headcountPlanningService = {
           metaJson: {
             ...((settings?.metaJson as any) || {}),
             headcountPlans: existingPlans,
-          },
+          } as any,
         },
         create: {
           orgId: request.orgId,
-          metaJson: { headcountPlans: existingPlans },
+          metaJson: { headcountPlans: existingPlans } as any,
         },
       });
 

@@ -31,7 +31,7 @@ export const marketReadyReportingService = {
     
     // Fetch latest runway from calculation service
     const { runwayMonths } = await prisma.realtimeSimulation.findFirst({
-        where: { orgId, isSnapshot: false },
+        where: { orgId, isSnapshot: false } as any,
         orderBy: { updatedAt: 'desc' },
         select: { resultsJson: true }
     }).then(res => {

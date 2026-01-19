@@ -144,7 +144,7 @@ async function detectSpendingAnomalies(orgId: string, threshold: number): Promis
       isDuplicate: false,
       date: { gte: threeMonthsAgo },
       amount: { lt: 0 }, // Expenses (negative amounts)
-    },
+    } as any,
     orderBy: { date: 'desc' },
   });
 

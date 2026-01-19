@@ -44,7 +44,7 @@ export const boardScenarioService = {
         resultsJson: results as any,
         isSnapshot: true,
         snapshotToken: token,
-      }
+      } as any
     });
 
     return {
@@ -60,7 +60,7 @@ export const boardScenarioService = {
    */
   getSnapshotByToken: async (token: string) => {
     const snapshot = await prisma.realtimeSimulation.findUnique({
-      where: { snapshotToken: token },
+      where: { snapshotToken: token } as any,
       include: {
         org: {
           select: {

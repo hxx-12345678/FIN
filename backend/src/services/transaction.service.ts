@@ -186,7 +186,7 @@ export const transactionService = {
           importBatchId: true, // Include for lineage tracking
           sourceId: true, // Include for deduplication tracking
           rawPayload: true,
-        },
+        } as any,
       });
       logger.info('Transactions fetched', { count: allTransactions.length });
     } catch (error) {

@@ -44,7 +44,7 @@ export const emailService = {
             apiKey: { apiKey: brevoApiKey }
           };
           
-          const sendSmtpEmail: brevo.SendSmtpEmail = {
+          const sendSmtpEmail: any = {
             sender: { email: fromEmail, name: 'FinaPilot' },
             to: [{ email: options.to }],
             subject: options.subject,
@@ -79,7 +79,7 @@ export const emailService = {
       // Try SendGrid if API key is configured
       if (sendgridApiKey) {
         try {
-          const sgMail = await import('@sendgrid/mail');
+          const sgMail = await import('@sendgrid/mail') as any;
           sgMail.setApiKey(sendgridApiKey);
           
           const msg = {

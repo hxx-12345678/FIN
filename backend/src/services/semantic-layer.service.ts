@@ -2,6 +2,9 @@ import prisma from '../config/database';
 import { auditService } from './audit.service';
 import { ValidationError, NotFoundError } from '../utils/errors';
 
+// Type assertion for Prisma models that may not be in generated types yet
+const prismaClient = prisma as any;
+
 export const semanticLayerService = {
   /**
    * Promote raw transactions to the financial ledger.
@@ -14,7 +17,7 @@ export const semanticLayerService = {
         orgId,
         importBatchId,
         isDuplicate: false,
-      },
+      } as any,
     });
 
     if (rawTxns.length === 0) {
@@ -47,7 +50,7 @@ export const semanticLayerService = {
         const chunk = ledgerEntries.slice(i, i + CHUNK_SIZE);
         const chunkResult = await prisma.$transaction(
           chunk.map(entry =>
-            prisma.financialLedger.create({ data: entry })
+            prismaClient.financialLedger.create({ data: entry })
           )
         );
         result.push(...chunkResult);
@@ -90,7 +93,7 @@ export const semanticLayerService = {
     description: string;
     reason: string;
   }) => {
-    const entry = await prisma.financialLedger.create({
+    const entry = await prismaClient.financialLedger.create({
       data: {
         orgId: params.orgId,
         transactionDate: params.transactionDate,
@@ -122,7 +125,7 @@ export const semanticLayerService = {
    * Get clean ledger data for reporting.
    */
   getLedgerData: async (orgId: string, startDate?: Date, endDate?: Date) => {
-    return await prisma.financialLedger.findMany({
+    return await prismaClient.financialLedger.findMany({
       where: {
         orgId,
         transactionDate: {

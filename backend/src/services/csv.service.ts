@@ -171,7 +171,7 @@ export const csvService = {
     }
 
     // Create import batch (lineage root)
-    const importBatch = await prisma.dataImportBatch.create({
+    const importBatch = await (prisma as any).dataImportBatch.create({
       data: {
         orgId,
         sourceType: 'csv',

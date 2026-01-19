@@ -147,7 +147,7 @@ NEXT_PUBLIC_ENVIRONMENT=production
 
 **Build Command:**
 ```bash
-npm install && npm run build && npx prisma migrate deploy
+npm install && npx prisma generate && npm run build && npx prisma migrate deploy
 ```
 
 **Start Command:**

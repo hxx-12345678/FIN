@@ -74,7 +74,7 @@ export const slackIntegrationService = {
           orgId,
           metaJson: { slack: config } as any,
         },
-      });
+      } as any);
 
       logger.info(`Slack configured for org ${orgId}`, { userId });
     } catch (error: any) {

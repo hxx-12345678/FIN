@@ -101,7 +101,7 @@ export const investorDashboardService = {
     // Model run might have calculated customers incorrectly, so prefer user-provided value
     if ((activeCustomers === 0 || activeCustomers > 1000) && arr > 0) {
       // First check data import batch mapping (most reliable - stored when CSV is mapped)
-      const importBatch = await prisma.dataImportBatch.findFirst({
+      const importBatch = await (prisma as any).dataImportBatch.findFirst({
         where: { orgId, sourceType: 'csv' },
         orderBy: { createdAt: 'desc' },
         select: { mappingJson: true },
@@ -177,11 +177,11 @@ export const investorDashboardService = {
     // If still 0 customers but we have revenue, count from transactions
     if (activeCustomers === 0 && arr > 0) {
       const transactions = await prisma.rawTransaction.findMany({
-        where: {
-          orgId,
-          isDuplicate: false,
-          amount: { gt: 0 }, // Revenue transactions only
-        },
+      where: {
+        orgId,
+        isDuplicate: false,
+        amount: { gt: 0 }, // Revenue transactions only
+      } as any,
         take: 1000,
       });
       
@@ -534,7 +534,7 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
       where: {
         orgId,
         isDuplicate: false,
-      },
+      } as any,
       orderBy: {
         date: 'desc',
       },
