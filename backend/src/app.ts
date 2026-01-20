@@ -67,33 +67,61 @@ const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3001',
   'https://fin-plum.vercel.app',
+  'https://finapilot-mvp.vercel.app',
   process.env.FRONTEND_URL,
 ].filter(Boolean) as string[];
 
+// Helper function to check if origin is allowed
+const isOriginAllowed = (origin: string | undefined): boolean => {
+  if (!origin) {
+    return true; // Allow requests with no origin (like mobile apps or curl requests)
+  }
+  
+  // Check exact match in allowed origins
+  if (allowedOrigins.includes(origin)) {
+    return true;
+  }
+  
+  // Allow all Vercel deployments (production and preview)
+  if (origin.endsWith('.vercel.app')) {
+    return true;
+  }
+  
+  return false;
+};
+
 const corsOptions = {
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) {
-      return callback(null, true);
-    }
-    
-    // Check if origin is in allowed list
-    if (allowedOrigins.includes(origin)) {
+    if (isOriginAllowed(origin)) {
       callback(null, true);
     } else {
-      // In development, log the blocked origin for debugging
-      if (config.nodeEnv === 'development') {
-        logger.warn(`CORS blocked origin: ${origin}. Allowed origins: ${allowedOrigins.join(', ')}`);
-      }
+      // Log blocked origin for debugging
+      logger.warn(`CORS blocked origin: ${origin}. Allowed origins: ${allowedOrigins.join(', ')}, or any *.vercel.app domain`);
       callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'Access-Control-Request-Method',
+    'Access-Control-Request-Headers',
+  ],
+  exposedHeaders: ['Content-Length', 'Content-Type'],
+  maxAge: 86400, // 24 hours - cache preflight requests for 24 hours
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
 };
 
 app.use(cors(corsOptions));
+
+// Explicit OPTIONS handler for preflight requests (additional safety)
+app.options('*', cors(corsOptions));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
