@@ -2,6 +2,30 @@
 
 Complete guide for deploying FinaPilot to production using Vercel (Frontend) and Render (Backend + Python Worker).
 
+## 🏗️ Unified Deployment (Recommended)
+
+To save costs and simplify management, FinaPilot is configured to run as a **single unified service** that contains both the Node.js API and the Python Background Worker.
+
+### 1. Render Deployment (One Click)
+1.  Connect your GitHub repository to Render.
+2.  Render will automatically detect the `render.yaml` blueprint.
+3.  Click **Deploy** to start the unified service.
+
+### 2. Manual Render Setup
+If not using the blueprint, configure a **Web Service**:
+- **Environment**: `Docker`
+- **Docker Context**: `.` (root)
+- **Dockerfile Path**: `Dockerfile`
+- **Instance Type**: `Starter` (Recommended for heavy CPU) or `Free`
+
+### 3. AWS Deployment (App Runner / ECS)
+Since the app is containerized, you can deploy the same image to AWS:
+1.  Push the code to GitHub.
+2.  Create an **AWS App Runner** service.
+3.  Select **Source code repository** and point to your repo.
+4.  Choose **Managed runtime** as `Docker`.
+5.  Set the port to `8000`.
+
 ---
 
 ## 📋 Table of Contents
