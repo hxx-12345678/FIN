@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Loader2 } from "lucide-react"
+import { useSearchParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { API_BASE_URL } from "@/lib/api-config"
 import {
@@ -85,6 +86,10 @@ const reportTemplates = [
 ]
 
 export function ReportsAnalytics() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const currentTab = searchParams.get("tab") || "templates"
+
   const [selectedPeriod, setSelectedPeriod] = useState("last-30-days")
   const [selectedTemplate, setSelectedTemplate] = useState("executive-summary")
   const [isGenerating, setIsGenerating] = useState(false)
@@ -841,7 +846,15 @@ export function ReportsAnalytics() {
         </Card>
       )}
 
-      <Tabs defaultValue="templates" className="space-y-4">
+      <Tabs 
+        value={currentTab} 
+        onValueChange={(value) => {
+          const params = new URLSearchParams(searchParams.toString())
+          params.set("tab", value)
+          router.replace(`?${params.toString()}`, { scroll: false })
+        }}
+        className="space-y-4"
+      >
         <div className="overflow-x-auto">
           <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 min-w-[400px]">
             <TabsTrigger value="templates" className="text-xs sm:text-sm">Report Templates</TabsTrigger>

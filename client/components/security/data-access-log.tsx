@@ -11,6 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Badge } from "@/components/ui/badge"
 import { Loader2, Download, ChevronDown, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
+import { API_BASE_URL } from "@/lib/api-config"
 
 interface DataAccessEvent {
   id: string
@@ -22,8 +23,6 @@ interface DataAccessEvent {
   details: any
   resourceSnapshot?: any
 }
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
 
 export function DataAccessLog() {
   const [events, setEvents] = useState<DataAccessEvent[]>([])

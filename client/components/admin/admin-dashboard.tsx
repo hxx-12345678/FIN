@@ -8,8 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import { Users, Building2, Activity, AlertCircle, TrendingUp, Settings } from "lucide-react"
 import { useAdminAccess } from "@/hooks/use-admin-access"
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
+import { API_BASE_URL } from "@/lib/api-config"
 
 interface SystemMetrics {
   totalUsers: number

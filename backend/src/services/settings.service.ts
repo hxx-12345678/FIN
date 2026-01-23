@@ -1234,4 +1234,53 @@ export const settingsService = {
       throw new ValidationError('Failed to export data. Please try again later.');
     }
   },
+
+  /**
+   * Delete user account and all associated data (GDPR Right to Erasure)
+   */
+  deleteProfile: async (userId: string) => {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { roles: true },
+    });
+
+    if (!user) {
+      throw new NotFoundError('User not found');
+    }
+
+    // Check if user is the last admin of any organization
+    for (const membership of user.roles) {
+      if (membership.role === 'admin') {
+        const otherAdmins = await prisma.userOrgRole.count({
+          where: {
+            orgId: membership.orgId,
+            role: 'admin',
+            userId: { not: userId },
+          },
+        });
+
+        if (otherAdmins === 0) {
+          throw new ValidationError(
+            `Cannot delete account. You are the only admin of organization ${membership.orgId}. Please transfer ownership or delete the organization first.`
+          );
+        }
+      }
+    }
+
+      // Delete all user data in a transaction
+      await prisma.$transaction([
+        // Delete preferences
+        prisma.userPreferences.deleteMany({ where: { userId } }),
+        // Delete memberships
+        prisma.userOrgRole.deleteMany({ where: { userId } }),
+        // Delete notification channels
+        prisma.notificationChannel.deleteMany({ where: { userId } }),
+        // Delete notifications
+        prisma.notification.deleteMany({ where: { userId } }),
+        // Finally delete the user
+        prisma.user.delete({ where: { id: userId } }),
+      ]);
+
+    logger.info(`User ${userId} deleted account (GDPR Right to Erasure)`);
+  },
 };

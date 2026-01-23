@@ -7,18 +7,24 @@ import "./globals.css"
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 
 export const metadata: Metadata = {
-  title: "FinaPilot - AI Financial Modeling Software | AI-CFO for Startups",
+  title: "FinaPilot - Your AI Financial Copilot",
   description:
     "Auto-generate your financial model. Build P&L, cashflow, and runway in minutes with AI-powered forecasting, Monte Carlo simulations, and investor-ready reports.",
   keywords:
     "financial modeling, AI CFO, startup finance, FP&A software, Monte Carlo forecasting, financial planning, cashflow management",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
   openGraph: {
     title: "FinaPilot - Your AI-CFO for Smarter Decisions",
     description:
       "Build complete financial models in minutes. AI-powered forecasting, scenario planning, and investor-ready reports.",
     type: "website",
+    images: ["/icon.svg"],
   },
-    generator: 'v0.app'
+  generator: 'v0.app'
 }
 
 export default function RootLayout({

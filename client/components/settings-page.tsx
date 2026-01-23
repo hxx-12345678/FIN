@@ -40,6 +40,7 @@ import { SyncAuditLog } from "./sync-audit-log"
 import { MFASetupWizard } from "./auth/mfa-setup-wizard"
 import { SessionManagement } from "./auth/session-management"
 import { toast } from "sonner"
+import { useSearchParams, useRouter } from "next/navigation"
 import {
   Dialog,
   DialogContent,
@@ -106,6 +107,10 @@ function SessionManagementButton() {
 }
 
 export function SettingsPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const currentTab = searchParams.get("tab") || "profile"
+  
   const [orgId, setOrgId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -122,7 +127,7 @@ export function SettingsPage() {
   })
   
   // Organization state
-  const [organization, setOrganization] = useState({
+  const [organization, setOrganization] = useState<any>({
     name: "",
     industry: "",
     companySize: "",
@@ -130,6 +135,7 @@ export function SettingsPage() {
     address: "",
     taxId: "",
     currency: "USD",
+    dataRetentionDays: 365,
   })
   
   // Appearance state
@@ -263,6 +269,7 @@ export function SettingsPage() {
             address: data.data.address || "",
             taxId: data.data.taxId || "",
             currency: data.data.currency || "USD",
+            dataRetentionDays: data.data.dataRetentionDays || 365,
           })
         }
       }
@@ -573,6 +580,34 @@ export function SettingsPage() {
     }
   }
 
+  const handleDeleteAccount = async () => {
+    if (!confirm("Are you absolutely sure you want to delete your account? This action is permanent and will delete all your personal data in accordance with GDPR Right to Erasure.")) {
+      return
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/profile`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
+
+      if (response.ok) {
+        toast.success("Account deleted successfully")
+        // Clear local storage and redirect to home
+        localStorage.removeItem("auth-token")
+        localStorage.removeItem("refresh-token")
+        localStorage.removeItem("orgId")
+        window.location.href = "/"
+      } else {
+        const error = await response.json()
+        toast.error(error.error?.message || "Failed to delete account")
+      }
+    } catch (error) {
+      toast.error("Failed to delete account")
+    }
+  }
+
   // Track initial values to compare changes
   const [initialValues, setInitialValues] = useState<{
     profile: typeof profile
@@ -666,13 +701,20 @@ export function SettingsPage() {
         </Alert>
       )}
 
-      <Tabs defaultValue="profile" className="space-y-4 w-full">
+      <Tabs 
+        value={currentTab} 
+        onValueChange={(value) => {
+          const params = new URLSearchParams(searchParams.toString())
+          params.set("tab", value)
+          router.replace(`?${params.toString()}`, { scroll: false })
+        }}
+        className="space-y-4 w-full"
+      >
         <div className="overflow-x-auto overflow-y-visible -mx-4 px-4 md:mx-0 md:px-0">
-          <TabsList className="inline-flex w-full min-w-[600px] md:min-w-0 md:grid md:grid-cols-7 h-auto p-1 gap-1">
+          <TabsList className="inline-flex w-full min-w-[600px] md:min-w-0 md:grid md:grid-cols-8 h-auto p-1 gap-1">
             <TabsTrigger value="profile" className="text-xs sm:text-sm whitespace-nowrap flex-shrink-0">Profile</TabsTrigger>
             <TabsTrigger value="organization" className="text-xs sm:text-sm whitespace-nowrap flex-shrink-0">Organization</TabsTrigger>
-            {/* <TabsTrigger value="appearance">Appearance</TabsTrigger> */}
-            {/* <TabsTrigger value="notifications">Notifications</TabsTrigger> */}
+            <TabsTrigger value="notifications" className="text-xs sm:text-sm whitespace-nowrap flex-shrink-0">Notifications</TabsTrigger>
             <TabsTrigger value="alerts" className="text-xs sm:text-sm whitespace-nowrap flex-shrink-0">Alerts</TabsTrigger>
             <TabsTrigger value="localization" className="text-xs sm:text-sm whitespace-nowrap flex-shrink-0">Localization</TabsTrigger>
             <TabsTrigger value="sync" className="text-xs sm:text-sm whitespace-nowrap flex-shrink-0">Sync Audit</TabsTrigger>
@@ -854,6 +896,16 @@ export function SettingsPage() {
                   />
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="dataRetention">Data Retention (Days) (GDPR)</Label>
+                  <Input 
+                    id="dataRetention" 
+                    type="number"
+                    value={organization.dataRetentionDays || 365}
+                    onChange={(e) => setOrganization({ ...organization, dataRetentionDays: parseInt(e.target.value) })}
+                  />
+                  <p className="text-[10px] text-muted-foreground italic">Automated data deletion after this period</p>
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="currency">Default Currency</Label>
                   <Select 
                     value={organization.currency}
@@ -989,8 +1041,8 @@ export function SettingsPage() {
           </Card>
         </TabsContent> */}
 
-        {/* Notifications Tab - COMMENTED OUT */}
-        {/* <TabsContent value="notifications" className="space-y-6">
+        {/* Notifications Tab */}
+        <TabsContent value="notifications" className="space-y-6 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -1008,60 +1060,30 @@ export function SettingsPage() {
                 <Switch 
                   id="emailNotifications" 
                   checked={notificationPrefs.emailNotifications}
-                  onCheckedChange={(checked) => setNotificationPrefs({ ...notificationPrefs, emailNotifications: checked })}
+                  onCheckedChange={(checked) => {
+                    setNotificationPrefs({ ...notificationPrefs, emailNotifications: checked })
+                    setHasChanges(true)
+                  }}
                 />
               </div>
 
               <div className="flex items-center justify-between">
                 <div>
-                  <Label htmlFor="pushNotifications">Push Notifications</Label>
-                  <p className="text-sm text-muted-foreground">Browser push notifications</p>
-                </div>
-                <Switch 
-                  id="pushNotifications" 
-                  checked={notificationPrefs.pushNotifications}
-                  onCheckedChange={(checked) => setNotificationPrefs({ ...notificationPrefs, pushNotifications: checked })}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label htmlFor="weeklyDigest">Weekly Digest</Label>
-                  <p className="text-sm text-muted-foreground">Weekly summary of your financial data</p>
-                </div>
-                <Switch 
-                  id="weeklyDigest" 
-                  checked={notificationPrefs.weeklyDigest}
-                  onCheckedChange={(checked) => setNotificationPrefs({ ...notificationPrefs, weeklyDigest: checked })}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label htmlFor="alertNotifications">Alert Notifications</Label>
-                  <p className="text-sm text-muted-foreground">Critical alerts and warnings</p>
-                </div>
-                <Switch 
-                  id="alertNotifications" 
-                  checked={notificationPrefs.alertNotifications}
-                  onCheckedChange={(checked) => setNotificationPrefs({ ...notificationPrefs, alertNotifications: checked })}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label htmlFor="marketingEmails">Marketing Emails</Label>
-                  <p className="text-sm text-muted-foreground">Product updates and tips</p>
+                  <Label htmlFor="marketingEmails">Marketing & Newsletter (GDPR Consent)</Label>
+                  <p className="text-sm text-muted-foreground">Receive product updates and tips</p>
                 </div>
                 <Switch 
                   id="marketingEmails" 
                   checked={notificationPrefs.marketingEmails}
-                  onCheckedChange={(checked) => setNotificationPrefs({ ...notificationPrefs, marketingEmails: checked })}
+                  onCheckedChange={(checked) => {
+                    setNotificationPrefs({ ...notificationPrefs, marketingEmails: checked })
+                    setHasChanges(true)
+                  }}
                 />
               </div>
             </CardContent>
           </Card>
-        </TabsContent> */}
+        </TabsContent>
 
         {/* Alerts Tab */}
         <TabsContent value="alerts" className="space-y-6 overflow-x-auto overflow-y-visible">
@@ -1167,6 +1189,19 @@ export function SettingsPage() {
                   <div className="w-full sm:w-auto flex-shrink-0">
                     <SessionManagementButton />
                   </div>
+                </div>
+
+                <div className="pt-6 border-t mt-6">
+                  <h3 className="text-lg font-medium text-red-600 mb-2 flex items-center gap-2">
+                    <Trash2 className="h-5 w-5" />
+                    Danger Zone
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Once you delete your account, there is no going back. Please be certain.
+                  </p>
+                  <Button variant="destructive" size="sm" onClick={handleDeleteAccount}>
+                    Delete Account (GDPR Right to Erasure)
+                  </Button>
                 </div>
               </div>
             </CardContent>

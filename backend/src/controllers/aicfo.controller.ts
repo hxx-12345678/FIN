@@ -7,6 +7,39 @@ import { ApplyPlanSchema } from '../validators/aicfo.validator';
 
 export const aicfoController = {
   /**
+   * POST /api/v1/orgs/:orgId/ai-cfo/query - Process query through multi-agent orchestration
+   * This is the new agentic workflow endpoint
+   */
+  processAgenticQuery: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        throw new ValidationError('User not authenticated');
+      }
+
+      const { orgId } = req.params;
+      const { query, context } = req.body;
+
+      if (!query || typeof query !== 'string') {
+        throw new ValidationError('Query is required');
+      }
+
+      const result = await aicfoService.processAgenticQuery(
+        orgId,
+        req.user.id,
+        query,
+        context
+      );
+
+      res.json({
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  /**
    * POST /api/v1/orgs/:orgId/ai-plans/apply - Apply plan changes
    */
   applyPlan: async (req: AuthRequest, res: Response, next: NextFunction) => {

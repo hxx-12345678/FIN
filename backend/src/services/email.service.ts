@@ -79,6 +79,7 @@ export const emailService = {
       // Try SendGrid if API key is configured
       if (sendgridApiKey) {
         try {
+          // @ts-ignore - dynamic import may not be resolved by tsc during noEmit
           const sgMail = await import('@sendgrid/mail') as any;
           sgMail.setApiKey(sendgridApiKey);
           

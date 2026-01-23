@@ -12,8 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Loader2, AlertCircle, UserCheck, Ban, Trash2 } from "lucide-react"
 import { useAdminAccess } from "@/hooks/use-admin-access"
 import { toast } from "sonner"
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
+import { API_BASE_URL } from "@/lib/api-config"
 
 export function OrgManagement() {
   const { isAdmin, loading: accessLoading } = useAdminAccess()

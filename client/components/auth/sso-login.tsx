@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Chrome, Building2, Lock } from "lucide-react"
 import { useSSOAuth } from "@/hooks/use-sso-auth"
 import { toast } from "sonner"
+import { API_BASE_URL } from "@/lib/api-config"
 
 interface SSOLoginProps {
   onSuccess?: () => void
@@ -42,7 +43,6 @@ export function SSOLogin({ onSuccess, onError, redirectUrl }: SSOLoginProps) {
     setState("authenticating")
 
     try {
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
       const response = await fetch(
         `${API_BASE_URL}/auth/sso/callback?provider=${provider}&code=${code}`,
         {

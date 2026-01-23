@@ -11,6 +11,7 @@ import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Compos
 import { Brain, TrendingUp, Zap, Download, RefreshCw, AlertTriangle, CheckCircle, Target, ListTodo, Loader2 } from "lucide-react"
 import { MonteCarloForecasting } from "./monte-carlo-forecasting"
 import { FinancialTermTooltip } from "./financial-term-tooltip"
+import { useSearchParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
 import Link from "next/link"
 import { API_BASE_URL } from "@/lib/api-config"
@@ -141,6 +142,10 @@ const buildBaselineInsight = (summary: any, runId?: string): InsightCard | null 
 }
 
 export function AIForecasting() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const currentTab = searchParams.get("tab") || "revenue"
+
   const [orgId, setOrgId] = useState<string | null>(null)
   const [models, setModels] = useState<Model[]>([])
   const [selectedModelId, setSelectedModelId] = useState<string>("")
@@ -1447,7 +1452,15 @@ Use the model run data to provide specific, data-driven insights about the forec
       </Card>
 
       {/* Forecasting Tabs */}
-      <Tabs defaultValue="revenue" className="space-y-4">
+      <Tabs 
+        value={currentTab} 
+        onValueChange={(value) => {
+          const params = new URLSearchParams(searchParams.toString())
+          params.set("tab", value)
+          router.replace(`?${params.toString()}`, { scroll: false })
+        }}
+        className="space-y-4"
+      >
         <div className="overflow-x-auto">
           <TabsList className="grid w-full grid-cols-5 min-w-[500px]">
             <TabsTrigger value="revenue" className="text-xs sm:text-sm">Revenue Forecast</TabsTrigger>

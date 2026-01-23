@@ -24,6 +24,7 @@ import { AssumptionTooltip } from "./assumption-tooltip"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { useSearchParams, useRouter } from "next/navigation"
 import { generateFinancialModelingTemplate, downloadCSV } from "@/utils/csv-template-generator"
 import { OneClickExportButton } from "./one-click-export-button"
 import { FinancialTermTooltip } from "./financial-term-tooltip"
@@ -119,6 +120,10 @@ interface ModelRun {
 }
 
 export function FinancialModeling() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const currentTab = searchParams.get("tab") || "statements"
+
   const [selectedModel, setSelectedModel] = useState<string | null>(null)
   const [models, setModels] = useState<Model[]>([])
   const [modelRuns, setModelRuns] = useState<ModelRun[]>([])
@@ -2509,7 +2514,15 @@ export function FinancialModeling() {
       </Card>
 
       {/* Financial Model Tabs */}
-      <Tabs defaultValue="statements" className="space-y-4">
+      <Tabs 
+        value={currentTab} 
+        onValueChange={(value) => {
+          const params = new URLSearchParams(searchParams.toString())
+          params.set("tab", value)
+          router.replace(`?${params.toString()}`, { scroll: false })
+        }}
+        className="space-y-4"
+      >
         <div className="overflow-x-auto">
           <TabsList className="grid w-full grid-cols-4 min-w-[400px]">
             <TabsTrigger value="statements" className="text-xs sm:text-sm">Financial Statements</TabsTrigger>

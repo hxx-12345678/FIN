@@ -7,6 +7,9 @@ import { requireOrgAccess, requireFinanceOrAdmin } from '../middlewares/rbac';
 
 const router = Router();
 
+// NEW: Multi-agent orchestration endpoint for proper agentic AI CFO
+router.post('/orgs/:orgId/ai-cfo/query', authenticate, requireOrgAccess('orgId'), auditLogger, aicfoController.processAgenticQuery);
+
 // Generate AI-CFO plan (with rate limiting and audit logging)
 // Note: Rate limiting might be too strict for board reporting, but we keep it for now
 router.post('/orgs/:orgId/ai-plans', authenticate, requireFinanceOrAdmin('orgId'), auditLogger, aicfoController.generatePlan);

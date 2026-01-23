@@ -17,6 +17,7 @@ router.put('/orgs/:orgId/settings', authenticate, requireOrgAccess('orgId'), set
 // User profile
 router.get('/users/profile', authenticate, settingsController.getProfile);
 router.put('/users/profile', authenticate, settingsController.updateProfile);
+router.delete('/users/profile', authenticate, settingsController.deleteProfile);
 
 // Organization details
 router.get('/orgs/:orgId/organization', authenticate, requireOrgAccess('orgId'), settingsController.getOrganization);

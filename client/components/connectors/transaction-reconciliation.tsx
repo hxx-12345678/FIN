@@ -10,6 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Loader2, CheckCircle2, XCircle, AlertCircle, ArrowRight, SkipForward } from "lucide-react"
 import { toast } from "sonner"
+import { API_BASE_URL } from "@/lib/api-config"
 
 interface ImportedTransaction {
   id: string
@@ -41,8 +42,6 @@ interface ReconciliationState {
   unmatched: string[]
   matchCandidates: Map<string, MatchCandidate[]>
 }
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
 
 export function TransactionReconciliation({ importId }: { importId: string }) {
   const [reconciliation, setReconciliation] = useState<ReconciliationState>({

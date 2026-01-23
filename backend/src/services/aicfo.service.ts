@@ -11,6 +11,7 @@ import { responseAssembler } from './response-assembler.service';
 import { observabilityService } from './monitoring/observability.service';
 import { generateCFOExplanation, generateCFOResponse, CFOAnalysis } from './llm/cfo-prompt.service';
 import { overviewDashboardService } from './overview-dashboard.service';
+import { agentOrchestrator } from './agents/agent-orchestrator.service';
 
 export interface GeneratePlanParams {
   modelRunId?: string;
@@ -401,6 +402,116 @@ export const aicfoService = {
           createdById: userId,
         },
       });
+    }
+  },
+
+  /**
+   * Process query through multi-agent orchestration
+   * This provides the proper agentic workflow with specialized agents
+   */
+  processAgenticQuery: async (
+    orgId: string,
+    userId: string,
+    query: string,
+    context?: Record<string, any>
+  ) => {
+    validateUUID(orgId, 'Organization ID');
+    validateUUID(userId, 'User ID');
+
+    const role = await prisma.userOrgRole.findUnique({
+      where: { userId_orgId: { userId, orgId } },
+    });
+
+    if (!role || !['admin', 'finance', 'viewer'].includes(role.role)) {
+      throw new ForbiddenError('Access denied');
+    }
+
+    const sanitizedQuery = sanitizeString(query.trim(), 500);
+    const startTime = Date.now();
+
+    try {
+      // Use the new agent orchestrator for proper multi-agent workflow
+      const agentResponse = await agentOrchestrator.processQuery(
+        orgId,
+        userId,
+        sanitizedQuery,
+        context
+      );
+
+      // Save to database for history (serialize to JSON-compatible format)
+      const plan = await prisma.aICFOPlan.create({
+        data: {
+          orgId,
+          modelRunId: null,
+          name: `AI-CFO: ${sanitizedQuery.substring(0, 60)}...`,
+          description: `Agentic analysis: ${sanitizedQuery}`,
+          status: agentResponse.status === 'waiting_approval' ? 'pending_approval' : 'completed',
+          planJson: JSON.parse(JSON.stringify({
+            goal: sanitizedQuery,
+            generatedAt: new Date().toISOString(),
+            agentResponse: {
+              answer: agentResponse.answer,
+              confidence: agentResponse.confidence,
+              agentType: agentResponse.agentType,
+              thoughts: agentResponse.thoughts,
+              dataSources: agentResponse.dataSources,
+              calculations: agentResponse.calculations,
+              recommendations: agentResponse.recommendations,
+              followUpQuestions: agentResponse.followUpQuestions,
+              visualizations: agentResponse.visualizations,
+              requiresApproval: agentResponse.requiresApproval,
+              escalationReason: agentResponse.escalationReason,
+            },
+            structuredResponse: {
+              natural_text: agentResponse.answer,
+              calculations: agentResponse.calculations || {},
+              intent: agentResponse.agentType,
+              confidence: agentResponse.confidence,
+            },
+            metadata: {
+              processingTimeMs: Date.now() - startTime,
+              agentType: agentResponse.agentType,
+              modelUsed: 'multi-agent-orchestrator',
+              thoughtSteps: agentResponse.thoughts.length,
+              dataSourceCount: agentResponse.dataSources.length,
+            },
+          })),
+          createdById: userId,
+        },
+      });
+
+      return {
+        planId: plan.id,
+        response: agentResponse,
+        processingTimeMs: Date.now() - startTime,
+      };
+    } catch (error: any) {
+      console.error('[AICFO] Agent orchestration error:', error);
+      
+      // Fallback to existing system
+      const fallbackPlan = await aicfoService.generatePlan(orgId, userId, {
+        goal: sanitizedQuery,
+        context,
+      });
+
+      return {
+        planId: fallbackPlan.id,
+        response: {
+          agentType: 'orchestrator',
+          taskId: fallbackPlan.id,
+          status: 'completed',
+          answer: (fallbackPlan.planJson as any)?.structuredResponse?.natural_text || 'Analysis completed.',
+          confidence: 0.7,
+          thoughts: [{
+            step: 1,
+            thought: 'Used fallback analysis system',
+            observation: 'Primary agent system unavailable',
+          }],
+          dataSources: [],
+          calculations: (fallbackPlan.planJson as any)?.structuredResponse?.calculations || {},
+        },
+        processingTimeMs: Date.now() - startTime,
+      };
     }
   },
 

@@ -25,6 +25,7 @@ import {
   ReferenceLine,
 } from "recharts"
 import { Play, Pause, RotateCcw, Zap, TrendingUp, Users, DollarSign, Activity, Loader2, AlertCircle, Share2, ShieldCheck, Calendar } from "lucide-react"
+import { useSearchParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { API_BASE_URL } from "@/lib/api-config"
 
@@ -49,6 +50,10 @@ const initialParams: SimulationParams = {
 }
 
 export function RealtimeSimulations() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const currentTab = searchParams.get("tab") || "revenue"
+
   const [params, setParams] = useState<SimulationParams>(initialParams)
   const [isRunning, setIsRunning] = useState(false)
   const [simulationData, setSimulationData] = useState<any[]>([])
@@ -1124,7 +1129,15 @@ export function RealtimeSimulations() {
 
         {/* Simulation Results */}
         <div className="lg:col-span-2 space-y-6">
-          <Tabs defaultValue="revenue" className="space-y-4">
+          <Tabs 
+            value={currentTab} 
+            onValueChange={(value) => {
+              const params = new URLSearchParams(searchParams.toString())
+              params.set("tab", value)
+              router.replace(`?${params.toString()}`, { scroll: false })
+            }}
+            className="space-y-4"
+          >
             <div className="overflow-x-auto">
               <TabsList className="grid w-full grid-cols-4 min-w-[400px]">
                 <TabsTrigger value="revenue" className="text-xs sm:text-sm">Revenue</TabsTrigger>

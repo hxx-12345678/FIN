@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { useSearchParams, useRouter } from "next/navigation"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import { Brain, Zap, Play, Save, Copy, Share, MessageSquare, AlertTriangle, CheckCircle, Plus, Loader2 } from "lucide-react"
 import { toast } from "sonner"
@@ -101,6 +102,10 @@ interface Model {
 }
 
 export function ScenarioPlanning() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const currentTab = searchParams.get("tab") || "scenarios"
+
   const [orgId, setOrgId] = useState<string | null>(null)
   const [models, setModels] = useState<Model[]>([])
   const [selectedModelId, setSelectedModelId] = useState<string>("")
@@ -683,7 +688,15 @@ Format the response in clear, professional English with specific numbers and per
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="scenarios" className="space-y-4">
+      <Tabs 
+        value={currentTab} 
+        onValueChange={(value) => {
+          const params = new URLSearchParams(searchParams.toString())
+          params.set("tab", value)
+          router.replace(`?${params.toString()}`, { scroll: false })
+        }}
+        className="space-y-4"
+      >
         <div className="overflow-x-auto">
           <TabsList className="grid w-full grid-cols-2 md:grid-cols-6 min-w-[600px]">
             <TabsTrigger value="scenarios" className="text-xs sm:text-sm">Scenarios</TabsTrigger>
@@ -767,8 +780,8 @@ Format the response in clear, professional English with specific numbers and per
                 {/* Existing Scenarios List */}
                 <Card className="mt-4">
                   <CardHeader>
-                    <CardTitle>Existing Scenarios</CardTitle>
-                    <CardDescription>Previously created scenarios</CardDescription>
+                    <CardTitle className="text-sm">Existing Scenarios</CardTitle>
+                    <CardDescription className="text-xs">Select to compare or view details</CardDescription>
                   </CardHeader>
                   <CardContent>
                     {loadingScenarios ? (
@@ -776,24 +789,37 @@ Format the response in clear, professional English with specific numbers and per
                         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                       </div>
                     ) : scenarios.length > 0 ? (
-                      <div className="space-y-2">
+                      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
                         {scenarios.map((scenario) => (
                           <div
                             key={scenario.id}
-                            className="p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
+                            className="p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors group relative"
                             onClick={() => {
-                              // Could navigate to scenario details
+                              // Switch to comparison tab and select this scenario
+                              const params = new URLSearchParams(searchParams.toString())
+                              params.set("tab", "comparison")
+                              params.set("scenarioId", scenario.id)
+                              router.replace(`?${params.toString()}`, { scroll: false })
+                              toast.info(`Viewing ${scenario.scenarioName || scenario.name}`)
                             }}
                           >
                             <div className="flex items-center justify-between mb-1">
-                              <h4 className="font-medium text-sm">{scenario.scenarioName}</h4>
-                              <Badge variant={scenario.status === "done" ? "default" : "secondary"}>
+                              <h4 className="font-semibold text-xs truncate max-w-[120px]">{scenario.scenarioName || scenario.name}</h4>
+                              <Badge variant={scenario.status === "done" ? "default" : "secondary"} className="scale-75 origin-right">
                                 {scenario.status}
                               </Badge>
                             </div>
-                            <p className="text-xs text-muted-foreground">
-                              {scenario.scenarioType} • {new Date(scenario.createdAt).toLocaleDateString()}
-                            </p>
+                            <div className="flex items-center justify-between">
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                                {scenario.scenarioType}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground">
+                                {new Date(scenario.createdAt).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <div className="absolute inset-y-0 right-0 w-8 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-l from-muted to-transparent rounded-r-lg">
+                              <Zap className="h-3 w-3 text-primary" />
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1013,7 +1039,14 @@ Format the response in clear, professional English with specific numbers and per
                           const summary = typeof scenario.summary === 'string' 
                             ? JSON.parse(scenario.summary) 
                             : scenario.summary || {};
-                          const growthRate = summary.growthRate || summary.revenueGrowth || 0;
+                          
+                          // Use summary if available, otherwise check overrides
+                          let growthRate = summary.growthRate || summary.revenueGrowth;
+                          if (growthRate === undefined && scenario.overrides?.revenue?.growth !== undefined) {
+                            growthRate = scenario.overrides.revenue.growth;
+                          }
+                          growthRate = growthRate || 0;
+                          
                           const revenue = summary.totalRevenue || summary.revenue || summary.mrr || 0;
                           const arr = summary.arr || (revenue * 12);
                           
@@ -1053,7 +1086,14 @@ Format the response in clear, professional English with specific numbers and per
                           const summary = typeof scenario.summary === 'string' 
                             ? JSON.parse(scenario.summary) 
                             : scenario.summary || {};
-                          const churnRate = summary.churnRate || 0;
+                          
+                          // Use summary if available, otherwise check overrides
+                          let churnRate = summary.churnRate;
+                          if (churnRate === undefined && scenario.overrides?.revenue?.churn !== undefined) {
+                            churnRate = scenario.overrides.revenue.churn;
+                          }
+                          churnRate = churnRate || 0;
+                          
                           const revenue = summary.totalRevenue || summary.revenue || summary.mrr || 0;
                           const arr = summary.arr || (revenue * 12);
                           

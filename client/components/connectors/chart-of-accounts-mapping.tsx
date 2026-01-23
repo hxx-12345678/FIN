@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Loader2, Save, Download, Upload, AlertCircle, ArrowRight } from "lucide-react"
 import { toast } from "sonner"
+import { API_BASE_URL } from "@/lib/api-config"
 
 interface SourceAccount {
   id: string
@@ -28,8 +29,6 @@ interface Mapping {
   sourceId: string
   targetId: string
 }
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
 
 export function ChartOfAccountsMapping({ connectorId }: { connectorId: string }) {
   const [sourceAccounts, setSourceAccounts] = useState<SourceAccount[]>([])

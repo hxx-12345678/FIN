@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Loader2, CheckCircle2, XCircle, AlertCircle, Merge, Trash2 } from "lucide-react"
 import { toast } from "sonner"
+import { API_BASE_URL } from "@/lib/api-config"
 
 interface DuplicateGroup {
   id: string
@@ -21,8 +22,6 @@ interface DuplicateGroup {
   }>
   confidence: number
 }
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
 
 export function DuplicateDetectionPanel() {
   const [duplicates, setDuplicates] = useState<DuplicateGroup[]>([])

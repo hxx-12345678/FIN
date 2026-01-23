@@ -479,6 +479,26 @@ export const settingsController = {
   },
 
   /**
+   * DELETE /api/v1/users/profile - Delete user account (GDPR Right to Erasure)
+   */
+  deleteProfile: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        throw new ValidationError('User not authenticated');
+      }
+
+      await settingsService.deleteProfile(req.user.id);
+
+      res.json({
+        ok: true,
+        message: 'User account and all associated data deleted successfully',
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  /**
    * POST /api/v1/orgs/:orgId/localization/fx-rates/update - Update FX rates
    */
   updateFxRates: async (req: AuthRequest, res: Response, next: NextFunction) => {

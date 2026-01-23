@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useCallback } from "react"
+import { API_BASE_URL } from "@/lib/api-config"
 
 type MFAMethod = "totp" | "sms" | "email"
 
@@ -21,7 +22,6 @@ interface UseMFAReturn {
   resetAttempts: () => void
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
 const MAX_ATTEMPTS = 3
 
 export function useMFA(): UseMFAReturn {

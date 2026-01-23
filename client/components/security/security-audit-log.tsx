@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Loader2, Download, AlertCircle, ChevronDown, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
+import { API_BASE_URL } from "@/lib/api-config"
 
 interface SecurityEvent {
   id: string
@@ -23,7 +24,6 @@ interface SecurityEvent {
   details: any
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
 const POLL_INTERVAL = 5000
 
 export function SecurityAuditLog() {

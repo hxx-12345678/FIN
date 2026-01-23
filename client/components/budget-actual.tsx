@@ -27,6 +27,7 @@ import {
   ComposedChart,
 } from "recharts"
 import { TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Target, Download, Upload, Loader2, FileDown, Plus, FileSpreadsheet } from "lucide-react"
+import { useSearchParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { generateBudgetActualTemplate, generateBudgetTemplate, downloadCSV } from "@/utils/csv-template-generator"
 import { DataDrivenTooltip } from "./data-driven-tooltip"
@@ -201,6 +202,10 @@ const defaultAlerts: BudgetActualAlert[] = [
 ]
 
 export function BudgetActual() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const currentTab = searchParams.get("tab") || "overview"
+
   const [selectedPeriod, setSelectedPeriod] = useState<"current" | "previous" | "ytd">("current")
   const [selectedView, setSelectedView] = useState<"monthly" | "quarterly" | "yearly">("monthly")
   const [data, setData] = useState<BudgetActualData | null>(null)
@@ -943,7 +948,15 @@ export function BudgetActual() {
       </div>
 
       {/* Main Content Tabs */}
-      <Tabs defaultValue="overview" className="space-y-4">
+      <Tabs 
+        value={currentTab} 
+        onValueChange={(value) => {
+          const params = new URLSearchParams(searchParams.toString())
+          params.set("tab", value)
+          router.replace(`?${params.toString()}`, { scroll: false })
+        }}
+        className="space-y-4"
+      >
         <div className="overflow-x-auto">
           <TabsList className="grid w-full grid-cols-4 min-w-[400px]">
             <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>

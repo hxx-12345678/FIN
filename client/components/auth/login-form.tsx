@@ -8,20 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Mail, Lock, Eye, EyeOff } from "lucide-react"
 import { SSOLogin } from "./sso-login"
 import { toast } from "sonner"
-
-// Ensure API_BASE_URL always includes /api/v1
-const getApiBaseUrl = () => {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-  // Remove trailing slash if present
-  const cleanUrl = baseUrl.replace(/\/$/, '')
-  // Ensure /api/v1 is included
-  if (cleanUrl.endsWith('/api/v1')) {
-    return cleanUrl
-  }
-  return `${cleanUrl}/api/v1`
-}
-
-const API_BASE_URL = getApiBaseUrl()
+import { API_BASE_URL } from "@/lib/api-config"
 
 interface LoginFormProps {
   onSuccess?: () => void

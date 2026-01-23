@@ -41,12 +41,52 @@ import {
   Loader2,
   AlertCircle,
   Info,
+  ChevronDown,
+  ChevronUp,
+  Database,
+  Cpu,
+  ShieldCheck,
+  Target,
+  Zap,
 } from "lucide-react"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { StagedChangesPanel } from "./ai-assistant/staged-changes-panel"
 import { useStagedChanges } from "@/hooks/use-staged-changes"
 import { toast } from "sonner"
 import { API_BASE_URL } from "@/lib/api-config"
+
+interface AgentThought {
+  step: number
+  thought: string
+  action?: string
+  observation?: string
+}
+
+interface DataSource {
+  type: string
+  id: string
+  name: string
+  timestamp?: string
+  confidence?: number
+  snippet?: string
+}
+
+interface AgentRecommendation {
+  id: string
+  title: string
+  description: string
+  impact?: {
+    type: 'positive' | 'negative' | 'neutral'
+    metric: string
+    value: string
+    confidence: number
+  }
+  priority: string
+  category: string
+  actions: string[]
+  risks?: string[]
+}
 
 interface Message {
   id: string
@@ -57,6 +97,15 @@ interface Message {
   actionable?: boolean
   recommendation?: string
   planId?: string
+  // New agentic workflow fields
+  agentThoughts?: AgentThought[]
+  dataSources?: DataSource[]
+  recommendations?: AgentRecommendation[]
+  calculations?: Record<string, number>
+  confidence?: number
+  requiresApproval?: boolean
+  escalationReason?: string
+  agentType?: string
 }
 
 interface AICFOPlan {
@@ -108,28 +157,40 @@ interface Task {
 
 const quickActions = [
   {
-    title: "Runway Analysis",
-    description: "Get detailed cash runway breakdown",
+    title: "Cash Runway",
+    description: "Data + Insight: Runway, burn rate & prediction",
     icon: TrendingUp,
     query: "What is my current cash runway?",
   },
   {
-    title: "Fundraising Advice",
-    description: "AI-powered fundraising guidance",
-    icon: DollarSign,
-    query: "Should I raise funding now? What are the optimal timing and amount?",
+    title: "Variance Analysis",
+    description: "Drill-down: Why did we miss forecast?",
+    icon: AlertTriangle,
+    query: "Why did our EBITDA miss the forecast?",
+  },
+  {
+    title: "Scenario Simulation",
+    description: "Model a 10% drop in revenue",
+    icon: BarChart3,
+    query: "Model a 10% drop in revenue for next quarter",
+  },
+  {
+    title: "Anomaly Detection",
+    description: "Scan for duplicate payments",
+    icon: AlertCircle,
+    query: "Any signs of duplicate payments this month?",
+  },
+  {
+    title: "Board Summary",
+    description: "Draft executive report",
+    icon: Lightbulb,
+    query: "Draft a summary for the upcoming board meeting",
   },
   {
     title: "Cost Optimization",
     description: "Find ways to reduce burn rate",
-    icon: AlertTriangle,
-    query: "Analyze my expenses and suggest cost optimization opportunities",
-  },
-  {
-    title: "Growth Strategy",
-    description: "Revenue growth recommendations",
-    icon: BarChart3,
-    query: "What strategies can help me accelerate revenue growth?",
+    icon: DollarSign,
+    query: "How can I reduce my burn rate?",
   },
 ]
 
@@ -138,13 +199,13 @@ const initialMessages: Message[] = [
     id: "1",
     type: "assistant",
     content:
-      "Hi! I'm your AI CFO powered by Gemini. I can analyze your financial data, create forecasts, and convert insights into actionable tasks. Ask me anything about your finances or request a plan.",
+      "Hi! I'm your **AI CFO** - a multi-agent system that provides CFO-level insights with full transparency.\n\n**What I can do:**\n• **Cash & Runway:** \"What's my current cash runway?\" - Get exact numbers plus predictions\n• **Variance Analysis:** \"Why did we miss forecast?\" - Drill-down into specific drivers\n• **Scenario Simulation:** \"Model a 10% revenue drop\" - Instant comparison & recommendations\n• **Anomaly Detection:** \"Any duplicate payments?\" - Scan transactions for issues\n• **Board Reports:** \"Draft a board summary\" - Executive-ready reports\n\n**How I work:** I use specialized agents (Treasury, Forecasting, Analytics, etc.) that collaborate to answer your questions. I show my reasoning and cite data sources so you can trust and verify my answers.",
     timestamp: new Date(Date.now() - 300000),
     suggestions: [
       "What's my current runway?",
-      "Create a plan to extend runway by 6 months",
-      "How can I improve my burn rate?",
-      "Show me revenue trends",
+      "Model a 10% drop in revenue",
+      "Any duplicate payments this month?",
+      "Draft a board meeting summary",
     ],
   },
 ]
@@ -333,8 +394,8 @@ export function AIAssistant() {
         throw new Error("Organization ID not found")
       }
 
-      // Call AI CFO API
-      const response = await fetch(`${API_BASE_URL}/orgs/${currentOrgId}/ai-plans`, {
+      // Call AI CFO Agentic API (new multi-agent orchestration)
+      const response = await fetch(`${API_BASE_URL}/orgs/${currentOrgId}/ai-cfo/query`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -342,7 +403,7 @@ export function AIAssistant() {
         },
         credentials: "include",
         body: JSON.stringify({
-          goal: content,
+          query: content,
         }),
       })
 
@@ -352,191 +413,61 @@ export function AIAssistant() {
       }
 
       const result = await response.json()
-      if (result.ok && result.plan) {
-        const plan = result.plan
-        const planJson = plan.planJson || {}
-        const structuredResponse = planJson.structuredResponse || {}
-        const stagedChanges = planJson.stagedChanges || []
-        const calculations = structuredResponse.calculations || {}
-        const metadata = planJson.metadata || {}
-        const fallbackUsed =
-          metadata.fallbackUsed ||
-          metadata.recommendationsSource === "fallback" ||
-          (metadata.modelUsed && String(metadata.modelUsed).toLowerCase().includes("fallback"))
-        const lowConfidence =
-          typeof metadata.intentConfidence === "number" ? metadata.intentConfidence < 0.55 : false
-        // Treat staged changes as actionable even if generated via deterministic fallback
-        // (fallback still uses real org data; we only gate on very low confidence)
-        const hasActionableRecommendations = stagedChanges.length > 0 && !lowConfidence
+      if (result.ok && result.response) {
+        const agentResponse = result.response
+        const planId = result.planId
+        
+        // Extract agentic workflow data
+        const thoughts = agentResponse.thoughts || []
+        const dataSources = agentResponse.dataSources || []
+        const recommendations = agentResponse.recommendations || []
+        const calculations = agentResponse.calculations || {}
+        const confidence = agentResponse.confidence || 0
+        const requiresApproval = agentResponse.requiresApproval || false
+        const escalationReason = agentResponse.escalationReason
+        const followUpQuestions = agentResponse.followUpQuestions || []
+        const agentType = agentResponse.agentType
 
-        // Build comprehensive CFO-style response
-        let responseText = ""
-
-        // Start with natural text if available (LLM or fallback)
-        if (structuredResponse.natural_text) {
-          let naturalText = structuredResponse.natural_text
-          
-          // Handle case where natural_text might be a JSON string
-          if (typeof naturalText === 'string') {
-            const trimmed = naturalText.trim()
-            
-            // Check if it looks like JSON
-            if (trimmed.startsWith('{') && (trimmed.includes('naturalLanguage') || trimmed.includes('"naturalLanguage"'))) {
-              try {
-                const parsed = JSON.parse(trimmed)
-                // Try multiple possible keys
-                naturalText = parsed.naturalLanguage || parsed.natural_text || parsed.text || parsed.content || parsed.explanation || naturalText
-                
-                // If still looks like JSON, try one more level
-                if (typeof naturalText === 'string' && naturalText.trim().startsWith('{')) {
-                  try {
-                    const nested = JSON.parse(naturalText)
-                    naturalText = nested.naturalLanguage || nested.text || nested.content || naturalText
-                  } catch {
-                    // Use as-is
-                  }
-                }
-              } catch {
-                // If parsing fails, try to extract text manually
-                const match = trimmed.match(/"naturalLanguage"\s*:\s*"([^"]+)"/)
-                if (match && match[1]) {
-                  naturalText = match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"')
-                } else {
-                  // Last resort: remove JSON structure and extract text
-                  naturalText = trimmed.replace(/^\{[^}]*"naturalLanguage"\s*:\s*"([^"]+)"[^}]*\}$/, '$1').replace(/\\n/g, '\n').replace(/\\"/g, '"')
-                }
-              }
-            }
-          }
-          
-          responseText = naturalText
-        } else if (hasActionableRecommendations) {
-          // Build CFO-style response from components
-          responseText = `**CFO Analysis & Recommendations**\n\n`
-          
-          // Add calculations if available
-          if (Object.keys(calculations).length > 0) {
-            responseText += `**Key Financial Metrics:**\n`
-            Object.entries(calculations).forEach(([key, value]: [string, any]) => {
-              if (value !== null && value !== undefined) {
-                const formattedKey = key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())
-                const formattedValue = typeof value === "number" 
-                  ? (key.includes("percent") || key.includes("ratio") || key.includes("rate") 
-                      ? `${(value * 100).toFixed(1)}%` 
-                      : key.includes("month") || key.includes("day")
-                      ? `${value.toFixed(1)} ${key.includes("month") ? "months" : "days"}`
-                      : `$${value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`)
-                  : String(value)
-                responseText += `• ${formattedKey}: ${formattedValue}\n`
-              }
-            })
-            responseText += `\n`
-          }
-
-          // Add strategic recommendations
-          if (stagedChanges.length > 0) {
-            responseText += `**Strategic Recommendations:**\n\n`
-            stagedChanges.forEach((change: any, idx: number) => {
-              const action = change.action || "Strategic action"
-              const explain = change.explain || change.reasoning || "Based on financial analysis"
-              const impact = change.impact || {}
-              const confidence = change.confidence ? `${Math.round(change.confidence * 100)}%` : ""
-              const priority = change.priority ? `[${change.priority.toUpperCase()}]` : ""
-              
-              responseText += `${idx + 1}. **${action}** ${priority}\n`
-              responseText += `   ${explain}\n`
-              
-              // Add impact metrics if available
-              if (Object.keys(impact).length > 0) {
-                const impactText = Object.entries(impact)
-                  .filter(([_, v]) => v !== null && v !== undefined)
-                  .map(([k, v]: [string, any]) => {
-                    const key = k.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())
-                    const value = typeof v === "number" 
-                      ? (k.includes("percent") || k.includes("ratio") 
-                          ? `${(v * 100).toFixed(1)}%` 
-                          : k.includes("month") || k.includes("day")
-                          ? `${v.toFixed(1)} ${k.includes("month") ? "months" : "days"}`
-                          : `$${v.toLocaleString()}`)
-                      : String(v)
-                    return `${key}: ${value}`
-                  })
-                  .join(", ")
-                if (impactText) {
-                  responseText += `   *Impact: ${impactText}*\n`
-                }
-              }
-              
-              if (confidence) {
-                responseText += `   *Confidence: ${confidence}*\n`
-              }
-              
-              // Add warnings if available
-              if (change.warnings && Array.isArray(change.warnings) && change.warnings.length > 0) {
-                responseText += `   ⚠️ *Warnings: ${change.warnings.join(", ")}*\n`
-              }
-              
-              responseText += `\n`
-            })
-          } else {
-            responseText += `I've analyzed your financial data. Check the Staged Changes tab for detailed recommendations.\n\n`
-          }
-
-          // Add metadata about analysis quality
-          if (metadata.modelUsed && metadata.modelUsed !== "fallback" && !fallbackUsed) {
-            responseText += `*Analysis powered by ${metadata.modelUsed} with ${
-              metadata.intentConfidence ? Math.round(metadata.intentConfidence * 100) : 0
-            }% confidence*\n`
-          }
+        // Build response text
+        let responseText = agentResponse.answer || ""
+        
+        // Add confidence indicator
+        if (confidence > 0.8) {
+          responseText += `\n\n✅ *Confidence: ${Math.round(confidence * 100)}%*`
+        } else if (confidence > 0.6) {
+          responseText += `\n\n⚠️ *Confidence: ${Math.round(confidence * 100)}% - Consider verifying with additional data*`
         }
 
-        // Check if accounting system is connected from metadata
-        const hasConnectedAccounting = metadata.hasConnectedAccounting === true
-        const hasFinancialData = metadata.hasFinancialData === true
-
-        // Ensure we have a response - only use default if truly no response
-        if (!responseText.trim()) {
-          // Try to build a response from staged changes if available
-          if (stagedChanges.length > 0) {
-            responseText = `**CFO Analysis & Recommendations**\n\n`;
-            stagedChanges.slice(0, 3).forEach((change: any, idx: number) => {
-              responseText += `${idx + 1}. **${change.action || 'Recommendation'}**\n`;
-              if (change.explain || change.reasoning) {
-                responseText += `   ${change.explain || change.reasoning}\n`;
-              }
-              responseText += `\n`;
-            });
-          } else {
-            // Only show default message if we truly have no data and no recommendations
-            responseText =
-              "I can provide more strategic recommendations once your accounting/billing data is connected. Please connect your accounting system or provide more financial context (ARR, burn, runway)."
-          }
+        // If requires approval, add notice
+        if (requiresApproval && escalationReason) {
+          responseText = `⏳ **Approval Required**\n\n${escalationReason}\n\n---\n\n` + responseText
         }
 
-        // Only add accounting system suggestion ONCE per session if user has NO financial data
-        // Don't spam every response with this message
-        // Note: We'll show it in the initial message or first response only, not every time
-        // Removed repetitive suggestion to improve user experience
-
+        // Create rich message with agentic data
         const aiResponse: Message = {
           id: (Date.now() + 1).toString(),
           type: "assistant",
           content: responseText,
           timestamp: new Date(),
-          suggestions: hasActionableRecommendations
-            ? [
-                "View detailed staged changes",
-                "Create tasks from recommendations",
-                "Ask about specific metrics",
-              ]
+          suggestions: followUpQuestions.length > 0 
+            ? followUpQuestions
             : [
-                "Connect accounting system",
-                "Share ARR, burn, runway details",
-                "Ask another financial question",
+                "Tell me more about this",
+                "What are the key risks?",
+                "What should I focus on?",
               ],
-          actionable: hasActionableRecommendations,
-          recommendation: hasActionableRecommendations ? stagedChanges[0]?.action : undefined,
-          planId: plan.id,
+          actionable: recommendations.length > 0,
+          recommendation: recommendations[0]?.title,
+          planId,
+          // New agentic workflow fields
+          agentThoughts: thoughts,
+          dataSources,
+          recommendations,
+          calculations,
+          confidence,
+          requiresApproval,
+          escalationReason,
+          agentType,
         }
 
         setMessages((prev) => [...prev, aiResponse])
@@ -545,10 +476,29 @@ export function AIAssistant() {
         await fetchPlans()
         
         toast.success(
-          hasActionableRecommendations
-            ? "AI CFO analysis completed successfully"
-            : "High-level guidance generated. Connect your accounting data for deeper insights."
+          recommendations.length > 0
+            ? `AI CFO analysis complete (${agentType} agent)`
+            : "Analysis complete"
         )
+      } else if (result.ok && result.plan) {
+        // Fallback: Handle legacy response format
+        const plan = result.plan
+        const planJson = plan.planJson || {}
+        const structuredResponse = planJson.structuredResponse || {}
+        const responseText = structuredResponse.natural_text || "Analysis completed."
+        
+        const aiResponse: Message = {
+          id: (Date.now() + 1).toString(),
+          type: "assistant",
+          content: responseText,
+          timestamp: new Date(),
+          suggestions: ["Ask another question"],
+          planId: plan.id,
+        }
+
+        setMessages((prev) => [...prev, aiResponse])
+        await fetchPlans()
+        toast.success("AI CFO analysis completed")
       } else {
         throw new Error("Invalid response from server")
       }
@@ -713,18 +663,25 @@ export function AIAssistant() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              AI CFO Assistant
+              AI CFO
             </h1>
             <Badge
               variant="secondary"
               className="flex items-center gap-1 bg-gradient-to-r from-blue-100 to-purple-100 text-blue-700 border-blue-200"
             >
-              <Sparkles className="h-3 w-3" />
-              Powered by Gemini
+              <Cpu className="h-3 w-3" />
+              Multi-Agent System
+            </Badge>
+            <Badge
+              variant="outline"
+              className="flex items-center gap-1 text-xs"
+            >
+              <ShieldCheck className="h-3 w-3" />
+              Explainable AI
             </Badge>
           </div>
           <p className="text-muted-foreground mt-1">
-            Your intelligent financial copilot for analysis, forecasting, and actionable insights
+            Specialized agents for Treasury, Forecasting, Analytics, Anomaly Detection & Reporting
           </p>
         </div>
       </div>
@@ -869,6 +826,103 @@ export function AIAssistant() {
                                 return <br key={idx} />;
                               })}
                             </div>
+                            {/* Agent Workflow Display */}
+                            {message.type === "assistant" && (message.agentThoughts?.length || message.dataSources?.length) && (
+                              <div className="mt-3 space-y-2">
+                                {/* Agent Type Badge */}
+                                {message.agentType && (
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                                      <Cpu className="h-3 w-3 mr-1" />
+                                      {message.agentType.charAt(0).toUpperCase() + message.agentType.slice(1)} Agent
+                                    </Badge>
+                                    {message.confidence && (
+                                      <Badge variant="outline" className={`text-xs ${
+                                        message.confidence > 0.8 ? 'bg-green-50 text-green-700 border-green-200' :
+                                        message.confidence > 0.6 ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                                        'bg-red-50 text-red-700 border-red-200'
+                                      }`}>
+                                        <Target className="h-3 w-3 mr-1" />
+                                        {Math.round(message.confidence * 100)}% confident
+                                      </Badge>
+                                    )}
+                                  </div>
+                                )}
+                                
+                                {/* Thinking Steps (Collapsible) */}
+                                {message.agentThoughts && message.agentThoughts.length > 0 && (
+                                  <Collapsible>
+                                    <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                                      <Zap className="h-3 w-3" />
+                                      View reasoning ({message.agentThoughts.length} steps)
+                                      <ChevronDown className="h-3 w-3" />
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent className="mt-2">
+                                      <div className="bg-slate-50 rounded-md p-2 text-xs space-y-1 border">
+                                        {message.agentThoughts.map((thought, idx) => (
+                                          <div key={idx} className="flex items-start gap-2">
+                                            <span className="text-muted-foreground font-mono">{thought.step}.</span>
+                                            <div>
+                                              <span className="text-slate-700">{thought.thought}</span>
+                                              {thought.observation && (
+                                                <span className="text-green-600 ml-1">→ {thought.observation}</span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </CollapsibleContent>
+                                  </Collapsible>
+                                )}
+                                
+                                {/* Data Sources (Collapsible) */}
+                                {message.dataSources && message.dataSources.length > 0 && (
+                                  <Collapsible>
+                                    <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                                      <Database className="h-3 w-3" />
+                                      Data sources ({message.dataSources.length})
+                                      <ChevronDown className="h-3 w-3" />
+                                    </CollapsibleTrigger>
+                                    <CollapsibleContent className="mt-2">
+                                      <div className="bg-slate-50 rounded-md p-2 text-xs space-y-1 border">
+                                        {message.dataSources.map((source, idx) => (
+                                          <div key={idx} className="flex items-center gap-2">
+                                            <Badge variant="outline" className="text-[10px] px-1 py-0">
+                                              {source.type}
+                                            </Badge>
+                                            <span className="text-slate-600">{source.name}</span>
+                                            {source.confidence && (
+                                              <span className="text-green-600">({Math.round(source.confidence * 100)}%)</span>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </CollapsibleContent>
+                                  </Collapsible>
+                                )}
+
+                                {/* Recommendations Preview */}
+                                {message.recommendations && message.recommendations.length > 0 && (
+                                  <div className="bg-amber-50 border border-amber-200 rounded-md p-2 mt-2">
+                                    <div className="flex items-center gap-1 text-xs text-amber-800 font-medium mb-1">
+                                      <Lightbulb className="h-3 w-3" />
+                                      {message.recommendations.length} Recommendation{message.recommendations.length > 1 ? 's' : ''}
+                                    </div>
+                                    {message.recommendations.slice(0, 2).map((rec, idx) => (
+                                      <div key={idx} className="text-xs text-amber-700">
+                                        • {rec.title}
+                                      </div>
+                                    ))}
+                                    {message.recommendations.length > 2 && (
+                                      <div className="text-xs text-amber-600 mt-1">
+                                        +{message.recommendations.length - 2} more...
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
                             {message.actionable && message.recommendation && (
                               <Button
                                 size="sm"
@@ -913,9 +967,14 @@ export function AIAssistant() {
                             </AvatarFallback>
                           </Avatar>
                           <div className="bg-muted rounded-lg p-3">
-                            <div className="flex items-center gap-1">
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              <span className="text-sm">AI CFO is thinking...</span>
+                            <div className="flex items-center gap-2">
+                              <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                              <div>
+                                <span className="text-sm font-medium">AI CFO Agents Working...</span>
+                                <div className="text-xs text-muted-foreground mt-1">
+                                  Classifying intent → Gathering data → Analyzing → Synthesizing
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>

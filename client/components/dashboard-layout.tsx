@@ -48,28 +48,6 @@ import { toast } from "sonner"
 import { SwitchOrganizationDialog } from "@/components/switch-organization-dialog"
 import { API_BASE_URL, getAuthToken } from "@/lib/api-config"
 
-function PendingApprovalsBadge() {
-  const { changes } = useStagedChanges("pending")
-  const pendingCount = changes.filter((c) => c.status === "pending").length
-
-  if (pendingCount === 0) return null
-
-  return (
-    <Button variant="outline" size="icon" className="relative bg-transparent shrink-0" asChild>
-      <a href="#assistant" onClick={(e) => {
-        e.preventDefault()
-        const event = new CustomEvent("navigate", { detail: { view: "assistant", tab: "staged-changes" } })
-        window.dispatchEvent(event)
-      }}>
-        <FileCheck className="h-4 w-4" />
-        <span className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 rounded-full text-xs flex items-center justify-center text-white">
-          {pendingCount}
-        </span>
-      </a>
-    </Button>
-  )
-}
-
 interface DashboardLayoutProps {
   children: React.ReactNode
   activeView: string
@@ -436,15 +414,21 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
       >
         <div className="flex flex-col h-full">
           <div className="border-b p-4">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-purple-600 shrink-0">
-                <DollarSign className="h-4 w-4 text-white" />
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0070f3] shadow-inner shrink-0 overflow-hidden relative group transition-all hover:scale-105">
+                {/* Background Pattern */}
+                <div className="absolute inset-0 opacity-20 pointer-events-none">
+                  <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-white"></div>
+                  <div className="absolute bottom-2 left-2 w-1 h-1 rounded-full bg-white"></div>
+                  <div className="absolute top-1/2 left-1 w-full h-[1px] bg-white transform -rotate-45"></div>
+                </div>
+                <span className="text-xl font-black text-white z-10 tracking-tighter">FP</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                <span className="text-lg font-bold tracking-tight text-foreground">
                   FinaPilot
                 </span>
-                <span className="text-xs text-muted-foreground">AI Financial Copilot</span>
+                <span className="text-[10px] uppercase tracking-widest text-[#0070f3] font-bold">AI Finance OS</span>
               </div>
             </div>
           </div>
@@ -601,7 +585,6 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
           <div className="flex flex-1 items-center gap-4 min-w-0">
             {/* Search and AI CFO - Removed as not currently functional */}
             {/* Notification Bell - Removed as not currently functional */}
-            <PendingApprovalsBadge />
           </div>
         </header>
 

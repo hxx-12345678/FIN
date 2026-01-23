@@ -1,14 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { API_BASE_URL } from "@/lib/api-config"
 
 interface UseAdminAccessReturn {
   isAdmin: boolean
   hasAccess: (permission: string) => boolean
   loading: boolean
 }
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
 
 export function useAdminAccess(): UseAdminAccessReturn {
   const [isAdmin, setIsAdmin] = useState(false)
