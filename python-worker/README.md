@@ -23,6 +23,34 @@ Python worker that polls the jobs table and processes heavy compute tasks.
    python worker.py
    ```
 
+### Run as HTTP service (FastAPI)
+
+You can run the worker as an HTTP service so jobs can be queued and triggered via HTTP.
+
+```bash
+# Install dependencies (includes FastAPI and Uvicorn)
+pip install -r requirements.txt
+
+# Run with Uvicorn (bind 0.0.0.0 to accept external requests)
+# For local development:
+uvicorn app:app --host 0.0.0.0 --port 8000 --workers 1
+# For production/Render (ensures uvicorn is found):
+python -m uvicorn app:app --host 0.0.0.0 --port $PORT
+```
+
+The FastAPI app includes background polling, so it will automatically process queued jobs.
+
+Endpoints:
+- `GET /health` — basic health check
+- `POST /queue_job` — queue a job into the database
+- `POST /run_next` — reserve and run the next job (optionally in background)
+- `POST /run_job_direct` — run a handler directly (useful for testing)
+- `GET /release_stuck_jobs` — release stuck jobs
+
+Note: These endpoints interact with the same `jobs` table as the background poller and
+require a correctly configured `DATABASE_URL` and related environment variables
+(S3, AWS credentials, etc.) for handlers that use external services.
+
 ## Job Types
 
 - `csv_import` - Parse CSV and import transactions

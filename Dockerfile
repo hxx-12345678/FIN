@@ -34,8 +34,9 @@ echo "🔄 Running database migrations..."\n\
 cd /app/backend && npx prisma migrate deploy\n\
 \n\
 # Start Python Worker in background\n\
-echo "🐍 Starting Python Worker..."\n\
-cd /app/python-worker && python3 worker.py &\n\
+# Start Python Worker as HTTP service (FastAPI) in background
+echo "🐍 Starting Python Worker (FastAPI)..."
+cd /app/python-worker && uvicorn app:app --host 0.0.0.0 --port 8000 &\
 \n\
 # Start Node.js Backend in foreground\n\
 echo "📦 Starting Node.js Backend..."\n\

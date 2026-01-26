@@ -4,6 +4,10 @@ import { ValidationError, NotFoundError, ForbiddenError } from '../utils/errors'
 import prisma from '../config/database';
 import { auditService } from './audit.service';
 
+interface WorkerQueueResponse {
+  job_id: string;
+}
+
 export type JobType =
   | 'csv_import'
   | 'connector_initial_sync'
@@ -167,6 +171,37 @@ export const jobService = {
       idempotencyKey: finalIdempotencyKey,
       params: jobParams,
     });
+
+    // Now queue the job via HTTP to the worker
+    const workerUrl = process.env.WORKER_URL || 'http://localhost:5000';
+    try {
+      const response = await fetch(`${workerUrl}/queue_job`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jobType,
+          orgId,
+          objectId,
+          params: jobParams,
+          queue: finalQueue,
+          priority: finalPriority,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Failed to queue job via worker: ${response.status} ${errorText}`);
+        // Still return the job, but log the error
+      } else {
+        const result = await response.json() as WorkerQueueResponse;
+        console.log(`Job queued via worker: ${result.job_id}`);
+      }
+    } catch (error) {
+      console.error('Error calling worker API:', error);
+      // Continue, don't fail the job creation
+    }
 
     // Log audit event
     if (orgId && createdByUserId) {
