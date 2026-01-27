@@ -11,7 +11,13 @@ app = FastAPI(title="FinaPilot Worker API")
 
 from jobs import runner as job_runner
 from utils.logger import setup_logger
+from utils.db import get_db_connection
 from worker import JOB_HANDLERS
+
+# Global state
+polling_active = False
+polling_thread = None
+active_jobs = {}  # Track active job threads
 from worker import JOB_HANDLERS  # Import handlers for polling
 
 
@@ -36,8 +42,29 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/status")
+def status():
+    """Check worker status including DB connection and polling"""
+    try:
+        # Test DB connection
+        conn = get_db_connection()
+        conn.close()
+        db_status = "connected"
+    except Exception as e:
+        db_status = f"error: {str(e)}"
+    
+    return {
+        "status": "ok",
+        "database": db_status,
+        "polling_active": polling_active,
+        "active_jobs": len(active_jobs) if 'active_jobs' in globals() else 0,
+    }
+
+
 @app.post("/queue_job")
 def queue_job(req: QueueJobRequest):
+    logger = setup_logger()
+    logger.info(f"📥 Queue job request: {req.jobType} for org {req.orgId}")
     try:
         job_id = job_runner.queue_job(
             job_type=req.jobType,
@@ -48,12 +75,16 @@ def queue_job(req: QueueJobRequest):
             priority=req.priority or 50,
         )
         if not job_id:
+            logger.error("❌ Failed to queue job in DB")
             raise HTTPException(status_code=500, detail="Failed to queue job")
+        logger.info(f"✅ Job queued: {job_id}")
         return {"job_id": job_id}
     except ValueError as e:
         # Typically thrown when DATABASE_URL missing or invalid
+        logger.error(f"❌ Queue job error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        logger.error(f"❌ Unexpected queue job error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -156,24 +187,39 @@ polling_thread = None
 
 def polling_loop():
     """Background polling loop similar to worker.py"""
-    global polling_active
+    global polling_active, active_jobs
     logger = setup_logger()
     logger.info("🚀 Background polling started")
     while polling_active:
         try:
+            # Check capacity
+            if len(active_jobs) >= 4:
+                time.sleep(0.5)
+                continue
+            
             # Poll all queues
             for queue in ['default', 'exports', 'montecarlo', 'connectors']:
                 job = job_runner.reserve_job(queue)
                 if job:
+                    logger.info(f"🎯 Reserved job {job['id']} ({job.get('jobType')}) from queue {queue}")
                     # Process the job
                     job_type = job.get('jobType')
                     handler = JOB_HANDLERS.get(job_type)
                     if handler:
-                        job_runner.run_job_with_retry(job, handler)
+                        active_jobs[job['id']] = threading.current_thread()
+                        try:
+                            logger.info(f"▶️ Starting job {job['id']}")
+                            job_runner.run_job_with_retry(job, handler)
+                            logger.info(f"✅ Completed job {job['id']}")
+                        finally:
+                            if job['id'] in active_jobs:
+                                del active_jobs[job['id']]
                     else:
+                        logger.error(f"❌ Unknown job type: {job_type} for job {job['id']}")
                         job_runner.fail_job(job['id'], ValueError(f"Unknown job type: {job_type}"))
                     break  # Process one job per poll cycle
             else:
+                logger.debug("No jobs in any queue")
                 time.sleep(0.5)  # No jobs, wait
         except Exception as e:
             logger.error(f"❌ Polling error: {str(e)}", exc_info=True)
