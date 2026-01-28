@@ -60,7 +60,7 @@ class StrategicAgentService {
     });
 
     // Get financial data
-    const financialData = await this.getFinancialData(orgId, dataSources);
+    const financialData = await this.getFinancialData(orgId, dataSources, params.sharedContext);
 
     thoughts.push({
       step: 2,
@@ -134,7 +134,7 @@ class StrategicAgentService {
           title: 'Strategic Analysis',
           data: Object.entries(calculations).map(([key, value]) => ({
             metric: key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()),
-            value: typeof value === 'number' 
+            value: typeof value === 'number'
               ? (Math.abs(value) < 1 ? `${(value * 100).toFixed(1)}%` : `$${value.toLocaleString()}`)
               : value,
           })),
@@ -144,43 +144,54 @@ class StrategicAgentService {
   }
 
   /**
-   * Get financial data
+   * Get financial baseline data for strategic analysis
    */
-  private async getFinancialData(orgId: string, dataSources: DataSource[]): Promise<any> {
-    let revenue = 0;
-    let opex = 0;
-    let headcount = 0;
-    let rdSpend = 0;
-    let saasSubscriptions = 0;
-    let realEstateSpend = 0;
-    let hasRealData = false;
+  private async getFinancialData(orgId: string, dataSources: DataSource[], sharedContext?: any): Promise<any> {
+    let revenue = sharedContext?.calculations?.revenue || 0;
+    let netBurn = sharedContext?.calculations?.netBurn || sharedContext?.calculations?.burnRate || 0;
+    let cashBalance = sharedContext?.calculations?.cashBalance || 0;
+    let arr = sharedContext?.calculations?.arr || revenue * 12;
+    let opex = sharedContext?.calculations?.expenses || sharedContext?.calculations?.opex || 0;
+    let hasRealData = revenue > 0 || cashBalance > 0;
 
-    try {
-      const latestRun = await prisma.modelRun.findFirst({
-        where: { orgId, status: 'done' },
-        orderBy: { createdAt: 'desc' },
-      });
+    let headcount = 50;
+    let rdSpend = opex * 0.35;
+    let saasSubscriptions = opex * 0.08;
+    let realEstateSpend = opex * 0.12;
 
-      if (latestRun?.summaryJson) {
-        const summary = latestRun.summaryJson as any;
-        revenue = summary.revenue || summary.mrr || 0;
-        opex = summary.expenses || summary.opex || summary.monthlyBurn || 0;
-        headcount = summary.headcount || 50;
-        rdSpend = summary.rdSpend || opex * 0.35;
-        saasSubscriptions = summary.saasSpend || opex * 0.08;
-        realEstateSpend = summary.realEstateSpend || opex * 0.12;
-        hasRealData = revenue > 0 || opex > 0;
-
-        dataSources.push({
-          type: 'model_run',
-          id: latestRun.id,
-          name: 'Financial Model',
-          timestamp: latestRun.createdAt,
-          confidence: 0.9,
+    if (!hasRealData) {
+      try {
+        const latestRun = await prisma.modelRun.findFirst({
+          where: { orgId, status: 'done' },
+          orderBy: { createdAt: 'desc' },
         });
-      }
 
-      // Get budget breakdown if available
+        if (latestRun?.summaryJson) {
+          const summary = latestRun.summaryJson as any;
+          revenue = summary.revenue || summary.mrr || 0;
+          opex = summary.expenses || summary.opex || summary.monthlyBurn || 0;
+          headcount = summary.headcount || 50;
+          rdSpend = summary.rdSpend || opex * 0.35;
+          saasSubscriptions = summary.saasSpend || opex * 0.08;
+          realEstateSpend = summary.realEstateSpend || opex * 0.12;
+          hasRealData = revenue > 0 || opex > 0;
+          cashBalance = summary.cashBalance || 0;
+
+          dataSources.push({
+            type: 'model_run',
+            id: latestRun.id,
+            name: 'Financial Model',
+            timestamp: latestRun.createdAt,
+            confidence: 0.9,
+          });
+        }
+      } catch (error) {
+        console.error('[StrategicAgent] Error:', error);
+      }
+    }
+
+    // Get budget breakdown if available
+    try {
       const budgets = await prisma.budget.findMany({
         where: { orgId },
         orderBy: { month: 'desc' },
@@ -196,25 +207,25 @@ class StrategicAgentService {
           confidence: 0.85,
         });
       }
+    } catch (e) {
+      // Ignore budget errors
+    }
 
-      if (!hasRealData) {
-        revenue = 200000;
-        opex = 280000;
-        headcount = 35;
-        rdSpend = opex * 0.35;
-        saasSubscriptions = 25000;
-        realEstateSpend = opex * 0.12;
+    if (!hasRealData) {
+      revenue = 200000;
+      opex = 280000;
+      headcount = 35;
+      rdSpend = opex * 0.35;
+      saasSubscriptions = 25000;
+      realEstateSpend = opex * 0.12;
 
-        dataSources.push({
-          type: 'manual_input',
-          id: 'benchmark',
-          name: 'Industry Benchmarks',
-          timestamp: new Date(),
-          confidence: 0.5,
-        });
-      }
-    } catch (error) {
-      console.error('[StrategicAgent] Error:', error);
+      dataSources.push({
+        type: 'manual_input',
+        id: 'benchmark',
+        name: 'Industry Benchmarks',
+        timestamp: new Date(),
+        confidence: 0.5,
+      });
     }
 
     return {
@@ -240,11 +251,11 @@ class StrategicAgentService {
     calculations: Record<string, number>
   ): Promise<MAAnalysis> {
     const acquisitionPrice = entities.amount || 50000000; // Default $50M
-    
+
     // Simulate target company data
     const targetArr = acquisitionPrice * 0.25; // Typical 4x ARR multiple
     const targetMargin = 0.15;
-    
+
     // Calculate synergies
     const backOfficeSynergies = data.opex * 0.05; // 5% opex reduction
     const salesSynergies = data.revenue * 0.08; // 8% revenue uplift
@@ -255,10 +266,10 @@ class StrategicAgentService {
     const combinedRevenue = data.arr + targetArr;
     const acquisitionDebt = acquisitionPrice * 0.5; // Assume 50% debt financed
     const interestCost = acquisitionDebt * 0.06; // 6% interest rate
-    
+
     const year1Eps = (data.revenue - data.opex) * 12;
     const year1CombinedEps = ((data.revenue + targetArr / 12) - (data.opex + interestCost / 12) + totalSynergies / 12) * 12;
-    
+
     const year1Change = (year1CombinedEps - year1Eps) / Math.abs(year1Eps);
     const isDilutive = year1Change < 0;
 
@@ -293,7 +304,7 @@ class StrategicAgentService {
       year1Impact: isDilutive ? 'dilutive' : 'accretive',
       year1ImpactPercent: year1Change,
       year2Outlook: `Accretive by Year 2 with +$${(targetArr + totalSynergies * 12).toLocaleString()} ARR contribution`,
-      recommendation: isDilutive 
+      recommendation: isDilutive
         ? `Proceed only if interest rate below ${((0.06 - year1Change * 0.02) * 100).toFixed(1)}%`
         : 'Favorable deal structure - recommend proceeding',
       conditions: [
@@ -316,7 +327,7 @@ class StrategicAgentService {
   ): Promise<CostReductionOpportunity[]> {
     const targetReduction = entities.percentage ? entities.percentage / 100 : 0.10;
     const targetSavings = data.opex * targetReduction;
-    
+
     const opportunities: CostReductionOpportunity[] = [];
     let totalIdentified = 0;
 
@@ -501,7 +512,7 @@ class StrategicAgentService {
       priority: 'high',
       category: 'm&a',
       actions: analysis.conditions,
-      risks: analysis.year1Impact === 'dilutive' 
+      risks: analysis.year1Impact === 'dilutive'
         ? ['Short-term EPS dilution', 'Integration risk', 'Key talent retention']
         : ['Integration execution risk', 'Culture alignment'],
       dataSources: [],
@@ -605,14 +616,14 @@ class StrategicAgentService {
   ): string {
     const targetPercent = (calculations.targetReduction * 100).toFixed(0);
     const achievedPercent = (calculations.savingsPercent * 100).toFixed(1);
-    
+
     let answer = `**Cost Reduction Analysis**\n\n`;
     answer += `Targeting **${targetPercent}%** reduction in operating costs without slowing R&D.\n\n`;
 
     answer += `**Identified Opportunities:**\n\n`;
     answer += `| Category | Current | Savings | R&D Impact |\n`;
     answer += `|----------|---------|---------|------------|\n`;
-    
+
     for (const opp of opportunities) {
       answer += `| ${opp.category} | $${opp.currentSpend.toLocaleString()} | $${opp.potentialSavings.toLocaleString()} | ${opp.rdImpact} |\n`;
     }

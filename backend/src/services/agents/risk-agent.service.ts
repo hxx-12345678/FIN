@@ -48,8 +48,8 @@ class RiskAgentService {
     });
 
     // Get baseline financial data
-    const financialData = await this.getFinancialData(orgId, dataSources);
-    
+    const financialData = await this.getFinancialData(orgId, dataSources, params.sharedContext);
+
     thoughts.push({
       step: 2,
       thought: `Baseline retrieved: Runway ${financialData.runway.toFixed(1)} months, Burn $${financialData.monthlyBurn.toLocaleString()}`,
@@ -57,7 +57,7 @@ class RiskAgentService {
 
     // Identify query-specific risk focus
     const riskFocus = this.identifyRiskFocus(query);
-    
+
     thoughts.push({
       step: 3,
       thought: `Risk focus identified: ${riskFocus.join(', ')}`,
@@ -72,7 +72,7 @@ class RiskAgentService {
     });
 
     const scenarios = await this.runStressTests(financialData, riskFocus, dataSources);
-    
+
     thoughts.push({
       step: 5,
       thought: `Analyzed ${scenarios.length} risk scenarios`,
@@ -115,52 +115,55 @@ class RiskAgentService {
   /**
    * Get baseline financial data
    */
-  private async getFinancialData(orgId: string, dataSources: DataSource[]): Promise<any> {
-    let cashBalance = 0;
-    let monthlyBurn = 0;
-    let revenue = 0;
+  private async getFinancialData(orgId: string, dataSources: DataSource[], sharedContext?: any): Promise<any> {
+    let cashBalance = sharedContext?.calculations?.cashBalance || 0;
+    let monthlyBurn = sharedContext?.calculations?.burnRate || sharedContext?.calculations?.expenses || 0;
+    let revenue = sharedContext?.calculations?.revenue || 0;
     let cogs = 0;
-    let hasRealData = false;
+    let hasRealData = cashBalance > 0 || monthlyBurn > 0;
 
-    try {
-      const latestRun = await prisma.modelRun.findFirst({
-        where: { orgId, status: 'done' },
-        orderBy: { createdAt: 'desc' },
+    // Only query DB if we don't have base data in sharedContext
+    if (!hasRealData) {
+      try {
+        const latestRun = await prisma.modelRun.findFirst({
+          where: { orgId, status: 'done' },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        if (latestRun?.summaryJson) {
+          const summary = latestRun.summaryJson as any;
+          cashBalance = summary.cashBalance || summary.initialCash || 0;
+          monthlyBurn = summary.monthlyBurn || summary.burnRate || summary.expenses || 0;
+          revenue = summary.revenue || summary.mrr || 0;
+          cogs = summary.cogs || revenue * 0.2;
+          hasRealData = cashBalance > 0 || monthlyBurn > 0;
+
+          dataSources.push({
+            type: 'model_run',
+            id: latestRun.id,
+            name: 'Financial Model',
+            timestamp: latestRun.createdAt,
+            confidence: 0.9,
+          });
+        }
+      } catch (error) {
+        console.error('[RiskAgent] Error fetching DB data:', error);
+      }
+    }
+
+    if (!hasRealData) {
+      cashBalance = 1500000;
+      monthlyBurn = 120000;
+      revenue = 80000;
+      cogs = 16000;
+
+      dataSources.push({
+        type: 'manual_input',
+        id: 'benchmark',
+        name: 'Industry Benchmarks',
+        timestamp: new Date(),
+        confidence: 0.5,
       });
-
-      if (latestRun?.summaryJson) {
-        const summary = latestRun.summaryJson as any;
-        cashBalance = summary.cashBalance || summary.initialCash || 0;
-        monthlyBurn = summary.monthlyBurn || summary.burnRate || summary.expenses || 0;
-        revenue = summary.revenue || summary.mrr || 0;
-        cogs = summary.cogs || revenue * 0.2;
-        hasRealData = cashBalance > 0 || monthlyBurn > 0;
-
-        dataSources.push({
-          type: 'model_run',
-          id: latestRun.id,
-          name: 'Financial Model',
-          timestamp: latestRun.createdAt,
-          confidence: 0.9,
-        });
-      }
-
-      if (!hasRealData) {
-        cashBalance = 1500000;
-        monthlyBurn = 120000;
-        revenue = 80000;
-        cogs = 16000;
-
-        dataSources.push({
-          type: 'manual_input',
-          id: 'benchmark',
-          name: 'Industry Benchmarks',
-          timestamp: new Date(),
-          confidence: 0.5,
-        });
-      }
-    } catch (error) {
-      console.error('[RiskAgent] Error:', error);
     }
 
     const netBurn = monthlyBurn - revenue;
@@ -408,7 +411,7 @@ class RiskAgentService {
     const expectedLoss = scenarios.reduce((sum, s) => sum + (s.impact * s.probability), 0);
 
     // Worst case runway
-    const worstScenario = scenarios.reduce((worst, s) => 
+    const worstScenario = scenarios.reduce((worst, s) =>
       s.runwayImpact < worst.runwayImpact ? s : worst, scenarios[0]);
     const worstCaseRunway = data.runway * (1 + worstScenario.runwayImpact);
 
@@ -527,7 +530,7 @@ class RiskAgentService {
     if (/supply.*chain|how.*safe/i.test(query)) {
       const supplyChainScenarios = scenarios.filter(s => s.type === 'supply_chain');
       const totalExposure = supplyChainScenarios.reduce((sum, s) => sum + s.impact, 0) / supplyChainScenarios.length;
-      
+
       answer += `**Supply Chain Risk Assessment:**\n`;
       answer += `We have a **${(totalExposure * 100).toFixed(0)}% exposure** to supply chain risks.\n\n`;
     }
@@ -543,7 +546,7 @@ class RiskAgentService {
     answer += `**Key Risk Scenarios:**\n\n`;
     answer += `| Scenario | Probability | Impact | Runway Effect |\n`;
     answer += `|----------|-------------|--------|---------------|\n`;
-    
+
     for (const scenario of scenarios.slice(0, 5)) {
       answer += `| ${scenario.name} | ${(scenario.probability * 100).toFixed(0)}% | ${(scenario.impact * 100).toFixed(0)}% | ${scenario.runwayImpact > 0 ? '+' : ''}${(scenario.runwayImpact * 100).toFixed(0)}% |\n`;
     }

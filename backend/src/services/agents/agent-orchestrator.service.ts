@@ -23,6 +23,7 @@ import {
   QUERY_PATTERNS,
   HITL_THRESHOLDS,
 } from './agent-types';
+import { llmService } from '../llm.service';
 import { treasuryAgent } from './treasury-agent.service';
 import { forecastingAgent } from './forecasting-agent.service';
 import { analyticsAgent } from './analytics-agent.service';
@@ -44,7 +45,7 @@ class AgentOrchestratorService {
     this.agents.set('analytics', analyticsAgent);     // Variance, drill-down
     this.agents.set('anomaly', anomalyAgent);         // Duplicate detection, fraud
     this.agents.set('reporting', reportingAgent);     // Board summaries, narratives
-    
+
     // Advanced Strategic Agents
     this.agents.set('capital', capitalAgent);         // Capital allocation, portfolio optimization
     this.agents.set('risk', riskAgent);               // Stress testing, tail risk, black swan
@@ -59,7 +60,8 @@ class AgentOrchestratorService {
     orgId: string,
     userId: string,
     query: string,
-    context?: Record<string, any>
+    context?: Record<string, any>,
+    bypassApproval: boolean = false
   ): Promise<AgentResponse> {
     const startTime = Date.now();
     const thoughts: AgentThought[] = [];
@@ -74,7 +76,7 @@ class AgentOrchestratorService {
       });
 
       const intent = await this.classifyIntent(query);
-      
+
       thoughts.push({
         step: 2,
         thought: `Identified intent: ${intent.primaryIntent} (confidence: ${(intent.confidence * 100).toFixed(0)}%)`,
@@ -83,7 +85,7 @@ class AgentOrchestratorService {
 
       // Step 2: Create execution plan
       const plan = await this.createPlan(orgId, query, intent);
-      
+
       thoughts.push({
         step: 3,
         thought: `Created execution plan with ${plan.tasks.length} tasks`,
@@ -91,18 +93,49 @@ class AgentOrchestratorService {
       });
 
       // Step 3: Check if human approval is needed
-      if (plan.requiresApproval) {
+      if (plan.requiresApproval && !bypassApproval) {
         return this.createApprovalResponse(plan, thoughts, dataSources);
       }
 
       // Step 4: Execute tasks through specialized agents
       const results = await this.executePlan(orgId, userId, plan, thoughts, dataSources);
 
-      // Step 5: Synthesize final response
+      // Step 5: Aggregate data from all agents
+      const allRecommendations = results.flatMap(r => r.recommendations || []);
+      const allCalculations = results.reduce((acc, r) => ({ ...acc, ...r.calculations }), {});
+      const allVisualizations = results.flatMap(r => r.visualizations || []);
+
+      // Step 6: Synthesize final response narrative
+      let finalAnswer = '';
+      if (intent.complexity !== 'simple' && results.length > 0) {
+        thoughts.push({
+          step: thoughts.length + 1,
+          thought: 'Synthesizing professional CFO narrative using LLM...',
+          action: 'narrative_synthesis',
+        });
+
+        try {
+          finalAnswer = await llmService.synthesizeCfoReport(
+            query,
+            results.map(r => r.answer),
+            allCalculations
+          );
+        } catch (llmError) {
+          console.warn('[AgentOrchestrator] LLM Synthesis failed, using deterministic fallback');
+          finalAnswer = this.combineAnswers(intent.primaryIntent, results.map(r => r.answer), allCalculations);
+        }
+      } else {
+        finalAnswer = this.combineAnswers(intent.primaryIntent, results.map(r => r.answer), allCalculations);
+      }
+
       const response = await this.synthesizeResponse(
         query,
         intent,
         results,
+        finalAnswer,
+        allCalculations,
+        allRecommendations,
+        allVisualizations,
         thoughts,
         dataSources,
         startTime
@@ -111,7 +144,7 @@ class AgentOrchestratorService {
       return response;
     } catch (error: any) {
       console.error('[AgentOrchestrator] Error:', error);
-      
+
       return {
         agentType: 'orchestrator',
         taskId: uuidv4(),
@@ -133,17 +166,24 @@ class AgentOrchestratorService {
    */
   async classifyIntent(query: string): Promise<IntentClassification> {
     const queryLower = query.toLowerCase();
-    
+
     // Check against known patterns
     for (const [intentName, config] of Object.entries(QUERY_PATTERNS)) {
       for (const pattern of config.patterns) {
         if (pattern.test(queryLower)) {
+          let complexity = config.complexity;
+
+          // Dynamic complexity upgrade: if user asks for reasoning/analysis, it's NOT simple
+          if (/(?:why|because|analyze|explain|plan|strategy|how|what if)/i.test(queryLower)) {
+            complexity = complexity === 'simple' ? 'moderate' : 'complex';
+          }
+
           return {
             primaryIntent: intentName,
             confidence: 0.85,
             entities: this.extractEntities(query),
             requiredAgents: config.agents,
-            complexity: config.complexity,
+            complexity,
             requiresRealTimeData: true,
           };
         }
@@ -311,7 +351,7 @@ class AgentOrchestratorService {
   }
 
   /**
-   * Execute the plan through specialized agents
+   * Execute the plan through specialized agents with shared context
    */
   async executePlan(
     orgId: string,
@@ -321,6 +361,11 @@ class AgentOrchestratorService {
     dataSources: DataSource[]
   ): Promise<AgentResponse[]> {
     const results: AgentResponse[] = [];
+    const sharedContext: Record<string, any> = {
+      calculations: {},
+      observations: [],
+      dataSources: []
+    };
 
     // Execute tasks (can be parallelized based on plan.parallelizable)
     for (const taskId of plan.executionOrder) {
@@ -345,11 +390,22 @@ class AgentOrchestratorService {
       });
 
       try {
-        const result = await agent.execute(orgId, userId, task.params);
+        // Pass sharedContext to the agent for "Better than CFO" holistic reasoning
+        const result = await agent.execute(orgId, userId, {
+          ...task.params,
+          sharedContext
+        });
         results.push(result);
 
-        // Collect data sources from agent
+        // Update shared context for subsequent agents
+        if (result.calculations) {
+          sharedContext.calculations = { ...sharedContext.calculations, ...result.calculations };
+        }
+        if (result.answer) {
+          sharedContext.observations.push(`${agentType}: ${result.answer.substring(0, 500)}`);
+        }
         if (result.dataSources) {
+          sharedContext.dataSources.push(...result.dataSources);
           dataSources.push(...result.dataSources);
         }
 
@@ -371,38 +427,24 @@ class AgentOrchestratorService {
   }
 
   /**
-   * Synthesize final response from agent results
+   * Synthesize final response from agent results and aggregated data
    */
   async synthesizeResponse(
     query: string,
     intent: IntentClassification,
     results: AgentResponse[],
+    finalAnswer: string,
+    allCalculations: Record<string, number>,
+    allRecommendations: AgentRecommendation[],
+    allVisualizations: any[],
     thoughts: AgentThought[],
     dataSources: DataSource[],
     startTime: number
   ): Promise<AgentResponse> {
-    // Combine answers from all agents
-    const answers = results.map(r => r.answer).filter(Boolean);
-    const allRecommendations = results.flatMap(r => r.recommendations || []);
-    const allCalculations = results.reduce((acc, r) => ({ ...acc, ...r.calculations }), {});
-    const allVisualizations = results.flatMap(r => r.visualizations || []);
-
     // Calculate overall confidence (weighted average)
     const avgConfidence = results.length > 0
       ? results.reduce((sum, r) => sum + r.confidence, 0) / results.length
       : 0.5;
-
-    // Synthesize final answer
-    let finalAnswer = '';
-    
-    if (answers.length === 0) {
-      finalAnswer = `I analyzed your question about "${query}" but need more data to provide a complete answer. Please ensure your financial data is connected.`;
-    } else if (answers.length === 1) {
-      finalAnswer = answers[0];
-    } else {
-      // Combine multiple agent answers intelligently
-      finalAnswer = this.combineAnswers(intent.primaryIntent, answers, allCalculations);
-    }
 
     // Add thinking summary
     thoughts.push({
@@ -430,7 +472,7 @@ class AgentOrchestratorService {
   }
 
   /**
-   * Combine answers from multiple agents
+   * Combine answers from multiple agents into a cohesive CFO report
    */
   private combineAnswers(
     intent: string,
@@ -446,8 +488,37 @@ class AgentOrchestratorService {
       case 'board_summary':
         return this.formatBoardSummary(answers, calculations);
       default:
-        // Default: join with context
-        return `**Analysis Summary**\n\n${answers.join('\n\n---\n\n')}`;
+        // Production Level Synthesis: Build a professional CFO report
+        let report = `### 📊 AI CFO Executive Report\n\n`;
+
+        // Key Financial Snapshot
+        if (calculations.revenue || calculations.cashBalance || calculations.burnRate) {
+          report += `#### 🏷️ Financial Snapshot\n`;
+          if (calculations.cashBalance) report += `• **Cash Position:** $${calculations.cashBalance.toLocaleString()}\n`;
+          if (calculations.revenue) report += `• **Monthly Revenue:** $${calculations.revenue.toLocaleString()}\n`;
+          if (calculations.burnRate) report += `• **Monthly Burn:** $${calculations.burnRate.toLocaleString()}\n`;
+          if (calculations.runway) report += `• **Current Runway:** ${calculations.runway.toFixed(1)} months\n`;
+          report += `\n`;
+        }
+
+        report += `#### 🔍 Strategic Analysis & Insights\n`;
+        // Intelligently combine insights without duplicates
+        const uniqueInsights = Array.from(new Set(answers.map(a => a.trim())));
+        uniqueInsights.forEach((insight, idx) => {
+          // Clean up individual agent answers to fit into a report format
+          const cleanedInsight = insight
+            .replace(/^#+.*$/gm, '') // Remove nested headers
+            .replace(/\*\*Analysis Summary\*\*/g, '')
+            .trim();
+
+          if (cleanedInsight) {
+            report += `${cleanedInsight}\n\n`;
+          }
+        });
+
+        report += `---\n*This analysis was synthesized by a collaboration of specialized agents (Treasury, Analytics, and Forecasting).*`;
+
+        return report;
     }
   }
 
@@ -457,15 +528,15 @@ class AgentOrchestratorService {
     const cashBalance = calculations.cashBalance || calculations.cash;
 
     let response = `**Cash Runway Analysis**\n\n`;
-    
+
     if (runway) {
       response += `📊 **Current Runway:** ${runway.toFixed(1)} months\n\n`;
     }
-    
+
     if (burnRate) {
       response += `💸 **Monthly Burn Rate:** $${burnRate.toLocaleString()}\n`;
     }
-    
+
     if (cashBalance) {
       response += `💰 **Cash Balance:** $${cashBalance.toLocaleString()}\n\n`;
     }
@@ -482,13 +553,13 @@ class AgentOrchestratorService {
   private formatScenarioAnswer(answers: string[], calculations: Record<string, number>): string {
     let response = `**Scenario Analysis**\n\n`;
     response += `I've modeled the requested scenario. Here's the comparison:\n\n`;
-    
+
     // Add calculations
     if (Object.keys(calculations).length > 0) {
       response += `**Projected Impact:**\n`;
       for (const [key, value] of Object.entries(calculations)) {
         const formattedKey = key.replace(/([A-Z])/g, ' $1').toLowerCase();
-        const formattedValue = typeof value === 'number' 
+        const formattedValue = typeof value === 'number'
           ? (Math.abs(value) > 1 ? `$${value.toLocaleString()}` : `${(value * 100).toFixed(1)}%`)
           : value;
         response += `• ${formattedKey}: ${formattedValue}\n`;
@@ -509,7 +580,7 @@ class AgentOrchestratorService {
     let response = `**Executive Summary for Board Meeting**\n\n`;
     response += `*Prepared by AI CFO Assistant*\n\n`;
     response += `---\n\n`;
-    
+
     // Key metrics section
     if (Object.keys(calculations).length > 0) {
       response += `**Key Financial Metrics:**\n\n`;

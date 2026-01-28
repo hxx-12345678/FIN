@@ -16,7 +16,8 @@ class TreasuryAgentService {
   async execute(
     orgId: string,
     userId: string,
-    params: Record<string, any>
+    params: Record<string, any>,
+    sharedContext?: any
   ): Promise<AgentResponse> {
     const thoughts: AgentThought[] = [];
     const dataSources: DataSource[] = [];
@@ -29,8 +30,8 @@ class TreasuryAgentService {
     });
 
     // Fetch real data
-    const financialData = await this.getFinancialData(orgId, dataSources);
-    
+    const financialData = await this.getFinancialData(orgId, dataSources, sharedContext);
+
     thoughts.push({
       step: 2,
       thought: `Retrieved data: ${dataSources.length} sources`,
@@ -39,7 +40,7 @@ class TreasuryAgentService {
 
     // Calculate runway
     const runway = this.calculateRunway(financialData, calculations);
-    
+
     thoughts.push({
       step: 3,
       thought: `Calculated runway: ${runway.months.toFixed(1)} months`,
@@ -48,7 +49,7 @@ class TreasuryAgentService {
 
     // Analyze burn trends
     const burnTrends = await this.analyzeBurnTrends(orgId, dataSources);
-    
+
     thoughts.push({
       step: 4,
       thought: `Burn rate trend: ${burnTrends.trend}`,
@@ -88,69 +89,76 @@ class TreasuryAgentService {
   /**
    * Gather financial data from all available sources
    */
-  private async getFinancialData(orgId: string, dataSources: DataSource[]): Promise<any> {
-    let cashBalance = 0;
-    let monthlyBurn = 0;
-    let monthlyRevenue = 0;
-    let hasRealData = false;
+  private async getFinancialData(orgId: string, dataSources: DataSource[], sharedContext?: any): Promise<any> {
+    let cashBalance = sharedContext?.calculations?.cashBalance || 0;
+    let monthlyBurn = sharedContext?.calculations?.expenses || sharedContext?.calculations?.burnRate || 0;
+    let monthlyRevenue = sharedContext?.calculations?.revenue || 0;
+    let hasRealData = cashBalance > 0 || monthlyBurn > 0 || monthlyRevenue > 0;
 
-    try {
-      // Get from latest model run
-      const latestRun = await prisma.modelRun.findFirst({
-        where: { orgId, status: 'done' },
-        orderBy: { createdAt: 'desc' },
-      });
-
-      if (latestRun?.summaryJson) {
-        const summary = latestRun.summaryJson as any;
-        cashBalance = summary.cashBalance || summary.initialCash || 0;
-        monthlyBurn = summary.monthlyBurn || summary.burnRate || summary.expenses || 0;
-        monthlyRevenue = summary.revenue || summary.monthlyRevenue || summary.mrr || 0;
-        hasRealData = true;
-
-        dataSources.push({
-          type: 'model_run',
-          id: latestRun.id,
-          name: 'Financial Model',
-          timestamp: latestRun.createdAt,
-          confidence: 0.9,
-          snippet: `Model run from ${latestRun.createdAt.toLocaleDateString()}`,
+    // Only query DB if we don't have base data in sharedContext
+    if (!hasRealData) {
+      try {
+        // Get from latest model run
+        const latestRun = await prisma.modelRun.findFirst({
+          where: { orgId, status: 'done' },
+          orderBy: { createdAt: 'desc' },
         });
-      }
 
-      // Get transaction data
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        if (latestRun?.summaryJson) {
+          const summary = latestRun.summaryJson as any;
+          cashBalance = summary.cashBalance || summary.initialCash || 0;
+          monthlyBurn = summary.monthlyBurn || summary.burnRate || summary.expenses || 0;
+          monthlyRevenue = summary.revenue || summary.monthlyRevenue || summary.mrr || 0;
+          hasRealData = true;
 
-      const transactions = await prisma.rawTransaction.aggregate({
-        where: {
-          orgId,
-          date: { gte: thirtyDaysAgo },
-          isDuplicate: false,
-        },
-        _sum: { amount: true },
-        _count: true,
-      });
-
-      if (transactions._count > 0) {
-        const txnAmount = transactions._sum.amount ? Number(transactions._sum.amount) : 0;
-        // Transactions are typically negative for expenses
-        if (txnAmount < 0 && !monthlyBurn) {
-          monthlyBurn = Math.abs(txnAmount);
+          dataSources.push({
+            type: 'model_run',
+            id: latestRun.id,
+            name: 'Financial Model',
+            timestamp: latestRun.createdAt,
+            confidence: 0.9,
+            snippet: `Model run from ${latestRun.createdAt.toLocaleDateString()}`,
+          });
         }
-        hasRealData = true;
 
-        dataSources.push({
-          type: 'transaction',
-          id: 'aggregated_transactions',
-          name: 'Transaction History',
-          timestamp: new Date(),
-          confidence: 0.95,
-          snippet: `${transactions._count} transactions in last 30 days`,
+        // Get transaction data
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        const transactions = await prisma.rawTransaction.aggregate({
+          where: {
+            orgId,
+            date: { gte: thirtyDaysAgo },
+            isDuplicate: false,
+          },
+          _sum: { amount: true },
+          _count: true,
         });
-      }
 
-      // Get from org settings/budgets
+        if (transactions._count > 0) {
+          const txnAmount = transactions._sum.amount ? Number(transactions._sum.amount) : 0;
+          // Transactions are typically negative for expenses
+          if (txnAmount < 0 && !monthlyBurn) {
+            monthlyBurn = Math.abs(txnAmount);
+          }
+          hasRealData = true;
+
+          dataSources.push({
+            type: 'transaction',
+            id: 'aggregated_transactions',
+            name: 'Transaction History',
+            timestamp: new Date(),
+            confidence: 0.95,
+            snippet: `${transactions._count} transactions in last 30 days`,
+          });
+        }
+      } catch (error) {
+        console.error('[TreasuryAgent] Error fetching data:', error);
+      }
+    }
+
+    // Still check budgets if available
+    try {
       const budgets = await prisma.budget.findMany({
         where: { orgId },
         orderBy: { month: 'desc' },
@@ -167,9 +175,8 @@ class TreasuryAgentService {
           snippet: `${budgets.length} budget periods`,
         });
       }
-
-    } catch (error) {
-      console.error('[TreasuryAgent] Error fetching data:', error);
+    } catch (e) {
+      // Ignore budget errors
     }
 
     // Use defaults if no real data
@@ -216,6 +223,8 @@ class TreasuryAgentService {
     calculations.monthlyRevenue = data.monthlyRevenue;
     calculations.netBurn = netBurn;
     calculations.runway = runwayMonths;
+    calculations.burnRate = data.monthlyBurn; // Alias for consistency
+    calculations.hasRealData = data.hasRealData ? 1 : 0;
 
     return { months: runwayMonths, cashOutDate };
   }

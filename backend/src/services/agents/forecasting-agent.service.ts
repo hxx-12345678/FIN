@@ -32,8 +32,8 @@ class ForecastingAgentService {
     });
 
     // Get baseline data
-    const baselineData = await this.getBaselineData(orgId, dataSources);
-    
+    const baselineData = await this.getBaselineData(orgId, dataSources, params.sharedContext);
+
     thoughts.push({
       step: 2,
       thought: 'Baseline data retrieved',
@@ -47,7 +47,7 @@ class ForecastingAgentService {
 
     // Standard forecast
     const forecast = this.generateForecast(baselineData, 12);
-    
+
     thoughts.push({
       step: 3,
       thought: 'Generated 12-month forecast',
@@ -87,47 +87,48 @@ class ForecastingAgentService {
   /**
    * Get baseline financial data
    */
-  private async getBaselineData(orgId: string, dataSources: DataSource[]): Promise<any> {
-    let mrr = 0;
-    let growthRate = 0.08;
+  private async getBaselineData(orgId: string, dataSources: DataSource[], sharedContext?: any): Promise<any> {
+    let mrr = sharedContext?.calculations?.revenue || sharedContext?.calculations?.mrr || 0;
+    let growthRate = sharedContext?.calculations?.growthRate || 0.08;
     let churnRate = 0.05;
-    let hasRealData = false;
+    let hasRealData = mrr > 0;
 
-    try {
-      const latestRun = await prisma.modelRun.findFirst({
-        where: { orgId, status: 'done' },
-        orderBy: { createdAt: 'desc' },
-      });
-
-      if (latestRun?.summaryJson) {
-        const summary = latestRun.summaryJson as any;
-        mrr = summary.mrr || summary.revenue || summary.monthlyRevenue || 0;
-        growthRate = summary.revenueGrowth || summary.growthRate || 0.08;
-        churnRate = summary.churnRate || 0.05;
-        hasRealData = mrr > 0;
-
-        dataSources.push({
-          type: 'model_run',
-          id: latestRun.id,
-          name: 'Financial Model',
-          timestamp: latestRun.createdAt,
-          confidence: 0.9,
+    if (!hasRealData) {
+      try {
+        const latestRun = await prisma.modelRun.findFirst({
+          where: { orgId, status: 'done' },
+          orderBy: { createdAt: 'desc' },
         });
-      }
 
-      if (!hasRealData) {
-        mrr = 75000;
-        dataSources.push({
-          type: 'manual_input',
-          id: 'default_forecast',
-          name: 'Industry Benchmarks',
-          timestamp: new Date(),
-          confidence: 0.5,
-        });
+        if (latestRun?.summaryJson) {
+          const summary = latestRun.summaryJson as any;
+          mrr = summary.mrr || summary.revenue || summary.monthlyRevenue || 0;
+          growthRate = summary.revenueGrowth || summary.growthRate || 0.08;
+          churnRate = summary.churnRate || 0.05;
+          hasRealData = mrr > 0;
+
+          dataSources.push({
+            type: 'model_run',
+            id: latestRun.id,
+            name: 'Financial Model',
+            timestamp: latestRun.createdAt,
+            confidence: 0.9,
+          });
+        }
+      } catch (error) {
+        console.error('[ForecastingAgent] Error:', error);
       }
-    } catch (error) {
-      console.error('[ForecastingAgent] Error:', error);
+    }
+
+    if (!hasRealData) {
       mrr = 75000;
+      dataSources.push({
+        type: 'manual_input',
+        id: 'default_forecast',
+        name: 'Industry Benchmarks',
+        timestamp: new Date(),
+        confidence: 0.5,
+      });
     }
 
     return { mrr, growthRate, churnRate, hasRealData };
@@ -143,9 +144,9 @@ class ForecastingAgentService {
     for (let i = 0; i < months; i++) {
       const date = new Date();
       date.setMonth(date.getMonth() + i);
-      
+
       currentRevenue = currentRevenue * (1 + baseline.growthRate) * (1 - baseline.churnRate);
-      
+
       forecast.push({
         month: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
         revenue: Math.round(currentRevenue),
@@ -181,14 +182,21 @@ class ForecastingAgentService {
     const currentRevenue = baseline.mrr;
     const scenarioRevenue = currentRevenue * (1 + (isDecrease ? -Math.abs(changePercent) : changePercent));
     const baselineForecast = this.generateForecast(baseline, 12);
-    
+
     const scenarioBaseline = { ...baseline, mrr: scenarioRevenue };
     const scenarioForecast = this.generateForecast(scenarioBaseline, 12);
 
     // Calculate runway impact
-    const currentBurn = baseline.mrr * 1.3; // Assume burn is 1.3x revenue for scaling company
-    const scenarioBurn = currentBurn; // Expenses stay same
-    const currentRunway = (baseline.mrr * 6) / (currentBurn - currentRevenue + 0.01);
+    const sharedCalcs = (params as any)?.sharedContext?.calculations || {};
+    const actualBurn = sharedCalcs.netBurn || sharedCalcs.monthlyBurn || (baseline.mrr * 1.3);
+    const usingEstimate = !sharedCalcs.netBurn && !sharedCalcs.monthlyBurn;
+
+    const currentBurn = actualBurn;
+    // scenarioRevenue is already calculated above, no need to re-declare
+    const scenarioBurn = currentBurn; // Expenses stay same in this simple model
+
+    // Improved runway calculation with shared context
+    const currentRunway = sharedCalcs.runway || ((baseline.mrr * 6) / (currentBurn - currentRevenue + 0.01));
     const scenarioRunway = (baseline.mrr * 6) / (scenarioBurn - scenarioRevenue + 0.01);
 
     calculations.baselineRevenue = currentRevenue;
@@ -207,7 +215,7 @@ class ForecastingAgentService {
 
     // Generate recommendations
     const recommendations: AgentRecommendation[] = [];
-    
+
     if (isDecrease) {
       recommendations.push({
         id: uuidv4(),
@@ -261,7 +269,7 @@ class ForecastingAgentService {
    */
   private buildScenarioAnswer(baseline: any, entities: any, calculations: Record<string, number>, isDecrease: boolean): string {
     let answer = `**Scenario Analysis: ${isDecrease ? 'Revenue Decrease' : 'Revenue Increase'} of ${Math.abs(entities.percentage)}%**\n\n`;
-    
+
     answer += `**Side-by-Side Comparison:**\n\n`;
     answer += `| Metric | Current | Scenario | Change |\n`;
     answer += `|--------|---------|----------|--------|\n`;
@@ -272,7 +280,7 @@ class ForecastingAgentService {
       answer += `⚠️ **Impact Analysis:**\n`;
       answer += `A ${Math.abs(entities.percentage)}% revenue drop would reduce monthly revenue by $${Math.abs(calculations.revenueImpact).toLocaleString()}. `;
       answer += `This would ${calculations.runwayImpact < -1 ? 'significantly impact' : 'moderately affect'} your runway.\n\n`;
-      
+
       answer += `**Suggested Mitigations:**\n`;
       answer += `1. Reduce discretionary spending by ${Math.min(20, Math.abs(entities.percentage / 2)).toFixed(0)}%\n`;
       answer += `2. Accelerate collection of outstanding receivables\n`;

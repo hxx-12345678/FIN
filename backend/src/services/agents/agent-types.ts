@@ -6,7 +6,7 @@
  */
 
 // Agent types that specialize in different CFO functions
-export type AgentType = 
+export type AgentType =
   | 'treasury'      // Cash management, runway, burn rate
   | 'forecasting'   // Revenue predictions, scenario modeling
   | 'analytics'     // Drill-down analysis, EBITDA variance
@@ -24,7 +24,7 @@ export type AgentType =
 export type AgentStatus = 'idle' | 'thinking' | 'executing' | 'waiting_approval' | 'completed' | 'failed';
 
 // Agent action types
-export type AgentActionType = 
+export type AgentActionType =
   | 'data_retrieval'      // Fetch data from sources
   | 'calculation'         // Perform financial calculations
   | 'analysis'            // Analyze data patterns
@@ -151,6 +151,20 @@ export interface ApprovalRequest {
 
 // Query patterns for intent classification
 export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentType[]; complexity: IntentClassification['complexity'] }> = {
+  // Crisis management
+  'crisis_management': {
+    patterns: [
+      /emergency.*plan/i,
+      /crisis/i,
+      /save.*runway/i,
+      /unexpected.*increase/i,
+      /significant.*drop/i,
+      /preserve.*cash/i,
+      /cash.*last/i,
+    ],
+    agents: ['treasury', 'analytics', 'risk'],
+    complexity: 'complex',
+  },
   // Treasury queries
   'cash_runway': {
     patterns: [
@@ -173,7 +187,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
     agents: ['treasury'],
     complexity: 'simple',
   },
-  
+
   // Analytics queries
   'variance_analysis': {
     patterns: [
@@ -186,7 +200,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
     agents: ['analytics', 'forecasting'],
     complexity: 'complex',
   },
-  
+
   // Forecasting queries
   'scenario_modeling': {
     patterns: [
@@ -209,7 +223,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
     agents: ['forecasting'],
     complexity: 'moderate',
   },
-  
+
   // Anomaly detection queries
   'duplicate_detection': {
     patterns: [
@@ -222,7 +236,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
     agents: ['anomaly'],
     complexity: 'moderate',
   },
-  
+
   // Reporting queries
   'board_summary': {
     patterns: [
@@ -235,7 +249,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
     agents: ['reporting', 'analytics', 'treasury'],
     complexity: 'complex',
   },
-  
+
   // Cost optimization
   'cost_optimization': {
     patterns: [
@@ -361,13 +375,13 @@ export const HITL_THRESHOLDS = {
   // Value thresholds (in USD)
   highValueTransaction: 100000,
   majorInvestment: 500000,
-  
+
   // Confidence thresholds
   lowConfidenceThreshold: 0.6,
-  
+
   // Risk thresholds
   highRiskActions: ['budget_approval', 'vendor_contract', 'tax_filing', 'large_transfer'],
-  
+
   // Complexity requiring human review
   complexDecisions: ['restructuring', 'acquisition', 'major_pivot'],
 };
