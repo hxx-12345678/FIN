@@ -16,26 +16,26 @@ class TreasuryAgentService {
   async execute(
     orgId: string,
     userId: string,
-    params: Record<string, any>,
-    sharedContext?: any
+    params: Record<string, any>
   ): Promise<AgentResponse> {
     const thoughts: AgentThought[] = [];
     const dataSources: DataSource[] = [];
     const calculations: Record<string, number> = {};
+    const sharedContext = params.sharedContext || {};
 
     thoughts.push({
       step: 1,
-      thought: 'Gathering financial data from connected sources...',
+      thought: 'Gathering financial data from connected sources and shared context...',
       action: 'data_retrieval',
     });
 
-    // Fetch real data
+    // Fetch real data (prioritizing shared context)
     const financialData = await this.getFinancialData(orgId, dataSources, sharedContext);
 
     thoughts.push({
       step: 2,
-      thought: `Retrieved data: ${dataSources.length} sources`,
-      observation: `Cash: $${financialData.cashBalance?.toLocaleString() || 'N/A'}, Monthly burn: $${financialData.monthlyBurn?.toLocaleString() || 'N/A'}`,
+      thought: `Retrieved level data: ${dataSources.length} sources`,
+      observation: `Cash: $${financialData.cashBalance?.toLocaleString() || 'N/A'}, Monthly burn: $${financialData.monthlyBurn?.toLocaleString() || 'N/A'}, Revenue: $${financialData.monthlyRevenue?.toLocaleString() || 'N/A'}`,
     });
 
     // Calculate runway
@@ -43,8 +43,8 @@ class TreasuryAgentService {
 
     thoughts.push({
       step: 3,
-      thought: `Calculated runway: ${runway.months.toFixed(1)} months`,
-      observation: `Cash out date: ${runway.cashOutDate.toLocaleDateString()}`,
+      thought: `Calculated runway: ${runway.months === 36 ? '>36' : runway.months.toFixed(1)} months`,
+      observation: `Cash out date: ${runway.months === 36 ? 'Safe > 3 years' : runway.cashOutDate.toLocaleDateString()}`,
     });
 
     // Analyze burn trends
@@ -90,14 +90,19 @@ class TreasuryAgentService {
    * Gather financial data from all available sources
    */
   private async getFinancialData(orgId: string, dataSources: DataSource[], sharedContext?: any): Promise<any> {
+    // Prioritize shared context
     let cashBalance = sharedContext?.calculations?.cashBalance || 0;
-    let monthlyBurn = sharedContext?.calculations?.expenses || sharedContext?.calculations?.burnRate || 0;
+    let monthlyBurn = sharedContext?.calculations?.burnRate || sharedContext?.calculations?.expenses || 0;
     let monthlyRevenue = sharedContext?.calculations?.revenue || 0;
-    let hasRealData = cashBalance > 0 || monthlyBurn > 0 || monthlyRevenue > 0;
+    let hasRealData = (cashBalance > 0 || monthlyBurn > 0);
 
-    // Only query DB if we don't have base data in sharedContext
-    if (!hasRealData) {
-      try {
+    // If we have shared context data, use it and skip heavy DB lookups unless necessary
+    if (hasRealData) {
+      // We still might want model run info for citations if not present
+    }
+
+    try {
+      if (!hasRealData) {
         // Get from latest model run
         const latestRun = await prisma.modelRun.findFirst({
           where: { orgId, status: 'done' },
@@ -120,11 +125,14 @@ class TreasuryAgentService {
             snippet: `Model run from ${latestRun.createdAt.toLocaleDateString()}`,
           });
         }
+      }
 
-        // Get transaction data
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      // Get transaction data
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
+      // Only fetch transactions if we don't have good burn data or want to verify
+      if (!monthlyBurn) {
         const transactions = await prisma.rawTransaction.aggregate({
           where: {
             orgId,
@@ -152,13 +160,9 @@ class TreasuryAgentService {
             snippet: `${transactions._count} transactions in last 30 days`,
           });
         }
-      } catch (error) {
-        console.error('[TreasuryAgent] Error fetching data:', error);
       }
-    }
 
-    // Still check budgets if available
-    try {
+      // Get from org settings/budgets
       const budgets = await prisma.budget.findMany({
         where: { orgId },
         orderBy: { month: 'desc' },
@@ -175,8 +179,9 @@ class TreasuryAgentService {
           snippet: `${budgets.length} budget periods`,
         });
       }
-    } catch (e) {
-      // Ignore budget errors
+
+    } catch (error) {
+      console.error('[TreasuryAgent] Error fetching data:', error);
     }
 
     // Use defaults if no real data
@@ -195,11 +200,13 @@ class TreasuryAgentService {
       });
     }
 
+    const netBurn = monthlyBurn - monthlyRevenue;
+
     return {
       cashBalance,
       monthlyBurn,
       monthlyRevenue,
-      netBurn: monthlyBurn - monthlyRevenue,
+      netBurn,
       hasRealData,
     };
   }
@@ -211,17 +218,23 @@ class TreasuryAgentService {
     data: any,
     calculations: Record<string, number>
   ): { months: number; cashOutDate: Date } {
-    const netBurn = Math.max(data.netBurn, data.monthlyBurn * 0.3); // At least 30% of burn
-    const runwayMonths = netBurn > 0 ? data.cashBalance / netBurn : 24; // Max 24 if profitable
+    let runwayMonths = 0;
+
+    // If netBurn is negative (profitable) or zero, runway is effectively infinite. Cap at 36 months for display.
+    if (data.netBurn <= 0) {
+      runwayMonths = 36;
+    } else {
+      runwayMonths = data.cashBalance / data.netBurn;
+    }
 
     const cashOutDate = new Date();
-    cashOutDate.setMonth(cashOutDate.getMonth() + Math.floor(runwayMonths));
+    cashOutDate.setMonth(cashOutDate.getMonth() + Math.min(Math.floor(runwayMonths), 36));
 
     // Store calculations
     calculations.cashBalance = data.cashBalance;
     calculations.monthlyBurn = data.monthlyBurn;
     calculations.monthlyRevenue = data.monthlyRevenue;
-    calculations.netBurn = netBurn;
+    calculations.netBurn = data.netBurn;
     calculations.runway = runwayMonths;
     calculations.burnRate = data.monthlyBurn; // Alias for consistency
     calculations.hasRealData = data.hasRealData ? 1 : 0;
