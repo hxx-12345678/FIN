@@ -75,7 +75,7 @@ export const connectorService = {
   },
   startOAuth: async (orgId: string, type: ConnectorType, userId: string) => {
     // Validate connector type
-    const validTypes: ConnectorType[] = ['quickbooks', 'xero', 'stripe', 'plaid', 'razorpay', 'tally', 'csv'];
+    const validTypes: ConnectorType[] = ['quickbooks', 'xero', 'zoho', 'stripe', 'plaid', 'razorpay', 'tally', 'csv'];
     if (!validTypes.includes(type)) {
       throw new ValidationError(`Invalid connector type. Must be one of: ${validTypes.join(', ')}`);
     }
@@ -113,11 +113,21 @@ export const connectorService = {
     );
 
     // Get provider adapter
-    const adapter = getProviderAdapter(type);
+    let adapter;
+    try {
+      adapter = getProviderAdapter(type);
+    } catch (error: any) {
+      throw new ValidationError(error.message || 'Failed to initialize connector adapter');
+    }
     const redirectUri = `${config.backendUrl}/api/v1/connectors/callback`;
 
     // Get OAuth URL
-    const authUrl = await adapter.getAuthUrl(orgId, stateTokenWithConnector, redirectUri);
+    let authUrl: string;
+    try {
+      authUrl = await adapter.getAuthUrl(orgId, stateTokenWithConnector, redirectUri);
+    } catch (error: any) {
+      throw new ValidationError(`Failed to generate OAuth URL: ${error.message}`);
+    }
 
     // Update connector with state token
     await connectorRepository.update(connector.id, {
@@ -139,7 +149,8 @@ export const connectorService = {
   handleOAuthCallback: async (
     connectorId: string | undefined,
     code: string,
-    state: string
+    state: string,
+    realmId?: string // QuickBooks specific
   ) => {
     // Verify state token and extract connectorId from it
     let payload: any;
@@ -173,6 +184,62 @@ export const connectorService = {
     // Exchange code for tokens
     const tokens = await adapter.exchangeCode(code, redirectUri);
 
+    // Extract provider-specific IDs from tokens/response
+    // QuickBooks: realmId is in the token response or needs to be fetched
+    // Xero: tenantId needs to be fetched from connections API
+    // Zoho: organizationId needs to be fetched from organizations API
+    let providerSpecificConfig: any = {
+      tokenAcquiredAt: new Date().toISOString(),
+      expiresAt: tokens.expiresAt?.toISOString(),
+    };
+
+    // For QuickBooks, realmId is provided in the OAuth callback query params
+    if (connector.type === 'quickbooks' && realmId) {
+      providerSpecificConfig.realmId = realmId;
+    }
+
+    // For Xero and Zoho, we need to fetch tenant/organization IDs after token exchange
+    // This is done asynchronously in the initial sync job
+    // For now, we'll fetch them here to store in configJson
+    if (connector.type === 'xero') {
+      try {
+        const axios = await import('axios');
+        const response = await axios.default.get('https://api.xero.com/connections', {
+          headers: {
+            'Authorization': `Bearer ${tokens.accessToken}`,
+            'Accept': 'application/json',
+          },
+        });
+        const connections = response.data;
+        if (connections && connections.length > 0) {
+          providerSpecificConfig.tenantId = connections[0].tenantId;
+        }
+      } catch (error) {
+        // Log but don't fail - will be fetched during sync
+        console.warn('Failed to fetch Xero tenant ID during OAuth callback:', error);
+      }
+    }
+
+    if (connector.type === 'zoho') {
+      try {
+        const axios = await import('axios');
+        const response = await axios.default.get('https://books.zoho.com/api/v3/organizations', {
+          headers: {
+            'Authorization': `Zoho-oauthtoken ${tokens.accessToken}`,
+            'Accept': 'application/json',
+          },
+        });
+        const data = response.data;
+        const orgs = data?.organizations || [];
+        if (orgs.length > 0) {
+          providerSpecificConfig.organizationId = orgs[0].organization_id;
+        }
+      } catch (error) {
+        // Log but don't fail - will be fetched during sync
+        console.warn('Failed to fetch Zoho organization ID during OAuth callback:', error);
+      }
+    }
+
     // Encrypt tokens
     const tokensJson = JSON.stringify({
       accessToken: tokens.accessToken,
@@ -194,8 +261,7 @@ export const connectorService = {
         encryptedConfig: encryptedTokens,
         configJson: {
           ...(connector.configJson as any || {}),
-          tokenAcquiredAt: new Date().toISOString(),
-          expiresAt: tokens.expiresAt?.toISOString(),
+          ...providerSpecificConfig,
         },
         lastSyncedAt: null,
       },

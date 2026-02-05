@@ -39,15 +39,23 @@ export const connectorController = {
         throw new ValidationError('orgId and type are required');
       }
 
-      const result = await connectorService.startOAuth(orgId, type as any, req.user.id);
+      try {
+        const result = await connectorService.startOAuth(orgId, type as any, req.user.id);
 
-      res.json({
-        ok: true,
-        data: {
-          connectorId: result.connectorId,
-          authUrl: result.authUrl,
-        },
-      });
+        res.json({
+          ok: true,
+          data: {
+            connectorId: result.connectorId,
+            authUrl: result.authUrl,
+          },
+        });
+      } catch (serviceError: any) {
+        // Provide more detailed error messages
+        if (serviceError.message?.includes('credentials not configured')) {
+          throw new ValidationError(`${type.toUpperCase()} OAuth credentials are missing. Please configure ${type.toUpperCase()}_CLIENT_ID and ${type.toUpperCase()}_CLIENT_SECRET in your .env file.`);
+        }
+        throw serviceError;
+      }
     } catch (error) {
       next(error);
     }
@@ -55,23 +63,35 @@ export const connectorController = {
 
   oauthCallback: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { code, state } = req.query;
+      const { code, state, realmId, error, error_description } = req.query;
+
+      // Check for OAuth errors from provider
+      if (error) {
+        const { config } = await import('../config/env');
+        const errorMsg = error_description || error;
+        res.redirect(`${config.frontendUrl}/integrations?error=${encodeURIComponent(errorMsg as string)}`);
+        return;
+      }
 
       if (!code || !state) {
         throw new ValidationError('code and state are required');
       }
 
+      // Pass realmId if available (QuickBooks specific)
       const result = await connectorService.handleOAuthCallback(
         undefined, // connectorId will be extracted from state token
         code as string,
-        state as string
+        state as string,
+        realmId as string | undefined
       );
 
       // Redirect to frontend success page
       const { config } = await import('../config/env');
-      res.redirect(`${config.frontendUrl}/connectors/${result.connectorId}/success`);
+      res.redirect(`${config.frontendUrl}/integrations?success=true&connectorId=${result.connectorId}`);
     } catch (error) {
-      next(error);
+      const { config } = await import('../config/env');
+      const errorMsg = error instanceof Error ? error.message : 'OAuth callback failed';
+      res.redirect(`${config.frontendUrl}/integrations?error=${encodeURIComponent(errorMsg)}`);
     }
   },
 

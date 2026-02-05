@@ -298,11 +298,31 @@ export function IntegrationsPage() {
   }, [getAuthToken, checkCompletion])
 
   // 3. EFFECTS
-  // Initial mount: get Org ID
+  // Initial mount: get Org ID and check for OAuth callback results
   useEffect(() => {
+    // Check for OAuth callback success/error in URL params
+    const urlParams = new URLSearchParams(window.location.search)
+    const success = urlParams.get('success')
+    const error = urlParams.get('error')
+    const connectorId = urlParams.get('connectorId')
+    
+    if (success && connectorId) {
+      toast.success(`Successfully connected connector!`, { duration: 5000 })
+      // Clean URL
+      window.history.replaceState({}, '', window.location.pathname)
+    } else if (error) {
+      toast.error(`Connection failed: ${decodeURIComponent(error)}`, { duration: 10000 })
+      // Clean URL
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+
     const stored = localStorage.getItem("orgId")
     if (stored) {
       setOrgId(stored)
+      // Refresh connectors after OAuth callback
+      if (success) {
+        setTimeout(() => fetchAllData(stored), 1000)
+      }
     } else {
       const token = getAuthToken()
       if (token) {
@@ -313,6 +333,10 @@ export function IntegrationsPage() {
           if (data.orgs?.length > 0) {
             localStorage.setItem("orgId", data.orgs[0].id)
             setOrgId(data.orgs[0].id)
+            // Refresh connectors after OAuth callback
+            if (success) {
+              setTimeout(() => fetchAllData(data.orgs[0].id), 1000)
+            }
           } else {
             setLoading(false)
           }
@@ -321,7 +345,7 @@ export function IntegrationsPage() {
         setLoading(false)
       }
     }
-  }, [getAuthToken])
+  }, [getAuthToken, fetchAllData])
 
   // When orgId is set, fetch data
   useEffect(() => {
@@ -372,6 +396,16 @@ export function IntegrationsPage() {
   // 4. HANDLERS
   const handleConnect = async (integration: Integration) => {
     if (!orgId) return toast.error("Organization ID not found")
+    
+    // Tally doesn't use OAuth - show instructions instead
+    if (integration.id === 'tally') {
+      toast.info(
+        "Tally requires manual CSV export. Please export data from Tally ERP 9 and use the CSV Import feature above.",
+        { duration: 8000 }
+      )
+      return
+    }
+
     setSelectedIntegration(integration)
     setShowConnectDialog(true)
 
@@ -388,15 +422,23 @@ export function IntegrationsPage() {
         }
       )
 
-      if (!response.ok) throw new Error("Failed to start OAuth")
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        const errorMessage = errorData.message || errorData.error || `HTTP ${response.status}: Failed to start OAuth`
+        throw new Error(errorMessage)
+      }
+      
       const result = await response.json()
       if (result.ok && result.data?.authUrl) {
+        // Redirect to OAuth provider
         window.location.href = result.data.authUrl
       } else {
-        throw new Error("Invalid OAuth response")
+        throw new Error(result.message || "Invalid OAuth response - no auth URL received")
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Connection failed")
+      console.error('[Integrations] Connection error:', err)
+      const errorMessage = err instanceof Error ? err.message : "Connection failed. Please check your OAuth credentials in .env"
+      toast.error(errorMessage, { duration: 10000 })
       setShowConnectDialog(false)
     }
   }

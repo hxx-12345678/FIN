@@ -36,6 +36,10 @@ export const config = {
       clientId: process.env.XERO_CLIENT_ID || '',
       clientSecret: process.env.XERO_CLIENT_SECRET || '',
     },
+    zoho: {
+      clientId: process.env.ZOHO_CLIENT_ID || '',
+      clientSecret: process.env.ZOHO_CLIENT_SECRET || '',
+    },
   },
   encryption: {
     key: process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || '',
