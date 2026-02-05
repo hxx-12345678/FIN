@@ -21,35 +21,34 @@ class TreasuryAgentService {
     const thoughts: AgentThought[] = [];
     const dataSources: DataSource[] = [];
     const calculations: Record<string, number> = {};
-    const sharedContext = params.sharedContext || {};
 
     thoughts.push({
       step: 1,
-      thought: 'Gathering financial data from connected sources and shared context...',
+      thought: 'Gathering financial data from connected sources...',
       action: 'data_retrieval',
     });
 
-    // Fetch real data (prioritizing shared context)
-    const financialData = await this.getFinancialData(orgId, dataSources, sharedContext);
-
+    // Fetch real data
+    const financialData = await this.getFinancialData(orgId, dataSources);
+    
     thoughts.push({
       step: 2,
-      thought: `Retrieved level data: ${dataSources.length} sources`,
-      observation: `Cash: $${financialData.cashBalance?.toLocaleString() || 'N/A'}, Monthly burn: $${financialData.monthlyBurn?.toLocaleString() || 'N/A'}, Revenue: $${financialData.monthlyRevenue?.toLocaleString() || 'N/A'}`,
+      thought: `Retrieved data: ${dataSources.length} sources`,
+      observation: `Cash: $${financialData.cashBalance?.toLocaleString() || 'N/A'}, Monthly burn: $${financialData.monthlyBurn?.toLocaleString() || 'N/A'}`,
     });
 
     // Calculate runway
     const runway = this.calculateRunway(financialData, calculations);
-
+    
     thoughts.push({
       step: 3,
-      thought: `Calculated runway: ${runway.months === 36 ? '>36' : runway.months.toFixed(1)} months`,
-      observation: `Cash out date: ${runway.months === 36 ? 'Safe > 3 years' : runway.cashOutDate.toLocaleDateString()}`,
+      thought: `Calculated runway: ${runway.months.toFixed(1)} months`,
+      observation: `Cash out date: ${runway.cashOutDate.toLocaleDateString()}`,
     });
 
     // Analyze burn trends
     const burnTrends = await this.analyzeBurnTrends(orgId, dataSources);
-
+    
     thoughts.push({
       step: 4,
       thought: `Burn rate trend: ${burnTrends.trend}`,
@@ -89,77 +88,66 @@ class TreasuryAgentService {
   /**
    * Gather financial data from all available sources
    */
-  private async getFinancialData(orgId: string, dataSources: DataSource[], sharedContext?: any): Promise<any> {
-    // Prioritize shared context
-    let cashBalance = sharedContext?.calculations?.cashBalance || 0;
-    let monthlyBurn = sharedContext?.calculations?.burnRate || sharedContext?.calculations?.expenses || 0;
-    let monthlyRevenue = sharedContext?.calculations?.revenue || 0;
-    let hasRealData = (cashBalance > 0 || monthlyBurn > 0);
-
-    // If we have shared context data, use it and skip heavy DB lookups unless necessary
-    if (hasRealData) {
-      // We still might want model run info for citations if not present
-    }
+  private async getFinancialData(orgId: string, dataSources: DataSource[]): Promise<any> {
+    let cashBalance = 0;
+    let monthlyBurn = 0;
+    let monthlyRevenue = 0;
+    let hasRealData = false;
 
     try {
-      if (!hasRealData) {
-        // Get from latest model run
-        const latestRun = await prisma.modelRun.findFirst({
-          where: { orgId, status: 'done' },
-          orderBy: { createdAt: 'desc' },
+      // Get from latest model run
+      const latestRun = await prisma.modelRun.findFirst({
+        where: { orgId, status: 'done' },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (latestRun?.summaryJson) {
+        const summary = latestRun.summaryJson as any;
+        cashBalance = summary.cashBalance || summary.initialCash || 0;
+        monthlyBurn = summary.monthlyBurn || summary.burnRate || summary.expenses || 0;
+        monthlyRevenue = summary.revenue || summary.monthlyRevenue || summary.mrr || 0;
+        hasRealData = true;
+
+        dataSources.push({
+          type: 'model_run',
+          id: latestRun.id,
+          name: 'Financial Model',
+          timestamp: latestRun.createdAt,
+          confidence: 0.9,
+          snippet: `Model run from ${latestRun.createdAt.toLocaleDateString()}`,
         });
-
-        if (latestRun?.summaryJson) {
-          const summary = latestRun.summaryJson as any;
-          cashBalance = summary.cashBalance || summary.initialCash || 0;
-          monthlyBurn = summary.monthlyBurn || summary.burnRate || summary.expenses || 0;
-          monthlyRevenue = summary.revenue || summary.monthlyRevenue || summary.mrr || 0;
-          hasRealData = true;
-
-          dataSources.push({
-            type: 'model_run',
-            id: latestRun.id,
-            name: 'Financial Model',
-            timestamp: latestRun.createdAt,
-            confidence: 0.9,
-            snippet: `Model run from ${latestRun.createdAt.toLocaleDateString()}`,
-          });
-        }
       }
 
       // Get transaction data
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      // Only fetch transactions if we don't have good burn data or want to verify
-      if (!monthlyBurn) {
-        const transactions = await prisma.rawTransaction.aggregate({
-          where: {
-            orgId,
-            date: { gte: thirtyDaysAgo },
-            isDuplicate: false,
-          },
-          _sum: { amount: true },
-          _count: true,
-        });
+      const transactions = await prisma.rawTransaction.aggregate({
+        where: {
+          orgId,
+          date: { gte: thirtyDaysAgo },
+          isDuplicate: false,
+        },
+        _sum: { amount: true },
+        _count: true,
+      });
 
-        if (transactions._count > 0) {
-          const txnAmount = transactions._sum.amount ? Number(transactions._sum.amount) : 0;
-          // Transactions are typically negative for expenses
-          if (txnAmount < 0 && !monthlyBurn) {
-            monthlyBurn = Math.abs(txnAmount);
-          }
-          hasRealData = true;
-
-          dataSources.push({
-            type: 'transaction',
-            id: 'aggregated_transactions',
-            name: 'Transaction History',
-            timestamp: new Date(),
-            confidence: 0.95,
-            snippet: `${transactions._count} transactions in last 30 days`,
-          });
+      if (transactions._count > 0) {
+        const txnAmount = transactions._sum.amount ? Number(transactions._sum.amount) : 0;
+        // Transactions are typically negative for expenses
+        if (txnAmount < 0 && !monthlyBurn) {
+          monthlyBurn = Math.abs(txnAmount);
         }
+        hasRealData = true;
+
+        dataSources.push({
+          type: 'transaction',
+          id: 'aggregated_transactions',
+          name: 'Transaction History',
+          timestamp: new Date(),
+          confidence: 0.95,
+          snippet: `${transactions._count} transactions in last 30 days`,
+        });
       }
 
       // Get from org settings/budgets
@@ -200,13 +188,11 @@ class TreasuryAgentService {
       });
     }
 
-    const netBurn = monthlyBurn - monthlyRevenue;
-
     return {
       cashBalance,
       monthlyBurn,
       monthlyRevenue,
-      netBurn,
+      netBurn: monthlyBurn - monthlyRevenue,
       hasRealData,
     };
   }
@@ -218,26 +204,18 @@ class TreasuryAgentService {
     data: any,
     calculations: Record<string, number>
   ): { months: number; cashOutDate: Date } {
-    let runwayMonths = 0;
-
-    // If netBurn is negative (profitable) or zero, runway is effectively infinite. Cap at 36 months for display.
-    if (data.netBurn <= 0) {
-      runwayMonths = 36;
-    } else {
-      runwayMonths = data.cashBalance / data.netBurn;
-    }
+    const netBurn = Math.max(data.netBurn, data.monthlyBurn * 0.3); // At least 30% of burn
+    const runwayMonths = netBurn > 0 ? data.cashBalance / netBurn : 24; // Max 24 if profitable
 
     const cashOutDate = new Date();
-    cashOutDate.setMonth(cashOutDate.getMonth() + Math.min(Math.floor(runwayMonths), 36));
+    cashOutDate.setMonth(cashOutDate.getMonth() + Math.floor(runwayMonths));
 
     // Store calculations
     calculations.cashBalance = data.cashBalance;
     calculations.monthlyBurn = data.monthlyBurn;
     calculations.monthlyRevenue = data.monthlyRevenue;
-    calculations.netBurn = data.netBurn;
+    calculations.netBurn = netBurn;
     calculations.runway = runwayMonths;
-    calculations.burnRate = data.monthlyBurn; // Alias for consistency
-    calculations.hasRealData = data.hasRealData ? 1 : 0;
 
     return { months: runwayMonths, cashOutDate };
   }

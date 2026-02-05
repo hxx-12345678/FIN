@@ -415,20 +415,18 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
         <div className="flex flex-col h-full">
           <div className="border-b p-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0070f3] shadow-inner shrink-0 overflow-hidden relative group transition-all hover:scale-105">
-                {/* Background Pattern */}
-                <div className="absolute inset-0 opacity-20 pointer-events-none">
-                  <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-white"></div>
-                  <div className="absolute bottom-2 left-2 w-1 h-1 rounded-full bg-white"></div>
-                  <div className="absolute top-1/2 left-1 w-full h-[1px] bg-white transform -rotate-45"></div>
-                </div>
-                <span className="text-xl font-black text-white z-10 tracking-tighter">FP</span>
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 shadow-lg shrink-0 overflow-hidden relative group transition-all hover:scale-105">
+                <img 
+                  src="/icon.svg" 
+                  alt="FinaPilot Logo" 
+                  className="w-8 h-8"
+                />
               </div>
               <div className="flex flex-col">
                 <span className="text-lg font-bold tracking-tight text-foreground">
                   FinaPilot
                 </span>
-                <span className="text-[10px] uppercase tracking-widest text-[#0070f3] font-bold">AI Finance OS</span>
+                <span className="text-[10px] uppercase tracking-widest text-blue-600 font-bold">AI Finance OS</span>
               </div>
             </div>
           </div>

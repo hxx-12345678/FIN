@@ -236,14 +236,14 @@ FRONTEND_URL=https://your-frontend.vercel.app
 pip install -r requirements.txt
 ```
 
-**Start Command (recommended - run as web service):**
+**Start Command:**
 ```bash
-uvicorn app:app --host 0.0.0.0 --port 8000
+python worker.py
 ```
 
 **Instance Type:**
-- Use a Render Web Service (free tiers available) instead of a Background Worker to avoid the $7/month background worker cost. The FastAPI app is a web service and can run on Render's free web instance for development.
-- Standard (paid) instances are recommended for production deployments
+- Starter ($7/month) for development
+- Standard ($25/month) for production
 
 ### Step 3: Environment Variables
 

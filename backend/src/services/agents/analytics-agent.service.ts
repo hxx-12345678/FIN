@@ -32,8 +32,8 @@ class AnalyticsAgentService {
     });
 
     // Get financial data for analysis
-    const financialData = await this.getFinancialData(orgId, dataSources, params.sharedContext);
-
+    const financialData = await this.getFinancialData(orgId, dataSources);
+    
     thoughts.push({
       step: 2,
       thought: 'Financial data retrieved',
@@ -42,7 +42,7 @@ class AnalyticsAgentService {
 
     // Perform analysis based on intent
     let analysisResult;
-
+    
     if (intent === 'variance_analysis' || query.toLowerCase().includes('miss') || query.toLowerCase().includes('why')) {
       analysisResult = await this.performVarianceAnalysis(orgId, financialData, thoughts, dataSources, calculations);
     } else {
@@ -81,48 +81,41 @@ class AnalyticsAgentService {
   /**
    * Get financial data
    */
-  private async getFinancialData(orgId: string, dataSources: DataSource[], sharedContext?: any): Promise<any> {
-    let revenue = sharedContext?.calculations?.revenue || 0;
-    let expenses = sharedContext?.calculations?.expenses || sharedContext?.calculations?.burnRate || 0;
+  private async getFinancialData(orgId: string, dataSources: DataSource[]): Promise<any> {
+    let revenue = 0;
+    let expenses = 0;
     let cogs = 0;
-    let ebitda = sharedContext?.calculations?.ebitda || 0;
-    let forecastRevenue = sharedContext?.calculations?.forecastRevenue || 0;
-    let forecastExpenses = sharedContext?.calculations?.forecastExpenses || 0;
-    let hasRealData = revenue > 0 || expenses > 0;
+    let ebitda = 0;
+    let forecastRevenue = 0;
+    let forecastExpenses = 0;
+    let hasRealData = false;
 
-    // Only query DB if we don't have base data in sharedContext
-    if (!hasRealData) {
-      try {
-        const latestRun = await prisma.modelRun.findFirst({
-          where: { orgId, status: 'done' },
-          orderBy: { createdAt: 'desc' },
-        });
-
-        if (latestRun?.summaryJson) {
-          const summary = latestRun.summaryJson as any;
-          revenue = summary.revenue || summary.mrr || 0;
-          expenses = summary.expenses || summary.opex || 0;
-          cogs = summary.cogs || revenue * 0.2;
-          ebitda = revenue - cogs - expenses;
-          forecastRevenue = summary.forecastRevenue || revenue * 1.1;
-          forecastExpenses = summary.forecastExpenses || expenses;
-          hasRealData = revenue > 0;
-
-          dataSources.push({
-            type: 'model_run',
-            id: latestRun.id,
-            name: 'Financial Model',
-            timestamp: latestRun.createdAt,
-            confidence: 0.9,
-          });
-        }
-      } catch (error) {
-        console.error('[AnalyticsAgent] Error:', error);
-      }
-    }
-
-    // Still check budgets if available
     try {
+      const latestRun = await prisma.modelRun.findFirst({
+        where: { orgId, status: 'done' },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (latestRun?.summaryJson) {
+        const summary = latestRun.summaryJson as any;
+        revenue = summary.revenue || summary.mrr || 0;
+        expenses = summary.expenses || summary.opex || 0;
+        cogs = summary.cogs || revenue * 0.2;
+        ebitda = revenue - cogs - expenses;
+        forecastRevenue = summary.forecastRevenue || revenue * 1.1;
+        forecastExpenses = summary.forecastExpenses || expenses;
+        hasRealData = revenue > 0;
+
+        dataSources.push({
+          type: 'model_run',
+          id: latestRun.id,
+          name: 'Financial Model',
+          timestamp: latestRun.createdAt,
+          confidence: 0.9,
+        });
+      }
+
+      // Get budget data for comparison
       const budgets = await prisma.budget.findMany({
         where: { orgId },
         orderBy: { month: 'desc' },
@@ -142,25 +135,25 @@ class AnalyticsAgentService {
           confidence: 0.85,
         });
       }
-    } catch (e) {
-      // Ignore budget errors
-    }
 
-    if (!hasRealData) {
-      revenue = 85000;
-      expenses = 70000;
-      cogs = 17000;
-      ebitda = revenue - cogs - expenses;
-      forecastRevenue = 95000;
-      forecastExpenses = 65000;
+      if (!hasRealData) {
+        revenue = 85000;
+        expenses = 70000;
+        cogs = 17000;
+        ebitda = revenue - cogs - expenses;
+        forecastRevenue = 95000;
+        forecastExpenses = 65000;
 
-      dataSources.push({
-        type: 'manual_input',
-        id: 'benchmark_data',
-        name: 'Industry Benchmarks',
-        timestamp: new Date(),
-        confidence: 0.5,
-      });
+        dataSources.push({
+          type: 'manual_input',
+          id: 'benchmark_data',
+          name: 'Industry Benchmarks',
+          timestamp: new Date(),
+          confidence: 0.5,
+        });
+      }
+    } catch (error) {
+      console.error('[AnalyticsAgent] Error:', error);
     }
 
     return {
@@ -170,7 +163,7 @@ class AnalyticsAgentService {
       ebitda,
       forecastRevenue,
       forecastExpenses,
-      grossMargin: revenue > 0 ? (revenue - cogs) / revenue : 0,
+      grossMargin: (revenue - cogs) / revenue,
       hasRealData,
     };
   }
@@ -193,7 +186,7 @@ class AnalyticsAgentService {
 
     const revenueVariance = data.revenue - data.forecastRevenue;
     const revenueVariancePct = (revenueVariance / data.forecastRevenue) * 100;
-
+    
     const expenseVariance = data.expenses - data.forecastExpenses;
     const expenseVariancePct = (expenseVariance / data.forecastExpenses) * 100;
 

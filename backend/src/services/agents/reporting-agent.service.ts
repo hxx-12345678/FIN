@@ -33,8 +33,8 @@ class ReportingAgentService {
     });
 
     // Gather comprehensive financial data
-    const financialData = await this.gatherFinancialData(orgId, dataSources, params.sharedContext);
-
+    const financialData = await this.gatherFinancialData(orgId, dataSources);
+    
     thoughts.push({
       step: 2,
       thought: 'Financial data aggregated from all sources',
@@ -43,7 +43,7 @@ class ReportingAgentService {
 
     // Generate KPI summary
     const kpis = this.calculateKPIs(financialData, calculations);
-
+    
     thoughts.push({
       step: 3,
       thought: 'Key performance indicators calculated',
@@ -84,15 +84,15 @@ class ReportingAgentService {
   /**
    * Gather comprehensive financial data
    */
-  private async gatherFinancialData(orgId: string, dataSources: DataSource[], sharedContext?: any): Promise<any> {
-    let revenue = sharedContext?.calculations?.revenue || 0;
+  private async gatherFinancialData(orgId: string, dataSources: DataSource[]): Promise<any> {
+    let revenue = 0;
     let prevRevenue = 0;
-    let expenses = sharedContext?.calculations?.expenses || sharedContext?.calculations?.burnRate || 0;
-    let cashBalance = sharedContext?.calculations?.cashBalance || 0;
-    let customers = sharedContext?.calculations?.customers || 0;
-    let churnRate = sharedContext?.calculations?.churnRate || 0.05;
-    let arr = sharedContext?.calculations?.arr || revenue * 12;
-    let hasRealData = revenue > 0 || cashBalance > 0;
+    let expenses = 0;
+    let cashBalance = 0;
+    let customers = 0;
+    let churnRate = 0.05;
+    let arr = 0;
+    let hasRealData = false;
 
     try {
       // Get latest model run
@@ -415,7 +415,7 @@ class ReportingAgentService {
   private generateTrendData(data: any): any[] {
     const months = [];
     let currentRevenue = data.revenue;
-
+    
     // Generate 6 months of historical data (going backwards)
     for (let i = 5; i >= 0; i--) {
       const date = new Date();
