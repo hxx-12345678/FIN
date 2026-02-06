@@ -66,7 +66,13 @@ const targetFields = [
   { value: "currency", label: "Currency", required: false },
 ]
 
-export function ExcelImportWizard() {
+interface ExcelImportWizardProps {
+  orgId?: string | null
+  token?: string | null
+  onImportComplete?: () => void
+}
+
+export function ExcelImportWizard({ orgId: propOrgId, token: propToken, onImportComplete }: ExcelImportWizardProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [step, setStep] = useState<"upload" | "analyzing" | "preview" | "mapping" | "importing">("upload")
   const [file, setFile] = useState<File | null>(null)
@@ -114,11 +120,11 @@ export function ExcelImportWizard() {
     setStep("analyzing")
 
     try {
-      const token = localStorage.getItem("auth-token")
-      const orgId = localStorage.getItem("orgId") // Assuming orgId is stored
+      const token = propToken || localStorage.getItem("auth-token")
+      const orgId = propOrgId || localStorage.getItem("orgId")
 
       if (!token || !orgId) {
-        toast.error("Authentication error")
+        toast.error("Authentication error or Organization not selected")
         return
       }
 
@@ -132,7 +138,10 @@ export function ExcelImportWizard() {
         body: formData,
       })
 
-      if (!response.ok) throw new Error("Upload failed")
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error?.message || "Upload failed")
+      }
 
       const result = await response.json()
       if (result.ok) {
@@ -153,14 +162,14 @@ export function ExcelImportWizard() {
           headers: { Authorization: `Bearer ${token}` },
         })
         const result = await response.json()
-        
+
         if (result.ok) {
           const job = result.job
           if (job.status === "completed") {
             // Extract preview data from logs
             const logs = job.logs || []
-            const previewLog = Array.isArray(logs) 
-              ? logs.find((l: any) => l.preview)?.preview 
+            const previewLog = Array.isArray(logs)
+              ? logs.find((l: any) => l.preview)?.preview
               : (logs as any).preview
 
             if (previewLog) {
@@ -195,8 +204,13 @@ export function ExcelImportWizard() {
     if (!previewData) return
 
     setStep("importing")
-    const orgId = localStorage.getItem("orgId")
-    const token = localStorage.getItem("auth-token")
+    const orgId = propOrgId || localStorage.getItem("orgId")
+    const token = propToken || localStorage.getItem("auth-token")
+
+    if (!orgId || !token) {
+      toast.error("Authentication error")
+      return
+    }
 
     try {
       const mappingJson = {
@@ -221,7 +235,9 @@ export function ExcelImportWizard() {
 
       const result = await response.json()
       if (result.ok) {
-        pollImportJob(result.data.jobId, token!)
+        pollImportJob(result.data.jobId, token)
+      } else {
+        throw new Error(result.error?.message || "Import failed to start")
       }
     } catch (error) {
       toast.error("Import failed to start")
@@ -236,7 +252,7 @@ export function ExcelImportWizard() {
           headers: { Authorization: `Bearer ${token}` },
         })
         const result = await response.json()
-        
+
         if (result.ok) {
           const job = result.job
           if (job.status === "completed") {
@@ -246,7 +262,11 @@ export function ExcelImportWizard() {
             // Mocking simple completion for now based on job status
             setImportedCount(previewData?.total_rows || 0)
             toast.success("Import completed successfully!")
-            
+
+            if (onImportComplete) {
+              onImportComplete()
+            }
+
             setTimeout(() => {
               setIsOpen(false)
               resetWizard()
@@ -320,7 +340,7 @@ export function ExcelImportWizard() {
                 <div>
                   <h4 className="font-medium text-yellow-900">Volatile Formulas Detected</h4>
                   <p className="text-sm text-yellow-800">
-                    Found {previewData.volatile_formulas} volatile formulas (e.g., RAND, TODAY). 
+                    Found {previewData.volatile_formulas} volatile formulas (e.g., RAND, TODAY).
                     These values may change on every calculation.
                   </p>
                 </div>
@@ -378,8 +398,8 @@ export function ExcelImportWizard() {
               {targetFields.map(field => (
                 <div key={field.value} className="space-y-2">
                   <Label>{field.label} {field.required && "*"}</Label>
-                  <Select 
-                    value={fieldMappings[field.value] || ""} 
+                  <Select
+                    value={fieldMappings[field.value] || ""}
                     onValueChange={(v) => setFieldMappings(prev => ({ ...prev, [field.value]: v }))}
                   >
                     <SelectTrigger>

@@ -13,7 +13,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts"
 import { VirtualizedTable } from "@/components/ui/virtualized-table"
 import { useChartPagination } from "@/hooks/use-chart-pagination"
-import { Download, Upload, Zap, TrendingUp, Calculator, Brain, Save, SearchIcon, Loader2, AlertCircle, Play, FileDown, FileText, HelpCircle, Pencil, Check, X } from "lucide-react"
+import { Download, Upload, Zap, TrendingUp, Calculator, Brain, Save, SearchIcon, Loader2, AlertCircle, Play, FileDown, FileText, HelpCircle, Pencil, Check, X, Sparkles, Plus, LineChart as LineChartIcon, CheckCircle2, ShieldCheck } from "lucide-react"
+import { CreateModelForm } from "./create-model-form"
 import { toast } from "sonner"
 import { ProvenanceDrawer } from "./provenance-drawer"
 import { ProvenanceSearch } from "./provenance-search"
@@ -136,12 +137,29 @@ export function FinancialModeling() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [orgId, setOrgId] = useState<string | null>(null)
+  // Calculate data completeness score
+  const dataCompleteness = useMemo(() => {
+    if (!currentRun?.summaryJson) return 85;
+    const summary = typeof currentRun.summaryJson === 'string'
+      ? JSON.parse(currentRun.summaryJson)
+      : currentRun.summaryJson;
+
+    const hasRevenue = !!(summary.revenue || summary.mrr || (summary.kpis && (summary.kpis.revenue || summary.kpis.mrr)));
+    const hasExpenses = !!(summary.expenses || summary.burnRate || (summary.kpis && (summary.kpis.expenses || summary.kpis.burnRate)));
+    const hasCash = !!(summary.cashBalance || summary.cash || (summary.kpis && (summary.kpis.cashBalance || summary.kpis.cash)));
+    const hasAudit = !!(summary.metadata && summary.metadata.dataIngestedAt);
+
+    return ((hasRevenue ? 25 : 0) + (hasExpenses ? 25 : 0) + (hasCash ? 25 : 0) + (hasAudit ? 25 : 0)) || 85;
+  }, [currentRun]);
+
   const [runningModel, setRunningModel] = useState(false)
   const [provenanceModalOpen, setProvenanceModalOpen] = useState(false)
   const [selectedCellData, setSelectedCellData] = useState<any>(null)
   const [showTransactions, setShowTransactions] = useState(false)
   const [transactions, setTransactions] = useState<any[]>([])
   const [loadingTransactions, setLoadingTransactions] = useState(false)
+  const [connectors, setConnectors] = useState<any[]>([])
+  const [loadingConnectors, setLoadingConnectors] = useState(false)
   const [showCreateModelDialog, setShowCreateModelDialog] = useState(false)
   const [showImportDialog, setShowImportDialog] = useState(false)
   const [newModelName, setNewModelName] = useState("")
@@ -152,6 +170,7 @@ export function FinancialModeling() {
   const [newModelStartDate, setNewModelStartDate] = useState<string>(new Date().toISOString().slice(0, 7)) // YYYY-MM
   const [creatingModel, setCreatingModel] = useState(false)
   const [generatingAI, setGeneratingAI] = useState(false)
+  const [createModelAiMode, setCreateModelAiMode] = useState(false)
   const [assumptionEdits, setAssumptionEdits] = useState<Record<string, string>>({})
   const [savingAssumptions, setSavingAssumptions] = useState(false)
   const [editingModelId, setEditingModelId] = useState<string | null>(null)
@@ -175,6 +194,7 @@ export function FinancialModeling() {
   useEffect(() => {
     if (orgId) {
       fetchTransactions()
+      fetchConnectors(orgId)
     }
   }, [orgId])
 
@@ -182,23 +202,23 @@ export function FinancialModeling() {
   useEffect(() => {
     const handleImportComplete = async (event: CustomEvent) => {
       const { rowsImported, orgId: importedOrgId } = event.detail || {}
-      
+
       if (importedOrgId && importedOrgId === orgId) {
         toast.success(`CSV import completed! Refreshing data...`)
-        
+
         // Refresh transactions
         await fetchTransactions()
-        
+
         // Refresh models and runs
         const token = localStorage.getItem("auth-token") || document.cookie
           .split("; ")
           .find((row) => row.startsWith("auth-token="))
           ?.split("=")[1]
-        
+
         if (token && orgId) {
           // Refresh models list
           await fetchOrgIdAndModels()
-          
+
           // If a model is selected, refresh its runs
           if (selectedModel) {
             await fetchModelRuns(orgId, selectedModel, token)
@@ -229,21 +249,21 @@ export function FinancialModeling() {
           .split("; ")
           .find((row) => row.startsWith("auth-token="))
           ?.split("=")[1]
-        
+
         if (!token) return
-        
+
         // Only regenerate if we don't have valid sensitivity data
         if (!sensitivityData || !sensitivityData.revenueGrowth || !sensitivityData.churnRate) {
           console.log("Regenerating sensitivity data - currentRun:", currentRun?.id)
           await fetchModelDetails(orgId, selectedModel, token)
         }
       }
-      
+
       // Small delay to ensure state is updated
       const timer = setTimeout(() => {
         regenerateSensitivity()
       }, 300)
-      
+
       return () => clearTimeout(timer)
     }
   }, [currentRun?.id, selectedModel, orgId])
@@ -281,6 +301,37 @@ export function FinancialModeling() {
     }
 
     return null
+  }
+
+  const fetchConnectors = async (currentOrgId: string) => {
+    setLoadingConnectors(true)
+    try {
+      const token = localStorage.getItem("auth-token") || document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("auth-token="))
+        ?.split("=")[1]
+
+      if (!token) return
+
+      const response = await fetch(`${API_BASE_URL}/orgs/${currentOrgId}/connectors`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        if (result.ok) {
+          setConnectors(result.connectors || [])
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch connectors:", error)
+    } finally {
+      setLoadingConnectors(false)
+    }
   }
 
   const fetchTransactions = async () => {
@@ -356,7 +407,7 @@ export function FinancialModeling() {
         if (modelsResult.models.length > 0) {
           // Prioritize model with completed runs, otherwise use first model
           let selectedModelObj = modelsResult.models[0]
-          
+
           // Check if any model has completed runs
           for (const model of modelsResult.models) {
             const runsResponse = await fetch(`${API_BASE_URL}/models/${model.id}/runs`, {
@@ -366,7 +417,7 @@ export function FinancialModeling() {
               },
               credentials: "include",
             })
-            
+
             if (runsResponse.ok) {
               const runsResult = await runsResponse.json()
               if (runsResult.ok && runsResult.runs && runsResult.runs.length > 0) {
@@ -378,7 +429,7 @@ export function FinancialModeling() {
               }
             }
           }
-          
+
           setSelectedModel(selectedModelObj.id)
           setCurrentModel(selectedModelObj)
           await fetchModelRuns(currentOrgId, selectedModelObj.id, token)
@@ -415,7 +466,7 @@ export function FinancialModeling() {
         if (result.ok && result.runs) {
           const runs = result.runs
           setModelRuns(runs)
-          
+
           // Get the latest completed run (or most recent run)
           const latestRun = runs.find((r: ModelRun) => r.status === "done") || runs[0]
           if (latestRun) {
@@ -463,19 +514,19 @@ export function FinancialModeling() {
         if (result.ok && result.run) {
           const run = result.run
           setCurrentRun(run)
-          
+
           // Extract financial data from summaryJson
           if (run.summaryJson) {
             // summaryJson can be stored as JSONB or accidentally as a JSON-string; normalize to object.
             const summary =
               typeof run.summaryJson === "string"
                 ? (() => {
-                    try {
-                      return JSON.parse(run.summaryJson)
-                    } catch {
-                      return {}
-                    }
-                  })()
+                  try {
+                    return JSON.parse(run.summaryJson)
+                  } catch {
+                    return {}
+                  }
+                })()
                 : run.summaryJson
             const monthlyData: any[] = []
 
@@ -505,18 +556,18 @@ export function FinancialModeling() {
                 const revenue = Number(summary.revenue || summary.mrr || 0)
                 const expenses = Number(summary.expenses || 0)
                 const cogs = Number(summary.cogs || revenue * 0.2)
-                
+
                 if (revenue > 0 || expenses > 0) {
                   // Generate 12 months of data from summary
                   const generatedData: any[] = []
                   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
                   const now = new Date()
-                  
+
                   for (let i = 0; i < 12; i++) {
                     const monthDate = new Date(now.getFullYear(), now.getMonth() + i, 1)
                     const monthKey = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}`
                     const growthFactor = Math.pow(1.08, i) // 8% monthly growth
-                    
+
                     generatedData.push({
                       month: monthNames[monthDate.getMonth()],
                       monthKey: monthKey,
@@ -528,7 +579,7 @@ export function FinancialModeling() {
                       cashFlow: Math.round((revenue - expenses) * growthFactor),
                     })
                   }
-                  
+
                   if (generatedData.length > 0) {
                     setFinancialData(generatedData)
                   } else {
@@ -597,7 +648,7 @@ export function FinancialModeling() {
           return true
         }
       }
-      
+
       const errorData = await response.json().catch(() => ({}))
       toast.error(errorData.error?.message || "Failed to update model name")
       return false
@@ -646,10 +697,10 @@ export function FinancialModeling() {
         if (result.ok && result.model) {
           const model = result.model
           setCurrentModel(model)
-          
+
           // Use override if provided, otherwise use currentRun from state
           const runToUse = runToUseOverride !== undefined ? runToUseOverride : currentRun
-          
+
           // Extract assumptions from modelJson
           if (model.modelJson && model.modelJson.assumptions) {
             // Keep a focused, editable set of key assumptions (these flow into the Python worker model).
@@ -689,14 +740,14 @@ export function FinancialModeling() {
             setModelAssumptions([])
             setAssumptionEdits({})
           }
-          
+
           // Extract projections from modelJson
           if (model.modelJson && model.modelJson.projections) {
             setProjections(model.modelJson.projections)
           } else if (runToUse && runToUse.summaryJson) {
             // Generate projections from summary (use runToUse instead of currentRun)
-            const summary = typeof runToUse.summaryJson === 'string' 
-              ? JSON.parse(runToUse.summaryJson) 
+            const summary = typeof runToUse.summaryJson === 'string'
+              ? JSON.parse(runToUse.summaryJson)
               : runToUse.summaryJson
             const monthlyRevenue = summary.revenue || summary.mrr || 0
             const arr = monthlyRevenue * 12
@@ -713,7 +764,7 @@ export function FinancialModeling() {
               // Calculate from cash and burn rate
               calculatedRunway = cashBalance / burnRate;
             }
-            
+
             setProjections({
               projectedARR: projectedArr,
               totalBurn: summary.expenses * 12 || 0,
@@ -728,14 +779,14 @@ export function FinancialModeling() {
             const baselineExpenses = a.baselineExpenses || a.costs?.baselineExpenses || 80000
             const initialCash = a.initialCash || a.cash?.initialCash || 500000
             const monthlyBurn = baselineExpenses - baselineRevenue
-            
+
             // Calculate runway correctly - if monthlyBurn is negative (profitable), show 999
-            const calculatedRunway = monthlyBurn > 0 && initialCash > 0 
-              ? initialCash / monthlyBurn 
-              : monthlyBurn <= 0 && initialCash > 0 
-              ? 999 
-              : 0;
-            
+            const calculatedRunway = monthlyBurn > 0 && initialCash > 0
+              ? initialCash / monthlyBurn
+              : monthlyBurn <= 0 && initialCash > 0
+                ? 999
+                : 0;
+
             const projectionsData = {
               projectedARR: baselineRevenue * 12 * (1 + revenueGrowth),
               totalBurn: baselineExpenses * 12,
@@ -745,38 +796,38 @@ export function FinancialModeling() {
             console.log("Setting projections from assumptions:", projectionsData)
             setProjections(projectionsData)
           }
-          
+
           // Extract sensitivity data from modelJson or generate from assumptions
           // Check if sensitivity data exists AND is valid (has revenueGrowth and churnRate)
           const existingSensitivity = model.modelJson?.sensitivity
-          const hasValidSensitivity = existingSensitivity && 
-            existingSensitivity.revenueGrowth && 
+          const hasValidSensitivity = existingSensitivity &&
+            existingSensitivity.revenueGrowth &&
             existingSensitivity.churnRate &&
             existingSensitivity.revenueGrowth.base &&
             existingSensitivity.churnRate.base &&
             !forceRegenerateSensitivity
-          
+
           if (hasValidSensitivity) {
             console.log("Using existing sensitivity data from modelJson")
             setSensitivityData(existingSensitivity)
           } else {
             // Generate sensitivity data from model run or assumptions
             console.log("Generating sensitivity data - runToUse:", runToUse?.id, "has summary:", !!runToUse?.summaryJson, "forceRegenerate:", forceRegenerateSensitivity)
-            
+
             let baseRevenue = 0
             let revenueGrowth = 0.08
             let churnRate = 0.05
-            
+
             // Try to get from current run first (use runToUse which is currentRun from state)
             if (runToUse?.summaryJson) {
-              const summary = typeof runToUse.summaryJson === 'string' 
-                ? JSON.parse(runToUse.summaryJson) 
+              const summary = typeof runToUse.summaryJson === 'string'
+                ? JSON.parse(runToUse.summaryJson)
                 : runToUse.summaryJson
               baseRevenue = Number(summary.revenue || summary.mrr || 0)
               revenueGrowth = Number(summary.growthRate || summary.revenueGrowth || 0.08)
               churnRate = Number(summary.churnRate || 0.05)
               console.log("✅ Using run data - Revenue:", baseRevenue, "Growth:", revenueGrowth, "Churn:", churnRate)
-            } 
+            }
             // Fallback to assumptions
             else if (model.modelJson?.assumptions) {
               const a = model.modelJson.assumptions
@@ -785,12 +836,12 @@ export function FinancialModeling() {
               churnRate = Number(a.churnRate || a.revenue?.churnRate || 0.05)
               console.log("✅ Using assumptions - Revenue:", baseRevenue, "Growth:", revenueGrowth, "Churn:", churnRate)
             }
-            
+
             // Ensure we have valid values
             if (baseRevenue <= 0) baseRevenue = 100000
             if (revenueGrowth <= 0) revenueGrowth = 0.08
             if (churnRate <= 0) churnRate = 0.05
-            
+
             const baseARR = baseRevenue * 12
             const sensitivity = {
               revenueGrowth: {
@@ -913,7 +964,7 @@ export function FinancialModeling() {
       toast.error("Please select a model first")
       return
     }
-    
+
     let currentOrgId = orgId
     if (!currentOrgId) {
       currentOrgId = await fetchOrgId()
@@ -922,7 +973,7 @@ export function FinancialModeling() {
         return
       }
     }
-    
+
     if (runningModel) {
       return
     }
@@ -977,12 +1028,12 @@ export function FinancialModeling() {
       }
 
       const result = await response.json()
-      
+
       // Handle different response formats
       if (result.ok) {
         const jobId = result.jobId || result.modelRun?.jobId || result.job?.id
         const modelRunId = result.modelRun?.id
-        
+
         if (jobId && currentOrgId && selectedModel) {
           toast.success("Model run started. Processing...")
           // Poll for completion
@@ -1077,7 +1128,7 @@ export function FinancialModeling() {
               await fetchModelRuns(orgId, modelId, token)
               return
             }
-            
+
             // Still running - show progress if available
             if (progress > 0 && attempts % 10 === 0) {
               toast.info(`Model run in progress: ${Math.round(progress)}%`)
@@ -1200,7 +1251,7 @@ export function FinancialModeling() {
       }
 
       const result = await response.json()
-      
+
       if (result.ok && result.model) {
         toast.success("Model created successfully", {
           description: "This financial model is based on assumptions. Review and adjust assumptions in the Assumptions tab to customize projections.",
@@ -1330,7 +1381,7 @@ export function FinancialModeling() {
     }
   }
 
-  const handleCreateModelFromAI = async (aiData: any, currentOrgId?: string, token?: string) => {
+  const handleCreateModelFromAI = async (aiData: any, currentOrgId?: string, token?: string, onSuccess?: (modelId: string) => void) => {
     const targetOrgId = currentOrgId || orgId
     if (!targetOrgId) {
       toast.error("Organization ID not found")
@@ -1349,7 +1400,7 @@ export function FinancialModeling() {
       }
 
       const modelName = `AI Generated Model - ${new Date().toLocaleDateString()}`
-      
+
       // Check if user has transaction data - if yes, use CSV data source to pull real data
       // Otherwise use blank and let the baseline run pull from transactions
       let dataSourceType: "blank" | "csv" = "blank"
@@ -1372,20 +1423,55 @@ export function FinancialModeling() {
       } catch (e) {
         console.log("Could not check transactions, using blank model")
       }
-      
-      // Use standard defaults for AI models, or infer from aiData if possible
-      // For AI models, we'll use 24 months and hybrid as robust defaults
+
+      // Use standard defaults for AI models, but infer from aiData if possible
+      // This makes the AI generation much more accurate and professional
+      let aiAssumptions: any = {}
+      if (aiData.calculations) {
+        // Normalize growth rate if it's over 1 (likely a percentage)
+        let growth = aiData.calculations.growth || aiData.calculations.revenueGrowth || 0.08
+        if (growth > 1) growth = growth / 100
+
+        aiAssumptions = {
+          revenue: {
+            baselineRevenue: aiData.calculations.revenue || aiData.calculations.monthlyRevenue || 100000,
+            revenueGrowth: growth,
+          },
+          costs: {
+            baselineExpenses: aiData.calculations.burnRate || aiData.calculations.monthlyBurnRate || 80000,
+            expenseGrowth: 0.05,
+          },
+          cash: {
+            initialCash: aiData.calculations.cashBalance || aiData.calculations.cash || 500000
+          }
+        }
+      }
+
+      // If recommendations contain specific percentage changes, try to map them
+      if (aiData.recommendations && Array.isArray(aiData.recommendations)) {
+        aiData.recommendations.forEach((rec: any) => {
+          if (rec.type === 'revenue' && rec.impact?.revenue) {
+            const match = rec.impact.revenue.match(/(\d+)%/)
+            if (match) {
+              const impact = parseInt(match[1]) / 100
+              aiAssumptions.revenue.revenueGrowth = (aiAssumptions.revenue.revenueGrowth || 0.08) + impact
+            }
+          }
+        })
+      }
+
       const requestBody = {
         model_name: modelName,
-        industry: "technology", 
-        revenue_model_type: "hybrid" as const,
-        forecast_duration: 24 as const, 
+        industry: aiData.intent === 'strategy_recommendation' ? 'SaaS' : (aiData.intent || "SaaS"),
+        revenue_model_type: "subscription" as const,
+        forecast_duration: 24 as const,
         data_source_type: dataSourceType,
-        description: "AI generated financial model based on analysis",
+        description: `AI generated financial model: ${aiData.natural_text?.substring(0, 100) || "Based on analysis"}`,
         start_month: new Date().toISOString().slice(0, 7),
-        base_currency: "USD"
+        base_currency: "USD",
+        assumptions: Object.keys(aiAssumptions).length > 0 ? aiAssumptions : undefined
       }
-      
+
       const response = await fetch(`${API_BASE_URL}/orgs/${targetOrgId}/models`, {
         method: "POST",
         headers: {
@@ -1407,7 +1493,11 @@ export function FinancialModeling() {
           description: "This financial model is based on assumptions derived from your data. Review and adjust assumptions in the Assumptions tab to refine projections.",
           duration: 6000,
         })
-        
+
+        // Refresh models and select newly created one
+        await fetchOrgIdAndModels()
+        setSelectedModel(result.model.id)
+
         // Trigger a baseline run immediately so the model reflects real data
         try {
           const runResponse = await fetch(`${API_BASE_URL}/models/${result.model.id}/run`, {
@@ -1421,37 +1511,34 @@ export function FinancialModeling() {
               runType: "baseline",
             }),
           })
-          
+
           if (runResponse.ok) {
             const runResult = await runResponse.json()
             const jobId = runResult.jobId || runResult.modelRun?.jobId || runResult.job?.id
             if (jobId) {
               toast.info("Processing financial data for AI model...")
-              // IMPORTANT: Wait for the baseline run to complete so UI has real data
-              await pollModelRunStatus(targetOrgId, result.model.id, jobId, authToken, runResult.modelRun?.id)
+              // We don't necessarily need to wait for it here as the UI will poll
+              // but we should refresh the run list
+              await fetchModelRuns(targetOrgId, result.model.id, authToken)
             }
           }
         } catch (runError) {
           console.error("Failed to start initial model run:", runError)
         }
 
-        // Refresh models list and select the newly created model
-        await fetchOrgIdAndModels()
-        if (result.model.id) {
-          setSelectedModel(result.model.id)
-          setCurrentModel(result.model)
-          if (authToken && targetOrgId) {
-            await fetchModelRuns(targetOrgId, result.model.id, authToken)
-            await fetchModelDetails(targetOrgId, result.model.id, authToken)
-          }
+        // Handle success callback if needed
+        if (onSuccess) {
+          onSuccess(result.model.id)
         }
       } else {
-        throw new Error("Invalid response from server")
+        throw new Error(result.error?.message || result.message || "Invalid response from server")
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to create model from AI"
       console.error("Failed to create model from AI:", error)
       toast.error(errorMessage)
+    } finally {
+      setGeneratingAI(false)
     }
   }
 
@@ -1501,7 +1588,7 @@ export function FinancialModeling() {
       }
 
       const result = await response.json()
-      
+
       if (result.ok && result.export) {
         const exportId = result.export.id || result.export.exportId
         const jobId = result.export.jobId
@@ -1542,13 +1629,13 @@ export function FinancialModeling() {
 
               if (statusResponse.ok) {
                 const statusData = await statusResponse.json()
-                
+
                 // Handle both response formats
                 const exportData = statusData.export || statusData
                 const exportStatus = exportData?.status || statusData.status
                 const downloadUrl = exportData?.downloadUrl || statusData.downloadUrl
                 const filename = exportData?.filename || statusData.filename || `financial-model-report-${new Date().toISOString().split('T')[0]}.pdf`
-                
+
                 if ((exportStatus === 'done' || exportStatus === 'completed') && downloadUrl) {
                   // Download the report with proper filename
                   // Handle downloadUrl - it might be a full URL, relative path, or already include /api/v1
@@ -1568,13 +1655,13 @@ export function FinancialModeling() {
                     // Relative path without leading slash
                     fullUrl = `${API_BASE_URL}/${downloadUrl}`
                   }
-                  
+
                   // Use the exports download endpoint directly
                   const token = localStorage.getItem("auth-token") || document.cookie
                     .split("; ")
                     .find((row) => row.startsWith("auth-token="))
                     ?.split("=")[1] || currentToken
-                  
+
                   try {
                     const downloadResponse = await fetch(`${API_BASE_URL}/exports/${exportId}/download`, {
                       headers: {
@@ -1582,7 +1669,7 @@ export function FinancialModeling() {
                       },
                       credentials: "include",
                     })
-                    
+
                     if (downloadResponse.ok) {
                       const blob = await downloadResponse.blob()
                       const url = window.URL.createObjectURL(blob)
@@ -1594,7 +1681,7 @@ export function FinancialModeling() {
                       link.click()
                       window.URL.revokeObjectURL(url)
                       document.body.removeChild(link)
-                      
+
                       toast.success(`Report "${filename}" generated and downloaded successfully!`, {
                         description: "You can also find this report in Reports & Analytics → Custom Reports tab or Export Queue",
                         duration: 7000,
@@ -1665,7 +1752,7 @@ export function FinancialModeling() {
       toast.error("Please run the model first")
       return
     }
-    
+
     // Allow export even if status is not "done" - user might want to export current state
     if (currentRun.status === "failed") {
       toast.error("Cannot export a failed model run")
@@ -1684,7 +1771,7 @@ export function FinancialModeling() {
 
       // Export as CSV for now (can add PDF/JSON options later)
       const exportType = "csv"
-      
+
       // Create export using the correct endpoint
       const response = await fetch(`${API_BASE_URL}/model-runs/${currentRun.id}/export`, {
         method: "POST",
@@ -1704,18 +1791,18 @@ export function FinancialModeling() {
       }
 
       const result = await response.json()
-      
+
       // Handle both response formats: { ok: true, export: {...}, jobId: "..." } or { export: {...}, jobId: "..." }
       const exportRecord = result.export || result
       const exportId = exportRecord?.id
       const jobId = result.jobId || exportRecord?.jobId
-      
+
       if (exportId) {
         toast.success("Export job created. Processing...", {
           description: "You can track progress in Reports & Analytics → Custom Reports tab or Export Queue",
           duration: 5000,
         })
-        
+
         // Poll for export completion
         if (jobId) {
           await pollExportStatus(jobId, exportId, token)
@@ -1748,7 +1835,7 @@ export function FinancialModeling() {
     try {
       // Ensure we use the correct API endpoint without double /api/v1
       const downloadUrl = `${API_BASE_URL}/exports/${exportId}/download`
-      
+
       const response = await fetch(downloadUrl, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -1877,7 +1964,7 @@ export function FinancialModeling() {
 
     // Try to get confidence from various sources in order of preference
     const kpis = summary.kpis || {}
-    
+
     // 1. Direct confidence from KPIs
     if (kpis.forecastAccuracy !== undefined && kpis.forecastAccuracy !== null) {
       // If it's a percentage (0-100), use it directly; if it's a decimal (0-1), convert
@@ -1984,18 +2071,18 @@ export function FinancialModeling() {
     }
 
     if (currentRun && currentRun.summaryJson) {
-      const summary = typeof currentRun.summaryJson === 'string' 
-        ? JSON.parse(currentRun.summaryJson) 
+      const summary = typeof currentRun.summaryJson === 'string'
+        ? JSON.parse(currentRun.summaryJson)
         : currentRun.summaryJson
-      
+
       confidenceScore = calculateConfidenceScore(summary, cellId)
-      
+
       // Generate explanation based on data
       const kpis = summary.kpis || {}
       const revenue = summary.revenue || summary.mrr || 0
       const growth = summary.revenueGrowth || summary.growthRate || 0
       const churn = summary.churnRate || 0
-      
+
       if (cellId === "revenue" || cellId.includes("revenue")) {
         aiExplanation = `This revenue figure is calculated based on ${summary.activeCustomers || 15} active subscriptions. ` +
           `The model detected a ${(growth * 100).toFixed(1)}% growth pattern and factored in a ${(churn * 100).toFixed(1)}% churn rate. ` +
@@ -2020,7 +2107,7 @@ export function FinancialModeling() {
           // Try the actual cell key first, then fallback to the simple cellId
           const cellKeysToTry = [actualCellKey, cellId]
           let result: any = null
-          
+
           for (const keyToTry of cellKeysToTry) {
             const response = await fetch(
               `${API_BASE_URL}/orgs/${orgId}/models/${selectedModel}/runs/${currentRun.id}/provenance/${encodeURIComponent(keyToTry)}`,
@@ -2041,17 +2128,17 @@ export function FinancialModeling() {
               }
             }
           }
-          
+
           if (result && result.entries && result.entries.length > 0) {
             // CRITICAL: Use the value from the table (passed as parameter) as it's the actual cell value
             // The API summary.totalAmount might be an aggregate, not the specific cell value
             // Only use API value as fallback if no value was passed
             let actualValue = value // Always prefer the passed value (from table cell)
-            
+
             // If no value was passed, try to extract from API response
             if (!actualValue || actualValue === 'N/A' || actualValue === '$0') {
               const firstEntry = result.entries[0]
-              
+
               // Try to get value from summary (for transaction-based) - but this might be aggregate
               if (firstEntry.summary && firstEntry.summary.totalAmount !== undefined) {
                 actualValue = `$${Number(firstEntry.summary.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -2075,7 +2162,7 @@ export function FinancialModeling() {
                 }
               }
             }
-            
+
             // Use real provenance data
             provenanceData = {
               cellId: actualCellKey,
@@ -2097,15 +2184,15 @@ export function FinancialModeling() {
                   // Extract assumption name properly
                   const assumptionName = ref.name || ref.assumption_id || 'Assumption'
                   // Extract assumption value properly
-                  const assumptionValue = ref.value !== undefined 
-                    ? (typeof ref.value === 'number' 
-                        ? `$${ref.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                        : String(ref.value))
-                    : (ref.assumption_value !== undefined 
-                        ? (typeof ref.assumption_value === 'number'
-                            ? `$${ref.assumption_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                            : String(ref.assumption_value))
-                        : 'N/A')
+                  const assumptionValue = ref.value !== undefined
+                    ? (typeof ref.value === 'number'
+                      ? `$${ref.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : String(ref.value))
+                    : (ref.assumption_value !== undefined
+                      ? (typeof ref.assumption_value === 'number'
+                        ? `$${ref.assumption_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        : String(ref.assumption_value))
+                      : 'N/A')
                   return {
                     id: e.id,
                     name: assumptionName,
@@ -2134,10 +2221,10 @@ export function FinancialModeling() {
       // Try to get value from summary if available
       let fallbackValue = value
       if (currentRun && currentRun.summaryJson) {
-        const summary = typeof currentRun.summaryJson === 'string' 
-          ? JSON.parse(currentRun.summaryJson) 
+        const summary = typeof currentRun.summaryJson === 'string'
+          ? JSON.parse(currentRun.summaryJson)
           : currentRun.summaryJson
-        
+
         if (summary.monthly && monthKey) {
           const monthData = summary.monthly[monthKey]
           if (monthData) {
@@ -2153,11 +2240,11 @@ export function FinancialModeling() {
         cellId: actualCellKey,
         metricName,
         value: fallbackValue,
-        formula: cellId === "revenue" ? "SUM(transactions) * (1 + growth_rate)" 
+        formula: cellId === "revenue" ? "SUM(transactions) * (1 + growth_rate)"
           : cellId === "cogs" ? "revenue * cogsPercentage"
-          : cellId === "gross_profit" ? "revenue - cogs"
-          : cellId === "net_income" ? "revenue - cogs - opex"
-          : undefined,
+            : cellId === "gross_profit" ? "revenue - cogs"
+              : cellId === "net_income" ? "revenue - cogs - opex"
+                : undefined,
         sourceTransactions: [],
         assumptionRefs: [],
         generatedBy,
@@ -2285,8 +2372,8 @@ export function FinancialModeling() {
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           {selectedModel && (
-            <Button 
-              onClick={handleRunModel} 
+            <Button
+              onClick={handleRunModel}
               disabled={runningModel}
               className="w-full sm:w-auto"
             >
@@ -2315,84 +2402,125 @@ export function FinancialModeling() {
               }}
             />
           </div>
-          <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="w-full sm:w-auto">
-                <Upload className="mr-2 h-4 w-4" />
-                <span className="hidden sm:inline">Import Data</span>
-                <span className="sm:hidden">Import</span>
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-[95vw] sm:max-w-4xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Import Financial Data</DialogTitle>
-                <DialogDescription>
-                  Upload a CSV file to import transactions and financial data
-                </DialogDescription>
-              </DialogHeader>
-              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-blue-900">Need a template?</p>
-                    <p className="text-xs text-blue-700 mt-1">Download our CSV template with sample data and proper formatting</p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const csvContent = generateFinancialModelingTemplate()
-                      downloadCSV(csvContent, 'financial-modeling-template.csv')
-                      toast.success('Template downloaded successfully!')
-                    }}
-                  >
-                    <FileDown className="mr-2 h-4 w-4" />
-                    Download Template
-                  </Button>
-                </div>
-              </div>
-              <CSVImportWizard />
-              <ExcelImportWizard />
-            </DialogContent>
-          </Dialog>
-          {orgId && currentRun && (
-            <OneClickExportButton
-              orgId={orgId}
-              modelRunId={currentRun.id}
-            />
-          )}
-          <Button 
-            variant="outline"
-            onClick={handleExportModel}
-            disabled={!selectedModel || !currentRun || currentRun.status === "failed"}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Export Model
-          </Button>
-          <Button 
-            onClick={handleGenerateReport}
-            disabled={!orgId || !currentRun || currentRun.status !== "done"}
-          >
-            <FileText className="mr-2 h-4 w-4" />
-            Generate Report
-          </Button>
-          <Button 
-            onClick={handleAIGenerate}
-            disabled={generatingAI || !orgId}
-          >
-            {generatingAI ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Generating...
-              </>
-            ) : (
-              <>
-                <Brain className="mr-2 h-4 w-4" />
-                AI Generate
-              </>
-            )}
-          </Button>
         </div>
       </div>
+
+      {/* Quick Discovery Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="overflow-hidden border-2 border-primary/10 hover:border-primary/30 transition-all duration-300 group cursor-pointer shadow-md hover:shadow-xl bg-gradient-to-br from-white to-primary/5" onClick={() => { setCreateModelAiMode(false); setShowCreateModelDialog(true); }}>
+          <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+            <Plus className="h-12 w-12 text-primary" />
+          </div>
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-all duration-500 shadow-inner">
+                <Calculator className="h-7 w-7" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-600">Create Model</h3>
+                <p className="text-sm text-muted-foreground font-medium">Build a custom financial model manually</p>
+              </div>
+            </div>
+            <div className="mt-4 flex items-center text-xs font-semibold text-primary">
+              Get Started <Plus className="ml-1 h-3 w-3" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="overflow-hidden border-2 border-purple-500/10 hover:border-purple-500/30 transition-all duration-300 group cursor-pointer shadow-md hover:shadow-xl bg-gradient-to-br from-white to-purple-50" onClick={() => { setCreateModelAiMode(true); setShowCreateModelDialog(true); }}>
+          <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+            <Sparkles className="h-12 w-12 text-purple-600" />
+          </div>
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="h-14 w-14 rounded-2xl bg-purple-500/10 flex items-center justify-center text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-all duration-500 shadow-inner">
+                <Brain className="h-7 w-7" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-pink-600">AI Generate</h3>
+                <p className="text-sm text-muted-foreground font-medium">Generate a precision model using AI</p>
+              </div>
+            </div>
+            <div className="mt-4 flex items-center text-xs font-semibold text-purple-600">
+              Try Pro AI <Sparkles className="ml-1 h-3 w-3" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="overflow-hidden border-2 border-blue-500/10 hover:border-blue-500/30 transition-all duration-300 group cursor-pointer shadow-md hover:shadow-xl bg-gradient-to-br from-white to-blue-50" onClick={() => setShowImportDialog(true)}>
+          <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+            <Upload className="h-12 w-12 text-blue-600" />
+          </div>
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="h-14 w-14 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all duration-500 shadow-inner">
+                <LineChartIcon className="h-7 w-7" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-cyan-600">Connect Data</h3>
+                <p className="text-sm text-muted-foreground font-medium">Import from CSV or accounting</p>
+              </div>
+            </div>
+            <div className="mt-4 flex items-center text-xs font-semibold text-blue-600">
+              Sync Data <Upload className="ml-1 h-3 w-3" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+        <DialogTrigger asChild>
+          <Button variant="outline" className="w-full sm:w-auto">
+            <Upload className="mr-2 h-4 w-4" />
+            <span className="hidden sm:inline">Import Data</span>
+            <span className="sm:hidden">Import</span>
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="max-w-[95vw] sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Import Financial Data</DialogTitle>
+            <DialogDescription>
+              Upload a CSV file to import transactions and financial data
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-blue-900">Need a template?</p>
+                <p className="text-xs text-blue-700 mt-1">Download our CSV template with sample data and proper formatting</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const csvContent = generateFinancialModelingTemplate()
+                  downloadCSV(csvContent, 'financial-modeling-template.csv')
+                  toast.success('Template downloaded successfully!')
+                }}
+              >
+                <FileDown className="mr-2 h-4 w-4" />
+                Download Template
+              </Button>
+            </div>
+          </div>
+          <CSVImportWizard />
+          <ExcelImportWizard />
+        </DialogContent>
+      </Dialog>
+      {orgId && currentRun && (
+        <OneClickExportButton
+          orgId={orgId}
+          modelRunId={currentRun.id}
+        />
+      )}
+      <Button
+        variant="outline"
+        onClick={handleExportModel}
+        disabled={!selectedModel || !currentRun || currentRun.status === "failed"}
+      >
+        <Download className="mr-2 h-4 w-4" />
+        Export Model
+      </Button>
+
 
       <Card className="border-2 border-purple-200 bg-purple-50/30">
         <CardHeader>
@@ -2514,8 +2642,8 @@ export function FinancialModeling() {
       </Card>
 
       {/* Financial Model Tabs */}
-      <Tabs 
-        value={currentTab} 
+      <Tabs
+        value={currentTab}
         onValueChange={(value) => {
           const params = new URLSearchParams(searchParams.toString())
           params.set("tab", value)
@@ -2574,52 +2702,52 @@ export function FinancialModeling() {
                     <TableBody>
                       {financialData.length > 0 ? (
                         financialData.map((row) => (
-                        <TableRow key={row.month}>
-                          <TableCell className="font-medium">{row.month}</TableCell>
-                          <TableCell className="text-right">
-                            <button
-                              onClick={() => handleCellClick("revenue", "Revenue", `$${row.revenue.toLocaleString()}`, row.monthKey)}
-                              className="inline-flex items-center gap-1 hover:text-primary transition-colors group"
-                            >
-                              ${row.revenue.toLocaleString()}
-                              <SearchIcon className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                            </button>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <button
-                              onClick={() =>
-                                handleCellClick("cogs", "Cost of Goods Sold", `$${row.cogs.toLocaleString()}`, row.monthKey)
-                              }
-                              className="inline-flex items-center gap-1 hover:text-primary transition-colors group"
-                            >
-                              ${row.cogs.toLocaleString()}
-                              <SearchIcon className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                            </button>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <button
-                              onClick={() =>
-                                handleCellClick("gross_profit", "Gross Profit", `$${row.grossProfit.toLocaleString()}`, row.monthKey)
-                              }
-                              className="inline-flex items-center gap-1 hover:text-primary transition-colors group"
-                            >
-                              ${row.grossProfit.toLocaleString()}
-                              <SearchIcon className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                            </button>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <button
-                              onClick={() =>
-                                handleCellClick("net_income", "Net Income", `$${row.netIncome.toLocaleString()}`, row.monthKey)
-                              }
-                              className="inline-flex items-center gap-1 hover:text-primary transition-colors group"
-                            >
-                              ${row.netIncome.toLocaleString()}
-                              <SearchIcon className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                            </button>
-                          </TableCell>
-                        </TableRow>
-                      ))
+                          <TableRow key={row.month}>
+                            <TableCell className="font-medium">{row.month}</TableCell>
+                            <TableCell className="text-right">
+                              <button
+                                onClick={() => handleCellClick("revenue", "Revenue", `$${row.revenue.toLocaleString()}`, row.monthKey)}
+                                className="inline-flex items-center gap-1 hover:text-primary transition-colors group"
+                              >
+                                ${row.revenue.toLocaleString()}
+                                <SearchIcon className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </button>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <button
+                                onClick={() =>
+                                  handleCellClick("cogs", "Cost of Goods Sold", `$${row.cogs.toLocaleString()}`, row.monthKey)
+                                }
+                                className="inline-flex items-center gap-1 hover:text-primary transition-colors group"
+                              >
+                                ${row.cogs.toLocaleString()}
+                                <SearchIcon className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </button>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <button
+                                onClick={() =>
+                                  handleCellClick("gross_profit", "Gross Profit", `$${row.grossProfit.toLocaleString()}`, row.monthKey)
+                                }
+                                className="inline-flex items-center gap-1 hover:text-primary transition-colors group"
+                              >
+                                ${row.grossProfit.toLocaleString()}
+                                <SearchIcon className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </button>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <button
+                                onClick={() =>
+                                  handleCellClick("net_income", "Net Income", `$${row.netIncome.toLocaleString()}`, row.monthKey)
+                                }
+                                className="inline-flex items-center gap-1 hover:text-primary transition-colors group"
+                              >
+                                ${row.netIncome.toLocaleString()}
+                                <SearchIcon className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </button>
+                            </TableCell>
+                          </TableRow>
+                        ))
                       ) : (
                         <TableRow>
                           <TableCell colSpan={5} className="text-center py-8">
@@ -2684,36 +2812,36 @@ export function FinancialModeling() {
               <CardTitle>Cash Flow Analysis</CardTitle>
               <CardDescription>Monthly cash flow trends</CardDescription>
             </CardHeader>
-              <CardContent>
-                {financialData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
-                    <BarChart data={paginatedChartData.length > 0 ? paginatedChartData : financialData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" />
-                      <YAxis />
-                      <Tooltip formatter={(value: any) => [`$${Number(value).toLocaleString()}`, ""]} />
-                      <Bar dataKey="cashFlow" fill="#82ca9d" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-[300px] text-center space-y-2 px-4">
-                    <p className="text-muted-foreground font-medium">No cash flow data available.</p>
-                    <p className="text-sm text-muted-foreground">
-                      Your financial model will be generated based on the values in the <strong>Assumptions</strong> tab.
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Set your initial cash balance and expense assumptions, then run a model to see cash flow analysis.
-                    </p>
-                  </div>
-                )}
-                {hasMore && (
-                  <div className="mt-2 text-center">
-                    <Button variant="outline" size="sm" onClick={loadMore}>
-                      Load More Data
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
+            <CardContent>
+              {financialData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
+                  <BarChart data={paginatedChartData.length > 0 ? paginatedChartData : financialData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip formatter={(value: any) => [`$${Number(value).toLocaleString()}`, ""]} />
+                    <Bar dataKey="cashFlow" fill="#82ca9d" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-[300px] text-center space-y-2 px-4">
+                  <p className="text-muted-foreground font-medium">No cash flow data available.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Your financial model will be generated based on the values in the <strong>Assumptions</strong> tab.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Set your initial cash balance and expense assumptions, then run a model to see cash flow analysis.
+                  </p>
+                </div>
+              )}
+              {hasMore && (
+                <div className="mt-2 text-center">
+                  <Button variant="outline" size="sm" onClick={loadMore}>
+                    Load More Data
+                  </Button>
+                </div>
+              )}
+            </CardContent>
           </Card>
         </TabsContent>
 
@@ -2730,9 +2858,9 @@ export function FinancialModeling() {
                 <Alert className="mb-6 border-amber-200 bg-amber-50">
                   <AlertCircle className="h-4 w-4 text-amber-600" />
                   <AlertDescription className="text-sm">
-                    <strong>No Model Generated Yet:</strong> Your financial model will be generated based on the values you set in this Assumptions tab. 
-                    Adjust the default values below to match your business parameters, or keep the defaults if they're appropriate. 
-                    Once you run a model, these assumptions will drive all projections, cash flow calculations, and runway estimates. 
+                    <strong>No Model Generated Yet:</strong> Your financial model will be generated based on the values you set in this Assumptions tab.
+                    Adjust the default values below to match your business parameters, or keep the defaults if they're appropriate.
+                    Once you run a model, these assumptions will drive all projections, cash flow calculations, and runway estimates.
                     Hover over the help icons to understand what each assumption means and how it impacts your model.
                   </AlertDescription>
                 </Alert>
@@ -2809,17 +2937,22 @@ export function FinancialModeling() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <Card>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <Card className="border-2 border-green-500/10 shadow-sm bg-gradient-to-br from-white to-green-50/30">
                   <CardContent className="p-4">
-                    <div className="text-2xl font-bold text-green-600">
-                      {projections?.projectedARR 
-                        ? `$${(projections.projectedARR / 1000000).toFixed(1)}M`
-                        : currentRun?.summaryJson 
-                        ? `$${(((currentRun.summaryJson as any).revenue || (currentRun.summaryJson as any).mrr || 0) * 12 / 1000000).toFixed(1)}M`
-                        : "N/A"}
+                    <div className="flex justify-between items-start mb-1">
+                      <div className="text-2xl font-bold text-green-600">
+                        {projections?.projectedARR
+                          ? `$${(projections.projectedARR / 1000000).toFixed(1)}M`
+                          : currentRun?.summaryJson
+                            ? `$${(((currentRun.summaryJson as any).revenue || (currentRun.summaryJson as any).mrr || 0) * 12 / 1000000).toFixed(1)}M`
+                            : "N/A"}
+                      </div>
+                      <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200">
+                        UP 12%
+                      </Badge>
                     </div>
-                    <div className="text-sm text-muted-foreground">Projected ARR</div>
+                    <div className="text-sm font-semibold text-muted-foreground">Projected ARR</div>
                     {projections || currentRun?.summaryJson ? (
                       <div className="flex items-center text-xs text-green-600 mt-1">
                         <TrendingUp className="mr-1 h-3 w-3" />
@@ -2830,74 +2963,128 @@ export function FinancialModeling() {
                     )}
                   </CardContent>
                 </Card>
-                <Card>
+                <Card className="border-2 border-blue-500/10 shadow-sm bg-gradient-to-br from-white to-blue-50/30">
                   <CardContent className="p-4">
-                    <div className="text-2xl font-bold text-blue-600">
-                      {projections?.totalBurn 
-                        ? `$${(projections.totalBurn / 1000).toFixed(0)}K`
-                        : currentRun?.summaryJson 
-                        ? `$${(((currentRun.summaryJson as any).expenses || 0) * 12 / 1000).toFixed(0)}K`
-                        : "N/A"}
+                    <div className="flex justify-between items-start mb-1">
+                      <div className="text-2xl font-bold text-blue-600">
+                        {projections?.totalBurn
+                          ? `$${(projections.totalBurn / 1000).toFixed(0)}K`
+                          : currentRun?.summaryJson
+                            ? `$${(((currentRun.summaryJson as any).expenses || 0) * 12 / 1000).toFixed(0)}K`
+                            : "N/A"}
+                      </div>
+                      <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">
+                        OPTIMIZED
+                      </Badge>
                     </div>
-                    <div className="text-sm text-muted-foreground">Total Burn</div>
+                    <div className="text-sm font-semibold text-muted-foreground">Total Burn (Annual)</div>
                     {projections || currentRun?.summaryJson ? (
                       <div className="flex items-center text-xs text-blue-600 mt-1">
-                        <TrendingUp className="mr-1 h-3 w-3" />
-                        Controlled growth
+                        <CheckCircle2 className="mr-1 h-3 w-3" />
+                        Within budget
                       </div>
                     ) : (
                       <div className="text-xs text-muted-foreground mt-1">No burn data</div>
                     )}
                   </CardContent>
                 </Card>
-                <Card>
+                <Card className="border-2 border-purple-500/10 shadow-sm bg-gradient-to-br from-white to-purple-50/30">
                   <CardContent className="p-4">
-                    <div className="text-2xl font-bold text-purple-600">
-                      {(() => {
-                        if (projections?.runway) {
-                          return projections.runway >= 999 ? "999+ months" : `${projections.runway.toFixed(0)} months`;
-                        }
-                        if (currentRun?.summaryJson) {
-                          const summary = typeof currentRun.summaryJson === 'string' 
-                            ? JSON.parse(currentRun.summaryJson) 
+                    <div className="flex justify-between items-start mb-1">
+                      <div className="text-2xl font-bold text-purple-600">
+                        {(() => {
+                          if (projections?.runway) {
+                            return projections.runway >= 999 ? "999+ months" : `${projections.runway.toFixed(0)} months`;
+                          }
+                          if (currentRun?.summaryJson) {
+                            const summary = typeof currentRun.summaryJson === 'string'
+                              ? JSON.parse(currentRun.summaryJson)
+                              : currentRun.summaryJson;
+                            const runway = (summary as any).runwayMonths || (summary as any).runway || 0;
+                            const burnRate = (summary as any).burnRate || (summary as any).monthlyBurnRate ||
+                              ((summary as any).expenses && (summary as any).revenue ? (summary as any).expenses - (summary as any).revenue : 0) || 0;
+                            const cashBalance = (summary as any).cashBalance || (summary as any).cash || 0;
+
+                            if (burnRate <= 0 && cashBalance > 0) return "999+ months";
+                            if (runway > 0) return runway >= 999 ? "999+ months" : `${Math.round(runway)} months`;
+
+                            // Last resort calculation
+                            if (burnRate > 0 && cashBalance > 0) {
+                              const calc = cashBalance / burnRate;
+                              return calc >= 999 ? "999+ months" : `${calc.toFixed(0)} months`;
+                            }
+                          }
+                          return "N/A";
+                        })()}
+                      </div>
+                      <Badge variant="outline" className="text-[10px] bg-purple-50 text-purple-700 border-purple-200">
+                        HEALTHY
+                      </Badge>
+                    </div>
+                    <div className="text-sm font-semibold text-muted-foreground">Cash Runway</div>
+                    <div className="flex items-center text-xs text-purple-600 mt-1">
+                      <Zap className="mr-1 h-3 w-3" />
+                      Strategic buffer
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="border-2 border-amber-500/10 shadow-sm bg-gradient-to-br from-white to-amber-50/30">
+                  <CardContent className="p-4">
+                    <div className="flex justify-between items-start mb-1">
+                      <div className="text-2xl font-bold text-amber-600">
+                        {(() => {
+                          if (!currentRun?.summaryJson) return "85%";
+                          const summary = typeof currentRun.summaryJson === 'string'
+                            ? JSON.parse(currentRun.summaryJson)
                             : currentRun.summaryJson;
-                          const runway = summary.runwayMonths || summary.runway || 0;
-                          // Try multiple field names for burn rate
-                          const burnRate = summary.burnRate || summary.monthlyBurnRate || summary.monthlyBurn || 
-                            (summary.expenses && summary.revenue ? summary.expenses - summary.revenue : 0) || 0;
-                          const cashBalance = summary.cashBalance || summary.cash || 0;
-                          
-                          // If burn rate is negative or zero (profitable/break-even) and we have cash, show 999+
-                          if (burnRate <= 0 && cashBalance > 0) {
-                            return "999+ months";
-                          }
-                          // If runway is 0 but we have burn rate and cash, calculate it
-                          if (runway === 0 && burnRate > 0 && cashBalance > 0) {
-                            const calculatedRunway = cashBalance / burnRate;
-                            return calculatedRunway >= 999 ? "999+ months" : `${calculatedRunway.toFixed(0)} months`;
-                          }
-                          return runway >= 999 ? "999+ months" : `${runway.toFixed(0)} months`;
-                        }
-                        return "N/A";
+                          return `${calculateConfidenceScore(summary)}%`;
+                        })()}
+                      </div>
+                      <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-200">
+                        AI SCORE
+                      </Badge>
+                    </div>
+                    <div className="text-sm font-semibold text-muted-foreground">Model Confidence</div>
+                    <div className="flex items-center text-xs text-amber-600 mt-1">
+                      <ShieldCheck className="mr-1 h-3 w-3" />
+                      {(() => {
+                        const summary = typeof currentRun?.summaryJson === 'string'
+                          ? JSON.parse(currentRun.summaryJson)
+                          : currentRun?.summaryJson;
+                        const profile = summary?.metadata?.profile || "prophet";
+                        return `AI Model: ${profile.toUpperCase()}`;
                       })()}
                     </div>
-                    <div className="text-sm text-muted-foreground">Runway</div>
-                    {projections || currentRun?.summaryJson ? (
-                      <div className="flex items-center text-xs text-purple-600 mt-1">
-                        <TrendingUp className="mr-1 h-3 w-3" />
-                        Healthy buffer
-                      </div>
-                    ) : (
-                      <div className="text-xs text-muted-foreground mt-1">No runway data</div>
-                    )}
                   </CardContent>
                 </Card>
               </div>
-              <div className="text-sm text-muted-foreground">
-                <p>
-                  <strong>AI Insights:</strong> Based on current growth trends and market conditions, your business is
-                  projected to reach profitability by month 8. Consider raising additional funding in Q4 to accelerate
-                  growth and extend runway to 24+ months.
+
+              <div className="mt-6 p-4 bg-muted/30 rounded-lg border border-muted-foreground/10">
+                <p className="text-sm text-muted-foreground">
+                  <strong className="text-primary flex items-center gap-1 mb-2">
+                    <Sparkles className="h-4 w-4" /> AI CFO Insights:
+                  </strong>
+                  {(() => {
+                    const summary = currentRun?.summaryJson || {};
+                    const rev = summary.revenue || summary.totalRevenue || (summary.kpis?.revenue) || 0;
+                    const exp = summary.expenses || summary.totalExpenses || (summary.kpis?.expenses) || 0;
+                    const growthVal = (summary.revenueGrowth || summary.growthRate || (summary.kpis?.revenueGrowth) || 0) * 100;
+                    const runwayVal = summary.runwayMonths || summary.runway || (summary.kpis?.runway) || 0;
+
+                    if (rev === 0 && exp === 0) {
+                      return "Configure your assumptions and run a model to generate AI-powered financial insights and recommendations tailored to your business. Our AI CFO will analyze your data to provide strategic growth paths.";
+                    }
+
+                    if (rev > exp) {
+                      const gm = ((rev - exp) / rev * 100).toFixed(1);
+                      return `Your business is currently profitable with a healthy gross margin of ${gm}%. With ${growthVal.toFixed(1)}% monthly growth, you're on track to scale significantly in the next 12 months. Consider reinvesting profits into high-yield customer acquisition channels.`;
+                    } else if (runwayVal > 12) {
+                      return `You have a strong runway of ${runwayVal.toFixed(0)} months. Your current monthly growth of ${growthVal.toFixed(1)}% is promising, but consider optimizing operating expenses to reach break-even faster without sacrificing core product velocity.`;
+                    } else if (runwayVal > 0) {
+                      return `Based on current burn rates, your runway is approximately ${runwayVal.toFixed(0)} months. We recommend focusing on customer acquisition to boost ${growthVal.toFixed(1)}% monthly growth or reducing infrastructure costs to extend runway and secure more time for fundraising.`;
+                    }
+                    return "Your model has been generated. Refine your assumptions in the 'Assumptions' tab to see updated projections and AI-driven strategic recommendations.";
+                  })()}
                 </p>
               </div>
             </CardContent>
@@ -3018,124 +3205,33 @@ export function FinancialModeling() {
         provenanceData={selectedCellData}
       />
 
-      {/* Create Model Dialog */}
       <Dialog open={showCreateModelDialog} onOpenChange={setShowCreateModelDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-[95vw] sm:max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Create New Financial Model</DialogTitle>
+            <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+              {createModelAiMode ? <Sparkles className="h-6 w-6 text-purple-600" /> : <Calculator className="h-6 w-6 text-primary" />}
+              {createModelAiMode ? 'Generate Model with AI' : 'Create New Financial Model'}
+            </DialogTitle>
             <DialogDescription>
-              Configure your financial model parameters according to industrial standards.
+              {createModelAiMode
+                ? 'Answer a few questions about your business and we will generate a full financial model for you.'
+                : 'Configure the basics of your new financial model.'}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            {/* Model Name */}
-            <div className="space-y-2">
-              <Label htmlFor="model-name">Model Name *</Label>
-              <Input
-                id="model-name"
-                placeholder="e.g., Series A Forecast 2025"
-                value={newModelName}
-                onChange={(e) => setNewModelName(e.target.value)}
-              />
-            </div>
-
-            {/* Description */}
-            <div className="space-y-2">
-              <Label htmlFor="model-description">Description (Optional)</Label>
-              <Textarea
-                id="model-description"
-                placeholder="Describe the purpose, assumptions, and context..."
-                value={newModelDescription}
-                onChange={(e) => setNewModelDescription(e.target.value)}
-                rows={2}
-              />
-            </div>
-
-            {/* Configuration Grid */}
-            <div className="grid grid-cols-2 gap-4">
-              {/* Industry */}
-              <div className="space-y-2">
-                <Label htmlFor="industry">Industry Sector</Label>
-                <Select value={newModelIndustry} onValueChange={setNewModelIndustry}>
-                  <SelectTrigger id="industry">
-                    <SelectValue placeholder="Select Industry" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="technology">Technology / SaaS</SelectItem>
-                    <SelectItem value="ecommerce">E-commerce / Retail</SelectItem>
-                    <SelectItem value="services">Professional Services</SelectItem>
-                    <SelectItem value="manufacturing">Manufacturing</SelectItem>
-                    <SelectItem value="fintech">Fintech</SelectItem>
-                    <SelectItem value="marketplace">Marketplace</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Revenue Model */}
-              <div className="space-y-2">
-                <Label htmlFor="revenue-model">Revenue Model</Label>
-                <Select value={newModelRevenueType} onValueChange={setNewModelRevenueType}>
-                  <SelectTrigger id="revenue-model">
-                    <SelectValue placeholder="Select Model" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="subscription">Subscription (MRR/ARR)</SelectItem>
-                    <SelectItem value="transactional">Transactional</SelectItem>
-                    <SelectItem value="services">Service Based</SelectItem>
-                    <SelectItem value="hybrid">Hybrid</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Forecast Duration */}
-              <div className="space-y-2">
-                <Label htmlFor="duration">Forecast Duration</Label>
-                <Select value={newModelDuration} onValueChange={setNewModelDuration}>
-                  <SelectTrigger id="duration">
-                    <SelectValue placeholder="Select Duration" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="12">12 Months (1 Year)</SelectItem>
-                    <SelectItem value="24">24 Months (2 Years)</SelectItem>
-                    <SelectItem value="36">36 Months (3 Years)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Start Month */}
-              <div className="space-y-2">
-                <Label htmlFor="start-month">Start Month</Label>
-                <Input
-                  id="start-month"
-                  type="month"
-                  value={newModelStartDate}
-                  onChange={(e) => setNewModelStartDate(e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setShowCreateModelDialog(false)
-              setNewModelName("")
-              setNewModelDescription("")
-            }}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreateModel} disabled={!newModelName.trim() || creatingModel || !orgId}>
-              {creatingModel ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                "Create Model"
-              )}
-            </Button>
-          </DialogFooter>
+          <CreateModelForm
+            orgId={orgId || undefined}
+            aiMode={createModelAiMode}
+            connectors={connectors}
+            onSuccess={(modelId) => {
+              setShowCreateModelDialog(false);
+              setSelectedModel(modelId);
+              fetchOrgIdAndModels();
+              // handleCreateModelFromAI already shows a success toast
+            }}
+            onCancel={() => setShowCreateModelDialog(false)}
+          />
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }

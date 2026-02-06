@@ -211,9 +211,9 @@ export const financialModelService = {
 
     // Queue auto-model job to ingest data and generate assumptions
     let jobId: string | undefined;
-    if (request.data_source_type !== 'blank') {
+    if (request.data_source_type !== 'blank' || request.business_type) {
       const job = await jobService.createJob({
-        jobType: 'auto_model_trigger',
+        jobType: 'auto_model',
         orgId,
         objectId: model.id,
         createdByUserId: userId,
@@ -284,7 +284,7 @@ export const financialModelService = {
     // CRITICAL: Use most recent transactions available (prefer last 12 months, but use all if needed)
     const twelveMonthsAgo = new Date();
     twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
-    
+
     // Try to get recent transactions first
     let transactions = await prisma.$queryRaw`
       SELECT 
@@ -311,12 +311,12 @@ export const financialModelService = {
         WHERE "orgId" = ${orgId}::uuid
         ORDER BY date DESC
       ` as Array<{ date: Date; amount: number; category: string | null; description: string | null }>;
-      
+
       if (transactions.length === 0) {
         logger.warn(`No transactions found at all for org ${orgId}, using defaults`);
         return financialModelService.generateAssumptionsFromData(orgId, modelId, 'blank');
       }
-      
+
       // Warn about old data
       const oldestDate = transactions[transactions.length - 1].date;
       const newestDate = transactions[0].date;

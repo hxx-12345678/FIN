@@ -13,27 +13,55 @@ import { Loader2, Plus, FileText, Database } from "lucide-react"
 import { API_BASE_URL } from "@/lib/api-config"
 
 interface CreateModelFormProps {
-  orgId: string
+  orgId?: string | null
   onSuccess?: (modelId: string) => void
   onCancel?: () => void
   aiMode?: boolean // If true, automatically show AI questions after basic form
+  connectors?: any[]
 }
 
-export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false }: CreateModelFormProps) {
+export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false, connectors = [] }: CreateModelFormProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [step, setStep] = useState<"basic" | "ai-questions" | "complete">("basic")
-  
-  // If AI mode, set data source to blank so AI questions will show
+  const [effectiveOrgId, setEffectiveOrgId] = useState<string | null>(orgId || null)
+
+  // Try to get orgId from localStorage if not provided as prop
+  useEffect(() => {
+    if (!effectiveOrgId) {
+      const storedOrgId = localStorage.getItem("orgId")
+      if (storedOrgId) {
+        setEffectiveOrgId(storedOrgId)
+      }
+    }
+  }, [effectiveOrgId])
+
+  // Update effectiveOrgId when prop changes
+  useEffect(() => {
+    if (orgId) {
+      setEffectiveOrgId(orgId)
+    }
+  }, [orgId])
+
+  // Suggestions based on connectors
+  useEffect(() => {
+    if (connectors.length > 0) {
+      setFormData(prev => ({
+        ...prev,
+        data_source_type: prev.data_source_type || "connectors",
+      }))
+    }
+  }, [connectors])
+
   useEffect(() => {
     if (aiMode) {
       setFormData(prev => ({
         ...prev,
-        data_source_type: "blank", // Will trigger AI questions
+        data_source_type: prev.data_source_type || "blank", // Will trigger AI questions
       }))
     }
   }, [aiMode])
-  
+
   // Form state
   const [formData, setFormData] = useState({
     model_name: "",
@@ -246,7 +274,7 @@ export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false }: 
     // Validate AI answers
     const questions = getAiQuestions()
     const requiredQuestions = questions.filter(q => q.required)
-    
+
     for (const q of requiredQuestions) {
       if (q.key.startsWith("major_costs.")) {
         // Skip cost validation
@@ -263,6 +291,11 @@ export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false }: 
   }
 
   const createModel = async (isAiGenerated: boolean = false) => {
+    if (!effectiveOrgId) {
+      toast.error("Organization ID not found. Please try again or refresh the page.")
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -272,7 +305,7 @@ export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false }: 
         ?.split("=")[1]
 
       if (!token) {
-        throw new Error("Authentication token not found")
+        throw new Error("Authentication token not found. Please log in again.")
       }
 
       const payload: any = {
@@ -297,14 +330,17 @@ export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false }: 
         if (aiAnswers.starting_mrr) payload.starting_mrr = parseFloat(aiAnswers.starting_mrr)
         if (aiAnswers.starting_aov) payload.starting_aov = parseFloat(aiAnswers.starting_aov)
         if (aiAnswers.cash_on_hand) payload.cash_on_hand = parseFloat(aiAnswers.cash_on_hand)
-        
+
         payload.major_costs = {}
         if (aiAnswers.major_costs.payroll) payload.major_costs.payroll = parseFloat(aiAnswers.major_costs.payroll)
         if (aiAnswers.major_costs.infrastructure) payload.major_costs.infrastructure = parseFloat(aiAnswers.major_costs.infrastructure)
         if (aiAnswers.major_costs.marketing) payload.major_costs.marketing = parseFloat(aiAnswers.major_costs.marketing)
       }
 
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/models`, {
+      console.log("Creating model with payload:", payload)
+      console.log("API URL:", `${API_BASE_URL}/orgs/${effectiveOrgId}/models`)
+
+      const response = await fetch(`${API_BASE_URL}/orgs/${effectiveOrgId}/models`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -323,7 +359,7 @@ export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false }: 
       if (result.ok && result.model) {
         toast.success("Model created successfully!")
         setStep("complete")
-        
+
         if (onSuccess) {
           onSuccess(result.model.id)
         } else {
@@ -338,6 +374,20 @@ export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false }: 
     } finally {
       setLoading(false)
     }
+  }
+
+  // Show loading while waiting for orgId
+  if (!effectiveOrgId) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-12">
+          <div className="text-center space-y-4">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+            <p className="text-sm text-muted-foreground">Loading organization data...</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
   if (step === "complete") {
@@ -379,7 +429,7 @@ export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false }: 
               </Label>
               {q.type === "select" ? (
                 <Select
-                  value={aiAnswers[q.key as keyof typeof aiAnswers] as string}
+                  value={aiAnswers[q.key as keyof typeof aiAnswers] as string || undefined}
                   onValueChange={(value) => handleAiAnswerChange(q.key, value)}
                 >
                   <SelectTrigger>
@@ -398,7 +448,11 @@ export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false }: 
                   id={q.key}
                   type={q.type}
                   placeholder={q.placeholder}
-                  value={aiAnswers[q.key as keyof typeof aiAnswers] as string || ""}
+                  value={
+                    q.key.includes('.')
+                      ? (aiAnswers.major_costs as any)[q.key.split('.')[1]] || ""
+                      : (aiAnswers[q.key as keyof typeof aiAnswers] as string) || ""
+                  }
                   onChange={(e) => handleAiAnswerChange(q.key, e.target.value)}
                 />
               )}
@@ -460,7 +514,7 @@ export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false }: 
             Industry <span className="text-red-500">*</span>
           </Label>
           <Select
-            value={formData.industry}
+            value={formData.industry || undefined}
             onValueChange={(value) => handleInputChange("industry", value)}
           >
             <SelectTrigger>
@@ -482,7 +536,7 @@ export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false }: 
             Revenue Model Type <span className="text-red-500">*</span>
           </Label>
           <Select
-            value={formData.revenue_model_type}
+            value={formData.revenue_model_type || undefined}
             onValueChange={(value) => handleInputChange("revenue_model_type", value as any)}
           >
             <SelectTrigger>
@@ -503,7 +557,7 @@ export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false }: 
             Forecast Duration <span className="text-red-500">*</span>
           </Label>
           <Select
-            value={String(formData.forecast_duration)}
+            value={formData.forecast_duration ? String(formData.forecast_duration) : undefined}
             onValueChange={(value) => handleInputChange("forecast_duration", parseInt(value) as 12 | 24 | 36)}
           >
             <SelectTrigger>
@@ -536,7 +590,7 @@ export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false }: 
             Data Source <span className="text-red-500">*</span>
           </Label>
           <Select
-            value={formData.data_source_type}
+            value={formData.data_source_type || undefined}
             onValueChange={(value) => handleInputChange("data_source_type", value as any)}
           >
             <SelectTrigger>

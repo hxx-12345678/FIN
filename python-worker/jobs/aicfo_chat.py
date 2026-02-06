@@ -207,12 +207,15 @@ Respond ONLY in valid JSON format."""
         response = None
         invalid_keys = set()  # Track permanently invalid keys (leaked/expired) to skip faster
         
-        # Try Gemini 2.5 models first, then fallback to 2.0 and 1.5
+        # Try Gemini 2.5 Flash (highest success rate) first, then 2.0 Flash fallback
+        # 2.5 Pro often has 0 quota on free tier, so we deprioritize it
         models_to_try = [
-            'gemini-2.5-flash',  # Fastest, best for chat
-            'gemini-2.5-pro'    # Most capable for complex analysis
+            'gemini-2.5-flash',
+            'gemini-2.0-flash',
+            'gemini-1.5-flash' # Final stable fallback
         ]
-        api_versions = ['v1beta', 'v1']
+        api_versions = ['v1beta']
+
         
         for model_name in models_to_try:
             if response: break
@@ -249,7 +252,9 @@ Respond ONLY in valid JSON format."""
                         logger.debug(f"Payload for {model_name}: {json.dumps(gen_config)}")
                         
                         start_time = time.time()
-                        resp = requests.post(url, json=payload, timeout=20)
+                        # CRITICAL: Increased timeout to 60s for experimental models
+                        resp = requests.post(url, json=payload, timeout=60)
+
                         
                         if resp.status_code == 200:
                             response = resp
@@ -262,7 +267,8 @@ Respond ONLY in valid JSON format."""
                             if "response_mime_type" in gen_config:
                                 del gen_config["response_mime_type"]
                             payload["generationConfig"] = gen_config
-                            resp = requests.post(url, json=payload, timeout=20)
+                            resp = requests.post(url, json=payload, timeout=60)
+
                             if resp.status_code == 200:
                                 response = resp
                                 gemini_model = model_name
@@ -342,50 +348,48 @@ Respond ONLY in valid JSON format."""
                 try:
                     parsed = json.loads(json_str)
                 except json.JSONDecodeError as parse_error:
-                    logger.warning(f"Initial JSON parse failed: {parse_error}. Attempting repair...")
+                    logger.warning(f"Initial JSON parse failed: {parse_error}. Attempting expert repair...")
                     
-                    # Try to fix unterminated strings by finding the last incomplete string
-                    # and closing it properly
-                    error_pos = getattr(parse_error, 'pos', None) or 0
+                    # 1. Clean up common Markdown mess
+                    # Remove any text before the first {
+                    start_brace = json_str.find('{')
+                    if start_brace > 0:
+                        json_str = json_str[start_brace:]
                     
-                    # Strategy: Find incomplete string values and complete them
-                    # Look for patterns like: "action": "text that is unterminated
-                    # We'll try to find where the string should end
-                    
-                    # For unterminated strings, try to find the next valid JSON structure
-                    # and close the string before it
+                    # 2. Fix Unterminated String (Truncation)
                     if 'Unterminated string' in str(parse_error):
-                        # Find the position where the string starts
-                        # Look backwards from error position to find opening quote
-                        start_pos = json_str.rfind('"', 0, error_pos)
-                        if start_pos != -1:
-                            # Try to find where the string should end (next unescaped quote or end of object)
-                            # Look for patterns that suggest string continuation
-                            # If we can't find a closing quote, try to insert one before the next structural character
-                            remaining = json_str[error_pos:]
-                            # Look for next structural character that would end the string
-                            next_comma = remaining.find(',')
-                            next_brace = remaining.find('}')
-                            next_bracket = remaining.find(']')
-                            
-                            # Find the earliest structural character
-                            end_markers = [m for m in [next_comma, next_brace, next_bracket] if m != -1]
-                            if end_markers:
-                                insert_pos = error_pos + min(end_markers)
-                                # Insert closing quote before the structural character
-                                json_str = json_str[:insert_pos] + '"' + json_str[insert_pos:]
-                                logger.info(f"Repaired unterminated string at position {insert_pos}")
+                        # The string was likely cut off. We need to close it and the JSON structure.
+                        # Find the last quote
+                        last_quote = json_str.rfind('"')
+                        if last_quote > -1:
+                            # Heuristic: If the last quote is very near the end, it might be the start of the unterminated string
+                            # Or it might be the end of the last valid string.
+                            # Let's try to close the string and the object.
+                            # Just cap it off.
+                             json_str += '"}]}' 
+                             logger.info("Appended closing tag for truncated JSON")
+
+                    # 3. Fix "Expecting property name" (often due to trailing commas or unquoted keys)
+                    # Simple regex to remove trailing commas before } or ]
+                    json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
                     
-                    # Also fix unescaped newlines in strings
-                    # Replace literal newlines within string values with \n
-                    # This is tricky - we need to be careful not to break valid JSON
-                    # For now, try parsing again after the repair
                     try:
                         parsed = json.loads(json_str)
+                        logger.info("✅ Repair successful!")
                     except json.JSONDecodeError as e2:
-                        logger.warning(f"Repair attempt failed: {e2}. Using fallback extraction...")
-                        # Fall through to regex extraction below
-                        raise e2
+                         logger.warning(f"Repair 2 failed: {e2}. Trying aggressive truncation...")
+                         # Last ditch: Find the last valid '}' and cut everything after
+                         last_brace = json_str.rfind('}')
+                         if last_brace > 0:
+                             trunc_str = json_str[:last_brace+1]
+                             try:
+                                 parsed = json.loads(trunc_str)
+                                 logger.info("✅ Aggressive truncation successful!")
+                             except Exception:
+                                 raise e2
+                         else:
+                             raise e2
+
                 
                 # If we got here, parsing succeeded
                 natural_language = parsed.get('naturalLanguage', '')

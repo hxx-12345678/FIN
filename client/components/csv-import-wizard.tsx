@@ -73,7 +73,13 @@ const targetFields = [
   { value: "currency", label: "Currency", required: false },
 ]
 
-export function CSVImportWizard() {
+interface CSVImportWizardProps {
+  orgId?: string | null
+  token?: string | null
+  onImportComplete?: () => void
+}
+
+export function CSVImportWizard({ orgId: propOrgId, token: propToken, onImportComplete }: CSVImportWizardProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [step, setStep] = useState<"upload" | "preview" | "mapping" | "review">("upload")
   const [csvFile, setCsvFile] = useState<File | null>(null)
@@ -93,7 +99,7 @@ export function CSVImportWizard() {
   const [pendingJobId, setPendingJobId] = useState<string | null>(null)
   const [currentJobId, setCurrentJobId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  
+
   // Effect to handle step transition when job is created
   useEffect(() => {
     if (pendingJobId) {
@@ -242,9 +248,9 @@ export function CSVImportWizard() {
   // Calculate confidence for a field even if not auto-mapped
   const getFieldConfidence = (targetField: string, csvColumn: string | null): number => {
     if (!csvColumn) return 0
-    
+
     const headerLower = csvColumn.toLowerCase().trim()
-    
+
     switch (targetField) {
       case "date":
         if (headerLower === "date") return 98
@@ -338,34 +344,34 @@ export function CSVImportWizard() {
           }
           i++
         }
-        
+
         // Push the last field
         result.push(current.trim())
-        
+
         // Clean up empty trailing fields
         while (result.length > 0 && result[result.length - 1] === "") {
           result.pop()
         }
-        
+
         return result
       }
 
       const headers = parseCSVLine(lines[0])
       console.log("📋 Parsed headers:", headers)
-      
+
       if (headers.length === 0 || headers.every(h => !h.trim())) {
         toast.error("CSV file has no headers. Please check the file format.")
         return
       }
-      
+
       // Clean headers - remove empty strings and trim
       const cleanHeaders = headers.filter(h => h.trim().length > 0).map(h => h.trim())
-      
+
       if (cleanHeaders.length === 0) {
         toast.error("CSV file has no valid headers. Please check the file format.")
         return
       }
-      
+
       setCsvHeaders(cleanHeaders)
       console.log("✅ Headers set:", cleanHeaders.length)
 
@@ -376,20 +382,20 @@ export function CSVImportWizard() {
       for (let i = startIndex; i < lines.length; i++) {
         const line = lines[i].trim()
         if (!line) continue // Skip empty lines
-        
+
         const values = parseCSVLine(line)
         if (values.length === 0) continue // Skip rows with no data
-        
+
         const row: CSVRow = {}
         let hasData = false
-        
+
         cleanHeaders.forEach((header, index) => {
           const value = (values[index] || "").trim()
           // Clean the value: remove extra whitespace, handle null/undefined
           row[header] = value === "null" || value === "undefined" || value === "NULL" || value === "UNDEFINED" ? "" : value
           if (value) hasData = true
         })
-        
+
         // Only add rows that have at least some data
         if (hasData) {
           data.push(row)
@@ -397,7 +403,7 @@ export function CSVImportWizard() {
       }
 
       console.log("📊 Parsed data rows:", data.length)
-      
+
       if (data.length === 0) {
         toast.error("CSV file has no data rows. Please check the file.")
         return
@@ -425,7 +431,7 @@ export function CSVImportWizard() {
       setFieldMappings((prev) => prev.filter((m) => m.targetField !== targetField))
       return
     }
-    
+
     setFieldMappings((prev) => {
       const existing = prev.find((m) => m.targetField === targetField)
       if (existing) {
@@ -502,14 +508,14 @@ export function CSVImportWizard() {
       fieldMappingsCount: fieldMappings.length,
       csvDataRows: csvData.length
     })
-    
+
     if (!validateMappings()) {
       console.error("❌ Validation failed")
       toast.error("Please complete all required field mappings")
       return
     }
     console.log("✅ Validation passed")
-    
+
     if (!csvFile) {
       console.error("❌ No CSV file selected")
       toast.error("Please select a CSV file")
@@ -525,7 +531,7 @@ export function CSVImportWizard() {
 
     try {
       // Get orgId and token
-      const token = localStorage.getItem("auth-token") || document.cookie
+      const token = propToken || localStorage.getItem("auth-token") || document.cookie
         .split("; ")
         .find((row) => row.startsWith("auth-token="))
         ?.split("=")[1]
@@ -536,11 +542,11 @@ export function CSVImportWizard() {
         setIsImporting(false)
         return
       }
-      
+
       console.log("✅ Auth token found")
 
       // Get orgId
-      let orgId = localStorage.getItem("orgId")
+      let orgId = propOrgId || localStorage.getItem("orgId")
       if (!orgId) {
         const meResponse = await fetch(`${API_BASE_URL}/auth/me`, {
           headers: {
@@ -567,7 +573,7 @@ export function CSVImportWizard() {
         setIsImporting(false)
         return
       }
-      
+
       console.log("✅ OrgId found:", orgId)
 
       // Step 1: Upload CSV file
@@ -579,7 +585,7 @@ export function CSVImportWizard() {
       console.log("📤 API_BASE_URL:", API_BASE_URL)
       console.log("📤 Full upload URL:", uploadUrl)
       console.log("📤 Upload file size:", formData.get('file') instanceof File ? (formData.get('file') as File).size : 'unknown')
-      
+
       const uploadResponse = await fetch(uploadUrl, {
         method: "POST",
         headers: {
@@ -601,7 +607,7 @@ export function CSVImportWizard() {
         let errorData: any = {}
         try {
           errorData = JSON.parse(errorText)
-        } catch {}
+        } catch { }
         const errorMsg = errorData.error?.message || errorData.message || errorText || "Failed to upload CSV file"
         toast.error(`Upload failed: ${errorMsg}`)
         console.error("❌ Upload failed details:", {
@@ -618,7 +624,7 @@ export function CSVImportWizard() {
       console.log("📥 Parsing upload response...")
       const uploadResult = await uploadResponse.json()
       console.log("📥 Upload result parsed:", uploadResult)
-      
+
       if (!uploadResult.ok || !uploadResult.data?.uploadKey) {
         toast.error("Invalid upload response - missing uploadKey")
         console.error("❌ Invalid upload result:", {
@@ -640,7 +646,7 @@ export function CSVImportWizard() {
       // Step 2: Map CSV columns and create import job
       console.log("📋 Step 2: Preparing mappings...")
       toast.info("Mapping CSV columns and creating import job...")
-      
+
       const mappings: Record<string, string> = {}
       fieldMappings.forEach((mapping) => {
         // Only include mappings that have a valid CSV column (not "__none__")
@@ -648,10 +654,10 @@ export function CSVImportWizard() {
           mappings[mapping.targetField] = mapping.csvColumn
         }
       })
-      
+
       console.log("📋 Mappings prepared:", mappings)
       console.log("📋 Mappings count:", Object.keys(mappings).length)
-      
+
       // Validate that we have at least the required mappings
       const requiredFields = targetFields.filter((f) => f.required).map((f) => f.value)
       const missingRequired = requiredFields.filter((rf) => !mappings[rf])
@@ -695,7 +701,7 @@ export function CSVImportWizard() {
       })
 
       console.log("📥 Map response status:", mapResponse.status, mapResponse.statusText)
-      
+
       if (!mapResponse.ok) {
         const errorData = await mapResponse.json().catch(() => ({}))
         const errorMsg = errorData.error?.message || errorData.message || "Failed to map CSV columns"
@@ -720,7 +726,7 @@ export function CSVImportWizard() {
         hasJobId: !!mapResult.data?.jobId,
         jobId: mapResult.data?.jobId
       })
-      
+
       if (!mapResult.ok || !mapResult.data?.jobId) {
         toast.error("Invalid map response - job ID not found")
         console.error("❌ Invalid map result:", mapResult)
@@ -730,30 +736,30 @@ export function CSVImportWizard() {
 
       const jobId = mapResult.data.jobId
       console.log("✅ Import job created successfully! Job ID:", jobId)
-      
+
       if (!jobId) {
         console.error("❌ Job ID is missing from response")
         toast.error("Failed to create import job. Please try again.")
         setIsImporting(false)
         return
       }
-      
+
       toast.success("CSV columns mapped. Processing import...")
-      
+
       // CRITICAL: Store job ID and transition to step 4 IMMEDIATELY
       console.log("🔄 Transitioning to step 4 (review) for job:", jobId)
       setCurrentJobId(jobId)
       setPendingJobId(jobId) // This triggers useEffect to set step to "review"
       setStep("review") // Direct state update for immediate transition
       setIsImporting(false) // Job is created, polling will handle progress
-      
+
       console.log("✅ Step transition initiated - step should be 'review' now")
 
       // Step 4: Poll for job completion - START IMMEDIATELY
       const totalRows = csvData.length
       let attempts = 0
       const maxAttempts = 300 // 10 minutes max (increased for large files)
-      
+
       console.log("🚀 Starting polling for job:", jobId, "Total rows:", totalRows)
       console.log("📊 Polling will check every 2 seconds, max attempts:", maxAttempts)
 
@@ -771,7 +777,7 @@ export function CSVImportWizard() {
         try {
           attempts++
           console.log(`📡 Polling attempt ${attempts}/${maxAttempts} for job ${jobId}`)
-          
+
           const jobResponse = await fetch(`${API_BASE_URL}/jobs/${jobId}`, {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -787,7 +793,7 @@ export function CSVImportWizard() {
               progress: jobResult.job?.progress || jobResult.progress,
               hasLogs: !!jobResult.job?.logs || !!jobResult.logs
             })
-            
+
             // Handle different response formats - be more lenient
             let job = null
             if (jobResult.job) {
@@ -801,20 +807,20 @@ export function CSVImportWizard() {
               // Try to use the response as job data
               job = jobResult
             }
-            
+
             if (!job) {
               console.error("❌ Could not extract job data from response")
               throw new Error("Invalid job response format")
             }
             const jobStatus = job.status || job.jobStatus
             const progress = job.progress || 0
-            
+
             // Parse logs - can be array or object
             let logs: any = job.logs || {}
             let importedCount = 0
             let rowsImported = 0
             let rowsSkipped = 0
-            
+
             if (Array.isArray(logs)) {
               // Extract data from log entries - check most recent entries first
               for (let i = logs.length - 1; i >= 0; i--) {
@@ -837,33 +843,36 @@ export function CSVImportWizard() {
               rowsImported = logs.rows_imported || logs.rowsImported || 0
               rowsSkipped = logs.rows_skipped || logs.rowsSkipped || 0
             }
-            
+
             // Calculate imported count from logs first, then fallback to progress
             importedCount = rowsImported > 0 ? rowsImported : Math.max(0, Math.floor((progress / 100) * totalRows))
             setImportedRows(importedCount)
 
             console.log(`Job ${jobId} status: ${jobStatus}, progress: ${progress}%, imported: ${rowsImported}, skipped: ${rowsSkipped}, totalRows: ${totalRows}`)
 
-              if (jobStatus === "done" || jobStatus === "completed" || jobStatus === "finished") {
-                // Get final count from logs if available
-                const finalImported = rowsImported > 0 ? rowsImported : (progress >= 100 ? totalRows : importedCount)
-                setImportedRows(finalImported)
-                const message = rowsSkipped > 0 
-                  ? `Successfully imported ${finalImported} transactions! (${rowsSkipped} skipped)`
-                  : `Successfully imported ${finalImported} transactions!`
-                toast.success(message)
-                
-                // Trigger data refresh in other components
-                window.dispatchEvent(new CustomEvent('csv-import-completed', { 
-                  detail: { rowsImported: finalImported, orgId } 
-                }))
-                
-                // Close dialog after a short delay
-                setTimeout(() => {
-                  setIsOpen(false)
-                  resetWizard()
-                }, 2000)
-                return
+            if (jobStatus === "done" || jobStatus === "completed" || jobStatus === "finished") {
+              // Get final count from logs if available
+              const finalImported = rowsImported > 0 ? rowsImported : (progress >= 100 ? totalRows : importedCount)
+              setImportedRows(finalImported)
+              const message = rowsSkipped > 0
+                ? `Successfully imported ${finalImported} transactions! (${rowsSkipped} skipped)`
+                : `Successfully imported ${finalImported} transactions!`
+              toast.success(message)
+
+              // Trigger data refresh in other components
+              if (onImportComplete) {
+                onImportComplete()
+              }
+              window.dispatchEvent(new CustomEvent('csv-import-completed', {
+                detail: { rowsImported: finalImported, orgId }
+              }))
+
+              // Close dialog after a short delay
+              setTimeout(() => {
+                setIsOpen(false)
+                resetWizard()
+              }, 2000)
+              return
             } else if (jobStatus === "failed" || jobStatus === "dead_letter" || jobStatus === "error") {
               const errorMsg = job.lastError || job.last_error || "Import failed"
               throw new Error(errorMsg)
@@ -970,13 +979,12 @@ export function CSVImportWizard() {
             {["upload", "preview", "mapping", "review"].map((s, index) => (
               <div key={s} className="flex items-center flex-1">
                 <div
-                  className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${
-                    step === s
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : ["upload", "preview", "mapping", "review"].indexOf(step) > index
-                        ? "bg-green-500 text-white border-green-500"
-                        : "bg-muted text-muted-foreground border-muted"
-                  }`}
+                  className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${step === s
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : ["upload", "preview", "mapping", "review"].indexOf(step) > index
+                      ? "bg-green-500 text-white border-green-500"
+                      : "bg-muted text-muted-foreground border-muted"
+                    }`}
                 >
                   {["upload", "preview", "mapping", "review"].indexOf(step) > index ? (
                     <CheckCircle2 className="h-4 w-4" />
@@ -987,11 +995,10 @@ export function CSVImportWizard() {
                 <div className="flex-1 h-0.5 mx-2 bg-muted">
                   {index < 3 && (
                     <div
-                      className={`h-full ${
-                        ["upload", "preview", "mapping", "review"].indexOf(step) > index
-                          ? "bg-green-500"
-                          : ""
-                      }`}
+                      className={`h-full ${["upload", "preview", "mapping", "review"].indexOf(step) > index
+                        ? "bg-green-500"
+                        : ""
+                        }`}
                     />
                   )}
                 </div>
@@ -1087,7 +1094,7 @@ export function CSVImportWizard() {
                   <p className="text-sm text-muted-foreground">
                     Showing {previewRows.length} of {csvData.length} rows
                   </p>
-                  <Button 
+                  <Button
                     onClick={() => {
                       console.log("🔄 Continue to Mapping clicked")
                       console.log("📊 Current state:", {
@@ -1166,20 +1173,19 @@ export function CSVImportWizard() {
                           const currentColumn = getMappedColumn(field.value)
                           const confidence = mapping?.confidence || (currentColumn !== "__none__" ? getFieldConfidence(field.value, currentColumn) : 0)
                           const isMapped = currentColumn !== "__none__"
-                          
+
                           return (
                             <div key={field.value} className="flex items-center gap-4 p-3 border rounded-lg bg-white">
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <Label className="font-medium">{field.label}</Label>
                                   {isMapped && confidence > 0 && (
-                                    <Badge 
-                                      variant="secondary" 
-                                      className={`text-xs ${
-                                        confidence >= 90 ? "bg-green-100 text-green-700" :
+                                    <Badge
+                                      variant="secondary"
+                                      className={`text-xs ${confidence >= 90 ? "bg-green-100 text-green-700" :
                                         confidence >= 75 ? "bg-blue-100 text-blue-700" :
-                                        "bg-yellow-100 text-yellow-700"
-                                      }`}
+                                          "bg-yellow-100 text-yellow-700"
+                                        }`}
                                     >
                                       {confidence}% confidence
                                     </Badge>
@@ -1201,8 +1207,8 @@ export function CSVImportWizard() {
                                     setFieldMappings((prev) => {
                                       const existing = prev.find((m) => m.targetField === field.value)
                                       if (existing) {
-                                        return prev.map((m) => 
-                                          m.targetField === field.value 
+                                        return prev.map((m) =>
+                                          m.targetField === field.value
                                             ? { ...m, csvColumn: value, confidence: newConfidence }
                                             : m
                                         )
@@ -1242,7 +1248,7 @@ export function CSVImportWizard() {
                             const currentColumn = getMappedColumn(field.value)
                             const confidence = mapping?.confidence || (currentColumn !== "__none__" ? getFieldConfidence(field.value, currentColumn) : 0)
                             const isMapped = currentColumn !== "__none__"
-                            
+
                             return (
                               <div
                                 key={field.value}
@@ -1252,13 +1258,12 @@ export function CSVImportWizard() {
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <Label className="font-medium">{field.label}</Label>
                                     {isMapped && confidence > 0 && (
-                                      <Badge 
-                                        variant="secondary" 
-                                        className={`text-xs ${
-                                          confidence >= 90 ? "bg-green-100 text-green-700" :
+                                      <Badge
+                                        variant="secondary"
+                                        className={`text-xs ${confidence >= 90 ? "bg-green-100 text-green-700" :
                                           confidence >= 75 ? "bg-blue-100 text-blue-700" :
-                                          "bg-yellow-100 text-yellow-700"
-                                        }`}
+                                            "bg-yellow-100 text-yellow-700"
+                                          }`}
                                       >
                                         {confidence}% confidence
                                       </Badge>
@@ -1280,8 +1285,8 @@ export function CSVImportWizard() {
                                       setFieldMappings((prev) => {
                                         const existing = prev.find((m) => m.targetField === field.value)
                                         if (existing) {
-                                          return prev.map((m) => 
-                                            m.targetField === field.value 
+                                          return prev.map((m) =>
+                                            m.targetField === field.value
                                               ? { ...m, csvColumn: value, confidence: newConfidence }
                                               : m
                                           )
@@ -1422,8 +1427,8 @@ export function CSVImportWizard() {
                   <Button variant="outline" onClick={() => setStep("preview")} disabled={isImporting}>
                     Back
                   </Button>
-                  <Button 
-                    onClick={handleImport} 
+                  <Button
+                    onClick={handleImport}
                     disabled={!validateMappings() || isImporting}
                   >
                     {isImporting ? (

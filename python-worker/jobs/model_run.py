@@ -750,7 +750,20 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                     overrides[key] = value
         
         # Merge assumptions with overrides (overrides take precedence)
-        final_assumptions = {**assumptions, **overrides}
+        # Handle industrial nested assumptions by flattening them
+        flat_assumptions = {}
+        if isinstance(assumptions, dict):
+            for k, v in assumptions.items():
+                if isinstance(v, dict):
+                    for sub_k, sub_v in v.items():
+                        # Support both k.sub_k and sub_k formats
+                        flat_assumptions[f"{k}.{sub_k}"] = sub_v
+                        if sub_k not in flat_assumptions:
+                            flat_assumptions[sub_k] = sub_v
+                else:
+                    flat_assumptions[k] = v
+                    
+        final_assumptions = {**flat_assumptions, **overrides}
         
         # STEP 1: Get actual transaction data as baseline (Industry Standard: Use historical data)
         logger.info(f"Fetching transaction data for org {org_id}")

@@ -46,7 +46,7 @@ JOB_HANDLERS = {
     'xlsx_preview': handle_xlsx_preview,
     'xlsx_import': handle_xlsx_import,
     'model_run': handle_model_run,
-    'auto_model_trigger': handle_auto_model,
+    'auto_model': handle_auto_model,
     'monte_carlo': handle_monte_carlo,
     'alert_check': handle_alert_check,
     'export_pdf': handle_export_pdf,
