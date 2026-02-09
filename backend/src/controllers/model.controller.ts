@@ -14,7 +14,7 @@ export const modelController = {
       }
 
       const { org_id } = req.params;
-      
+
       // Use new financial model service for enhanced creation
       const result = await financialModelService.createModel(
         req.user.id,
@@ -745,5 +745,46 @@ export const modelController = {
     } catch (error) {
       next(error);
     }
+  },
+
+  getDrivers: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { org_id, model_id } = req.params;
+      const drivers = await financialModelService.getDrivers(org_id, model_id);
+      res.json({ ok: true, drivers });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  upsertDriver: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { org_id, model_id } = req.params;
+      const driver = await financialModelService.upsertDriver(org_id, model_id, req.body);
+      res.json({ ok: true, driver });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  updateDriverValues: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { org_id, scenario_id, driver_id } = req.params;
+      const result = await financialModelService.updateDriverValues(org_id, scenario_id, driver_id, req.body.values);
+      res.json({ ok: true, result });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  getScenarios: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { org_id, model_id } = req.params;
+      const scenarios = await financialModelService.getScenarios(org_id, model_id);
+      res.json({ ok: true, scenarios });
+    } catch (error) {
+      next(error);
+    }
   }
 };
+

@@ -482,7 +482,139 @@ export const financialModelService = {
 
     return assumptions;
   },
+
+  /**
+   * Get all drivers for a model
+   */
+  async getDrivers(orgId: string, modelId: string) {
+    const drivers = await prisma.driver.findMany({
+      where: { orgId, modelId },
+      include: {
+        formulas: true,
+        values: {
+          take: 36, // Get up to 3 years of values
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    return drivers;
+  },
+
+  /**
+   * Upsert a driver (create or update metadata)
+   */
+  async upsertDriver(orgId: string, modelId: string, driverData: any) {
+    const { id, name, type, category, timeGranularity, unit, isCalculated, formula } = driverData;
+
+    return await prisma.$transaction(async (tx) => {
+      const driver = await tx.driver.upsert({
+        where: { id: id && id !== 'new' ? id : '00000000-0000-0000-0000-000000000000' },
+        create: {
+          orgId,
+          modelId,
+          name,
+          type,
+          category,
+          unit,
+          timeGranularity: timeGranularity || 'monthly',
+          isCalculated: isCalculated || false,
+          formula,
+        },
+        update: {
+          name,
+          type: type || 'operational',
+          category,
+          unit,
+          timeGranularity: timeGranularity || 'monthly',
+          isCalculated: isCalculated || false,
+          formula,
+        },
+      });
+
+      // Handle DriverFormula table if calculated
+      if (isCalculated && formula) {
+        // Extract dependencies (UUIDs of other drivers)
+        const deps = Array.from(formula.matchAll(/[a-f0-9-]{36}/g)).map(m => m[0]);
+
+        const existingFormula = await tx.driverFormula.findFirst({ where: { driverId: driver.id } });
+
+        if (existingFormula) {
+          await tx.driverFormula.update({
+            where: { id: existingFormula.id },
+            data: { expression: formula, dependencies: deps },
+          });
+        } else {
+          await tx.driverFormula.create({
+            data: {
+              orgId,
+              modelId,
+              driverId: driver.id,
+              expression: formula,
+              dependencies: deps,
+            },
+          });
+        }
+      }
+
+      return driver;
+    });
+  },
+
+  /**
+   * Update driver values for a scenario
+   */
+  async updateDriverValues(orgId: string, scenarioId: string, driverId: string, values: { month: string, value: number }[]) {
+    // Use transaction to update all values
+    return await prisma.$transaction(
+      values.map(v => prisma.driverValue.upsert({
+        where: {
+          driverId_scenarioId_month: {
+            driverId,
+            scenarioId,
+            month: v.month,
+          },
+        },
+        create: {
+          driverId,
+          scenarioId,
+          month: v.month,
+          value: v.value,
+        },
+        update: {
+          value: v.value,
+        },
+      }))
+    );
+  },
+
+  /**
+   * Get scenarios for a model
+   */
+  async getScenarios(orgId: string, modelId: string) {
+    let scenarios = await prisma.financialScenario.findMany({
+      where: { orgId, modelId },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (scenarios.length === 0) {
+      // Seed default scenarios
+      await prisma.financialScenario.createMany({
+        data: [
+          { orgId, modelId, name: 'Base', isDefault: true, color: '#3b82f6' },
+          { orgId, modelId, name: 'Optimistic', color: '#10b981' },
+          { orgId, modelId, name: 'Pessimistic', color: '#ef4444' },
+        ],
+      });
+      scenarios = await prisma.financialScenario.findMany({
+        where: { orgId, modelId },
+        orderBy: { createdAt: 'asc' },
+      });
+    }
+
+    return scenarios;
+  },
 };
+
 
 
 

@@ -10,8 +10,11 @@ from utils.timer import CPUTimer
 from jobs.runner import check_cancel_requested, mark_cancelled, update_progress, queue_job
 from jobs.provenance_writer import write_provenance_batch, create_cell_key
 from utils.model_cache import generate_input_hash, get_cached_model_run, cache_model_run
+from jobs.engine import DriverBasedEngine
+from jobs.three_statement_engine import compute_three_statements
 
 logger = setup_logger()
+
 
 MODEL_TYPE_PROFILES: Dict[str, Dict[str, Any]] = {
     'prophet': {
@@ -841,7 +844,60 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             logger.warning("No start month in model metadata, using current month")
             current_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         
+        # --- NEW: Driver-Based Engine Implementation ---
+        model_id = model_json.get('id')
+        cursor.execute("SELECT id FROM drivers WHERE model_id = %s", (model_id,))
+        has_drivers = cursor.fetchone()
+        
+        driver_results = {}
+        if has_drivers:
+            logger.info(f"Found drivers for model {model_id}, executing Driver-Based Engine")
+            engine = DriverBasedEngine()
+            
+            # 1. Fetch all drivers
+            cursor.execute("SELECT id, name, type, category, is_calculated, formula FROM drivers WHERE model_id = %s", (model_id,))
+            drivers = cursor.fetchall()
+            for d in drivers:
+                engine.add_driver(str(d[0]), d[1], d[2], d[3])
+            
+            # 2. Fetch all formulas
+            cursor.execute("SELECT driver_id, expression, dependencies FROM driver_formulas WHERE model_id = %s", (model_id,))
+            formulas = cursor.fetchall()
+            for f in formulas:
+                engine.add_formula(str(f[0]), f[1], f[2] if isinstance(f[2], list) else json.loads(f[2]))
+            
+            # 3. Fetch values for the current scenario
+            # Use run_type or a specific scenario if provided in params
+            scenario_name = params_json.get('scenarioName', 'Base')
+            cursor.execute("SELECT id FROM financial_scenarios WHERE model_id = %s AND name = %s", (model_id, scenario_name))
+            scenario_row = cursor.fetchone()
+            if scenario_row:
+                scenario_id = scenario_row[0]
+                cursor.execute("SELECT driver_id, month, value FROM driver_values WHERE scenario_id = %s", (scenario_id,))
+                values = cursor.fetchall()
+                # Group values by driver
+                d_values = {}
+                for v in values:
+                    d_id = str(v[0])
+                    if d_id not in d_values: d_values[d_id] = {}
+                    d_values[d_id][v[1]] = float(v[2])
+                for d_id, m_vals in d_values.items():
+                    engine.set_driver_values(d_id, m_vals)
+            
+            # 4. Compute
+            horizon_raw = params_json.get('horizon') or 12
+            if isinstance(horizon_raw, str):
+                horizon = HORIZON_TO_MONTHS.get(horizon_raw.lower(), 12)
+            else:
+                horizon = int(horizon_raw)
+                
+            compute_months = [add_months(current_month, i).strftime('%Y-%m') for i in range(horizon)]
+            driver_results = engine.compute(compute_months)
+            logger.info(f"Driver-Based Engine computation complete. Nodes: {len(driver_results)}")
+        # --- END Driver-Based Engine ---
+
         # Filter transactions to use most recent data available
+
         # Prefer last 12 months before start, but use all available if that's all we have
         #
         # IMPORTANT: raw_transactions.date is a SQL DATE, which psycopg returns as datetime.date.
@@ -992,63 +1048,72 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             month_date = add_months(current_month, i)
             month_key = f"{month_date.year}-{str(month_date.month).zfill(2)}"
             
-            seasonal = model_profile['seasonality_amplitude'] * math.sin(2 * math.pi * (i + 1) / 12.0)
-            innovation = model_profile['innovation_factor'] * math.cos(2 * math.pi * (i + 1) / 6.0)
-            volatility = model_profile['volatility'] * (1 if i % 2 == 0 else -1)
-            growth_multiplier = max(0.01, (1 + revenue_growth) ** i)
-            expense_multiplier = max(0.01, (1 + expense_growth) ** i)
+            # --- NEW: Map Drivers to Statement Items ---
+            projected_revenue = None
+            projected_cogs = None
+            projected_opex = None
             
-            projected_revenue = starting_revenue * growth_multiplier
-            projected_revenue *= max(0.5, 1 + seasonal + innovation + volatility)
+            if driver_results:
+                # Find drivers by name/type
+                for d_id, m_data in driver_results.items():
+                    d_meta = engine.drivers_meta.get(d_id, {})
+                    d_name = d_meta.get('name', '').lower()
+                    if d_name == 'revenue' or d_meta.get('type') == 'revenue':
+                        projected_revenue = m_data.get(month_key)
+                    elif d_name == 'cogs' or 'cogs' in d_name:
+                        projected_cogs = m_data.get(month_key)
+                    elif d_name == 'opex' or 'operating expenses' in d_name or d_meta.get('type') == 'cost':
+                        if projected_opex is None: projected_opex = 0
+                        projected_opex += m_data.get(month_key, 0)
+
+            # Fallback to deterministic logic if driver not found
+            if projected_revenue is None:
+                seasonal = model_profile['seasonality_amplitude'] * math.sin(2 * math.pi * (i + 1) / 12.0)
+                innovation = model_profile['innovation_factor'] * math.cos(2 * math.pi * (i + 1) / 6.0)
+                volatility = model_profile['volatility'] * (1 if i % 2 == 0 else -1)
+                growth_multiplier = max(0.01, (1 + revenue_growth) ** i)
+                projected_revenue = starting_revenue * growth_multiplier
+                projected_revenue *= max(0.5, 1 + seasonal + innovation + volatility)
+            
             projected_revenue = max(0.0, projected_revenue)
             
-            # Industry Standard: Separate COGS from Operating Expenses
-            # COGS = Cost of Goods Sold (direct costs) - grows proportionally with revenue
-            # Operating Expenses = SG&A (Sales, General & Administrative) - grows independently
-            if starting_revenue > 0:
-                projected_cogs = starting_cogs * (projected_revenue / starting_revenue)
-            else:
-                projected_cogs = starting_cogs
-            projected_opex = max(0.0, starting_opex * expense_multiplier)
-            projected_total_expenses = projected_cogs + projected_opex
+            if projected_cogs is None:
+                if starting_revenue > 0:
+                    projected_cogs = starting_cogs * (projected_revenue / starting_revenue)
+                else:
+                    projected_cogs = starting_cogs
             
-            # Industry Standard: Net Income = Revenue - COGS - Operating Expenses
+            if projected_opex is None:
+                expense_multiplier = max(0.01, (1 + expense_growth) ** i)
+                projected_opex = max(0.0, starting_opex * expense_multiplier)
+            
+            projected_total_expenses = projected_cogs + projected_opex
             projected_net_income = projected_revenue - projected_total_expenses
-            # Industry Standard: Burn Rate = Operating Expenses - Revenue (for startups)
-            # Or: Burn Rate = Total Expenses - Revenue
             projected_burn_rate = projected_total_expenses - projected_revenue
             
             previous_cash = monthly_data[list(monthly_data.keys())[-1]]['cashBalance'] if monthly_data else initial_cash
             cash_balance = previous_cash + projected_net_income
             
             if projected_burn_rate > 0:
-                # Calculate runway: Cash Balance / Monthly Burn Rate
-                if projected_burn_rate > 0:
-                    runway_months = max(0.0, cash_balance / projected_burn_rate)
-                elif projected_burn_rate == 0:
-                    # No burn rate means infinite runway (cap at 999 for display)
-                    runway_months = 999
-                else:
-                    # Negative burn rate (profit) means infinite runway
-                    runway_months = 999
+                runway_months = max(0.0, cash_balance / projected_burn_rate)
             else:
-                # No cash balance - runway is 0
-                runway_months = 0
+                runway_months = 999
             
             confidence_for_month = max(60.0, min(99.0, model_profile['confidence'] - i * 0.5))
             
             monthly_data[month_key] = {
                 'revenue': float(projected_revenue),
-                'expenses': float(projected_total_expenses),  # Total expenses (COGS + Operating)
-                'cogs': float(projected_cogs),  # Cost of Goods Sold
-                'opex': float(projected_opex),  # Operating Expenses
-                'grossProfit': float(projected_revenue - projected_cogs),  # Industry Standard: Gross Profit = Revenue - COGS
-                'netIncome': float(projected_net_income),  # Industry Standard: Net Income = Revenue - COGS - Operating Expenses
+                'expenses': float(projected_total_expenses),
+                'cogs': float(projected_cogs),
+                'opex': float(projected_opex),
+                'grossProfit': float(projected_revenue - projected_cogs),
+                'netIncome': float(projected_net_income),
                 'cashBalance': float(cash_balance),
                 'burnRate': float(projected_burn_rate),
                 'runwayMonths': float(runway_months) if runway_months != float('inf') else 999,
                 'confidence': float(confidence_for_month),
             }
+
         
         # STEP 3: Calculate aggregate metrics
         if not monthly_data:
@@ -1138,6 +1203,35 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             f"Baseline revenue=${avg_monthly_revenue:,.2f}/month"
         )
         
+        # STEP 6: Generate 3-Statement Financial Model
+        logger.info("Generating 3-Statement Financial Model...")
+        three_statement_model = compute_three_statements(
+            start_month=start_month_str,
+            horizon_months=forecast_months,
+            initial_values={
+                'cash': initial_cash,
+                'revenue': starting_revenue or avg_monthly_revenue,
+                'accountsReceivable': 0,
+                'accountsPayable': 0,
+                'inventory': 0,
+                'ppe': float(final_assumptions.get('ppe', 100000)),
+                'debt': float(final_assumptions.get('debt', 0)),
+                'equity': initial_cash,
+                'retainedEarnings': 0
+            },
+            growth_assumptions={
+                'revenueGrowth': revenue_growth,
+                'cogsPercentage': cogs_percentage,
+                'opexPercentage': expense_growth,
+                'taxRate': float(final_assumptions.get('taxRate', 0.25)),
+                'depreciationRate': float(final_assumptions.get('depreciationRate', 0.02)),
+                'arDays': float(final_assumptions.get('arDays', 30)),
+                'apDays': float(final_assumptions.get('apDays', 45)),
+                'capexPercentage': float(final_assumptions.get('capexPercentage', 0.05))
+            }
+        )
+        logger.info(f"3-Statement Model validation: {three_statement_model.get('validation', {}).get('passed', False)}")
+        
         return {
             'revenue': float(annual_revenue),
             'expenses': float(annual_expenses),
@@ -1163,7 +1257,13 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             'modelType': model_type,
             'forecastMonths': forecast_months,
             'confidence': confidence_pct,
+            'driverResults': driver_results,
+            'dag': engine.get_dag_metadata() if has_drivers else None,
+            # 3-Statement Financial Model
+            'statements': three_statement_model
         }
+
+
     except Exception as e:
         logger.error(f"Error computing model: {str(e)}", exc_info=True)
         # Return default values on error

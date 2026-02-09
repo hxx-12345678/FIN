@@ -13,7 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts"
 import { VirtualizedTable } from "@/components/ui/virtualized-table"
 import { useChartPagination } from "@/hooks/use-chart-pagination"
-import { Download, Upload, Zap, TrendingUp, Calculator, Brain, Save, SearchIcon, Loader2, AlertCircle, Play, FileDown, FileText, HelpCircle, Pencil, Check, X, Sparkles, Plus, LineChart as LineChartIcon, CheckCircle2, ShieldCheck } from "lucide-react"
+import { Download, Upload, Zap, TrendingUp, Calculator, Brain, Save, SearchIcon, Loader2, AlertCircle, Play, FileDown, FileText, HelpCircle, Pencil, Check, X, Sparkles, Plus, LineChart as LineChartIcon, CheckCircle2, ShieldCheck, Grid, ShieldAlert } from "lucide-react"
 import { CreateModelForm } from "./create-model-form"
 import { toast } from "sonner"
 import { ProvenanceDrawer } from "./provenance-drawer"
@@ -29,7 +29,16 @@ import { useSearchParams, useRouter } from "next/navigation"
 import { generateFinancialModelingTemplate, downloadCSV } from "@/utils/csv-template-generator"
 import { OneClickExportButton } from "./one-click-export-button"
 import { FinancialTermTooltip } from "./financial-term-tooltip"
+import { DriverManagement } from "./drivers/driver-management"
+import { ThreeStatementViewer } from "./statements/three-statement-viewer"
+import { TraceViewer } from "./hyperblock/trace-viewer"
+import { IndustrialForecasting } from "./forecasting/industrial-forecasting"
+import { RiskAnalysisHub } from "./risk/risk-analysis-hub"
+import { DependencyGraph } from "./hyperblock/dependency-graph"
+import { MultiDimensionalViewer } from "./hyperblock/multi-dimensional-viewer"
+import { ModelReasoningHub } from "./reasoning/model-reasoning-hub"
 import { API_BASE_URL } from "@/lib/api-config"
+
 
 const defaultFinancialData = [
   {
@@ -109,6 +118,20 @@ interface Model {
   type: string
   orgId: string
   createdAt: string
+  drivers?: Array<{
+    id: string
+    name: string
+    type: string
+    category?: string
+    isCalculated?: boolean
+    formula?: string
+  }>
+  driverFormulas?: Array<{
+    id: string
+    driverId: string
+    expression: string
+    dependencies: any
+  }>
 }
 
 interface ModelRun {
@@ -176,6 +199,9 @@ export function FinancialModeling() {
   const [editingModelId, setEditingModelId] = useState<string | null>(null)
   const [editingModelName, setEditingModelName] = useState<string>("")
   const [savingModelName, setSavingModelName] = useState(false)
+  const [computationTraces, setComputationTraces] = useState<any[]>([])
+  const [affectedNodeIds, setAffectedNodeIds] = useState<string[]>([])
+  const [isRecomputing, setIsRecomputing] = useState(false)
 
   const { chartData: paginatedChartData, hasMore, loadMore, initializeData } = useChartPagination({
     defaultMonths: 36,
@@ -196,7 +222,25 @@ export function FinancialModeling() {
       fetchTransactions()
       fetchConnectors(orgId)
     }
-  }, [orgId])
+    if (selectedModel) {
+      fetchTraces(selectedModel)
+    }
+  }, [orgId, selectedModel])
+
+  const fetchTraces = async (modelId: string) => {
+    try {
+      const token = localStorage.getItem("auth-token")
+      const res = await fetch(`/api/v1/orgs/${orgId}/models/${modelId}/traces`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setComputationTraces(data.traces)
+      }
+    } catch (error) {
+      console.error("Error fetching traces:", error)
+    }
+  }
 
   // Listen for CSV import completion to refresh all data
   useEffect(() => {
@@ -2652,15 +2696,46 @@ export function FinancialModeling() {
         className="space-y-4"
       >
         <div className="overflow-x-auto">
-          <TabsList className="grid w-full grid-cols-4 min-w-[400px]">
+          <TabsList className="grid w-full grid-cols-8 min-w-[800px]">
             <TabsTrigger value="statements" className="text-xs sm:text-sm">Financial Statements</TabsTrigger>
-            <TabsTrigger value="assumptions" className="text-xs sm:text-sm">Assumptions</TabsTrigger>
+            <TabsTrigger value="drivers" className="text-xs sm:text-sm">Drivers & Scenarios</TabsTrigger>
+            <TabsTrigger value="dimensions" className="text-xs sm:text-sm flex items-center gap-1">
+              <Grid className="h-3 w-3 text-indigo-400" />
+              Hypercube
+            </TabsTrigger>
+            <TabsTrigger value="forecasting" className="text-xs sm:text-sm flex items-center gap-1">
+              <TrendingUp className="h-3 w-3 text-emerald-400" />
+              Forecasting
+            </TabsTrigger>
+            <TabsTrigger value="risk" className="text-xs sm:text-sm flex items-center gap-1">
+              <ShieldAlert className="h-3 w-3 text-rose-400" />
+              Risk Engine
+            </TabsTrigger>
             <TabsTrigger value="projections" className="text-xs sm:text-sm">Projections</TabsTrigger>
             <TabsTrigger value="sensitivity" className="text-xs sm:text-sm">Sensitivity</TabsTrigger>
+            <TabsTrigger value="explainability" className="text-xs sm:text-sm flex items-center gap-1">
+              <Sparkles className="h-3 w-3 text-blue-400" />
+              Explainability
+            </TabsTrigger>
           </TabsList>
         </div>
 
         <TabsContent value="statements" className="space-y-4 overflow-x-auto overflow-y-visible">
+          {/* 3-Statement Financial Model Viewer */}
+          <ThreeStatementViewer
+            orgId={orgId}
+            modelId={selectedModel}
+            runId={currentRun?.id || null}
+            statements={(() => {
+              if (!currentRun?.summaryJson) return null;
+              const summary = typeof currentRun.summaryJson === 'string'
+                ? JSON.parse(currentRun.summaryJson)
+                : currentRun.summaryJson;
+              return summary.statements || null;
+            })()}
+          />
+
+          {/* Legacy P&L and Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
             <Card>
               <CardHeader>
@@ -2845,79 +2920,19 @@ export function FinancialModeling() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="assumptions" className="space-y-4 overflow-x-auto overflow-y-visible">
-          <Card>
-            <CardHeader>
-              <CardTitle>Model Assumptions</CardTitle>
-              <CardDescription>
-                Key assumptions driving your financial model. Hover over the <HelpCircle className="h-3 w-3 inline" /> icon to learn more about each assumption and its impact.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {!selectedModel || modelAssumptions.length === 0 ? (
-                <Alert className="mb-6 border-amber-200 bg-amber-50">
-                  <AlertCircle className="h-4 w-4 text-amber-600" />
-                  <AlertDescription className="text-sm">
-                    <strong>No Model Generated Yet:</strong> Your financial model will be generated based on the values you set in this Assumptions tab.
-                    Adjust the default values below to match your business parameters, or keep the defaults if they're appropriate.
-                    Once you run a model, these assumptions will drive all projections, cash flow calculations, and runway estimates.
-                    Hover over the help icons to understand what each assumption means and how it impacts your model.
-                  </AlertDescription>
-                </Alert>
-              ) : (
-                <Alert className="mb-6 border-blue-200 bg-blue-50">
-                  <AlertCircle className="h-4 w-4 text-blue-600" />
-                  <AlertDescription className="text-sm">
-                    <strong>Important:</strong> This financial model is built on these assumptions. Changes to assumptions will affect all projections, cash flow, and runway calculations. Hover over the help icons to understand what each assumption means and how it impacts your model.
-                  </AlertDescription>
-                </Alert>
-              )}
-              <div className="space-y-6">
-                {["Revenue", "Costs"].map((category) => (
-                  <div key={category}>
-                    <h3 className="text-lg font-semibold mb-3">{category}</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {(modelAssumptions.length > 0 ? modelAssumptions : defaultAssumptions)
-                        .filter((assumption: any) => assumption.category === category)
-                        .map((assumption: any, index: number) => (
-                          <div key={index} className="space-y-2">
-                            <Label htmlFor={`assumption-${index}`} className="flex items-center gap-1">
-                              {assumption.item}
-                              <AssumptionTooltip assumptionKey={assumption.key} />
-                            </Label>
-                            <Input
-                              id={`assumption-${index}`}
-                              value={assumptionEdits[assumption.key] ?? assumption.value}
-                              onChange={(e) => {
-                                const next = e.target.value
-                                setAssumptionEdits((prev) => ({ ...prev, [assumption.key]: next }))
-                              }}
-                              className="font-mono"
-                            />
-                          </div>
-                        ))}
-                    </div>
-                    {modelAssumptions.length === 0 && defaultAssumptions.length === 0 && (
-                      <div className="text-sm text-muted-foreground py-4">
-                        No model assumptions available. Create a model and run it to see assumptions.
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <div className="flex gap-2">
-                  <Button onClick={handleSaveAssumptions} disabled={savingAssumptions || !selectedModel}>
-                    <Save className="mr-2 h-4 w-4" />
-                    {savingAssumptions ? "Saving..." : "Save Changes"}
-                  </Button>
-                  <Button variant="outline">
-                    <Zap className="mr-2 h-4 w-4" />
-                    AI Optimize
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="drivers" className="space-y-4">
+          <DriverManagement
+            orgId={orgId}
+            modelId={selectedModel}
+            onRecompute={(data) => {
+              setComputationTraces(prev => [data.trace[0], ...prev].slice(0, 20));
+              setAffectedNodeIds(data.affectedNodes);
+              // Also update financial data if we want to show instant changes
+              // For now, we'll focus on the explainability aspect
+            }}
+          />
         </TabsContent>
+
 
         <TabsContent value="projections" className="space-y-4 overflow-x-auto overflow-y-visible">
           <Card>
@@ -3194,6 +3209,58 @@ export function FinancialModeling() {
               </CardContent>
             )}
           </Card>
+        </TabsContent>
+
+        <TabsContent value="dimensions" className="space-y-6">
+          <MultiDimensionalViewer orgId={orgId} modelId={selectedModel} />
+        </TabsContent>
+
+        <TabsContent value="forecasting" className="space-y-6">
+          <IndustrialForecasting orgId={orgId} modelId={selectedModel} />
+        </TabsContent>
+
+        <TabsContent value="risk" className="space-y-6">
+          <RiskAnalysisHub orgId={orgId} modelId={selectedModel} />
+        </TabsContent>
+
+        <TabsContent value="explainability" className="space-y-6">
+          <ModelReasoningHub modelId={selectedModel} orgId={orgId} />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              <DependencyGraph
+                nodes={(() => {
+                  if (!currentModel) return [];
+                  // Extract nodes from model drivers
+                  return currentModel.drivers?.map(d => ({
+                    id: d.id,
+                    name: d.name,
+                    type: (d as any).isCalculated ? 'formula' : 'input' as any
+                  })) || [];
+                })()}
+                edges={(() => {
+                  if (!currentModel) return [];
+                  // Extract edges from driver formulas
+                  const edges: any[] = [];
+                  currentModel.driverFormulas?.forEach(f => {
+                    const deps = typeof f.dependencies === 'string' ? JSON.parse(f.dependencies) : f.dependencies;
+                    if (Array.isArray(deps)) {
+                      deps.forEach(depId => {
+                        edges.push({ source: depId, target: f.driverId });
+                      });
+                    }
+                  });
+                  return edges;
+                })()}
+                affectedNodeIds={affectedNodeIds}
+              />
+            </div>
+            <div className="lg:col-span-1">
+              <TraceViewer
+                traces={computationTraces}
+                isLoading={loading}
+              />
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
 

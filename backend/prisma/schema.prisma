@@ -85,6 +85,13 @@ model Org {
   dataImportBatches    DataImportBatch[]
   financialLedger      FinancialLedger[]
   approvalRequests     ApprovalRequest[]
+  drivers              Driver[]
+  financialScenarios   FinancialScenario[]
+  driverFormulas       DriverFormula[]
+  computationTraces    ComputationTrace[]
+  forecasts            Forecast[]
+
+
 
   @@map("orgs")
 }
@@ -202,6 +209,12 @@ model Model {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   modelRuns ModelRun[]
+  drivers   Driver[]
+  financialScenarios FinancialScenario[]
+  driverFormulas     DriverFormula[]
+  computationTraces  ComputationTrace[]
+  forecasts          Forecast[]
+
 
   @@index([orgId])
   @@map("models")
@@ -257,6 +270,186 @@ model MonteCarloJob {
   @@index([paramsHash])
   @@map("monte_carlo_jobs")
 }
+
+model Driver {
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org             Org         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId           String      @db.Uuid
+  model           Model       @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  modelId         String      @db.Uuid
+  name            String
+  description     String?
+  type            String      // revenue|cost|headcount|operational
+  category        String?     // pricing|volume|churn|cac etc.
+  timeGranularity String      @default("monthly") @map("time_granularity") // monthly|quarterly|yearly
+  unit            String?     // percentage|currency|count
+  
+  // Formulas
+  formula         String?     // Optional: If this is a calculated driver (Pricing * Volume)
+  isCalculated    Boolean     @default(false) @map("is_calculated")
+  
+  // Versions and history
+  version         Int         @default(1)
+  
+  // Relations
+  values          DriverValue[]
+  formulas        DriverFormula[]
+  
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([orgId])
+  @@index([modelId])
+  @@map("drivers")
+}
+
+model DriverValue {
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  driver      Driver            @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  driverId    String            @db.Uuid
+  scenario    FinancialScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  scenarioId  String            @db.Uuid
+  month       String            // YYYY-MM format
+  value       Decimal           @db.Decimal(20, 4)
+  
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([driverId, scenarioId, month])
+  @@index([driverId])
+  @@index([scenarioId])
+  @@map("driver_values")
+}
+
+model FinancialScenario {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org         Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId       String   @db.Uuid
+  model       Model    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  modelId     String   @db.Uuid
+  name        String   // Base, Optimistic, Pessimistic
+  color       String?
+  isDefault   Boolean  @default(false) @map("is_default")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  
+  driverValues DriverValue[]
+
+
+  
+  @@index([orgId])
+  @@index([modelId])
+  @@map("financial_scenarios")
+}
+
+model DriverFormula {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId        String   @db.Uuid
+  modelId      String   @db.Uuid
+  driver       Driver   @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  driverId     String   @db.Uuid
+  model        Model    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  org          Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  expression   String   // The formula expression: "pricing * volume"
+  dependencies Json     // Array of driver IDs this formula depends on
+  version      Int      @default(1)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  
+  @@index([modelId])
+  @@map("driver_formulas")
+}
+
+// =============================================================================
+// MULTI-DIMENSIONAL FINANCIAL MODELING (Anaplan/Pigment Style)
+// =============================================================================
+
+model Dimension {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId       String   @db.Uuid
+  modelId     String   @db.Uuid
+  name        String   // e.g., "Geography", "Product Line", "Department", "Segment"
+  type        String   // geography|product|department|segment|channel|custom
+  displayOrder Int     @default(0) @map("display_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  
+  members     DimensionMember[]
+  
+  @@unique([orgId, modelId, name])
+  @@index([orgId])
+  @@index([modelId])
+  @@map("dimensions")
+}
+
+model DimensionMember {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dimension   Dimension @relation(fields: [dimensionId], references: [id], onDelete: Cascade)
+  dimensionId String    @db.Uuid
+  name        String    // e.g., "US", "EMEA", "Product A", "Engineering"
+  code        String?   // Optional short code for exports
+  parentId    String?   @db.Uuid // For hierarchical dimensions (e.g., US > California > SF)
+  level       Int       @default(0) // 0 = root, 1 = child, etc.
+  displayOrder Int      @default(0) @map("display_order")
+  isActive    Boolean   @default(true) @map("is_active")
+  metadata    Json?     // Optional metadata (color, description, etc.)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  
+  cubeData    MetricCube[]
+  
+  @@unique([dimensionId, name])
+  @@index([dimensionId])
+  @@index([parentId])
+  @@map("dimension_members")
+}
+
+model MetricCube {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId       String   @db.Uuid
+  modelId     String   @db.Uuid
+  metricName  String   @map("metric_name") // e.g., "revenue", "headcount", "expenses"
+  
+  // Time dimension (always present)
+  month       String   // YYYY-MM format
+  
+  // Dimensional coordinates (nullable for aggregations)
+  geographyId   String? @db.Uuid
+  productId     String? @db.Uuid
+  departmentId  String? @db.Uuid
+  segmentId     String? @db.Uuid
+  channelId     String? @db.Uuid
+  scenarioId    String? @db.Uuid
+  
+  // For flexible custom dimensions
+  customDim1Id  String? @map("custom_dim1_id") @db.Uuid
+  customDim2Id  String? @map("custom_dim2_id") @db.Uuid
+  
+  // The actual value
+  value       Decimal  @db.Decimal(20, 4)
+  
+  // Metadata
+  isCalculated Boolean  @default(false) @map("is_calculated")
+  formula      String?  // If calculated, the formula used
+  version      Int      @default(1)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  
+  // Relations for dimension lookups
+  geography    DimensionMember? @relation(fields: [geographyId], references: [id])
+  
+  @@index([orgId, modelId])
+  @@index([metricName])
+  @@index([month])
+  @@index([geographyId])
+  @@index([productId])
+  @@index([departmentId])
+  @@index([segmentId])
+  @@index([scenarioId])
+  @@map("metric_cube")
+}
+
 
 model Prompt {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -499,6 +692,41 @@ model AICFOPlan {
   @@index([orgId])
   @@index([status])
   @@map("ai_cfo_plans")
+}
+
+model ComputationTrace {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org             Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId           String   @db.Uuid
+  model           Model    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  modelId         String   @db.Uuid
+  triggerNodeId   String   @map("trigger_node_id") // The driver/metric that changed
+  triggerUserId   String?  @map("trigger_user_id") @db.Uuid
+  affectedNodes   Json     @map("affected_nodes") // List of node IDs recomputed
+  durationMs      Int      @map("duration_ms")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([orgId])
+  @@index([modelId])
+  @@map("computation_traces")
+}
+
+model Forecast {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  org             Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId           String   @db.Uuid
+  model           Model    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  modelId         String   @db.Uuid
+  metricName      String   @map("metric_name")
+  method          String   // arima|trend|seasonal|regression
+  forecastData    Json     @map("forecast_data") // [{month, value}]
+  historicalData  Json?    @map("historical_data") // snapshots for backtesting
+  metrics         Json?    @map("metrics") // mape, rmse
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([orgId])
+  @@index([modelId])
+  @@map("forecasts")
 }
 
 model Notification {

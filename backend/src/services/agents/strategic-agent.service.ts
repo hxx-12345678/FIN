@@ -13,6 +13,8 @@
 import prisma from '../../config/database';
 import { AgentResponse, AgentThought, DataSource, AgentRecommendation } from './agent-types';
 import { v4 as uuidv4 } from 'uuid';
+import { reasoningService } from '../reasoning.service';
+import { ModelRun } from '@prisma/client';
 
 interface CostReductionOpportunity {
   category: string;
@@ -134,12 +136,18 @@ class StrategicAgentService {
           title: 'Strategic Analysis',
           data: Object.entries(calculations).map(([key, value]) => ({
             metric: key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()),
-            value: typeof value === 'number' 
+            value: typeof value === 'number'
               ? (Math.abs(value) < 1 ? `${(value * 100).toFixed(1)}%` : `$${value.toLocaleString()}`)
               : value,
           })),
         },
       ],
+      requiresApproval: isMAQuery || (isCostQuery && calculations.savingsPercent > 0.05),
+      escalationReason: isMAQuery
+        ? 'Strategic M&A decisions require formal board approval due to capital allocation magnitude.'
+        : (isCostQuery && calculations.savingsPercent > 0.05)
+          ? `Cost reduction of ${(calculations.savingsPercent * 100).toFixed(1)}% exceeds autonomous threshold (5%).`
+          : undefined,
     };
   }
 
@@ -155,8 +163,10 @@ class StrategicAgentService {
     let realEstateSpend = 0;
     let hasRealData = false;
 
+    let latestRun: any = null;
+
     try {
-      const latestRun = await prisma.modelRun.findFirst({
+      latestRun = await prisma.modelRun.findFirst({
         where: { orgId, status: 'done' },
         orderBy: { createdAt: 'desc' },
       });
@@ -226,6 +236,7 @@ class StrategicAgentService {
       realEstateSpend,
       arr: revenue * 12,
       hasRealData,
+      modelId: (latestRun as any)?.modelId
     };
   }
 
@@ -240,11 +251,11 @@ class StrategicAgentService {
     calculations: Record<string, number>
   ): Promise<MAAnalysis> {
     const acquisitionPrice = entities.amount || 50000000; // Default $50M
-    
+
     // Simulate target company data
     const targetArr = acquisitionPrice * 0.25; // Typical 4x ARR multiple
     const targetMargin = 0.15;
-    
+
     // Calculate synergies
     const backOfficeSynergies = data.opex * 0.05; // 5% opex reduction
     const salesSynergies = data.revenue * 0.08; // 8% revenue uplift
@@ -255,10 +266,10 @@ class StrategicAgentService {
     const combinedRevenue = data.arr + targetArr;
     const acquisitionDebt = acquisitionPrice * 0.5; // Assume 50% debt financed
     const interestCost = acquisitionDebt * 0.06; // 6% interest rate
-    
+
     const year1Eps = (data.revenue - data.opex) * 12;
     const year1CombinedEps = ((data.revenue + targetArr / 12) - (data.opex + interestCost / 12) + totalSynergies / 12) * 12;
-    
+
     const year1Change = (year1CombinedEps - year1Eps) / Math.abs(year1Eps);
     const isDilutive = year1Change < 0;
 
@@ -293,7 +304,7 @@ class StrategicAgentService {
       year1Impact: isDilutive ? 'dilutive' : 'accretive',
       year1ImpactPercent: year1Change,
       year2Outlook: `Accretive by Year 2 with +$${(targetArr + totalSynergies * 12).toLocaleString()} ARR contribution`,
-      recommendation: isDilutive 
+      recommendation: isDilutive
         ? `Proceed only if interest rate below ${((0.06 - year1Change * 0.02) * 100).toFixed(1)}%`
         : 'Favorable deal structure - recommend proceeding',
       conditions: [
@@ -316,7 +327,7 @@ class StrategicAgentService {
   ): Promise<CostReductionOpportunity[]> {
     const targetReduction = entities.percentage ? entities.percentage / 100 : 0.10;
     const targetSavings = data.opex * targetReduction;
-    
+
     const opportunities: CostReductionOpportunity[] = [];
     let totalIdentified = 0;
 
@@ -448,24 +459,43 @@ class StrategicAgentService {
 
     const recommendations: AgentRecommendation[] = [];
 
+    // Use Real Reasoning Engine if model is available
+    let reasoning: any = { analysis: [] };
+
+    if (data.modelId) {
+      try {
+        reasoning = await reasoningService.analyzeMetric(
+          data.modelId,
+          'burn_multiple',
+          'decrease'
+        );
+      } catch (e) {
+        console.warn('Reasoning engine skipped:', e);
+      }
+    }
+
     if (burnMultiple > 2) {
+      const actions = reasoning.analysis?.length > 0
+        ? reasoning.analysis.map((s: any) => `${s.driver}: ${s.action} (${s.estimated_impact})`)
+        : [
+          'Prioritize high-LTV customer segments',
+          'Optimize sales efficiency',
+          'Review cost structure for non-essential spend',
+        ];
+
       recommendations.push({
         id: uuidv4(),
-        title: 'Improve Burn Multiple',
-        description: `Current burn multiple of ${burnMultiple.toFixed(2)}x is above efficient range (<2x). Focus on revenue efficiency.`,
+        title: 'Improve Burn Multiple (AI Optimized)',
+        description: `Current burn multiple of ${burnMultiple.toFixed(2)}x is inefficient. ${reasoning.analysis?.length > 0 ? 'The reasoning engine suggests:' : 'Focus on revenue efficiency.'}`,
         impact: {
           type: 'negative',
           metric: 'burn_multiple',
           value: `${burnMultiple.toFixed(2)}x (target: <2x)`,
-          confidence: 0.85,
+          confidence: 0.9,
         },
         priority: 'high',
         category: 'efficiency',
-        actions: [
-          'Prioritize high-LTV customer segments',
-          'Optimize sales efficiency metrics',
-          'Review cost structure for non-essential spend',
-        ],
+        actions,
         dataSources: [],
       });
     }
@@ -501,7 +531,7 @@ class StrategicAgentService {
       priority: 'high',
       category: 'm&a',
       actions: analysis.conditions,
-      risks: analysis.year1Impact === 'dilutive' 
+      risks: analysis.year1Impact === 'dilutive'
         ? ['Short-term EPS dilution', 'Integration risk', 'Key talent retention']
         : ['Integration execution risk', 'Culture alignment'],
       dataSources: [],
@@ -605,14 +635,14 @@ class StrategicAgentService {
   ): string {
     const targetPercent = (calculations.targetReduction * 100).toFixed(0);
     const achievedPercent = (calculations.savingsPercent * 100).toFixed(1);
-    
+
     let answer = `**Cost Reduction Analysis**\n\n`;
     answer += `Targeting **${targetPercent}%** reduction in operating costs without slowing R&D.\n\n`;
 
     answer += `**Identified Opportunities:**\n\n`;
     answer += `| Category | Current | Savings | R&D Impact |\n`;
     answer += `|----------|---------|---------|------------|\n`;
-    
+
     for (const opp of opportunities) {
       answer += `| ${opp.category} | $${opp.currentSpend.toLocaleString()} | $${opp.potentialSavings.toLocaleString()} | ${opp.rdImpact} |\n`;
     }

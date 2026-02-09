@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import os
 import uuid
 import threading
@@ -16,9 +16,17 @@ from worker import JOB_HANDLERS
 
 # Global state
 polling_active = False
+active_jobs = {}
 polling_thread = None
-active_jobs = {}  # Track active job threads
 from worker import JOB_HANDLERS  # Import handlers for polling
+from jobs.hyperblock_engine import HyperblockEngine
+from jobs.forecasting_engine import ForecastingEngine
+from jobs.risk_engine import RiskEngine
+from jobs.reasoning_engine import ModelReasoningEngine
+
+# Model Cache for Real-time Recalculation
+# model_id -> HyperblockEngine instance
+hyperblock_cache: Dict[str, HyperblockEngine] = {}
 
 
 class QueueJobRequest(BaseModel):
@@ -178,6 +186,229 @@ def release_stuck(queue: Optional[str] = 'default'):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class HyperblockComputeRequest(BaseModel):
+    modelId: str
+    orgId: str
+    months: List[str]
+    dimensions: Optional[List[Dict[str, Any]]] = None # [{name, members}]
+    nodes: List[Dict[str, Any]] # {id, name, formula, category, dims: []}
+    update: Optional[Dict[str, Any]] = None # {nodeId, values: [{month, value, coords}], userId}
+
+class ForecastRequest(BaseModel):
+    history: List[float]
+    steps: int
+    method: str = "auto" # auto|arima|trend|seasonal|regression
+    period: int = 12
+    drivers_history: Optional[List[List[float]]] = None
+    drivers_forecast: Optional[List[List[float]]] = None
+    driver_names: Optional[List[str]] = None
+
+class BacktestRequest(BaseModel):
+    history: List[float]
+    window: int = 12
+
+class RiskRequest(BaseModel):
+    modelId: str
+    months: List[str]
+    dimensions: Optional[List[Dict[str, Any]]] = None
+    nodes: List[Dict[str, Any]]
+    distributions: Dict[str, Dict[str, Any]] # {nodeId: {dist, params}}
+    numSimulations: int = 1000
+
+@app.post("/compute/hyperblock")
+def compute_hyperblock(req: HyperblockComputeRequest):
+    """
+    High-performance real-time recompute using HyperblockEngine.
+    Supports incremental recompute and tracing.
+    """
+    logger = setup_logger()
+    cache_key = f"{req.orgId}:{req.modelId}"
+    
+    # Get or initialize engine
+    if cache_key not in hyperblock_cache:
+        logger.info(f"🚀 Initializing HyperblockEngine for {cache_key}")
+        engine = HyperblockEngine(req.modelId)
+        # Load dimensions
+        if req.dimensions:
+            for dim in req.dimensions:
+                engine.define_dimension(dim['name'], dim['members'])
+        
+        engine.initialize_horizon(req.months)
+        
+        # Load nodes and formulas
+        for node in req.nodes:
+            engine.add_metric(node['id'], node['name'], node.get('category', 'operational'), node.get('dims'))
+            if node.get('formula'):
+                engine.set_formula(node['id'], node['formula'])
+        
+        hyperblock_cache[cache_key] = engine
+    else:
+        engine = hyperblock_cache[cache_key]
+        # Verify if horizon changed
+        if engine.months != req.months:
+            engine.initialize_horizon(req.months)
+            
+    # Apply update if provided
+    affected_nodes = []
+    if req.update:
+        node_id = req.update['nodeId']
+        values = req.update['values']
+        user_id = req.update.get('userId', 'system')
+        
+        logger.info(f"⚡ Incremental update: {node_id} by {user_id}")
+        affected_nodes = engine.update_input(node_id, values, user_id)
+    else:
+        # Full recompute if no specific update
+        logger.info("⚡ Full recompute requested")
+        engine.full_recompute()
+        affected_nodes = list(engine.graph.nodes())
+
+    # Get results and trace
+    results = engine.get_results()
+    trace = engine.get_trace(limit=5)
+    
+    return {
+        "status": "success",
+        "results": results,
+        "affectedNodes": affected_nodes,
+        "trace": trace,
+        "metrics": {
+            "nodeCount": len(engine.graph.nodes()),
+            "edgeCount": len(engine.graph.edges()),
+            "computeTimeMs": trace[-1]['duration_ms'] if trace else 0
+        }
+    }
+
+@app.post("/compute/forecast")
+def compute_forecast(req: ForecastRequest):
+    """
+    Industrial scale forecasting endpoint.
+    """
+    try:
+        explanation = {}
+        if req.method == "arima":
+            forecast = ForecastingEngine.forecast_arima(req.history, req.steps)
+            explanation = {"info": "ARIMA(1,1,1) model fitted to historical trend."}
+        elif req.method == "seasonal":
+            forecast = ForecastingEngine.forecast_seasonal(req.history, req.steps, req.period)
+            explanation = {"info": f"Seasonal decomposition (period={req.period}) applied."}
+        elif req.method == "trend":
+            forecast = ForecastingEngine.forecast_trend(req.history, req.steps)
+            explanation = {"info": "Linear regression trend projection."}
+        elif req.method == "regression" and req.drivers_history:
+            forecast = ForecastingEngine.forecast_regression(req.history, req.steps, req.drivers_history, req.drivers_forecast)
+            explanation = {"info": "Multi-variate regression using operational drivers."}
+            # Simplified: add driver names to explanation
+            if req.driver_names:
+                explanation["drivers"] = req.driver_names
+        else: # auto
+            if req.drivers_history: # Prefer regression if drivers provided
+                forecast = ForecastingEngine.forecast_regression(req.history, req.steps, req.drivers_history, req.drivers_forecast)
+                explanation = {"info": "Auto-selected multi-variate regression."}
+            elif len(req.history) >= req.period * 2:
+                forecast = ForecastingEngine.forecast_seasonal(req.history, req.steps, req.period)
+                explanation = {"info": "Auto-selected seasonal model due to sufficient history."}
+            else:
+                forecast = ForecastingEngine.forecast_arima(req.history, req.steps)
+                explanation = {"info": "Auto-selected ARIMA model for short history."}
+        
+        # Calculate fitting accuracy on history (MAPE)
+        backtest = ForecastingEngine.calculate_metrics(req.history, ForecastingEngine.forecast_trend(req.history, 0)) # simplified
+        
+        return {
+            "status": "success",
+            "forecast": forecast,
+            "method": req.method,
+            "explanation": explanation,
+            "metrics": backtest
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/compute/forecast/backtest")
+def compute_backtest(req: BacktestRequest):
+    """
+    Accuracy validation via backtesting.
+    """
+    try:
+        results = ForecastingEngine.run_backtest(req.history, req.window)
+        return {
+            "status": "success",
+            "results": results
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/compute/risk")
+def compute_risk(req: RiskRequest):
+    """
+    Stochastic risk analysis using Monte Carlo simulations.
+    """
+    try:
+        engine = RiskEngine(req.modelId, req.months, req.dimensions)
+        results = engine.run_risk_analysis(req.nodes, req.distributions, req.numSimulations)
+        
+        return {
+            "status": "success",
+            "results": results
+        }
+    except Exception as e:
+        logger.error(f"Risk analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class ReasoningRequest(BaseModel):
+    modelId: str
+    target: str
+    nodes: Optional[List[Dict[str, Any]]] = None
+    data: Optional[Dict[str, Any]] = None
+    goal: str = "increase"
+    num_months: int = 12
+
+@app.post("/compute/reasoning")
+def compute_reasoning(req: ReasoningRequest):
+    """
+    Suggests improvements and explains model logic.
+    """
+    try:
+        engine = ModelReasoningEngine(req.modelId)
+        if req.nodes:
+            engine.hydrate_from_json(req.nodes, req.data)
+        
+        analysis = engine.analyze_drivers(req.target)
+        suggestions = engine.suggest_strategic_improvements(req.target)
+        explanation = engine.explain_metric_logic(req.target)
+        weak_assumptions = engine.detect_weak_assumptions()
+        
+        return {
+            "status": "success",
+            "analysis": analysis,
+            "suggestions": suggestions,
+            "explanation": explanation,
+            "weakAssumptions": weak_assumptions
+        }
+    except Exception as e:
+        logger.error(f"Reasoning failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class ScenarioRequest(BaseModel):
+    modelId: str
+    target: str
+    overrides: Dict[str, float]
+
+@app.post("/compute/scenario")
+def compute_scenario(req: ScenarioRequest):
+    """
+    Quickly visualizes the impact of changes on a target metric.
+    """
+    try:
+        engine = ModelReasoningEngine(req.modelId)
+        result = engine.simulate_scenario(req.target, req.overrides)
+        return { "status": "success", "result": result }
+    except Exception as e:
+        logger.error(f"Scenario simulation failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

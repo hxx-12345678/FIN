@@ -8,6 +8,7 @@
 import prisma from '../../config/database';
 import { AgentResponse, AgentThought, DataSource, AgentRecommendation, AgentVisualization } from './agent-types';
 import { v4 as uuidv4 } from 'uuid';
+import { reasoningService } from '../reasoning.service';
 
 class ForecastingAgentService {
   /**
@@ -33,7 +34,7 @@ class ForecastingAgentService {
 
     // Get baseline data
     const baselineData = await this.getBaselineData(orgId, dataSources);
-    
+
     thoughts.push({
       step: 2,
       thought: 'Baseline data retrieved',
@@ -47,7 +48,7 @@ class ForecastingAgentService {
 
     // Standard forecast
     const forecast = this.generateForecast(baselineData, 12);
-    
+
     thoughts.push({
       step: 3,
       thought: 'Generated 12-month forecast',
@@ -93,8 +94,10 @@ class ForecastingAgentService {
     let churnRate = 0.05;
     let hasRealData = false;
 
+    let latestRun: any = null;
+
     try {
-      const latestRun = await prisma.modelRun.findFirst({
+      latestRun = await prisma.modelRun.findFirst({
         where: { orgId, status: 'done' },
         orderBy: { createdAt: 'desc' },
       });
@@ -130,7 +133,7 @@ class ForecastingAgentService {
       mrr = 75000;
     }
 
-    return { mrr, growthRate, churnRate, hasRealData };
+    return { mrr, growthRate, churnRate, hasRealData, modelId: (latestRun as any)?.modelId };
   }
 
   /**
@@ -143,9 +146,9 @@ class ForecastingAgentService {
     for (let i = 0; i < months; i++) {
       const date = new Date();
       date.setMonth(date.getMonth() + i);
-      
+
       currentRevenue = currentRevenue * (1 + baseline.growthRate) * (1 - baseline.churnRate);
-      
+
       forecast.push({
         month: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
         revenue: Math.round(currentRevenue),
@@ -181,7 +184,7 @@ class ForecastingAgentService {
     const currentRevenue = baseline.mrr;
     const scenarioRevenue = currentRevenue * (1 + (isDecrease ? -Math.abs(changePercent) : changePercent));
     const baselineForecast = this.generateForecast(baseline, 12);
-    
+
     const scenarioBaseline = { ...baseline, mrr: scenarioRevenue };
     const scenarioForecast = this.generateForecast(scenarioBaseline, 12);
 
@@ -195,19 +198,53 @@ class ForecastingAgentService {
     calculations.scenarioRevenue = scenarioRevenue;
     calculations.revenueImpact = scenarioRevenue - currentRevenue;
     calculations.revenueImpactPercent = changePercent;
-    calculations.baselineRunway = Math.max(0, currentRunway);
-    calculations.scenarioRunway = Math.max(0, scenarioRunway);
-    calculations.runwayImpact = scenarioRunway - currentRunway;
+
+    // Use Python Reasoning Engine for accurate downstream impact if available
+    let reasoningResult: any = null;
+    if (baseline.modelId) {
+      try {
+        // Simulate impact on RUNWAY (depedent variable) given Revenue change
+        reasoningResult = await reasoningService.simulateScenario(
+          baseline.modelId,
+          'cash_runway',
+          { 'revenue': changePercent }
+        );
+
+        thoughts.push({
+          step: 3.5,
+          thought: 'Validating scenario with Reasoning Engine...',
+          observation: `Engine confirmed runway impact: ${reasoningResult.delta_percent > 0 ? '+' : ''}${(reasoningResult.delta_percent * 100).toFixed(1)}%`
+        });
+
+        // Override with accurate engine data
+        const engineRunway = reasoningResult.simulated;
+        const engineBaselineRunway = reasoningResult.baseline;
+
+        calculations.baselineRunway = engineBaselineRunway;
+        calculations.scenarioRunway = engineRunway;
+        calculations.runwayImpact = engineRunway - engineBaselineRunway;
+
+      } catch (e) {
+        console.warn('Reasoning simulation failed, using heuristics', e);
+      }
+    }
+
+    if (!reasoningResult) {
+      // Fallback heuristics
+      calculations.baselineRunway = Math.max(0, currentRunway);
+      calculations.scenarioRunway = Math.max(0, scenarioRunway);
+      calculations.runwayImpact = scenarioRunway - currentRunway;
+    }
 
     thoughts.push({
       step: 4,
       thought: 'Scenario impact calculated',
-      observation: `Revenue impact: $${(scenarioRevenue - currentRevenue).toLocaleString()}, Runway impact: ${(scenarioRunway - currentRunway).toFixed(1)} months`,
+      observation: `Revenue impact: $${(scenarioRevenue - currentRevenue).toLocaleString()}, Runway impact: ${(calculations.scenarioRunway - calculations.baselineRunway).toFixed(1)} months`,
     });
 
     // Generate recommendations
     const recommendations: AgentRecommendation[] = [];
-    
+
     if (isDecrease) {
       recommendations.push({
         id: uuidv4(),
@@ -261,7 +298,7 @@ class ForecastingAgentService {
    */
   private buildScenarioAnswer(baseline: any, entities: any, calculations: Record<string, number>, isDecrease: boolean): string {
     let answer = `**Scenario Analysis: ${isDecrease ? 'Revenue Decrease' : 'Revenue Increase'} of ${Math.abs(entities.percentage)}%**\n\n`;
-    
+
     answer += `**Side-by-Side Comparison:**\n\n`;
     answer += `| Metric | Current | Scenario | Change |\n`;
     answer += `|--------|---------|----------|--------|\n`;
@@ -272,7 +309,7 @@ class ForecastingAgentService {
       answer += `⚠️ **Impact Analysis:**\n`;
       answer += `A ${Math.abs(entities.percentage)}% revenue drop would reduce monthly revenue by $${Math.abs(calculations.revenueImpact).toLocaleString()}. `;
       answer += `This would ${calculations.runwayImpact < -1 ? 'significantly impact' : 'moderately affect'} your runway.\n\n`;
-      
+
       answer += `**Suggested Mitigations:**\n`;
       answer += `1. Reduce discretionary spending by ${Math.min(20, Math.abs(entities.percentage / 2)).toFixed(0)}%\n`;
       answer += `2. Accelerate collection of outstanding receivables\n`;

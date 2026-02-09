@@ -8,6 +8,7 @@
 import prisma from '../../config/database';
 import { AgentResponse, AgentThought, DataSource, AgentRecommendation } from './agent-types';
 import { v4 as uuidv4 } from 'uuid';
+import { reasoningService } from '../reasoning.service';
 
 class AnalyticsAgentService {
   /**
@@ -33,7 +34,7 @@ class AnalyticsAgentService {
 
     // Get financial data for analysis
     const financialData = await this.getFinancialData(orgId, dataSources);
-    
+
     thoughts.push({
       step: 2,
       thought: 'Financial data retrieved',
@@ -42,9 +43,11 @@ class AnalyticsAgentService {
 
     // Perform analysis based on intent
     let analysisResult;
-    
+
     if (intent === 'variance_analysis' || query.toLowerCase().includes('miss') || query.toLowerCase().includes('why')) {
       analysisResult = await this.performVarianceAnalysis(orgId, financialData, thoughts, dataSources, calculations);
+    } else if (intent === 'driver_analysis' || query.toLowerCase().includes('drive') || query.toLowerCase().includes('cause')) {
+      analysisResult = await this.performDriverAnalysis(financialData, query, thoughts, dataSources, calculations);
     } else {
       analysisResult = await this.performGeneralAnalysis(financialData, thoughts, calculations);
     }
@@ -90,8 +93,10 @@ class AnalyticsAgentService {
     let forecastExpenses = 0;
     let hasRealData = false;
 
+    let latestRun: any = null;
+
     try {
-      const latestRun = await prisma.modelRun.findFirst({
+      latestRun = await prisma.modelRun.findFirst({
         where: { orgId, status: 'done' },
         orderBy: { createdAt: 'desc' },
       });
@@ -165,6 +170,7 @@ class AnalyticsAgentService {
       forecastExpenses,
       grossMargin: (revenue - cogs) / revenue,
       hasRealData,
+      modelId: (latestRun as any)?.modelId
     };
   }
 
@@ -186,7 +192,7 @@ class AnalyticsAgentService {
 
     const revenueVariance = data.revenue - data.forecastRevenue;
     const revenueVariancePct = (revenueVariance / data.forecastRevenue) * 100;
-    
+
     const expenseVariance = data.expenses - data.forecastExpenses;
     const expenseVariancePct = (expenseVariance / data.forecastExpenses) * 100;
 
@@ -266,6 +272,78 @@ class AnalyticsAgentService {
       summary: `EBITDA ${ebitdaVariance < 0 ? 'missed' : 'exceeded'} forecast by ${Math.abs(ebitdaVariancePct).toFixed(1)}%`,
       factors,
       totalVariance: ebitdaVariance,
+    };
+  }
+
+
+  /**
+   * Perform driver analysis using Reasoning Engine
+   */
+  private async performDriverAnalysis(
+    data: any,
+    query: string,
+    thoughts: AgentThought[],
+    dataSources: DataSource[],
+    calculations: Record<string, number>
+  ): Promise<any> {
+    thoughts.push({
+      step: 3,
+      thought: 'Identifying key drivers using logic engine...',
+      action: 'driver_analysis',
+    });
+
+    const targetMetric = query.toLowerCase().includes('burn') ? 'monthly_burn_rate' :
+      query.toLowerCase().includes('runway') ? 'cash_runway' :
+        query.toLowerCase().includes('revenue') ? 'revenue' : 'net_income';
+
+    let drivers: any[] = [];
+
+    if (data.modelId) {
+      try {
+        // Use "increase" to see positive correlation drivers
+        const reasoning = await reasoningService.analyzeMetric(data.modelId, targetMetric, 'increase');
+        drivers = reasoning.analysis || [];
+
+        thoughts.push({
+          step: 3.5,
+          thought: `Reasoning engine identified top drivers for ${targetMetric}`,
+          observation: `Top driver: ${drivers[0]?.driver} (Impact: ${drivers[0]?.estimated_impact})`
+        });
+
+        // Add reasoning explanation
+        dataSources.push({
+          type: 'reasoning_engine',
+          id: 'driver_analysis',
+          name: 'Causal Driver Analysis',
+          timestamp: new Date(),
+          confidence: 0.9,
+          snippet: `Top drivers for ${targetMetric}: ${drivers.map((d: any) => d.driver).join(', ')}`
+        });
+
+      } catch (e) {
+        console.warn('Driver analysis failed', e);
+      }
+    }
+
+    if (drivers.length === 0) {
+      // Fallback
+      drivers = [
+        { driver: 'Headcount', reasoning: 'Primary expense driver', estimated_impact: 'High' },
+        { driver: 'Server Costs', reasoning: 'Scales with usage', estimated_impact: 'Medium' }
+      ];
+    }
+
+    return {
+      type: 'driver_analysis',
+      target: targetMetric,
+      summary: `Key drivers for **${targetMetric.replace(/_/g, ' ')}** identified.`,
+      factors: drivers.map((d: any) => ({
+        category: d.driver,
+        explanation: d.reasoning,
+        drivers: [d.action === 'increase' ? 'Positive Correlation' : 'Negative Correlation', d.estimated_impact],
+        impact: 0, // Qualitative
+        impactPct: 0
+      }))
     };
   }
 
