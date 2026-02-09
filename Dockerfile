@@ -31,6 +31,7 @@ echo "🚀 Starting FinaPilot Unified Service..."\n\
 \n\
 # Run database migrations\n\
 echo "🔄 Running database migrations..."\n\
+cd /app/backend && npx prisma migrate resolve --applied 20260209053640_add_computation_trace || true\n\
 cd /app/backend && npx prisma migrate deploy\n\
 \n\
 # Start Python Worker in background\n\
