@@ -68,7 +68,7 @@ def get_cached_model_run(
         
         if model_version:
             query += " AND params_json::jsonb->>'modelVersion' = %s"
-            params.append(model_version)
+            params.append(str(model_version))
         
         query += " ORDER BY created_at DESC LIMIT 1"
         

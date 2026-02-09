@@ -846,8 +846,18 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
         
         # --- NEW: Driver-Based Engine Implementation ---
         model_id = model_json.get('id')
-        cursor.execute("SELECT id FROM drivers WHERE model_id = %s", (model_id,))
-        has_drivers = cursor.fetchone()
+        has_drivers = False
+        if model_id:
+            try:
+                # Use a savepoint so we don't abort the global transaction if the table is missing
+                cursor.execute("SAVEPOINT check_drivers")
+                cursor.execute("SELECT id FROM drivers WHERE model_id = %s LIMIT 1", (model_id,))
+                has_drivers = cursor.fetchone() is not None
+                cursor.execute("RELEASE SAVEPOINT check_drivers")
+            except Exception as e:
+                cursor.execute("ROLLBACK TO SAVEPOINT check_drivers")
+                logger.warning(f"Could not check 'drivers' table (likely missing in DB): {str(e)}")
+                has_drivers = False
         
         driver_results = {}
         if has_drivers:
