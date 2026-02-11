@@ -24,6 +24,9 @@ from jobs.forecasting_engine import ForecastingEngine
 from jobs.risk_engine import RiskEngine
 from jobs.reasoning_engine import ModelReasoningEngine
 
+# Setup global logger
+logger = setup_logger()
+
 # Model Cache for Real-time Recalculation
 # model_id -> HyperblockEngine instance
 hyperblock_cache: Dict[str, HyperblockEngine] = {}
@@ -224,7 +227,6 @@ def compute_hyperblock(req: HyperblockComputeRequest):
     High-performance real-time recompute using HyperblockEngine.
     Supports incremental recompute and tracing.
     """
-    logger = setup_logger()
     cache_key = f"{req.orgId}:{req.modelId}"
     
     # Get or initialize engine

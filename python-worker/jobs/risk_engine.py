@@ -56,6 +56,11 @@ class RiskEngine:
         # 3. Inject Stochastic Inputs
         rng = np.random.default_rng()
         for node_id, config in proportions.items():
+            # Safety check: if node was not in the nodes list, add it as a basic metric
+            if node_id not in engine.data:
+                logger.warning(f"Node {node_id} found in distributions but not in nodes list. Adding dynamically.")
+                engine.add_metric(node_id, node_id, "operational", ["_simulation"])
+            
             dist = config.get('dist', 'normal')
             params = config.get('params', {})
             
@@ -82,7 +87,7 @@ class RiskEngine:
             engine.data[node_id] = samples
             
         # 4. Execute Full Recompute
-        engine.recompute_all()
+        engine.full_recompute()
         
         # 5. Extract Results and Compute Risk Metrics
         # Focus on one output metric for distribution analysis (e.g. Total Cash)

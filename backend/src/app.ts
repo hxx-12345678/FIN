@@ -56,6 +56,7 @@ import usageRoutes from './routes/usage.routes';
 import decisionEngineRoutes from './routes/decision-engine.routes';
 import approvalRoutes from './routes/approval.routes';
 import semanticLayerRoutes from './routes/semantic-layer.routes';
+import computeRoutes from './routes/compute.routes';
 
 dotenv.config();
 
@@ -76,17 +77,17 @@ const isOriginAllowed = (origin: string | undefined): boolean => {
   if (!origin) {
     return true; // Allow requests with no origin (like mobile apps or curl requests)
   }
-  
+
   // Check exact match in allowed origins
   if (allowedOrigins.includes(origin)) {
     return true;
   }
-  
+
   // Allow all Vercel deployments (production and preview)
   if (origin.endsWith('.vercel.app')) {
     return true;
   }
-  
+
   return false;
 };
 
@@ -140,14 +141,14 @@ if (config.nodeEnv === 'development') {
 app.get('/health', async (req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
-    
+
     // Check critical environment variables
     const envCheck = {
       database: !!config.databaseUrl,
       jwtSecret: !!config.jwtSecret,
       nodeEnv: config.nodeEnv,
     };
-    
+
     res.json({
       ok: true,
       status: 'healthy',
@@ -179,28 +180,28 @@ app.get('/api/v1', (req, res) => {
     ok: true,
     name: 'FinaPilot API',
     version: '1.0.0',
-      endpoints: {
-        auth: '/api/v1/auth',
-        orgs: '/api/v1/orgs',
-        connectors: '/api/v1/connectors',
-        csv: '/api/v1/orgs/:orgId/import/csv',
-        models: '/api/v1/models',
-        montecarlo: '/api/v1/models/:model_id/montecarlo',
-        jobs: '/api/v1/jobs',
-        provenance: '/api/v1/provenance',
-        exports: '/api/v1/exports',
-        scenarios: '/api/v1/models/:modelId/scenarios',
-        alerts: '/api/v1/orgs/:orgId/alerts',
-        aiPlans: '/api/v1/orgs/:orgId/ai-plans',
-        admin: '/api/v1/admin',
-        tasks: '/api/v1/tasks',
-        settings: '/api/v1/orgs/:orgId/settings',
-        risk: '/api/v1/montecarlo/:jobId/risk',
-        shareTokens: '/api/v1/orgs/:orgId/share-tokens',
-        budgetActual: '/api/v1/orgs/:orgId/models/:modelId/budget-actual',
-        aiSummaries: '/api/v1/orgs/:orgId/ai-summaries',
-        anomalyDetection: '/api/v1/orgs/:orgId/anomalies',
-      },
+    endpoints: {
+      auth: '/api/v1/auth',
+      orgs: '/api/v1/orgs',
+      connectors: '/api/v1/connectors',
+      csv: '/api/v1/orgs/:orgId/import/csv',
+      models: '/api/v1/models',
+      montecarlo: '/api/v1/models/:model_id/montecarlo',
+      jobs: '/api/v1/jobs',
+      provenance: '/api/v1/provenance',
+      exports: '/api/v1/exports',
+      scenarios: '/api/v1/models/:modelId/scenarios',
+      alerts: '/api/v1/orgs/:orgId/alerts',
+      aiPlans: '/api/v1/orgs/:orgId/ai-plans',
+      admin: '/api/v1/admin',
+      tasks: '/api/v1/tasks',
+      settings: '/api/v1/orgs/:orgId/settings',
+      risk: '/api/v1/montecarlo/:jobId/risk',
+      shareTokens: '/api/v1/orgs/:orgId/share-tokens',
+      budgetActual: '/api/v1/orgs/:orgId/models/:modelId/budget-actual',
+      aiSummaries: '/api/v1/orgs/:orgId/ai-summaries',
+      anomalyDetection: '/api/v1/orgs/:orgId/anomalies',
+    },
   });
 });
 
@@ -255,6 +256,7 @@ app.use('/api/v1', usageRoutes);
 app.use('/api/v1', decisionEngineRoutes);
 app.use('/api/v1', approvalRoutes);
 app.use('/api/v1', semanticLayerRoutes);
+app.use('/api/v1/compute', computeRoutes);
 app.use('/api/v1/debug', debugRoutes);
 
 // 404 handler

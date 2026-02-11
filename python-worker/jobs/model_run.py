@@ -176,6 +176,14 @@ def generate_summary_json(result: Dict[str, Any], model_json: Dict, params_json:
         if 'monthly' in result:
             summary['monthly'] = result['monthly']
         
+        # Add 3-statement financial model if available
+        if 'statements' in result:
+            summary['statements'] = result['statements']
+            
+        # Add DAG if available
+        if 'dag' in result:
+            summary['dag'] = result['dag']
+        
         # Add KPIs
         summary['kpis'] = {
             'revenueGrowth': float(result.get('revenueGrowth', 0)),

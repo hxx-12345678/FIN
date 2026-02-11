@@ -230,7 +230,7 @@ export function FinancialModeling() {
   const fetchTraces = async (modelId: string) => {
     try {
       const token = localStorage.getItem("auth-token")
-      const res = await fetch(`/api/v1/orgs/${orgId}/models/${modelId}/traces`, {
+      const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/traces`, {
         headers: { Authorization: `Bearer ${token}` }
       })
       const data = await res.json()
@@ -557,21 +557,24 @@ export function FinancialModeling() {
         const result = await response.json()
         if (result.ok && result.run) {
           const run = result.run
+
+          // Normalize summaryJson early so all components get a proper object
+          let normalizedSummary = run.summaryJson
+          if (typeof run.summaryJson === "string") {
+            try {
+              normalizedSummary = JSON.parse(run.summaryJson)
+              run.summaryJson = normalizedSummary // Update the run object itself
+            } catch (e) {
+              console.error("Failed to parse summaryJson", e)
+              normalizedSummary = {}
+            }
+          }
+
           setCurrentRun(run)
 
           // Extract financial data from summaryJson
-          if (run.summaryJson) {
-            // summaryJson can be stored as JSONB or accidentally as a JSON-string; normalize to object.
-            const summary =
-              typeof run.summaryJson === "string"
-                ? (() => {
-                  try {
-                    return JSON.parse(run.summaryJson)
-                  } catch {
-                    return {}
-                  }
-                })()
-                : run.summaryJson
+          if (normalizedSummary) {
+            const summary = normalizedSummary
             const monthlyData: any[] = []
 
             // Extract monthly data from summary
@@ -1559,10 +1562,12 @@ export function FinancialModeling() {
           if (runResponse.ok) {
             const runResult = await runResponse.json()
             const jobId = runResult.jobId || runResult.modelRun?.jobId || runResult.job?.id
-            if (jobId) {
+            if (jobId && targetOrgId) {
               toast.info("Processing financial data for AI model...")
-              // We don't necessarily need to wait for it here as the UI will poll
-              // but we should refresh the run list
+              const modelRunId = runResult.modelRun?.id
+              await pollModelRunStatus(targetOrgId, result.model.id, jobId, authToken, modelRunId)
+            } else if (targetOrgId) {
+              // Fallback: refresh runs to show queued/done state
               await fetchModelRuns(targetOrgId, result.model.id, authToken)
             }
           }
@@ -2491,25 +2496,6 @@ export function FinancialModeling() {
           </CardContent>
         </Card>
 
-        <Card className="overflow-hidden border-2 border-blue-500/10 hover:border-blue-500/30 transition-all duration-300 group cursor-pointer shadow-md hover:shadow-xl bg-gradient-to-br from-white to-blue-50" onClick={() => setShowImportDialog(true)}>
-          <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-            <Upload className="h-12 w-12 text-blue-600" />
-          </div>
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="h-14 w-14 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all duration-500 shadow-inner">
-                <LineChartIcon className="h-7 w-7" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-cyan-600">Connect Data</h3>
-                <p className="text-sm text-muted-foreground font-medium">Import from CSV or accounting</p>
-              </div>
-            </div>
-            <div className="mt-4 flex items-center text-xs font-semibold text-blue-600">
-              Sync Data <Upload className="ml-1 h-3 w-3" />
-            </div>
-          </CardContent>
-        </Card>
       </div>
       <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
         <DialogTrigger asChild>

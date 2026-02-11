@@ -30,6 +30,7 @@ import {
 } from "recharts"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
+import { API_BASE_URL } from "@/lib/api-config"
 
 interface ForecastResult {
     forecast: number[]
@@ -60,7 +61,7 @@ export function IndustrialForecasting({ orgId, modelId }: { orgId: string | null
         setLoading(true)
         try {
             const token = localStorage.getItem("auth-token")
-            const res = await fetch(`/api/v1/orgs/${orgId}/models/${modelId}/forecast`, {
+            const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/forecast`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -109,7 +110,7 @@ export function IndustrialForecasting({ orgId, modelId }: { orgId: string | null
         setLoading(true)
         try {
             const token = localStorage.getItem("auth-token")
-            const res = await fetch(`/api/v1/orgs/${orgId}/models/${modelId}/backtest`, {
+            const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/backtest`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

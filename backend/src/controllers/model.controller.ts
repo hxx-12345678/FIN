@@ -105,6 +105,8 @@ export const modelController = {
               email: true,
             },
           },
+          drivers: true,
+          driverFormulas: true,
         },
       });
 

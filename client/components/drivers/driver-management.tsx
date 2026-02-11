@@ -22,6 +22,7 @@ import {
     RefreshCw
 } from "lucide-react"
 import { toast } from "sonner"
+import { API_BASE_URL } from "@/lib/api-config"
 
 interface Driver {
     id: string
@@ -69,10 +70,10 @@ export function DriverManagement({ orgId, modelId, onRecompute }: {
             const token = localStorage.getItem("auth-token")
 
             const [driversRes, scenariosRes] = await Promise.all([
-                fetch(`/api/orgs/${orgId}/models/${modelId}/drivers`, {
+                fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/drivers`, {
                     headers: { Authorization: `Bearer ${token}` }
                 }),
-                fetch(`/api/orgs/${orgId}/models/${modelId}/scenarios`, {
+                fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/scenarios`, {
                     headers: { Authorization: `Bearer ${token}` }
                 })
             ])
@@ -104,7 +105,7 @@ export function DriverManagement({ orgId, modelId, onRecompute }: {
 
         try {
             const token = localStorage.getItem("auth-token")
-            const res = await fetch(`/api/orgs/${orgId}/models/${modelId}/drivers`, {
+            const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/drivers`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -132,7 +133,7 @@ export function DriverManagement({ orgId, modelId, onRecompute }: {
         setRecomputing(true)
         try {
             const token = localStorage.getItem("auth-token")
-            const res = await fetch(`/api/v1/orgs/${orgId}/models/${modelId}/recompute`, {
+            const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/recompute`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

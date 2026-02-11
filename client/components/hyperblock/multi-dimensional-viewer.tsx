@@ -31,6 +31,7 @@ import {
     Line
 } from "recharts"
 import { toast } from "sonner"
+import { API_BASE_URL } from "@/lib/api-config"
 
 interface Dimension {
     id: string
@@ -80,7 +81,7 @@ export function MultiDimensionalViewer({ orgId, modelId }: { orgId: string | nul
     const fetchDimensions = async () => {
         try {
             const token = localStorage.getItem("auth-token")
-            const res = await fetch(`/api/v1/orgs/${orgId}/models/${modelId}/dimensions`, {
+            const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/dimensions`, {
                 headers: { Authorization: `Bearer ${token}` }
             })
             const data = await res.json()
@@ -100,7 +101,7 @@ export function MultiDimensionalViewer({ orgId, modelId }: { orgId: string | nul
         try {
             const token = localStorage.getItem("auth-token")
             const res = await fetch(
-                `/api/v1/orgs/${orgId}/models/${modelId}/cube/pivot?metricName=${selectedMetric}&rowDimension=${rowDimension}&colDimension=${colDimension}`,
+                `${API_BASE_URL}/orgs/${orgId}/models/${modelId}/cube/pivot?metricName=${selectedMetric}&rowDimension=${rowDimension}&colDimension=${colDimension}`,
                 { headers: { Authorization: `Bearer ${token}` } }
             )
             const data = await res.json()
@@ -119,7 +120,7 @@ export function MultiDimensionalViewer({ orgId, modelId }: { orgId: string | nul
         setInitializing(true)
         try {
             const token = localStorage.getItem("auth-token")
-            const res = await fetch(`/api/v1/orgs/${orgId}/models/${modelId}/dimensions/init`, {
+            const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/dimensions/init`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}` }
             })

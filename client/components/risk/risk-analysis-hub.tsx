@@ -33,6 +33,7 @@ import {
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Slider } from "@/components/ui/slider"
+import { API_BASE_URL } from "@/lib/api-config"
 
 export function RiskAnalysisHub({ orgId, modelId }: { orgId: string | null, modelId: string | null }) {
     const [loading, setLoading] = useState(false)
@@ -41,18 +42,46 @@ export function RiskAnalysisHub({ orgId, modelId }: { orgId: string | null, mode
     const [selectedMetric, setSelectedMetric] = useState<string>("revenue")
 
     // Driver distributions
-    const [distributions, setDistributions] = useState<any>({
-        "revenue_growth": { dist: "triangular", params: { min: -0.05, mode: 0.05, max: 0.15 } },
-        "churn_rate": { dist: "normal", params: { mu: 0.02, sigma: 0.005 } },
-        "headcount_growth": { dist: "uniform", params: { min: 0.0, max: 0.02 } }
-    })
+    const [distributions, setDistributions] = useState<any>({})
+    const [availableDrivers, setAvailableDrivers] = useState<any[]>([])
+
+    useEffect(() => {
+        if (orgId && modelId) {
+            fetchDrivers()
+        }
+    }, [orgId, modelId])
+
+    const fetchDrivers = async () => {
+        try {
+            const token = localStorage.getItem("auth-token")
+            const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/drivers`, {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            const data = await res.json()
+            if (data.ok && data.drivers) {
+                setAvailableDrivers(data.drivers)
+                // Initialize distributions with some defaults for the drivers found
+                const initialDist: any = {}
+                data.drivers.slice(0, 3).forEach((d: any) => {
+                    initialDist[d.id] = {
+                        dist: "normal",
+                        name: d.name,
+                        params: { mu: 0, sigma: 0.05 }
+                    }
+                })
+                setDistributions(initialDist)
+            }
+        } catch (error) {
+            console.error("Failed to fetch drivers", error)
+        }
+    }
 
     const runRiskAnalysis = async () => {
         if (!orgId || !modelId) return
         setLoading(true)
         try {
             const token = localStorage.getItem("auth-token")
-            const res = await fetch(`/api/v1/orgs/${orgId}/models/${modelId}/risk`, {
+            const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/risk`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -127,7 +156,7 @@ export function RiskAnalysisHub({ orgId, modelId }: { orgId: string | null, mode
                         {Object.entries(distributions).map(([key, config]: [string, any]) => (
                             <div key={key} className="space-y-3 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-lg">
                                 <div className="flex justify-between items-center">
-                                    <span className="text-xs font-bold uppercase text-slate-500">{key.replace('_', ' ')}</span>
+                                    <span className="text-xs font-bold uppercase text-slate-500">{config.name || key.replace('_', ' ')}</span>
                                     <Select
                                         value={config.dist}
                                         onValueChange={(v) => setDistributions({ ...distributions, [key]: { ...config, dist: v } })}
