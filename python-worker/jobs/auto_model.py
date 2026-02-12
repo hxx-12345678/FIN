@@ -4,6 +4,7 @@ Ingests data from connectors/CSV and generates model assumptions
 Creates initial model_run snapshot
 """
 import json
+import uuid
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 from utils.db import get_db_connection
@@ -11,6 +12,13 @@ from utils.logger import setup_logger
 from jobs.runner import check_cancel_requested, mark_cancelled, update_progress
 
 logger = setup_logger()
+
+
+def add_months(base_date: datetime, months: int) -> datetime:
+    """Safely add months to a datetime (keeps day=1)."""
+    year = base_date.year + (base_date.month - 1 + months) // 12
+    month = (base_date.month - 1 + months) % 12 + 1
+    return base_date.replace(year=year, month=month)
 
 
 def handle_auto_model(job_id: str, org_id: str, object_id: str, logs: dict):
@@ -150,6 +158,59 @@ def handle_auto_model(job_id: str, org_id: str, object_id: str, logs: dict):
             WHERE id = %s
         """, (json.dumps(model_json), model_id))
         
+        update_progress(job_id, 70, {'status': 'populating_drivers'})
+        
+        # STEP 4.5: Populate Drivers Table for Interactive Modeling
+        # 1. Create Base Scenario
+        cursor.execute("""
+            INSERT INTO financial_scenarios (id, "orgId", "modelId", name, is_default, created_at, updated_at)
+            VALUES (gen_random_uuid(), %s, %s, 'Base', true, NOW(), NOW())
+            RETURNING id
+        """, (org_id, model_id))
+        scenario_id = cursor.fetchone()[0]
+        
+        # 2. Define standard industrial drivers
+        std_drivers = [
+            {'name': 'Revenue Growth', 'type': 'revenue', 'category': 'Growth', 'unit': '%', 'value_key': 'revenueGrowth', 'assump_group': 'revenue'},
+            {'name': 'Churn Rate', 'type': 'revenue', 'category': 'Retention', 'unit': '%', 'value_key': 'churnRate', 'assump_group': 'revenue'},
+            {'name': 'OpEx Growth', 'type': 'cost', 'category': 'Operations', 'unit': '%', 'value_key': 'expenseGrowth', 'assump_group': 'costs'},
+            {'name': 'Tax Rate', 'type': 'cost', 'category': 'Finance', 'unit': '%', 'value_key': 'taxRate', 'assump_group': 'costs', 'default': 0.25}
+        ]
+        
+        # Get start month
+        metadata = model_json.get('metadata', {})
+        start_month_str = metadata.get('startMonth') or '2025-01'
+        try:
+            year, month = map(int, start_month_str.split('-'))
+            base_date = datetime(year, month, 1, tzinfo=timezone.utc)
+        except:
+            base_date = datetime(2025, 1, 1, tzinfo=timezone.utc)
+
+        for d_info in std_drivers:
+            cursor.execute("""
+                INSERT INTO drivers (id, "orgId", "modelId", name, type, category, unit, is_calculated, created_at, updated_at)
+                VALUES (gen_random_uuid(), %s, %s, %s, %s, %s, %s, false, NOW(), NOW())
+                RETURNING id
+            """, (org_id, model_id, d_info['name'], d_info['type'], d_info['category'], d_info['unit']))
+            driver_id = cursor.fetchone()[0]
+            
+            # Populate values for 36 months starting from start_month
+            val = assumptions.get(d_info['assump_group'], {}).get(d_info['value_key'], d_info.get('default', 0))
+            
+            # Bulk insert values
+            values_to_insert = []
+            for i in range(36):
+                m_date = add_months(base_date, i)
+                m_key = f"{m_date.year}-{str(m_date.month).zfill(2)}"
+                values_to_insert.append((str(uuid.uuid4()), driver_id, scenario_id, m_key, float(val)))
+            
+            # Execute bulk insert
+            from psycopg2.extras import execute_values
+            execute_values(cursor, """
+                INSERT INTO driver_values (id, "driverId", "scenarioId", month, value, created_at, updated_at)
+                VALUES %s
+            """, [(v[0], v[1], v[2], v[3], v[4], datetime.now(timezone.utc), datetime.now(timezone.utc)) for v in values_to_insert])
+
         update_progress(job_id, 80, {'status': 'creating_initial_run'})
         
         # STEP 5: Create initial model_run snapshot
@@ -282,11 +343,11 @@ def generate_assumptions(
         'unitEconomics': {},
     }
     
-    # Extract user inputs if provided (AI-generated model)
+    # Prioritize user inputs for AI-generated models
     business_type = params.get('businessType', 'technology')
     starting_customers = params.get('startingCustomers', 0)
     starting_revenue = params.get('startingRevenue', 0)
-    starting_mrr = params.get('startingMrr', 0)
+    user_starting_mrr = params.get('startingMrr', 0)
     starting_aov = params.get('startingAov', 0)
     major_costs = params.get('majorCosts', {})
     cash_on_hand = params.get('cashOnHand', 500000)
@@ -295,109 +356,92 @@ def generate_assumptions(
     # If manual assumptions provided, use them as base
     if manual_assumptions:
         return manual_assumptions
+
+    # Determine baseline revenue: User input takes precedence
+    baseline_revenue = float(user_starting_mrr or (float(starting_revenue) / 12) or 0)
     
-    # Calculate from transaction data if available
-    if monthly_revenue or monthly_expenses:
+    # Determine historical stats if data source is not blank
+    hist_avg_revenue = 0
+    hist_revenue_growth = 0.08 # Default industrial benchmark
+    
+    if (monthly_revenue or monthly_expenses) and data_source_type != 'blank':
         revenue_months = sorted(monthly_revenue.keys())
-        expense_months = sorted(monthly_expenses.keys())
+        hist_avg_revenue = sum(monthly_revenue.values()) / len(revenue_months) if revenue_months else 0
         
-        # Calculate average monthly values
-        avg_monthly_revenue = sum(monthly_revenue.values()) / len(revenue_months) if revenue_months else 0
-        avg_monthly_expenses = sum(monthly_expenses.values()) / len(expense_months) if expense_months else 0
-        
-        # Calculate growth rates (CAGR-like)
-        revenue_growth = 0.08  # Default 8% periodic growth
         if len(revenue_months) >= 3:
-            # Use last 3 months for more recent trend
             recent_revs = [monthly_revenue[m] for m in revenue_months[-3:]]
-            if recent_revs[0] > 0:
-                revenue_growth = (recent_revs[-1] / recent_revs[0]) ** (1.0 / 2) - 1.0
-                revenue_growth = max(-0.5, min(1.0, revenue_growth))  # Clamp
-        
-        # Attempt categorization if we have enough data (placeholder for more complex logic)
-        # In a real system, we'd use a classifier here.
-        cogs_ratio = 0.20 # Default for SaaS-like
-        if business_type == 'ecommerce': cogs_ratio = 0.60
-        elif business_type == 'services': cogs_ratio = 0.40
-        
-        assumptions['revenue'] = {
-            'baselineRevenue': float(avg_monthly_revenue),
-            'revenueGrowth': float(revenue_growth),
-            'churnRate': 0.05,
-            'customerCount': int(starting_customers) or 100,
-            'mrr': float(avg_monthly_revenue),
-            'arr': float(avg_monthly_revenue * 12),
-            'aov': float(starting_aov) or (float(avg_monthly_revenue / max(1, starting_customers))),
-        }
-        
-        # Map categories to industrial OPEX buckets
-        payroll_total = float(category_expenses.get('Payroll', category_expenses.get('Salary', 0)))
-        marketing_total = float(category_expenses.get('Marketing', category_expenses.get('Advertising', 0)))
-        rent_total = float(category_expenses.get('Rent', category_expenses.get('Office', 0)))
-        
-        assumptions['costs'] = {
-            'baselineExpenses': float(avg_monthly_expenses),
-            'expenseGrowth': 0.05,
-            'cogsRatio': float(cogs_ratio),
-            'payroll': payroll_total / max(1, len(expense_months)) if payroll_total > 0 else float(major_costs.get('payroll', avg_monthly_expenses * 0.5)),
-            'marketing': marketing_total / max(1, len(expense_months)) if marketing_total > 0 else float(major_costs.get('marketing', avg_monthly_expenses * 0.2)),
-            'infrastructure': float(major_costs.get('infrastructure', avg_monthly_expenses * 0.1)),
-        }
-    else:
-        # Use user inputs (AI-generated model / New Setup)
-        baseline_revenue = float(starting_mrr or (float(starting_revenue) / 12) or 0)
-        
-        assumptions['revenue'] = {
-            'baselineRevenue': baseline_revenue,
-            'revenueGrowth': 0.08,
-            'churnRate': 0.05,
-            'customerCount': int(starting_customers) or 1,
-            'mrr': baseline_revenue,
-            'arr': baseline_revenue * 12,
-            'aov': float(starting_aov) or (baseline_revenue / max(1, starting_customers)),
-        }
-        
-        baseline_expenses = float(
-            (float(major_costs.get('payroll') or 0)) + \
-            (float(major_costs.get('infrastructure') or 0)) + \
-            (float(major_costs.get('marketing') or 0))
-        )
-        if baseline_expenses == 0: baseline_expenses = baseline_revenue * 0.8 # Fallback
-        
-        assumptions['costs'] = {
-            'baselineExpenses': baseline_expenses,
-            'expenseGrowth': 0.05,
-            'cogsRatio': 0.25,
-            'payroll': float(major_costs.get('payroll', 0)),
-            'infrastructure': float(major_costs.get('infrastructure', 0)),
-            'marketing': float(major_costs.get('marketing', 0)),
-        }
+            if recent_revs[0] > 100: # Significant enough to calculate growth
+                hist_revenue_growth = (recent_revs[-1] / recent_revs[0]) ** (1.0 / 2) - 1.0
+                # Clamp to realistic industrial ranges (-5% to +40% monthly)
+                # Professional models should not default to -50% unless data is extremely conclusive
+                hist_revenue_growth = max(-0.05, min(0.40, hist_revenue_growth))
     
-    # Cash assumptions
-    assumptions['cash'] = {
-        'initialCash': float(cash_on_hand) if cash_on_hand else 100000.0,
+    # Merge: if user didn't provide MRR but we have historicals, use historicals
+    if baseline_revenue == 0 and hist_avg_revenue > 0:
+        baseline_revenue = hist_avg_revenue
+    elif baseline_revenue == 0:
+        baseline_revenue = 10000.0 # Default starting point if totally empty
+
+    # Final Assumptions Construction
+    assumptions = {
+        'revenue': {
+            'baselineRevenue': float(baseline_revenue),
+            'revenueGrowth': float(hist_revenue_growth),
+            'growthModel': 'exponential', # SaaS Professional Standard
+            'churnRate': 0.03, # 3% monthly is professional SME/SaaS standard (~30% annual)
+            'customerCount': int(starting_customers) or (int(baseline_revenue / 100) if baseline_revenue > 0 else 100),
+            'mrr': float(baseline_revenue),
+            'arr': float(baseline_revenue * 12),
+            'aov': float(starting_aov) or (baseline_revenue / max(1, starting_customers)) if starting_customers else 100.0,
+        },
+        'costs': {
+            'baselineExpenses': 0,
+            'expenseGrowth': 0.04, # Slightly lower than revenue growth for operating leverage
+            'cogsRatio': 0.20 if business_type in ['saas', 'technology'] else (0.60 if business_type == 'ecommerce' else 0.40),
+        },
+        'cash': {
+            'initialCash': float(cash_on_hand) if cash_on_hand else 100000.0,
+        },
+        'unitEconomics': {}
     }
+
+    # Calculate Expenses from user costs or historicals
+    payroll = float(major_costs.get('payroll', 0))
+    marketing = float(major_costs.get('marketing', 0))
+    infrastructure = float(major_costs.get('infrastructure', 0))
     
-    # Industrial Unit Economics
-    cac = 125.0
-    if assumptions['costs'].get('marketing') and assumptions['revenue'].get('customerCount', 0) > 0:
-        # Simplified CAC from marketing spend / customer count (historical)
-        cac = assumptions['costs']['marketing'] / max(1, assumptions['revenue']['customerCount'] * 0.1)
+    if payroll == 0 and marketing == 0:
+        # Fallback to historical averages or revenue percentage
+        avg_exp = sum(monthly_expenses.values()) / len(monthly_expenses) if monthly_expenses else baseline_revenue * 0.7
+        assumptions['costs']['payroll'] = avg_exp * 0.6
+        assumptions['costs']['marketing'] = avg_exp * 0.2
+        assumptions['costs']['infrastructure'] = avg_exp * 0.1
+        assumptions['costs']['baselineExpenses'] = avg_exp
+    else:
+        assumptions['costs']['payroll'] = payroll
+        assumptions['costs']['marketing'] = marketing
+        assumptions['costs']['infrastructure'] = infrastructure
+        assumptions['costs']['baselineExpenses'] = payroll + marketing + infrastructure
+
+    # Industrial Unit Economics (LTV/CAC)
+    mrr = assumptions['revenue']['mrr']
+    cust_count = assumptions['revenue']['customerCount']
+    arpu = mrr / max(1, cust_count)
+    churn = assumptions['revenue']['churnRate']
     
-    ltv = 2400.0
-    mrr = assumptions['revenue'].get('mrr', 0)
-    churn = assumptions['revenue'].get('churnRate', 0.05)
-    if churn > 0:
-        ltv = (mrr / max(1, assumptions['revenue'].get('customerCount', 1))) / churn
+    # CAC: Default to 12-month payback if no marketing spend
+    cac = arpu * 12
+    if assumptions['costs']['marketing'] > 0:
+        # Implied monthly new customers (approx 10% of base)
+        cac = assumptions['costs']['marketing'] / max(1, cust_count * 0.1)
+    
+    ltv = arpu / max(0.001, churn)
     
     assumptions['unitEconomics'] = {
         'cac': float(cac),
         'ltv': float(ltv),
         'ltvCacRatio': float(ltv / cac) if cac > 0 else 3.0,
-        'paybackPeriod': float(cac / (mrr / max(1, assumptions['revenue'].get('customerCount', 1)))) if mrr > 0 else 12.0,
+        'paybackPeriod': float(cac / arpu) if arpu > 0 else 12.0,
     }
     
     return assumptions
-
-
-

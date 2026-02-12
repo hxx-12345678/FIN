@@ -1086,9 +1086,16 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
 
             # Fallback to deterministic logic if driver not found
             if projected_revenue is None:
-                seasonal = model_profile['seasonality_amplitude'] * math.sin(2 * math.pi * (i + 1) / 12.0)
-                innovation = model_profile['innovation_factor'] * math.cos(2 * math.pi * (i + 1) / 6.0)
-                volatility = model_profile['volatility'] * (1 if i % 2 == 0 else -1)
+                # Industry Standard: Baseline runs should be clean and steady
+                if run_type == 'baseline':
+                    seasonal = 0
+                    innovation = 0
+                    volatility = 0
+                else:
+                    seasonal = model_profile['seasonality_amplitude'] * math.sin(2 * math.pi * (i + 1) / 12.0)
+                    innovation = model_profile['innovation_factor'] * math.cos(2 * math.pi * (i + 1) / 6.0)
+                    volatility = model_profile['volatility'] * (1 if i % 2 == 0 else -1)
+                
                 growth_multiplier = max(0.01, (1 + revenue_growth) ** i)
                 projected_revenue = starting_revenue * growth_multiplier
                 projected_revenue *= max(0.5, 1 + seasonal + innovation + volatility)
@@ -1250,6 +1257,30 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
         )
         logger.info(f"3-Statement Model validation: {three_statement_model.get('validation', {}).get('passed', False)}")
         
+        # STEP 6: Integrate Summary with 3-Statement Model
+        # Use values from statements for the high-level summary to ensure consistency
+        pl_summary = three_statement_model['incomeStatement']['annual'].get(str(list(three_statement_model['incomeStatement']['annual'].keys())[0]), {})
+        bs_monthly = three_statement_model['balanceSheet']['monthly']
+        last_month_bs = bs_monthly[list(bs_monthly.keys())[-1]]
+        
+        # Recalculate summary metrics from the 3-statement model
+        annual_revenue = pl_summary.get('revenue', annual_revenue)
+        annual_expenses = pl_summary.get('cogs', 0) + pl_summary.get('operatingExpenses', 0)
+        annual_net_income = pl_summary.get('netIncome', annual_net_income)
+        ending_cash = last_month_bs.get('cash', ending_cash)
+        
+        # ARR/MRR consistency
+        # MRR = Last month revenue from 3-statement
+        pl_monthly = three_statement_model['incomeStatement']['monthly']
+        last_month_pl = pl_monthly[list(pl_monthly.keys())[-1]]
+        mrr = last_month_pl.get('revenue', mrr)
+        arr = mrr * 12
+        
+        # Burn Rate and Runway from 3-statement
+        # Burn = Monthly Expenses - Monthly Revenue
+        monthly_burn = max(0, last_month_pl.get('cogs', 0) + last_month_pl.get('operatingExpenses', 0) - last_month_pl.get('revenue', 0))
+        runway_months = ending_cash / monthly_burn if monthly_burn > 0 else 999
+        
         return {
             'revenue': float(annual_revenue),
             'expenses': float(annual_expenses),
@@ -1259,25 +1290,24 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             'burnRate': float(monthly_burn),
             'runway': float(runway_months),
             'runwayMonths': float(runway_months),
-            'arr': float(arr),  # Industry Standard: ARR = MRR * 12
-            'mrr': float(mrr),  # Monthly Recurring Revenue
+            'arr': float(arr),
+            'mrr': float(mrr),
             'churnRate': float(churn_rate),
             'customerCount': int(customer_count),
             'revenueGrowth': float(revenue_growth),
             'expenseGrowth': float(expense_growth),
-            'grossMargin': float(gross_margin),
+            'grossMargin': float(pl_summary.get('grossMargin', gross_margin)),
             'cac': float(cac),
             'ltv': float(ltv),
             'ltvCacRatio': float(ltv_cac_ratio),
             'paybackPeriod': float(payback_period),
-            'monthly': monthly_data,  # Industry Standard: Monthly projections
+            'monthly': monthly_data, 
             'metrics': metrics,
             'modelType': model_type,
             'forecastMonths': forecast_months,
             'confidence': confidence_pct,
             'driverResults': driver_results,
             'dag': engine.get_dag_metadata() if has_drivers else None,
-            # 3-Statement Financial Model
             'statements': three_statement_model
         }
 

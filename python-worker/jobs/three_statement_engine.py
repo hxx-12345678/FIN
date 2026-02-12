@@ -102,53 +102,53 @@ class ThreeStatementEngine:
             
             # Revenue with growth
             growth_factor = (1 + revenue_growth) ** i
-            revenue = starting_revenue * growth_factor
+            revenue = round(starting_revenue * growth_factor, 2)
             
             # Cost of Goods Sold
-            cogs = revenue * cogs_percentage
+            cogs = round(revenue * cogs_percentage, 2)
             
-            # Gross Profit
-            gross_profit = revenue - cogs
-            gross_margin = gross_profit / revenue if revenue > 0 else 0
+            # Gross Profit (Calculated from rounded components)
+            gross_profit = round(revenue - cogs, 2)
+            gross_margin = round(gross_profit / revenue, 4) if revenue > 0 else 0
             
             # Operating Expenses
-            operating_expenses = revenue * opex_percentage
+            operating_expenses = round(revenue * opex_percentage, 2)
             
             # Depreciation (on PPE)
-            depreciation = running_ppe * depreciation_rate
+            depreciation = round(running_ppe * depreciation_rate, 2)
             accumulated_depreciation += depreciation
             
-            # EBITDA (Earnings Before Interest, Taxes, Depreciation, Amortization)
-            ebitda = gross_profit - operating_expenses
+            # EBITDA (Calculated from rounded components)
+            ebitda = round(gross_profit - operating_expenses, 2)
             
-            # EBIT (Earnings Before Interest and Taxes)
-            ebit = ebitda - depreciation
+            # EBIT
+            ebit = round(ebitda - depreciation, 2)
             
-            # Interest Expense (assuming 8% annual on debt)
-            interest_expense = running_debt * (0.08 / 12)
+            # Interest Expense
+            interest_expense = round(running_debt * (0.08 / 12), 2)
             
-            # EBT (Earnings Before Taxes)
-            ebt = ebit - interest_expense
+            # EBT
+            ebt = round(ebit - interest_expense, 2)
             
             # Income Tax
-            income_tax = max(0, ebt * tax_rate)
+            income_tax = round(max(0, ebt * tax_rate), 2)
             
             # Net Income
-            net_income = ebt - income_tax
+            net_income = round(ebt - income_tax, 2)
             
             monthly_pl[month_key] = {
-                'revenue': round(revenue, 2),
-                'cogs': round(cogs, 2),
-                'grossProfit': round(gross_profit, 2),
-                'grossMargin': round(gross_margin, 4),
-                'operatingExpenses': round(operating_expenses, 2),
-                'depreciation': round(depreciation, 2),
-                'ebitda': round(ebitda, 2),
-                'ebit': round(ebit, 2),
-                'interestExpense': round(interest_expense, 2),
-                'ebt': round(ebt, 2),
-                'incomeTax': round(income_tax, 2),
-                'netIncome': round(net_income, 2)
+                'revenue': revenue,
+                'cogs': cogs,
+                'grossProfit': gross_profit,
+                'grossMargin': gross_margin,
+                'operatingExpenses': operating_expenses,
+                'depreciation': depreciation,
+                'ebitda': ebitda,
+                'ebit': ebit,
+                'interestExpense': interest_expense,
+                'ebt': ebt,
+                'incomeTax': income_tax,
+                'netIncome': net_income
             }
             
             # ============================================
@@ -184,7 +184,7 @@ class ThreeStatementEngine:
             # --- Investing Activities ---
             # CapEx (Capital Expenditures)
             capex = revenue * capex_percentage
-            running_ppe = running_ppe + capex - depreciation
+            running_ppe += capex 
             
             cf_investing = -capex
             
