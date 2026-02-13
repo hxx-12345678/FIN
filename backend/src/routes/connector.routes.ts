@@ -10,7 +10,7 @@ const router = Router();
 router.post(
   '/orgs/:orgId/connectors/:type/start-oauth',
   authenticate,
-  requireOrgAccess,
+  requireOrgAccess(),
   connectorController.startOAuth
 );
 
@@ -18,35 +18,35 @@ router.post(
 router.post(
   '/orgs/:orgId/connectors/stripe/connect',
   authenticate,
-  requireOrgAccess,
+  requireOrgAccess(),
   connectorController.connectStripe
 );
 
 // OAuth callback (no auth required - handled by state token)
 // Note: OAuth providers require static callback URL, so connectorId comes from state token
-router.get('/callback', connectorController.oauthCallback);
+router.get('/connectors/callback', connectorController.oauthCallback);
 
 // Sync connector
-router.post('/:id/sync', authenticate, connectorController.sync);
+router.post('/connectors/:id/sync', authenticate, connectorController.sync);
 
 // Get connector status
-router.get('/:id/status', authenticate, connectorController.getStatus);
+router.get('/connectors/:id/status', authenticate, connectorController.getStatus);
 
 // List connectors for org
 router.get(
   '/orgs/:orgId/connectors',
   authenticate,
-  requireOrgAccess,
+  requireOrgAccess(),
   connectorController.listConnectors
 );
 
 // Connector sync health
-router.get('/:id/health', authenticate, connectorSyncController.getConnectorHealth);
+router.get('/connectors/:id/health', authenticate, connectorSyncController.getConnectorHealth);
 
 // Update sync settings
-router.patch('/:id/sync-settings', authenticate, connectorSyncController.updateSyncSettings);
+router.patch('/connectors/:id/sync-settings', authenticate, connectorSyncController.updateSyncSettings);
 
 // Scheduled sync trigger (for cron)
-router.post('/scheduled/sync', connectorSyncController.triggerScheduledSync);
+router.post('/connectors/scheduled/sync', connectorSyncController.triggerScheduledSync);
 
 export default router;

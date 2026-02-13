@@ -77,7 +77,11 @@ export const riskService = {
       return response.data.results;
     } catch (error: any) {
       console.error('Risk analysis error:', error.message);
-      throw new Error(`Risk engine failed: ${error.message}`);
+      return {
+        simulations: [],
+        summary: {},
+        error: 'Risk engine is currently unavailable'
+      };
     }
   }
 };

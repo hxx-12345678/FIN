@@ -89,26 +89,55 @@ export const modelController = {
 
       const { model_id } = req.params;
 
-      const model = await prisma.model.findUnique({
-        where: { id: model_id },
-        select: {
-          id: true,
-          name: true,
-          version: true,
-          modelJson: true,
-          orgId: true,
-          createdAt: true,
-          createdBy: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
+      // Try to fetch model with all relations; fall back to core fields if relations don't exist
+      let model: any = null;
+      try {
+        model = await prisma.model.findUnique({
+          where: { id: model_id },
+          select: {
+            id: true,
+            name: true,
+            version: true,
+            modelJson: true,
+            orgId: true,
+            createdAt: true,
+            createdBy: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+            drivers: true,
+            driverFormulas: true,
+          },
+        });
+      } catch (relationError: any) {
+        // Relations may not exist in production DB yet - fall back to core fields
+        console.warn('getModel: falling back to core fields (relation query failed):', relationError.message);
+        model = await prisma.model.findUnique({
+          where: { id: model_id },
+          select: {
+            id: true,
+            name: true,
+            version: true,
+            modelJson: true,
+            orgId: true,
+            createdAt: true,
+            createdBy: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
             },
           },
-          drivers: true,
-          driverFormulas: true,
-        },
-      });
+        });
+        if (model) {
+          (model as any).drivers = [];
+          (model as any).driverFormulas = [];
+        }
+      }
 
       if (!model) {
         throw new NotFoundError('Model not found');

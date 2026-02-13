@@ -209,7 +209,7 @@ app.get('/api/v1', (req, res) => {
 // IMPORTANT: More specific routes must be registered before less specific ones
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/orgs', orgRoutes);
-app.use('/api/v1/connectors', connectorRoutes);
+app.use('/api/v1', connectorRoutes);
 app.use('/api/v1', csvRoutes);
 app.use('/api/v1', excelRoutes);
 // Monte Carlo routes must come before model routes to prevent /models/:model_id from matching /models/:model_id/montecarlo

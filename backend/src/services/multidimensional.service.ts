@@ -36,50 +36,60 @@ export const multidimensionalService = {
      * Create or get dimensions for a model
      */
     initializeDimensions: async (orgId: string, modelId: string) => {
-        const defaultDimensions = [
-            { name: 'Geography', type: 'geography' },
-            { name: 'Product Line', type: 'product' },
-            { name: 'Department', type: 'department' },
-            { name: 'Customer Segment', type: 'segment' },
-            { name: 'Channel', type: 'channel' },
-        ];
+        try {
+            const defaultDimensions = [
+                { name: 'Geography', type: 'geography' },
+                { name: 'Product Line', type: 'product' },
+                { name: 'Department', type: 'department' },
+                { name: 'Customer Segment', type: 'segment' },
+                { name: 'Channel', type: 'channel' },
+            ];
 
-        const results = [];
-        for (const dim of defaultDimensions) {
-            const existing = await prisma.dimension.findUnique({
-                where: {
-                    orgId_modelId_name: { orgId, modelId, name: dim.name }
-                }
-            });
-
-            if (existing) {
-                results.push(existing);
-            } else {
-                const created = await prisma.dimension.create({
-                    data: {
-                        orgId,
-                        modelId,
-                        name: dim.name,
-                        type: dim.type,
-                        displayOrder: defaultDimensions.indexOf(dim)
+            const results = [];
+            for (const dim of defaultDimensions) {
+                const existing = await prisma.dimension.findUnique({
+                    where: {
+                        orgId_modelId_name: { orgId, modelId, name: dim.name }
                     }
                 });
-                results.push(created);
-            }
-        }
 
-        return results;
+                if (existing) {
+                    results.push(existing);
+                } else {
+                    const created = await prisma.dimension.create({
+                        data: {
+                            orgId,
+                            modelId,
+                            name: dim.name,
+                            type: dim.type,
+                            displayOrder: defaultDimensions.indexOf(dim)
+                        }
+                    });
+                    results.push(created);
+                }
+            }
+
+            return results;
+        } catch (error: any) {
+            console.warn('initializeDimensions: table may not exist:', error.message);
+            return [];
+        }
     },
 
     /**
      * Get all dimensions for a model
      */
     getDimensions: async (modelId: string) => {
-        return prisma.dimension.findMany({
-            where: { modelId },
-            include: { members: true },
-            orderBy: { displayOrder: 'asc' }
-        });
+        try {
+            return await prisma.dimension.findMany({
+                where: { modelId },
+                include: { members: true },
+                orderBy: { displayOrder: 'asc' }
+            });
+        } catch (error: any) {
+            console.warn('getDimensions: table may not exist:', error.message);
+            return [];
+        }
     },
 
     /**
@@ -158,51 +168,56 @@ export const multidimensionalService = {
      * Query the metric cube with optional filters and aggregation
      */
     queryCube: async (query: CubeQuery) => {
-        const { modelId, metricName, months, filters, groupBy } = query;
+        try {
+            const { modelId, metricName, months, filters, groupBy } = query;
 
-        // Build where clause
-        const where: any = {
-            modelId,
-            metricName
-        };
+            // Build where clause
+            const where: any = {
+                modelId,
+                metricName
+            };
 
-        if (months && months.length > 0) {
-            where.month = { in: months };
-        }
+            if (months && months.length > 0) {
+                where.month = { in: months };
+            }
 
-        // Apply dimension filters
-        if (filters) {
-            for (const filter of filters) {
-                const fieldMap: Record<string, string> = {
-                    geography: 'geographyId',
-                    product: 'productId',
-                    department: 'departmentId',
-                    segment: 'segmentId',
-                    channel: 'channelId',
-                    scenario: 'scenarioId'
-                };
-                const field = fieldMap[filter.dimensionType];
-                if (field && filter.memberId) {
-                    where[field] = filter.memberId;
+            // Apply dimension filters
+            if (filters) {
+                for (const filter of filters) {
+                    const fieldMap: Record<string, string> = {
+                        geography: 'geographyId',
+                        product: 'productId',
+                        department: 'departmentId',
+                        segment: 'segmentId',
+                        channel: 'channelId',
+                        scenario: 'scenarioId'
+                    };
+                    const field = fieldMap[filter.dimensionType];
+                    if (field && filter.memberId) {
+                        where[field] = filter.memberId;
+                    }
                 }
             }
+
+            // Fetch raw data
+            const data = await prisma.metricCube.findMany({
+                where,
+                include: {
+                    geography: true
+                },
+                orderBy: { month: 'asc' }
+            });
+
+            // If groupBy is specified, perform aggregation
+            if (groupBy && groupBy.length > 0) {
+                return multidimensionalService.aggregateCubeData(data, groupBy);
+            }
+
+            return data;
+        } catch (error: any) {
+            console.warn('queryCube: table may not exist:', error.message);
+            return [];
         }
-
-        // Fetch raw data
-        const data = await prisma.metricCube.findMany({
-            where,
-            include: {
-                geography: true
-            },
-            orderBy: { month: 'asc' }
-        });
-
-        // If groupBy is specified, perform aggregation
-        if (groupBy && groupBy.length > 0) {
-            return multidimensionalService.aggregateCubeData(data, groupBy);
-        }
-
-        return data;
     },
 
     /**
@@ -264,11 +279,16 @@ export const multidimensionalService = {
         rollupDimension: string,
         months?: string[]
     ) => {
-        const where: any = { modelId, metricName };
-        if (months) where.month = { in: months };
+        try {
+            const where: any = { modelId, metricName };
+            if (months) where.month = { in: months };
 
-        const data = await prisma.metricCube.findMany({ where });
-        return multidimensionalService.aggregateCubeData(data, [rollupDimension]);
+            const data = await prisma.metricCube.findMany({ where });
+            return multidimensionalService.aggregateCubeData(data, [rollupDimension]);
+        } catch (error: any) {
+            console.warn('getRollup: table may not exist:', error.message);
+            return [];
+        }
     },
 
     /**
@@ -281,26 +301,31 @@ export const multidimensionalService = {
         memberId: string,
         targetDimension: string
     ) => {
-        const fieldMap: Record<string, string> = {
-            geography: 'geographyId',
-            product: 'productId',
-            department: 'departmentId',
-            segment: 'segmentId',
-            channel: 'channelId',
-            scenario: 'scenarioId'
-        };
+        try {
+            const fieldMap: Record<string, string> = {
+                geography: 'geographyId',
+                product: 'productId',
+                department: 'departmentId',
+                segment: 'segmentId',
+                channel: 'channelId',
+                scenario: 'scenarioId'
+            };
 
-        const filterField = fieldMap[dimensionType];
-        if (!filterField) throw new ValidationError(`Invalid dimension: ${dimensionType}`);
+            const filterField = fieldMap[dimensionType];
+            if (!filterField) throw new ValidationError(`Invalid dimension: ${dimensionType}`);
 
-        const where: any = {
-            modelId,
-            metricName,
-            [filterField]: memberId
-        };
+            const where: any = {
+                modelId,
+                metricName,
+                [filterField]: memberId
+            };
 
-        const data = await prisma.metricCube.findMany({ where });
-        return multidimensionalService.aggregateCubeData(data, [targetDimension]);
+            const data = await prisma.metricCube.findMany({ where });
+            return multidimensionalService.aggregateCubeData(data, [targetDimension]);
+        } catch (error: any) {
+            console.warn('drilldown: table may not exist:', error.message);
+            return [];
+        }
     },
 
     // =========================================================================
@@ -317,61 +342,66 @@ export const multidimensionalService = {
         colDimension: string,
         months?: string[]
     ) => {
-        const where: any = { modelId, metricName };
-        if (months) where.month = { in: months };
+        try {
+            const where: any = { modelId, metricName };
+            if (months) where.month = { in: months };
 
-        const data = await prisma.metricCube.findMany({
-            where,
-            include: { geography: true }
-        });
+            const data = await prisma.metricCube.findMany({
+                where,
+                include: { geography: true }
+            });
 
-        const fieldMap: Record<string, string> = {
-            geography: 'geographyId',
-            product: 'productId',
-            department: 'departmentId',
-            segment: 'segmentId',
-            channel: 'channelId',
-            scenario: 'scenarioId',
-            month: 'month'
-        };
+            const fieldMap: Record<string, string> = {
+                geography: 'geographyId',
+                product: 'productId',
+                department: 'departmentId',
+                segment: 'segmentId',
+                channel: 'channelId',
+                scenario: 'scenarioId',
+                month: 'month'
+            };
 
-        const rowField = fieldMap[rowDimension] || rowDimension;
-        const colField = fieldMap[colDimension] || colDimension;
+            const rowField = fieldMap[rowDimension] || rowDimension;
+            const colField = fieldMap[colDimension] || colDimension;
 
-        // Build pivot structure
-        const pivot: Record<string, Record<string, number>> = {};
-        const columns = new Set<string>();
+            // Build pivot structure
+            const pivot: Record<string, Record<string, number>> = {};
+            const columns = new Set<string>();
 
-        for (const entry of data) {
-            const rowKey = String(entry[rowField as keyof typeof entry] || 'Unknown');
-            const colKey = String(entry[colField as keyof typeof entry] || 'Unknown');
+            for (const entry of data) {
+                const rowKey = String(entry[rowField as keyof typeof entry] || 'Unknown');
+                const colKey = String(entry[colField as keyof typeof entry] || 'Unknown');
 
-            if (!pivot[rowKey]) pivot[rowKey] = {};
-            if (!pivot[rowKey][colKey]) pivot[rowKey][colKey] = 0;
+                if (!pivot[rowKey]) pivot[rowKey] = {};
+                if (!pivot[rowKey][colKey]) pivot[rowKey][colKey] = 0;
 
-            pivot[rowKey][colKey] += Number(entry.value);
-            columns.add(colKey);
-        }
-
-        return {
-            rows: Object.keys(pivot).sort(),
-            columns: Array.from(columns).sort(),
-            data: pivot,
-            totals: {
-                rowTotals: Object.fromEntries(
-                    Object.entries(pivot).map(([row, cols]) => [
-                        row,
-                        Object.values(cols).reduce((a, b) => a + b, 0)
-                    ])
-                ),
-                columnTotals: Object.fromEntries(
-                    Array.from(columns).map(col => [
-                        col,
-                        Object.values(pivot).reduce((sum, row) => sum + (row[col] || 0), 0)
-                    ])
-                ),
-                grandTotal: data.reduce((sum, e) => sum + Number(e.value), 0)
+                pivot[rowKey][colKey] += Number(entry.value);
+                columns.add(colKey);
             }
-        };
+
+            return {
+                rows: Object.keys(pivot).sort(),
+                columns: Array.from(columns).sort(),
+                data: pivot,
+                totals: {
+                    rowTotals: Object.fromEntries(
+                        Object.entries(pivot).map(([row, cols]) => [
+                            row,
+                            Object.values(cols).reduce((a, b) => a + b, 0)
+                        ])
+                    ),
+                    columnTotals: Object.fromEntries(
+                        Array.from(columns).map(col => [
+                            col,
+                            Object.values(pivot).reduce((sum, row) => sum + (row[col] || 0), 0)
+                        ])
+                    ),
+                    grandTotal: data.reduce((sum, e) => sum + Number(e.value), 0)
+                }
+            };
+        } catch (error: any) {
+            console.warn('getPivotTable: table may not exist:', error.message);
+            return { rows: [], columns: [], data: {}, totals: { rowTotals: {}, columnTotals: {}, grandTotal: 0 } };
+        }
     }
 };

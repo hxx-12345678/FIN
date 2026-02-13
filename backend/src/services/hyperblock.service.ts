@@ -66,16 +66,20 @@ export const hyperblockService = {
 
             // 5. Save trace for explainability if an update occurred
             if (update) {
-                await (prisma as any).computationTrace.create({
-                    data: {
-                        orgId,
-                        modelId,
-                        triggerNodeId: update.nodeId,
-                        triggerUserId: update.userId || null,
-                        affectedNodes: affectedNodes as any,
-                        durationMs: metrics.computeTimeMs
-                    }
-                });
+                try {
+                    await (prisma as any).computationTrace.create({
+                        data: {
+                            orgId,
+                            modelId,
+                            triggerNodeId: update.nodeId,
+                            triggerUserId: update.userId || null,
+                            affectedNodes: affectedNodes as any,
+                            durationMs: metrics.computeTimeMs
+                        }
+                    });
+                } catch (traceErr: any) {
+                    console.warn('Could not save computation trace:', traceErr.message);
+                }
             }
 
             return {
@@ -86,7 +90,14 @@ export const hyperblockService = {
             };
         } catch (error: any) {
             console.error('Hyperblock recompute error:', error.message);
-            throw new Error(`Hyperblock engine failed: ${error.message}`);
+            // Return empty result instead of crashing
+            return {
+                results: {},
+                affectedNodes: [],
+                trace: [],
+                metrics: { nodeCount: 0, edgeCount: 0, computeTimeMs: 0 },
+                error: 'Hyperblock engine unavailable'
+            };
         }
     },
 
@@ -94,10 +105,15 @@ export const hyperblockService = {
      * Get recently traces for a model
      */
     getTraces: async (modelId: string, limit: number = 10) => {
-        return (prisma as any).computationTrace.findMany({
-            where: { modelId },
-            orderBy: { createdAt: 'desc' },
-            take: limit
-        });
+        try {
+            return await (prisma as any).computationTrace.findMany({
+                where: { modelId },
+                orderBy: { createdAt: 'desc' },
+                take: limit
+            });
+        } catch (error: any) {
+            console.warn('getTraces: computationTrace table may not exist:', error.message);
+            return [];
+        }
     }
 };

@@ -61,7 +61,14 @@ export const forecastingService = {
             };
         } catch (error: any) {
             console.error('Forecasting error:', error.message);
-            throw new Error(`Forecasting engine failed: ${error.message}`);
+            return {
+                id: null,
+                forecast: [],
+                method: 'unavailable',
+                explanation: { info: 'Forecasting engine is currently unavailable' },
+                metrics: {},
+                error: error.message
+            };
         }
     },
 
@@ -86,26 +93,31 @@ export const forecastingService = {
      * Get historical data for a metric from the DB or Cube
      */
     getHistoricalMetricData: async (orgId: string, modelId: string, metricName: string) => {
-        // Fetch from MetricCube (our multi-dimensional store)
-        const entries = await (prisma as any).metricCube.findMany({
-            where: {
-                orgId,
-                modelId,
-                metricName
-            },
-            orderBy: {
-                month: 'asc'
-            }
-        });
+        try {
+            // Fetch from MetricCube (our multi-dimensional store)
+            const entries = await (prisma as any).metricCube.findMany({
+                where: {
+                    orgId,
+                    modelId,
+                    metricName
+                },
+                orderBy: {
+                    month: 'asc'
+                }
+            });
 
-        // Group by month and sum values (if multi-dimensional)
-        const monthlyData: Record<string, number> = {};
-        entries.forEach(e => {
-            monthlyData[e.month] = (monthlyData[e.month] || 0) + Number(e.value);
-        });
+            // Group by month and sum values (if multi-dimensional)
+            const monthlyData: Record<string, number> = {};
+            entries.forEach((e: any) => {
+                monthlyData[e.month] = (monthlyData[e.month] || 0) + Number(e.value);
+            });
 
-        return Object.entries(monthlyData)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([_, val]) => val);
+            return Object.entries(monthlyData)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([_, val]) => val);
+        } catch (error: any) {
+            console.warn('getHistoricalMetricData: table may not exist:', error.message);
+            return [];
+        }
     }
 };
