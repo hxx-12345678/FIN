@@ -37,6 +37,8 @@ import { toast } from "sonner"
 import { API_BASE_URL, getAuthToken, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { FinancialTermTooltip } from "./financial-term-tooltip"
 import { DataDrivenTooltip } from "./data-driven-tooltip"
+import { useModel } from "@/lib/model-context"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface OverviewData {
   healthScore: number
@@ -96,10 +98,12 @@ const defaultExpenseBreakdown = [
 ]
 
 export function OverviewDashboard() {
+  const { selectedModelId, setSelectedModelId, orgId: contextOrgId, setOrgId: setContextOrgId } = useModel()
   const [data, setData] = useState<OverviewData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [orgId, setOrgId] = useState<string | null>(null)
+  const [orgId, setOrgId] = useState<string | null>(contextOrgId)
+  const [models, setModels] = useState<any[]>([])
 
   const fetchOrgId = async () => {
     const storedOrgId = localStorage.getItem("orgId")
@@ -135,13 +139,13 @@ export function OverviewDashboard() {
       if (response.ok) {
         const responseData = await response.json()
         console.log("[Overview] Auth me response:", responseData)
-        
+
         // Handle different response formats (wrapped in ok: true or direct data)
         const userData = responseData.ok ? responseData : responseData.data || responseData
-        
+
         // Handle different response formats
         let orgIdToUse: string | null = null
-        
+
         if (userData?.orgs && Array.isArray(userData.orgs) && userData.orgs.length > 0) {
           // Response has orgs array
           orgIdToUse = userData.orgs[0].id
@@ -158,7 +162,7 @@ export function OverviewDashboard() {
           // Direct orgId in response
           orgIdToUse = responseData.orgId
         }
-        
+
         if (orgIdToUse) {
           console.log("[Overview] Found orgId:", orgIdToUse)
           localStorage.setItem("orgId", orgIdToUse)
@@ -178,6 +182,31 @@ export function OverviewDashboard() {
     return null
   }
 
+  const fetchModels = async (orgId: string, token: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/models`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        if (result.ok && result.models && result.models.length > 0) {
+          setModels(result.models)
+          // Only set if none selected
+          if (!selectedModelId) {
+            setSelectedModelId(result.models[0].id)
+          }
+        }
+      }
+    } catch (error) {
+      console.error("[Overview] Failed to fetch models:", error)
+    }
+  }
+
   const fetchOverviewData = async () => {
     setLoading(true)
     setError(null)
@@ -185,12 +214,12 @@ export function OverviewDashboard() {
     try {
       // First try to get orgId from state or localStorage
       let currentOrgId = orgId || localStorage.getItem("orgId")
-      
+
       // If not found, fetch it
       if (!currentOrgId) {
         currentOrgId = await fetchOrgId()
       }
-      
+
       if (!currentOrgId) {
         const errorMsg = "Organization ID not found. Please ensure you're logged in."
         console.error("[Overview] No orgId found:", errorMsg)
@@ -204,11 +233,11 @@ export function OverviewDashboard() {
         setOrgId(currentOrgId)
         localStorage.setItem("orgId", currentOrgId)
       }
-      
+
       console.log("[Overview] Fetching data for orgId:", currentOrgId)
 
       const token = getAuthToken()
-      
+
       if (!token) {
         const errorMsg = "Authentication token not found. Please log in again."
         console.error("[Overview] No token found")
@@ -227,10 +256,14 @@ export function OverviewDashboard() {
         return
       }
 
-      const url = `${API_BASE_URL}/orgs/${currentOrgId}/overview`
-      console.log("[Overview] Fetching from URL:", url)
+      const url = new URL(`${API_BASE_URL}/orgs/${currentOrgId}/overview`)
+      if (selectedModelId) {
+        url.searchParams.append("modelId", selectedModelId)
+      }
 
-      const response = await fetch(url, {
+      console.log("[Overview] Fetching from URL:", url.toString())
+
+      const response = await fetch(url.toString(), {
         headers: getAuthHeaders(),
         credentials: "include",
       })
@@ -248,7 +281,7 @@ export function OverviewDashboard() {
           setLoading(false)
           return
         }
-        
+
         let errorData: any = {}
         try {
           errorData = await response.json()
@@ -291,16 +324,32 @@ export function OverviewDashboard() {
   }
 
   useEffect(() => {
-    fetchOverviewData()
+    const initialize = async () => {
+      const currentOrgId = await fetchOrgId()
+      if (currentOrgId) {
+        const token = getAuthToken()
+        if (token) {
+          await fetchModels(currentOrgId, token)
+        }
+        await fetchOverviewData()
+      }
+    }
+    initialize()
   }, [])
+
+  useEffect(() => {
+    if (orgId && selectedModelId) {
+      fetchOverviewData()
+    }
+  }, [selectedModelId])
 
   // Listen for CSV/Excel import completion to refresh data
   useEffect(() => {
     const handleImportComplete = async (event: CustomEvent) => {
       const { rowsImported, orgId: importedOrgId } = event.detail || {}
-      
+
       console.log("[Overview] Import completed, refreshing data...", { rowsImported, importedOrgId, currentOrgId: orgId })
-      
+
       // Update orgId if it came from the event
       if (importedOrgId) {
         if (importedOrgId !== orgId) {
@@ -308,7 +357,7 @@ export function OverviewDashboard() {
           localStorage.setItem("orgId", importedOrgId)
         }
       }
-      
+
       // Small delay to ensure backend has processed the data
       setTimeout(() => {
         fetchOverviewData()
@@ -407,8 +456,8 @@ export function OverviewDashboard() {
           <p className="text-sm md:text-base text-muted-foreground">AI-powered insights for your business performance</p>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             className="w-full sm:w-auto"
             onClick={async () => {
               // Trigger data refresh for last 30 days
@@ -716,13 +765,12 @@ export function OverviewDashboard() {
               overviewData.alerts.map((alert, index) => (
                 <div
                   key={index}
-                  className={`flex items-start gap-3 p-3 rounded-lg border ${
-                    alert.type === "warning"
-                      ? "bg-yellow-50 border-yellow-200"
-                      : alert.type === "success"
+                  className={`flex items-start gap-3 p-3 rounded-lg border ${alert.type === "warning"
+                    ? "bg-yellow-50 border-yellow-200"
+                    : alert.type === "success"
                       ? "bg-green-50 border-green-200"
                       : "bg-blue-50 border-blue-200"
-                  }`}
+                    }`}
                 >
                   {alert.type === "warning" ? (
                     <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
@@ -733,24 +781,22 @@ export function OverviewDashboard() {
                   )}
                   <div>
                     <div
-                      className={`font-medium ${
-                        alert.type === "warning"
-                          ? "text-yellow-800"
-                          : alert.type === "success"
+                      className={`font-medium ${alert.type === "warning"
+                        ? "text-yellow-800"
+                        : alert.type === "success"
                           ? "text-green-800"
                           : "text-blue-800"
-                      }`}
+                        }`}
                     >
                       {alert.title}
                     </div>
                     <div
-                      className={`text-sm ${
-                        alert.type === "warning"
-                          ? "text-yellow-700"
-                          : alert.type === "success"
+                      className={`text-sm ${alert.type === "warning"
+                        ? "text-yellow-700"
+                        : alert.type === "success"
                           ? "text-green-700"
                           : "text-blue-700"
-                      }`}
+                        }`}
                     >
                       {alert.message}
                     </div>

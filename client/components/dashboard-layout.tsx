@@ -47,6 +47,8 @@ import { useStagedChanges } from "@/hooks/use-staged-changes"
 import { toast } from "sonner"
 import { SwitchOrganizationDialog } from "@/components/switch-organization-dialog"
 import { API_BASE_URL, getAuthToken } from "@/lib/api-config"
+import { useModel } from "@/lib/model-context"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -190,7 +192,7 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
   const [isSigningOut, setIsSigningOut] = useState(false)
   const sidebarRef = useRef<HTMLDivElement>(null)
   const mainContentRef = useRef<HTMLDivElement>(null)
-  
+
   // User data state
   const [userData, setUserData] = useState<{
     id: string
@@ -205,7 +207,9 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
   } | null>(null)
   const [loadingUser, setLoadingUser] = useState(true)
   const [showSwitchOrgDialog, setShowSwitchOrgDialog] = useState(false)
-  const [currentOrgId, setCurrentOrgId] = useState<string | null>(null)
+  const { selectedModelId, setSelectedModelId, orgId: contextOrgId, setOrgId: setContextOrgId } = useModel()
+  const [models, setModels] = useState<any[]>([])
+  const [currentOrgId, setCurrentOrgId] = useState<string | null>(contextOrgId)
 
   // Fetch user data
   useEffect(() => {
@@ -239,7 +243,7 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
 
         const data = await response.json()
         setUserData(data)
-        
+
         // Set current org from localStorage or first org
         const storedOrgId = localStorage.getItem("orgId")
         if (storedOrgId && data.orgs?.some((org: any) => org.id === storedOrgId)) {
@@ -258,6 +262,41 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
 
     fetchUserData()
   }, [])
+
+  const fetchModels = async (orgId: string, token: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/models`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        if (result.ok && result.models) {
+          setModels(result.models)
+          // If no model is selected globally, select the first one
+          if (!selectedModelId && result.models.length > 0) {
+            setSelectedModelId(result.models[0].id)
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching models:", error)
+    }
+  }
+
+  useEffect(() => {
+    if (currentOrgId) {
+      const token = getAuthToken()
+      if (token) {
+        fetchModels(currentOrgId, token)
+        setContextOrgId(currentOrgId)
+      }
+    }
+  }, [currentOrgId])
 
   useEffect(() => {
     const checkMobile = () => {
@@ -325,13 +364,13 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
       localStorage.removeItem("orgId")
       localStorage.removeItem("finapilot_has_visited")
       localStorage.removeItem("finapilot_onboarding_complete")
-      
+
       // Clear cookies
       document.cookie = "auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
       document.cookie = "refresh-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
 
       toast.success("Signed out successfully")
-      
+
       // Dispatch custom event to reset app state and show landing page
       // This avoids full page reload and works with component-based routing
       setTimeout(() => {
@@ -368,7 +407,7 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
 
   // Get current organization
   const currentOrg = userData?.orgs?.find((org) => org.id === currentOrgId)
-  
+
   // Get user initials for avatar
   const getUserInitials = () => {
     if (userData?.name) {
@@ -416,9 +455,9 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
           <div className="border-b p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 shadow-lg shrink-0 overflow-hidden relative group transition-all hover:scale-105">
-                <img 
-                  src="/icon.svg" 
-                  alt="FinaPilot Logo" 
+                <img
+                  src="/icon.svg"
+                  alt="FinaPilot Logo"
                   className="w-8 h-8"
                 />
               </div>
@@ -542,8 +581,8 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
                     <Settings className="mr-2 h-4 w-4" />
                     Account Settings
                   </DropdownMenuItem>
-                  <DropdownMenuItem 
-                    className="text-red-600" 
+                  <DropdownMenuItem
+                    className="text-red-600"
                     onClick={handleSignOut}
                     disabled={isSigningOut}
                   >
@@ -581,8 +620,29 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
             </div>
           )}
           <div className="flex flex-1 items-center gap-4 min-w-0">
-            {/* Search and AI CFO - Removed as not currently functional */}
-            {/* Notification Bell - Removed as not currently functional */}
+            {models.length > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-muted-foreground hidden sm:inline">Active Model:</span>
+                <Select
+                  value={selectedModelId || undefined}
+                  onValueChange={(value) => setSelectedModelId(value)}
+                >
+                  <SelectTrigger className="w-[180px] md:w-[240px] h-9 border-blue-100 bg-blue-50/30 hover:bg-blue-50/50 transition-colors">
+                    <SelectValue placeholder="Select model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {models.map((model) => (
+                      <SelectItem key={model.id} value={model.id}>
+                        <div className="flex items-center gap-2">
+                          <BarChart3 className="h-3.5 w-3.5 text-blue-600" />
+                          <span>{model.name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
         </header>
 

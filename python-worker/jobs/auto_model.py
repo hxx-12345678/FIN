@@ -325,105 +325,146 @@ def generate_assumptions(
     data_source_type: str
 ) -> Dict[str, Any]:
     """
-    Generate industrial-standard assumptions from transaction data or user inputs
+    Generate industrial-standard assumptions from transaction data or user inputs.
+    More intelligent scanning: looks at all available data even if source is 'blank'.
     """
-    assumptions = {
-        'revenue': {
-            'growthModel': 'linear',
-            'seasonality': 0.05,
+    # Industry benchmarks (Industrial Standards)
+    industry_benchmarks = {
+        'saas': {
+            'revenueGrowth': 0.12, # 12% monthly for growth-stage startups
+            'churnRate': 0.03,     # 3% monthly SaaS standard
+            'expenseGrowth': 0.05,
+            'cogsRatio': 0.15,     # High gross margin
+            'defaultRevenue': 15000.0
         },
-        'costs': {
-            'opexBuckets': {
-                'sales_marketing': 0.0,
-                'research_development': 0.0,
-                'general_admin': 0.0,
-            }
+        'ecommerce': {
+            'revenueGrowth': 0.18, # Higher volatility/growth in ecom
+            'churnRate': 0.10,     # Higher 'churn' (non-repeat)
+            'expenseGrowth': 0.08,
+            'cogsRatio': 0.60,     # Lower gross margin due to physical goods
+            'defaultRevenue': 25000.0
         },
-        'cash': {},
-        'unitEconomics': {},
+        'services': {
+            'revenueGrowth': 0.06,
+            'churnRate': 0.05,
+            'expenseGrowth': 0.04,
+            'cogsRatio': 0.40,     # Labor intensive
+            'defaultRevenue': 12000.0
+        },
+        'technology': {
+            'revenueGrowth': 0.15,
+            'churnRate': 0.04,
+            'expenseGrowth': 0.07,
+            'cogsRatio': 0.20,
+            'defaultRevenue': 20000.0
+        }
     }
-    
-    # Prioritize user inputs for AI-generated models
-    business_type = params.get('businessType', 'technology')
-    starting_customers = params.get('startingCustomers', 0)
-    starting_revenue = params.get('startingRevenue', 0)
-    user_starting_mrr = params.get('startingMrr', 0)
-    starting_aov = params.get('startingAov', 0)
+
+    business_type = params.get('businessType', 'saas').lower()
+    bench = industry_benchmarks.get(business_type, industry_benchmarks['saas'])
+
+    # 1. Prioritize user inputs
+    starting_customers = params.get('startingCustomers')
+    starting_revenue = params.get('startingRevenue')
+    user_starting_mrr = params.get('startingMrr')
+    starting_aov = params.get('startingAov')
     major_costs = params.get('majorCosts', {})
-    cash_on_hand = params.get('cashOnHand', 500000)
+    cash_on_hand = params.get('cashOnHand')
+    retention_rate = params.get('retentionRate')
+    acquisition_efficiency = params.get('acquisitionEfficiency') or {}
+    hiring_plan = params.get('hiringPlan') or []
     manual_assumptions = params.get('assumptions', {})
     
     # If manual assumptions provided, use them as base
     if manual_assumptions:
         return manual_assumptions
 
-    # Determine baseline revenue: User input takes precedence
-    baseline_revenue = float(user_starting_mrr or (float(starting_revenue) / 12) or 0)
-    
-    # Determine historical stats if data source is not blank
+    # 2. Smart Data Scanning: Look at transactions even if data_source is 'blank'
+    # but only if user didn't provide specific starting values
     hist_avg_revenue = 0
-    hist_revenue_growth = 0.08 # Default industrial benchmark
-    
-    if (monthly_revenue or monthly_expenses) and data_source_type != 'blank':
-        revenue_months = sorted(monthly_revenue.keys())
-        hist_avg_revenue = sum(monthly_revenue.values()) / len(revenue_months) if revenue_months else 0
-        
-        if len(revenue_months) >= 3:
-            recent_revs = [monthly_revenue[m] for m in revenue_months[-3:]]
-            if recent_revs[0] > 100: # Significant enough to calculate growth
-                hist_revenue_growth = (recent_revs[-1] / recent_revs[0]) ** (1.0 / 2) - 1.0
-                # Clamp to realistic industrial ranges (-5% to +40% monthly)
-                # Professional models should not default to -50% unless data is extremely conclusive
-                hist_revenue_growth = max(-0.05, min(0.40, hist_revenue_growth))
-    
-    # Merge: if user didn't provide MRR but we have historicals, use historicals
-    if baseline_revenue == 0 and hist_avg_revenue > 0:
-        baseline_revenue = hist_avg_revenue
-    elif baseline_revenue == 0:
-        baseline_revenue = 10000.0 # Default starting point if totally empty
+    hist_revenue_growth = bench['revenueGrowth']
+    hist_avg_expenses = 0
+    has_data = len(monthly_revenue) > 0 or len(monthly_expenses) > 0
 
-    # Final Assumptions Construction
+    if has_data:
+        revenue_months = sorted(monthly_revenue.keys())
+        if revenue_months:
+            hist_avg_revenue = sum(monthly_revenue.values()) / len(revenue_months)
+            
+            if len(revenue_months) >= 3:
+                # Calculate Compound Monthly Growth Rate (CMGR)
+                start_rev = monthly_revenue[revenue_months[0]]
+                end_rev = monthly_revenue[revenue_months[-1]]
+                if start_rev > 1.0:
+                    months_delta = len(revenue_months) - 1
+                    try:
+                        hist_revenue_growth = (end_rev / start_rev) ** (1.0 / months_delta) - 1.0
+                    except:
+                        pass
+        
+        expense_months = sorted(monthly_expenses.keys())
+        if expense_months:
+            hist_avg_expenses = sum(monthly_expenses.values()) / len(expense_months)
+
+    # 3. Decision Logic for Baseline Revenue (The 'Same Value' Fix)
+    # Priority: User Input > Historical Data > Industry Benchmark
+    if user_starting_mrr is not None and float(user_starting_mrr) > 0:
+        baseline_revenue = float(user_starting_mrr)
+    elif starting_revenue is not None and float(starting_revenue) > 0:
+        baseline_revenue = float(starting_revenue) / 12.0
+    elif hist_avg_revenue > 0:
+        baseline_revenue = hist_avg_revenue
+    else:
+        # DISTINCT DEFAULT: Use industry-specific default instead of hardcoded 10000
+        baseline_revenue = bench['defaultRevenue']
+
+    # 4. Final Assumptions Construction
     assumptions = {
         'revenue': {
-            'baselineRevenue': float(baseline_revenue),
-            'revenueGrowth': float(hist_revenue_growth),
-            'growthModel': 'exponential', # SaaS Professional Standard
-            'churnRate': 0.03, # 3% monthly is professional SME/SaaS standard (~30% annual)
-            'customerCount': int(starting_customers) or (int(baseline_revenue / 100) if baseline_revenue > 0 else 100),
-            'mrr': float(baseline_revenue),
-            'arr': float(baseline_revenue * 12),
-            'aov': float(starting_aov) or (baseline_revenue / max(1, starting_customers)) if starting_customers else 100.0,
+            'baselineRevenue': float(baseline_revenue or 0),
+            'revenueGrowth': float(hist_revenue_growth or 0),
+            'growthModel': 'exponential' if business_type in ['saas', 'technology'] else 'linear',
+            'churnRate': float(1 - (float(retention_rate)/100)) if retention_rate is not None else float(bench['churnRate']),
+            'customerCount': int(starting_customers) if starting_customers is not None else (int(baseline_revenue / 100) if baseline_revenue > 0 else 100),
+            'mrr': float(baseline_revenue or 0),
+            'arr': float((baseline_revenue or 0) * 12),
+            'aov': float(starting_aov) if starting_aov is not None else ((baseline_revenue / max(1, float(starting_customers or 1))) if (starting_customers and baseline_revenue > 0) else 100.0),
         },
         'costs': {
-            'baselineExpenses': 0,
-            'expenseGrowth': 0.04, # Slightly lower than revenue growth for operating leverage
-            'cogsRatio': 0.20 if business_type in ['saas', 'technology'] else (0.60 if business_type == 'ecommerce' else 0.40),
+            'baselineExpenses': float(hist_avg_expenses) if hist_avg_expenses > 0 else (baseline_revenue * 0.7),
+            'expenseGrowth': float(bench['expenseGrowth']),
+            'cogsRatio': float(bench['cogsRatio']),
+            'hiringPlan': hiring_plan
         },
         'cash': {
-            'initialCash': float(cash_on_hand) if cash_on_hand else 100000.0,
+            'initialCash': float(cash_on_hand) if cash_on_hand is not None else 500000.0,
         },
         'unitEconomics': {}
     }
 
     # Calculate Expenses from user costs or historicals
-    payroll = float(major_costs.get('payroll', 0))
-    marketing = float(major_costs.get('marketing', 0))
-    infrastructure = float(major_costs.get('infrastructure', 0))
+    payroll = float(major_costs.get('payroll') or 0)
+    marketing = float(major_costs.get('marketing') or 0)
+    infrastructure = float(major_costs.get('infrastructure') or 0)
     
-    if payroll == 0 and marketing == 0:
-        # Fallback to historical averages or revenue percentage
-        avg_exp = sum(monthly_expenses.values()) / len(monthly_expenses) if monthly_expenses else baseline_revenue * 0.7
-        assumptions['costs']['payroll'] = avg_exp * 0.6
-        assumptions['costs']['marketing'] = avg_exp * 0.2
-        assumptions['costs']['infrastructure'] = avg_exp * 0.1
-        assumptions['costs']['baselineExpenses'] = avg_exp
-    else:
+    if payroll > 0 or marketing > 0 or infrastructure > 0:
         assumptions['costs']['payroll'] = payroll
         assumptions['costs']['marketing'] = marketing
         assumptions['costs']['infrastructure'] = infrastructure
         assumptions['costs']['baselineExpenses'] = payroll + marketing + infrastructure
+    elif hist_avg_expenses > 0:
+        # Allocate historical expenses to buckets based on industry norms
+        assumptions['costs']['payroll'] = hist_avg_expenses * 0.6
+        assumptions['costs']['marketing'] = hist_avg_expenses * 0.2
+        assumptions['costs']['infrastructure'] = hist_avg_expenses * 0.1
+    else:
+        # Use defaults based on baseline_revenue
+        exp = assumptions['costs']['baselineExpenses']
+        assumptions['costs']['payroll'] = exp * 0.6
+        assumptions['costs']['marketing'] = exp * 0.2
+        assumptions['costs']['infrastructure'] = exp * 0.1
 
-    # Industrial Unit Economics (LTV/CAC)
+    # 5. Industrial Unit Economics (LTV/CAC)
     mrr = assumptions['revenue']['mrr']
     cust_count = assumptions['revenue']['customerCount']
     arpu = mrr / max(1, cust_count)
@@ -438,10 +479,10 @@ def generate_assumptions(
     ltv = arpu / max(0.001, churn)
     
     assumptions['unitEconomics'] = {
-        'cac': float(cac),
+        'cac': float(acquisition_efficiency.get('caac') or cac),
         'ltv': float(ltv),
-        'ltvCacRatio': float(ltv / cac) if cac > 0 else 3.0,
-        'paybackPeriod': float(cac / arpu) if arpu > 0 else 12.0,
+        'ltvCacRatio': float(ltv / (acquisition_efficiency.get('caac') or cac)) if (acquisition_efficiency.get('caac') or cac) > 0 else 3.0,
+        'paybackPeriod': float(acquisition_efficiency.get('payback') or (cac / arpu)) if arpu > 0 else 12.0,
     }
     
     return assumptions

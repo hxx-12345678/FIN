@@ -53,13 +53,13 @@ export const overviewDashboardService = {
   /**
    * Get overview dashboard data for an organization
    */
-  getOverviewData: async (orgId: string): Promise<OverviewDashboardData> => {
+  getOverviewData: async (orgId: string, modelId?: string): Promise<OverviewDashboardData> => {
     // Get actual transaction data from raw_transactions
     // First, try last 12 months, but if no data, use ALL available transactions
     const now = new Date();
     const startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1); // Last 12 months
     const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0); // End of current month
-    
+
     // Fetch transactions from database (last 12 months first)
     let transactions = await prisma.rawTransaction.findMany({
       where: {
@@ -74,7 +74,7 @@ export const overviewDashboardService = {
         date: 'desc',
       },
     });
-    
+
     // If no recent transactions, get ALL transactions (for orgs with old data)
     if (transactions.length === 0) {
       console.log(`[Overview] No transactions in last 12 months, fetching ALL transactions`);
@@ -89,23 +89,23 @@ export const overviewDashboardService = {
         take: 1000, // Limit to prevent performance issues
       });
     }
-    
+
     // Calculate revenue and expenses from transactions
     const monthlyRevenueMap = new Map<string, number>();
     const monthlyExpenseMap = new Map<string, number>();
-    
+
     for (const tx of transactions) {
       const month = String(tx.date.getMonth() + 1).padStart(2, '0');
       const period = `${tx.date.getFullYear()}-${month}`;
       const amount = Number(tx.amount);
-      
+
       if (amount > 0) {
         monthlyRevenueMap.set(period, (monthlyRevenueMap.get(period) || 0) + amount);
       } else {
         monthlyExpenseMap.set(period, (monthlyExpenseMap.get(period) || 0) + Math.abs(amount));
       }
     }
-    
+
     // Try to get investor dashboard data (may return defaults if no baseline run)
     let investorData;
     try {
@@ -114,10 +114,10 @@ export const overviewDashboardService = {
       console.log(`[Overview] Error getting investor data, using fallback: ${error}`);
       investorData = null;
     }
-    
+
     // Determine the date range for charts (last 6 months ending at latest data or current date)
     let chartPeriods: string[] = [];
-    
+
     const allPeriods = Array.from(new Set([
       ...monthlyRevenueMap.keys(),
       ...monthlyExpenseMap.keys()
@@ -128,7 +128,7 @@ export const overviewDashboardService = {
       const lastPeriod = allPeriods[allPeriods.length - 1];
       const [year, month] = lastPeriod.split('-').map(Number);
       const lastDate = new Date(year, month - 1, 1);
-      
+
       chartPeriods = Array.from({ length: 6 }, (_, i) => {
         const date = new Date(lastDate.getFullYear(), lastDate.getMonth() - i, 1);
         const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -147,37 +147,37 @@ export const overviewDashboardService = {
     let monthlyRevenue = 0;
     let monthlyBurnRate = 0;
     let revenueGrowth = 0;
-    
+
     console.log(`[Overview] Found ${transactions.length} transactions for org ${orgId}`);
-    
+
     if (transactions.length > 0) {
       console.log(`[Overview] Processing transactions, date range: ${transactions[0].date} to ${transactions[transactions.length - 1].date}`);
-      
+
       console.log(`[Overview] Periods with data: ${allPeriods.join(', ')}`);
-      
+
       if (allPeriods.length > 0) {
         // Use the most recent period with data
         const latestPeriod = allPeriods[allPeriods.length - 1];
         const latestMonthRevenue = monthlyRevenueMap.get(latestPeriod) || 0;
         const latestMonthBurnRate = monthlyExpenseMap.get(latestPeriod) || 0;
-        
+
         // Calculate average revenue from all available months (or last 3 if more than 3)
         const periodsForAvg = allPeriods.slice(-3);
         const totalRevenue = periodsForAvg.reduce((sum, period) => {
           return sum + (monthlyRevenueMap.get(period) || 0);
         }, 0);
         const avgMonthlyRevenue = periodsForAvg.length > 0 ? totalRevenue / periodsForAvg.length : 0;
-        
+
         monthlyRevenue = avgMonthlyRevenue;
         monthlyBurnRate = latestMonthBurnRate;
-        
+
         // Calculate growth: compare latest period with previous period
         if (allPeriods.length >= 2) {
           const prevPeriod = allPeriods[allPeriods.length - 2];
           const prevRevenue = monthlyRevenueMap.get(prevPeriod) || 0;
           revenueGrowth = prevRevenue > 0 ? ((latestMonthRevenue - prevRevenue) / prevRevenue) * 100 : 0;
         }
-        
+
         console.log(`[Overview] Calculated: monthlyRevenue=$${monthlyRevenue}, monthlyBurnRate=$${monthlyBurnRate}, revenueGrowth=${revenueGrowth}%`);
         console.log(`[Overview] Latest period: ${latestPeriod}, Revenue: $${latestMonthRevenue}, Burn: $${latestMonthBurnRate}`);
       } else {
@@ -200,23 +200,25 @@ export const overviewDashboardService = {
         revenueGrowth = 0;
       }
     }
-    
+
     // Calculate runway, health score, and active customers
     let runwayMonths = 0;
     let healthScore = 50; // Default middle score
     let activeCustomers = 0;
-    
-    // Try to get cash balance and customers from any model run (baseline or scenario)
+
+    // Try to get cash balance and customers from specific model run if provided, 
+    // otherwise any model run (baseline or scenario)
     const anyModelRun = await prisma.modelRun.findFirst({
       where: {
         orgId,
+        ...(modelId ? { modelId } : {}),
         status: 'done',
       },
       orderBy: {
         createdAt: 'desc',
       },
     });
-    
+
     let cashBalance = 0;
     if (anyModelRun && anyModelRun.summaryJson) {
       const summary = anyModelRun.summaryJson as any;
@@ -228,7 +230,7 @@ export const overviewDashboardService = {
         activeCustomers = modelCustomers;
       }
     }
-    
+
     if (investorData) {
       runwayMonths = investorData.executiveSummary.monthsRunway || 0;
       healthScore = investorData.executiveSummary.healthScore || 50;
@@ -236,7 +238,7 @@ export const overviewDashboardService = {
         activeCustomers = investorData.executiveSummary.activeCustomers || 0;
       }
     }
-    
+
     // If still 0, count unique customers from revenue transactions
     if (activeCustomers === 0 && transactions.length > 0) {
       const uniqueCustomers = new Set<string>();
@@ -252,7 +254,7 @@ export const overviewDashboardService = {
       activeCustomers = uniqueCustomers.size;
       console.log(`[Overview] Calculated ${activeCustomers} unique customers from ${transactions.length} transactions`);
     }
-    
+
     // Use standardized runway calculation service
     const { runwayCalculationService } = await import('./runway-calculation.service');
     const runwayData = await runwayCalculationService.calculateRunway(orgId);
@@ -263,7 +265,7 @@ export const overviewDashboardService = {
       monthlyBurnRate = runwayData.monthlyBurnRate;
     }
     console.log(`[Overview] Using standardized runway: ${runwayMonths.toFixed(2)} months (source: ${runwayData.source})`);
-    
+
     // Ensure runway is never negative and cap at reasonable maximum
     // IMPORTANT: If burn rate > 0, runway should be calculated, not capped at 999
     // Only cap at 999 if there's truly no burn rate (infinite runway)
@@ -281,7 +283,7 @@ export const overviewDashboardService = {
         runwayMonths = 0;
       }
     }
-    
+
     // Calculate health score based on available metrics - use same formula as investor dashboard
     if (healthScore === 0 || healthScore === 50) {
       // Import the same calculateHealthScore function used by investor dashboard
@@ -296,20 +298,20 @@ export const overviewDashboardService = {
         arrGrowth: number;
       }): number => {
         let score = 50; // Base score
-        
+
         // ARR growth component (0-30 points)
         if (params.arrGrowth > 20) score += 30;
         else if (params.arrGrowth > 15) score += 25;
         else if (params.arrGrowth > 10) score += 20;
         else if (params.arrGrowth > 5) score += 15;
         else if (params.arrGrowth > 0) score += 10;
-        
+
         // Runway component (0-30 points)
         if (params.runwayMonths > 18) score += 30;
         else if (params.runwayMonths > 12) score += 25;
         else if (params.runwayMonths > 6) score += 20;
         else if (params.runwayMonths > 3) score += 10;
-        
+
         // Burn rate vs ARR component (0-20 points)
         if (params.burnRate > 0 && params.arr > 0) {
           const burnRatio = params.burnRate / params.arr;
@@ -317,10 +319,10 @@ export const overviewDashboardService = {
           else if (burnRatio < 0.7) score += 15;
           else if (burnRatio < 1.0) score += 10;
         }
-        
+
         return Math.min(100, Math.max(0, score));
       };
-      
+
       healthScore = calculateHealthScore({
         arr,
         burnRate: monthlyBurnRate,
@@ -328,10 +330,10 @@ export const overviewDashboardService = {
         arrGrowth: revenueGrowth,
       });
     }
-    
+
     // Generate revenue vs forecast data from actual transactions
     let revenueData: Array<{ month: string; revenue: number; forecast: number }> = [];
-    
+
     if (transactions.length > 0) {
       // Use actual transaction data
       const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -342,10 +344,10 @@ export const overviewDashboardService = {
         const actualRevenue = monthlyRevenueMap.get(period) || 0;
         // Forecast based on growth trend
         const growthFactor = 1 + (revenueGrowth / 100);
-        const forecast = actualRevenue > 0 
-          ? actualRevenue * growthFactor 
+        const forecast = actualRevenue > 0
+          ? actualRevenue * growthFactor
           : monthlyRevenue * Math.pow(growthFactor, index + 1);
-        
+
         return {
           month: monthName,
           revenue: Math.round(actualRevenue),
@@ -373,7 +375,7 @@ export const overviewDashboardService = {
         forecast: Math.round(baseRevenue * (1 + (index + 1) * 0.08)),
       }));
     }
-    
+
     // Generate burn rate data
     let burnRateData: Array<{ month: string; burn: number; runway: number }> = [];
     if (investorData && investorData.monthlyMetrics.length > 0) {
@@ -409,10 +411,10 @@ export const overviewDashboardService = {
         runway: Math.max(0, runwayMonths - index),
       }));
     }
-    
+
     // Generate expense breakdown from actual transactions
     const expenseBreakdownMap = new Map<string, number>();
-    
+
     for (const tx of transactions) {
       const amount = Number(tx.amount);
       if (amount < 0 && tx.category) {
@@ -420,10 +422,10 @@ export const overviewDashboardService = {
         expenseBreakdownMap.set(category, (expenseBreakdownMap.get(category) || 0) + Math.abs(amount));
       }
     }
-    
+
     let expenseBreakdown: Array<{ name: string; value: number; color: string }> = [];
     const colors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#00ff88', '#0088fe', '#00c49f'];
-    
+
     if (expenseBreakdownMap.size > 0) {
       // Use actual categories from transactions
       let colorIndex = 0;
@@ -450,11 +452,11 @@ export const overviewDashboardService = {
         { name: 'Other', value: Math.round(totalExpenses * 0.02), color: '#00ff88' },
       ];
     }
-    
+
     // Calculate changes BEFORE generating alerts (needed for burnRateChange alerts)
     let burnRateChange = 0;
     if (investorData && investorData.monthlyMetrics.length >= 2) {
-      burnRateChange = ((monthlyBurnRate - investorData.monthlyMetrics[investorData.monthlyMetrics.length - 2].burn) / 
+      burnRateChange = ((monthlyBurnRate - investorData.monthlyMetrics[investorData.monthlyMetrics.length - 2].burn) /
         investorData.monthlyMetrics[investorData.monthlyMetrics.length - 2].burn) * 100;
     } else if (allPeriods.length >= 2) {
       // Calculate from transaction data
@@ -466,15 +468,15 @@ export const overviewDashboardService = {
         burnRateChange = ((latestBurn - prevBurn) / prevBurn) * 100;
       }
     }
-    
+
     const runwayChange = investorData ? investorData.executiveSummary.runwayChange : 0;
-    
+
     // Generate comprehensive AI-powered alerts based on actual data
     const alerts: Array<{ type: 'warning' | 'success' | 'info'; title: string; message: string }> = [];
-    
+
     // Only show alerts if we have meaningful data
     const hasData = transactions.length > 0 || monthlyRevenue > 0 || monthlyBurnRate > 0;
-    
+
     if (!hasData) {
       // Only show welcome message if no data
       alerts.push({
@@ -515,7 +517,7 @@ export const overviewDashboardService = {
           message: `Cash runway is ${runwayMonths.toFixed(1)} months - excellent position. Focus on growth and efficiency. Consider strategic investments or expansion.`,
         });
       }
-      
+
       // Revenue Growth Alerts
       if (revenueGrowth > 30) {
         alerts.push({
@@ -548,7 +550,7 @@ export const overviewDashboardService = {
           message: `Revenue declined ${Math.abs(revenueGrowth).toFixed(1)}% - critical issue. Immediate actions: (1) Analyze root causes (churn, pricing, competition), (2) Implement retention programs, (3) Review go-to-market strategy.`,
         });
       }
-      
+
       // Burn Rate vs Revenue Alerts
       if (monthlyRevenue > 0) {
         const burnRatio = monthlyBurnRate / monthlyRevenue;
@@ -572,7 +574,7 @@ export const overviewDashboardService = {
           });
         }
       }
-      
+
       // Burn Rate Change Alerts
       if (Math.abs(burnRateChange) > 15) {
         if (burnRateChange > 0) {
@@ -589,7 +591,7 @@ export const overviewDashboardService = {
           });
         }
       }
-      
+
       // Health Score Insights
       if (healthScore >= 80) {
         alerts.push({
@@ -610,7 +612,7 @@ export const overviewDashboardService = {
           message: `Financial health score: ${healthScore}/100. Immediate focus areas: (1) Extend cash runway, (2) Reduce burn rate, (3) Accelerate revenue growth, (4) Consider strategic pivots.`,
         });
       }
-      
+
       // Customer Growth Insights
       if (activeCustomers > 0 && monthlyRevenue > 0) {
         const revenuePerCustomer = monthlyRevenue / activeCustomers;
@@ -623,11 +625,11 @@ export const overviewDashboardService = {
         }
       }
     }
-    
+
     // Keep revenueData in original format for frontend compatibility: { month, revenue, forecast }
     // Ensure we always return at least default data so charts aren't empty
     let finalRevenueData = revenueData.length > 0 ? revenueData : getDefaultRevenueData();
-    
+
     // Filter out months with zero revenue if we have actual data, but keep at least 3 months
     // This ensures charts show meaningful data
     if (finalRevenueData.length > 0) {
@@ -641,11 +643,11 @@ export const overviewDashboardService = {
         finalRevenueData = getDefaultRevenueData();
       }
     }
-    
+
     // Keep expenseBreakdown in original format for frontend compatibility: { name, value, color }
     // Ensure we always return at least default breakdown so charts aren't empty
     let finalExpenseBreakdown = expenseBreakdown.length > 0 ? expenseBreakdown : [];
-    
+
     // If no expenses, provide default breakdown based on monthly burn rate
     if (finalExpenseBreakdown.length === 0 && monthlyBurnRate > 0) {
       const colors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#00ff88', '#0088fe', '#00c49f'];
@@ -657,12 +659,12 @@ export const overviewDashboardService = {
         { name: 'Other', value: Math.round(monthlyBurnRate * 0.02), color: colors[4] },
       ].filter(item => item.value > 0); // Remove zero values
     }
-    
+
     // If still empty, use empty array (don't provide fake values)
     if (finalExpenseBreakdown.length === 0) {
       finalExpenseBreakdown = [];
     }
-    
+
     // Get top vendors from transactions
     const vendorMap = new Map<string, number>();
     for (const tx of transactions) {
@@ -676,7 +678,7 @@ export const overviewDashboardService = {
       .map(([name, amount]) => ({ name, amount: Math.round(amount) }))
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 10);
-    
+
     // Get top customers from transactions (positive amounts)
     const customerMap = new Map<string, number>();
     for (const tx of transactions) {
@@ -690,7 +692,7 @@ export const overviewDashboardService = {
       .map(([name, amount]) => ({ name, amount: Math.round(amount) }))
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 10);
-    
+
     return {
       healthScore: Math.round(healthScore),
       monthlyRevenue: Math.round(monthlyRevenue),
@@ -737,21 +739,21 @@ function getDefaultAlerts() {
  */
 function extractVendorFromDescription(description: string | null, rawPayload: any): string | null {
   if (!description && !rawPayload) return null;
-  
+
   // Try to extract from description (common patterns)
   if (description) {
     // Remove common prefixes/suffixes
     let vendor = description.trim();
-    
+
     // Remove transaction IDs, reference numbers
     vendor = vendor.replace(/\b(REF|REF#|REFERENCE|TXN|ID|#)\s*:?\s*[A-Z0-9-]+\b/gi, '').trim();
-    
+
     // Remove amounts
     vendor = vendor.replace(/\$[\d,]+\.?\d*/g, '').trim();
-    
+
     // Remove dates
     vendor = vendor.replace(/\d{1,2}\/\d{1,2}\/\d{2,4}/g, '').trim();
-    
+
     // Take first meaningful words (usually vendor name is at the start)
     const words = vendor.split(/\s+/).filter(w => w.length > 2);
     if (words.length > 0) {
@@ -759,7 +761,7 @@ function extractVendorFromDescription(description: string | null, rawPayload: an
       return words.slice(0, 3).join(' ').substring(0, 50);
     }
   }
-  
+
   // Try to extract from rawPayload
   if (rawPayload && typeof rawPayload === 'object') {
     const vendorFields = ['vendor', 'merchant', 'payee', 'name', 'company', 'business'];
@@ -769,7 +771,7 @@ function extractVendorFromDescription(description: string | null, rawPayload: an
       }
     }
   }
-  
+
   return description ? description.substring(0, 50) : null;
 }
 

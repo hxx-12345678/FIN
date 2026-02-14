@@ -81,6 +81,25 @@ export const modelController = {
     }
   },
 
+  analyzeData: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        throw new ValidationError('User not authenticated');
+      }
+
+      const { org_id } = req.params;
+
+      const analysis = await financialModelService.analyzeStrategicData(org_id);
+
+      res.json({
+        ok: true,
+        analysis,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   getModel: async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.user) {

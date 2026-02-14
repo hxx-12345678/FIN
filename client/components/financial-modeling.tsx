@@ -38,6 +38,7 @@ import { DependencyGraph } from "./hyperblock/dependency-graph"
 import { MultiDimensionalViewer } from "./hyperblock/multi-dimensional-viewer"
 import { ModelReasoningHub } from "./reasoning/model-reasoning-hub"
 import { API_BASE_URL } from "@/lib/api-config"
+import { useModel } from "@/lib/model-context"
 
 
 const defaultFinancialData = [
@@ -112,12 +113,18 @@ const defaultAssumptions = [
 
 // Transactions are now fetched from the backend API
 
-interface Model {
+interface FinancialModel {
   id: string
   name: string
   type: string
   orgId: string
   createdAt: string
+  modelJson?: {
+    metadata?: any
+    assumptions?: any
+    projections?: any
+    sensitivity?: any
+  }
   drivers?: Array<{
     id: string
     name: string
@@ -147,19 +154,19 @@ export function FinancialModeling() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const currentTab = searchParams.get("tab") || "statements"
+  const { selectedModelId: selectedModel, setSelectedModelId: setSelectedModel, orgId: contextOrgId, setOrgId: setContextOrgId } = useModel()
 
-  const [selectedModel, setSelectedModel] = useState<string | null>(null)
-  const [models, setModels] = useState<Model[]>([])
+  const [models, setModels] = useState<FinancialModel[]>([])
   const [modelRuns, setModelRuns] = useState<ModelRun[]>([])
   const [currentRun, setCurrentRun] = useState<ModelRun | null>(null)
-  const [currentModel, setCurrentModel] = useState<Model | null>(null)
+  const [currentModel, setCurrentModel] = useState<FinancialModel | null>(null)
   const [financialData, setFinancialData] = useState<any[]>([])
   const [modelAssumptions, setModelAssumptions] = useState<any[]>([])
   const [projections, setProjections] = useState<any>(null)
   const [sensitivityData, setSensitivityData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [orgId, setOrgId] = useState<string | null>(null)
+  const [orgId, setOrgId] = useState<string | null>(contextOrgId)
   // Calculate data completeness score
   const dataCompleteness = useMemo(() => {
     if (!currentRun?.summaryJson) return 85;
@@ -708,7 +715,7 @@ export function FinancialModeling() {
     }
   }
 
-  const handleStartEditModelName = (model: Model, e: React.MouseEvent) => {
+  const handleStartEditModelName = (model: FinancialModel, e: React.MouseEvent) => {
     e.stopPropagation() // Prevent card click
     setEditingModelId(model.id)
     setEditingModelName(model.name || "")
@@ -758,15 +765,15 @@ export function FinancialModeling() {
             }
 
             const normalized = {
-              baselineRevenue: toNum(a.baselineRevenue ?? a.revenue?.baselineRevenue, 100000),
-              revenueGrowth: toNum(a.revenueGrowth ?? a.revenue?.revenueGrowth, 0.08),
-              churnRate: toNum(a.churnRate ?? a.revenue?.churnRate, 0.05),
-              baselineExpenses: toNum(a.baselineExpenses ?? a.costs?.baselineExpenses, 80000),
-              expenseGrowth: toNum(a.expenseGrowth ?? a.costs?.expenseGrowth, 0.05),
+              baselineRevenue: toNum(a.baselineRevenue ?? a.revenue?.baselineRevenue, 0),
+              revenueGrowth: toNum(a.revenueGrowth ?? a.revenue?.revenueGrowth, 0.05),
+              churnRate: toNum(a.churnRate ?? a.revenue?.churnRate, 0.03),
+              baselineExpenses: toNum(a.baselineExpenses ?? a.costs?.baselineExpenses, 0),
+              expenseGrowth: toNum(a.expenseGrowth ?? a.costs?.expenseGrowth, 0.03),
               cogsPercentage: toNum(a.cogsPercentage ?? a.costs?.cogsPercentage, 0.2),
-              initialCash: toNum(a.initialCash ?? a.cash?.initialCash, 500000),
-              cac: toNum(a.cac, 125),
-              ltv: toNum(a.ltv, 2400),
+              initialCash: toNum(a.initialCash ?? a.cash?.initialCash, 0),
+              cac: toNum(a.cac, 0),
+              ltv: toNum(a.ltv, 0),
             }
 
             const extractedAssumptions: any[] = [
@@ -936,30 +943,36 @@ export function FinancialModeling() {
       return Number.isFinite(n) ? n : fallback
     }
 
+    const getExisting = (key: string, fallback: number) => {
+      const a = currentModel?.modelJson?.assumptions || {}
+      const val = a[key] ?? a.revenue?.[key] ?? a.costs?.[key] ?? a.cash?.[key]
+      return typeof val === 'number' ? val : fallback
+    }
+
     const assumptionsPayload = {
       // flat keys
-      baselineRevenue: parseNum("baselineRevenue", 100000),
-      revenueGrowth: parseNum("revenueGrowth", 0.08),
-      churnRate: parseNum("churnRate", 0.05),
-      baselineExpenses: parseNum("baselineExpenses", 80000),
-      expenseGrowth: parseNum("expenseGrowth", 0.05),
-      cogsPercentage: parseNum("cogsPercentage", 0.2),
-      initialCash: parseNum("initialCash", 500000),
-      cac: parseNum("cac", 125),
-      ltv: parseNum("ltv", 2400),
+      baselineRevenue: parseNum("baselineRevenue", getExisting("baselineRevenue", 0)),
+      revenueGrowth: parseNum("revenueGrowth", getExisting("revenueGrowth", 0.05)),
+      churnRate: parseNum("churnRate", getExisting("churnRate", 0.03)),
+      baselineExpenses: parseNum("baselineExpenses", getExisting("baselineExpenses", 0)),
+      expenseGrowth: parseNum("expenseGrowth", getExisting("expenseGrowth", 0.03)),
+      cogsPercentage: parseNum("cogsPercentage", getExisting("cogsPercentage", 0.2)),
+      initialCash: parseNum("initialCash", getExisting("initialCash", 0)),
+      cac: parseNum("cac", getExisting("cac", 0)),
+      ltv: parseNum("ltv", getExisting("ltv", 0)),
       // structured mirrors
       revenue: {
-        baselineRevenue: parseNum("baselineRevenue", 100000),
-        revenueGrowth: parseNum("revenueGrowth", 0.08),
-        churnRate: parseNum("churnRate", 0.05),
+        baselineRevenue: parseNum("baselineRevenue", getExisting("baselineRevenue", 0)),
+        revenueGrowth: parseNum("revenueGrowth", getExisting("revenueGrowth", 0.05)),
+        churnRate: parseNum("churnRate", getExisting("churnRate", 0.03)),
       },
       costs: {
-        baselineExpenses: parseNum("baselineExpenses", 80000),
-        expenseGrowth: parseNum("expenseGrowth", 0.05),
-        cogsPercentage: parseNum("cogsPercentage", 0.2),
+        baselineExpenses: parseNum("baselineExpenses", getExisting("baselineExpenses", 0)),
+        expenseGrowth: parseNum("expenseGrowth", getExisting("expenseGrowth", 0.03)),
+        cogsPercentage: parseNum("cogsPercentage", getExisting("cogsPercentage", 0.2)),
       },
       cash: {
-        initialCash: parseNum("initialCash", 500000),
+        initialCash: parseNum("initialCash", getExisting("initialCash", 0)),
       },
     }
 
@@ -2274,7 +2287,7 @@ export function FinancialModeling() {
           ? JSON.parse(currentRun.summaryJson)
           : currentRun.summaryJson
 
-        if (summary.monthly && monthKey) {
+        if (summary && summary.monthly && monthKey) {
           const monthData = summary.monthly[monthKey]
           if (monthData) {
             if (cellId === 'revenue') fallbackValue = `$${(monthData.revenue || 0).toLocaleString()}`
@@ -2715,8 +2728,8 @@ export function FinancialModeling() {
             statements={(() => {
               if (!currentRun?.summaryJson) return null;
               const summary = typeof currentRun.summaryJson === 'string'
-                ? JSON.parse(currentRun.summaryJson)
-                : currentRun.summaryJson;
+                ? (JSON.parse(currentRun.summaryJson) || {})
+                : (currentRun.summaryJson || {});
               return summary.statements || null;
             })()}
           />

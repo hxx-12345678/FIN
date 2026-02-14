@@ -91,7 +91,13 @@ export function IndustrialForecasting({ orgId, modelId }: { orgId: string | null
                     } as any)
                 })
 
-                setForecastData(combined)
+                const sanitized = (combined as any[]).map(d => ({
+                    ...d,
+                    actual: typeof d.actual === 'number' && Number.isFinite(d.actual) ? d.actual : undefined,
+                    forecast: typeof d.forecast === 'number' && Number.isFinite(d.forecast) ? d.forecast : undefined
+                }))
+
+                setForecastData(sanitized)
                 setExplanation(data.explanation?.info || "")
                 toast.success(`Generated ${data.method} forecast`)
             } else {
@@ -122,13 +128,16 @@ export function IndustrialForecasting({ orgId, modelId }: { orgId: string | null
                 })
             })
             const data = await res.json()
-            if (data.ok) {
+            if (data.ok && data.results) {
                 setBacktestResults(data.results)
-                setMetrics(data.results.metrics)
+                setMetrics(data.results.metrics || {})
                 toast.success("Backtest complete")
+            } else {
+                toast.error(data.error || data.message || "Insufficient data for backtesting")
             }
         } catch (error) {
-            toast.error("Backtesting failed")
+            console.error("Backtest error:", error)
+            toast.error("Backtesting failed to connect")
         } finally {
             setLoading(false)
         }

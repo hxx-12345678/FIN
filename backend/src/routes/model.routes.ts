@@ -12,6 +12,7 @@ const router = Router();
 
 router.post('/orgs/:org_id/models', authenticate, requireFinanceOrAdmin('org_id'), modelController.createModel);
 router.get('/orgs/:org_id/models', authenticate, requireOrgAccess('org_id'), modelController.getModels);
+router.get('/orgs/:org_id/analysis', authenticate, requireOrgAccess('org_id'), modelController.analyzeData);
 router.delete('/orgs/:org_id/models/:model_id', authenticate, requireFinanceOrAdmin('org_id'), modelController.deleteModel);
 
 // Monte Carlo routes must come BEFORE /models/:model_id to prevent route conflicts

@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "sonner"
-import { Loader2, Plus, FileText, Database } from "lucide-react"
+import { Loader2, Plus, FileText, Database, Sparkles as SparkleIcon, TrendingUp, ShieldCheck, Target, Zap, ArrowRight, CheckCircle2, Brain } from "lucide-react"
+import { motion, AnimatePresence } from "framer-motion"
 import { API_BASE_URL } from "@/lib/api-config"
 
 interface CreateModelFormProps {
@@ -23,7 +24,9 @@ interface CreateModelFormProps {
 export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false, connectors = [] }: CreateModelFormProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [step, setStep] = useState<"basic" | "ai-questions" | "complete">("basic")
+  const [step, setStep] = useState<"basic" | "analyzing" | "strategic-confirm" | "ai-questions" | "complete">("basic")
+  const [analysisData, setAnalysisData] = useState<any>(null)
+  const [strategicGoal, setStrategicGoal] = useState<"growth" | "profitability" | "stable">("growth")
   const [effectiveOrgId, setEffectiveOrgId] = useState<string | null>(orgId || null)
 
   // Try to get orgId from localStorage if not provided as prop
@@ -89,6 +92,13 @@ export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false, co
       marketing: "",
     },
     cash_on_hand: "",
+    growth_rate_target: "",
+    retention_rate: "",
+    hiring_plan: [] as Array<{ month: number, role: string, salary: string }>,
+    acquisition_efficiency: {
+      caac: "", // Customer Acquisition Cost
+      payback: "", // Payback period in months
+    }
   })
 
   // Set default start month to current month
@@ -237,10 +247,26 @@ export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false, co
       placeholder: "e.g., 20000",
     })
 
+    // Efficiency parameters (Futuristic standard)
+    questions.push({
+      key: "retention_rate",
+      label: "Expected Customer Retention Rate (%)",
+      type: "number",
+      placeholder: "e.g., 95 (for 5% churn)",
+      required: true,
+    })
+
+    questions.push({
+      key: "acquisition_efficiency.caac",
+      label: "Target CAC ($)",
+      type: "number",
+      placeholder: "e.g., 500",
+    })
+
     // Cash question (always asked)
     questions.push({
       key: "cash_on_hand",
-      label: "Current Cash on Hand",
+      label: "Current Total Cash on Hand ($)",
       type: "number",
       placeholder: "e.g., 500000",
       required: true,
@@ -249,14 +275,43 @@ export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false, co
     return questions
   }
 
+  const handleDataAnalysis = async () => {
+    if (!effectiveOrgId) return;
+    setStep("analyzing");
+
+    try {
+      const token = localStorage.getItem("auth-token") || document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("auth-token="))
+        ?.split("=")[1];
+
+      const res = await fetch(`${API_BASE_URL}/orgs/${effectiveOrgId}/analysis`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setAnalysisData(data.analysis);
+        // Artificial delay for "Premium AI Feel" and transition window
+        await new Promise(r => setTimeout(r, 2500));
+        setStep("strategic-confirm");
+      } else {
+        throw new Error("Analysis failed");
+      }
+    } catch (e) {
+      setStep("basic");
+      toast.error("AI Analysis failed. Proceeding with standard setup.");
+      await createModel(false);
+    }
+  }
+
   const handleSubmit = async () => {
     if (!validateBasicForm()) {
       return
     }
 
-    // If data source is CSV/connectors, skip AI questions (data comes from transactions)
+    // If data source is CSV/connectors, trigger AI Analysis for Premium Feel
     if (formData.data_source_type === "csv" || formData.data_source_type === "connectors") {
-      await createModel(false)
+      await handleDataAnalysis();
       return
     }
 
@@ -268,6 +323,22 @@ export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false, co
 
     // Fallback: create model without AI
     await createModel(false)
+  }
+
+  const handleStrategicSubmit = async () => {
+    // Merge strategic goal into assumptions
+    const customAssumptions = {
+      revenue: {
+        ...analysisData?.assumptions?.revenue,
+        growthModel: strategicGoal === "growth" ? "exponential" : "linear",
+        revenueGrowth: strategicGoal === "growth"
+          ? (analysisData?.assumptions?.revenue?.revenueGrowth || 0.08) * 1.5
+          : (analysisData?.assumptions?.revenue?.revenueGrowth || 0.08)
+      }
+    };
+
+    // Create model with these strategic biases
+    await createModel(true, customAssumptions);
   }
 
   const handleAiSubmit = async () => {
@@ -290,7 +361,7 @@ export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false, co
     await createModel(true)
   }
 
-  const createModel = async (isAiGenerated: boolean = false) => {
+  const createModel = async (isAiGenerated: boolean = false, extraAssumptions?: any) => {
     if (!effectiveOrgId) {
       toast.error("Organization ID not found. Please try again or refresh the page.")
       return
@@ -376,296 +447,293 @@ export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false, co
     }
   }
 
-  // Show loading while waiting for orgId
-  if (!effectiveOrgId) {
-    return (
-      <Card>
-        <CardContent className="flex items-center justify-center py-12">
-          <div className="text-center space-y-4">
-            <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-            <p className="text-sm text-muted-foreground">Loading organization data...</p>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
+  const renderAnalyzingStep = () => {
+    const statuses = [
+      "Securing data pipeline...",
+      "Analyzing transaction history...",
+      "Identifying recurring revenue patterns...",
+      "Benchmarking against industry standards...",
+      "Synthesizing strategic recommendations..."
+    ];
 
-  if (step === "complete") {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Model Created Successfully!</CardTitle>
-          <CardDescription>Your financial model is being set up.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground mb-4">
-            The model is being processed. You'll be redirected to the model dashboard shortly.
-          </p>
-          <Button onClick={() => router.push("/financial-modeling")}>
-            Go to Financial Modeling
+      <div className="flex flex-col items-center justify-center py-20 space-y-8">
+        <div className="relative">
+          <motion.div
+            animate={{ scale: [1, 1.1, 1], rotate: 360 }}
+            transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+            className="w-24 h-24 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 flex items-center justify-center shadow-xl shadow-purple-200"
+          >
+            <SparkleIcon className="h-10 w-10 text-white" />
+          </motion.div>
+          <motion.div
+            animate={{ scale: [1, 1.5, 1], opacity: [0.2, 0.5, 0.2] }}
+            transition={{ duration: 2, repeat: Infinity }}
+            className="absolute inset-0 rounded-full bg-blue-400 -z-10 blur-xl"
+          />
+        </div>
+
+        <div className="text-center space-y-2">
+          <h3 className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-blue-600">
+            FinaPilot AI is Thinking
+          </h3>
+          <div className="h-6">
+            <AnimatePresence mode="wait">
+              <motion.p
+                key={Math.floor(Date.now() / 2000)}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="text-sm text-muted-foreground"
+              >
+                {statuses[Math.floor((Date.now() / 1000) % statuses.length)]}
+              </motion.p>
+            </AnimatePresence>
+          </div>
+        </div>
+
+        <div className="w-64 h-2 bg-slate-100 rounded-full overflow-hidden">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: "100%" }}
+            transition={{ duration: 2.5, ease: "easeInOut" }}
+            className="h-full bg-gradient-to-r from-purple-500 to-blue-500"
+          />
+        </div>
+      </div>
+    );
+  };
+
+  const renderStrategicStep = () => {
+    return (
+      <div className="space-y-6">
+        <div className="p-4 rounded-xl bg-purple-50 border border-purple-100 flex gap-4 items-start">
+          <div className="p-2 bg-white rounded-lg shadow-sm text-purple-600">
+            <TrendingUp className="h-5 w-5" />
+          </div>
+          <div className="space-y-1">
+            <h4 className="font-medium text-purple-900">AI Data Insight</h4>
+            <p className="text-sm text-purple-700 leading-relaxed">
+              {analysisData?.insight?.summary} {analysisData?.insight?.benchmarks?.text}
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <Label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Choose Your Strategic Outlook</Label>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[
+              { id: 'growth', label: 'Aggressive Growth', icon: Zap, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200', desc: 'Focus on MoM revenue scaling.' },
+              { id: 'stable', label: 'Sustainable', icon: Target, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200', desc: 'Balanced growth and burn.' },
+              { id: 'profitability', label: 'Efficiency First', icon: ShieldCheck, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200', desc: 'Prioritize runway & unit economics.' },
+            ].map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => setStrategicGoal(opt.id as any)}
+                className={`p-4 rounded-xl border-2 text-left transition-all hover:shadow-md ${strategicGoal === opt.id ? `${opt.border} ${opt.bg} ring-2 ring-primary ring-offset-2` : 'border-slate-100 bg-white hover:border-slate-300'}`}
+              >
+                <opt.icon className={`h-6 w-6 mb-3 ${opt.color}`} />
+                <h5 className="font-bold text-slate-900">{opt.label}</h5>
+                <p className="text-xs text-slate-500 mt-1">{opt.desc}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex gap-3 pt-4">
+          <Button variant="ghost" onClick={() => setStep("basic")} disabled={loading}>Back</Button>
+          <Button onClick={handleStrategicSubmit} disabled={loading} className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg">
+            {loading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+            Confirm & Initialize Model
           </Button>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  if (step === "ai-questions") {
-    const questions = getAiQuestions()
-
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>AI Model Setup</CardTitle>
-          <CardDescription>
-            Answer a few questions to help us generate accurate assumptions for your model.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {questions.map((q) => (
-            <div key={q.key} className="space-y-2">
-              <Label htmlFor={q.key}>
-                {q.label}
-                {q.required && <span className="text-red-500 ml-1">*</span>}
-              </Label>
-              {q.type === "select" ? (
-                <Select
-                  value={aiAnswers[q.key as keyof typeof aiAnswers] as string || undefined}
-                  onValueChange={(value) => handleAiAnswerChange(q.key, value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={`Select ${q.label.toLowerCase()}`} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {q.options?.map((opt) => (
-                      <SelectItem key={opt} value={opt}>
-                        {opt.charAt(0).toUpperCase() + opt.slice(1)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  id={q.key}
-                  type={q.type}
-                  placeholder={q.placeholder}
-                  value={
-                    q.key.includes('.')
-                      ? (aiAnswers.major_costs as any)[q.key.split('.')[1]] || ""
-                      : (aiAnswers[q.key as keyof typeof aiAnswers] as string) || ""
-                  }
-                  onChange={(e) => handleAiAnswerChange(q.key, e.target.value)}
-                />
-              )}
-            </div>
-          ))}
-
-          <div className="flex gap-2 pt-4">
-            <Button
-              variant="outline"
-              onClick={() => setStep("basic")}
-              disabled={loading}
-            >
-              Back
-            </Button>
-            <Button onClick={handleAiSubmit} disabled={loading}>
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                <>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create Model
-                </>
-              )}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Create Financial Model</CardTitle>
-        <CardDescription>
-          Set up a new financial model for your organization.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Model Name */}
-        <div className="space-y-2">
-          <Label htmlFor="model_name">
-            Model Name <span className="text-red-500">*</span>
-          </Label>
-          <Input
-            id="model_name"
-            placeholder="e.g., Q1 2025 Forecast"
-            value={formData.model_name}
-            onChange={(e) => handleInputChange("model_name", e.target.value)}
-          />
-        </div>
-
-        {/* Industry */}
-        <div className="space-y-2">
-          <Label htmlFor="industry">
-            Industry <span className="text-red-500">*</span>
-          </Label>
-          <Select
-            value={formData.industry || undefined}
-            onValueChange={(value) => handleInputChange("industry", value)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select industry" />
-            </SelectTrigger>
-            <SelectContent>
-              {industries.map((ind) => (
-                <SelectItem key={ind} value={ind}>
-                  {ind}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Revenue Model Type */}
-        <div className="space-y-2">
-          <Label htmlFor="revenue_model_type">
-            Revenue Model Type <span className="text-red-500">*</span>
-          </Label>
-          <Select
-            value={formData.revenue_model_type || undefined}
-            onValueChange={(value) => handleInputChange("revenue_model_type", value as any)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select revenue model" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="subscription">Subscription</SelectItem>
-              <SelectItem value="transactional">Transactional</SelectItem>
-              <SelectItem value="services">Services</SelectItem>
-              <SelectItem value="hybrid">Hybrid</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Forecast Duration */}
-        <div className="space-y-2">
-          <Label htmlFor="forecast_duration">
-            Forecast Duration <span className="text-red-500">*</span>
-          </Label>
-          <Select
-            value={formData.forecast_duration ? String(formData.forecast_duration) : undefined}
-            onValueChange={(value) => handleInputChange("forecast_duration", parseInt(value) as 12 | 24 | 36)}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="12">12 months</SelectItem>
-              <SelectItem value="24">24 months</SelectItem>
-              <SelectItem value="36">36 months</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Start Month */}
-        <div className="space-y-2">
-          <Label htmlFor="start_month">
-            Start Month <span className="text-red-500">*</span>
-          </Label>
-          <Input
-            id="start_month"
-            type="month"
-            value={formData.start_month}
-            onChange={(e) => handleInputChange("start_month", e.target.value)}
-          />
-        </div>
-
-        {/* Data Source Type */}
-        <div className="space-y-2">
-          <Label htmlFor="data_source_type">
-            Data Source <span className="text-red-500">*</span>
-          </Label>
-          <Select
-            value={formData.data_source_type || undefined}
-            onValueChange={(value) => handleInputChange("data_source_type", value as any)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select data source" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="connectors">
-                <div className="flex items-center gap-2">
-                  <Database className="h-4 w-4" />
-                  <span>Connectors (QuickBooks, Xero, etc.)</span>
+    <Card className="overflow-hidden border-none shadow-2xl ring-1 ring-slate-200">
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={step}
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -20 }}
+          transition={{ duration: 0.3 }}
+        >
+          {step === "basic" && (
+            <CardContent className="p-0">
+              <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-8 text-white relative overflow-hidden">
+                <div className="relative z-10">
+                  <CardTitle className="text-2xl">Financial Model Hub</CardTitle>
+                  <CardDescription className="text-slate-400 mt-1">Design the blueprint of your company&apos;s future.</CardDescription>
                 </div>
-              </SelectItem>
-              <SelectItem value="csv">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  <span>CSV Import</span>
+                <div className="absolute top-0 right-0 p-8 opacity-10">
+                  <SparkleIcon size={120} />
                 </div>
-              </SelectItem>
-              <SelectItem value="blank">Blank (Manual Entry)</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+              </div>
+              <div className="p-8 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase text-slate-500">Model Name</Label>
+                    <Input
+                      placeholder="e.g. Series A Projections"
+                      value={formData.model_name}
+                      autoFocus
+                      onChange={(e) => handleInputChange("model_name", e.target.value)}
+                      className="h-12 border-slate-200 focus:ring-purple-500 transition-all text-lg font-medium"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase text-slate-500">Industry Sector</Label>
+                    <Select value={formData.industry} onValueChange={(val) => handleInputChange("industry", val)}>
+                      <SelectTrigger className="h-12"><SelectValue placeholder="Industry" /></SelectTrigger>
+                      <SelectContent>
+                        {industries.map(ind => <SelectItem key={ind} value={ind}>{ind}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
 
-        {/* Optional Fields */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="base_currency">Base Currency</Label>
-            <Input
-              id="base_currency"
-              value={formData.base_currency}
-              onChange={(e) => handleInputChange("base_currency", e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="country">Country</Label>
-            <Input
-              id="country"
-              value={formData.country}
-              onChange={(e) => handleInputChange("country", e.target.value)}
-            />
-          </div>
-        </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase text-slate-500">Revenue Engine</Label>
+                    <Select value={formData.revenue_model_type} onValueChange={(val) => handleInputChange("revenue_model_type", val)}>
+                      <SelectTrigger className="h-12"><SelectValue placeholder="Engine" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="subscription">Subscription</SelectItem>
+                        <SelectItem value="transactional">Transactional</SelectItem>
+                        <SelectItem value="services">Services</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase text-slate-500">Scale Window</Label>
+                    <Select value={String(formData.forecast_duration)} onValueChange={(val) => handleInputChange("forecast_duration", parseInt(val))}>
+                      <SelectTrigger className="h-12"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="12">12 Months</SelectItem>
+                        <SelectItem value="24">24 Months</SelectItem>
+                        <SelectItem value="36">36 Months</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase text-slate-500">Ignition Month</Label>
+                    <Input type="month" value={formData.start_month} onChange={(e) => handleInputChange("start_month", e.target.value)} className="h-12" />
+                  </div>
+                </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="description">Description (Optional)</Label>
-          <Textarea
-            id="description"
-            placeholder="Add a description for this model..."
-            value={formData.description}
-            onChange={(e) => handleInputChange("description", e.target.value)}
-            rows={3}
-          />
-        </div>
+                <div className="space-y-4">
+                  <Label className="text-xs font-bold uppercase text-slate-500">Intelligence Source</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <button
+                      onClick={() => handleInputChange("data_source_type", "connectors")}
+                      className={`p-4 rounded-xl border-2 text-left flex items-center gap-4 transition-all ${formData.data_source_type === "connectors" ? 'border-primary bg-primary/5' : 'border-slate-100 hover:border-slate-300'}`}
+                    >
+                      <div className={`p-2 rounded-lg ${formData.data_source_type === "connectors" ? 'bg-primary text-white' : 'bg-slate-100'}`}>
+                        <Database className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="font-bold">Sync Connectors</div>
+                        <div className="text-xs text-slate-500 italic">ERP, QBO, Xero, Plaid</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => handleInputChange("data_source_type", "blank")}
+                      className={`p-4 rounded-xl border-2 text-left flex items-center gap-4 transition-all ${formData.data_source_type === "blank" ? 'border-primary bg-primary/5' : 'border-slate-100 hover:border-slate-300'}`}
+                    >
+                      <div className={`p-2 rounded-lg ${formData.data_source_type === "blank" ? 'bg-primary text-white' : 'bg-slate-100'}`}>
+                        <SparkleIcon className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="font-bold">AI Synthetic Generation</div>
+                        <div className="text-xs text-slate-500 italic">Predictive Benchmarking</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
 
-        <div className="flex gap-2 pt-4">
-          {onCancel && (
-            <Button variant="outline" onClick={onCancel} disabled={loading}>
-              Cancel
-            </Button>
+                <div className="flex justify-end pt-4 gap-3">
+                  {onCancel && <Button variant="ghost" onClick={onCancel}>Cancel</Button>}
+                  <Button
+                    onClick={handleSubmit}
+                    disabled={loading || !formData.model_name || !formData.industry}
+                    className="px-8 h-12 bg-slate-900 text-white rounded-xl shadow-xl hover:shadow-2xl transition-all"
+                  >
+                    Next Step <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
           )}
-          <Button onClick={handleSubmit} disabled={loading} className="flex-1">
-            {loading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              <>
-                <Plus className="mr-2 h-4 w-4" />
-                {formData.data_source_type === "blank" ? "Create Model" : "Continue"}
-              </>
-            )}
-          </Button>
-        </div>
-      </CardContent>
+
+          {step === "analyzing" && (
+            <CardContent className="p-12">
+              {renderAnalyzingStep()}
+            </CardContent>
+          )}
+
+          {step === "strategic-confirm" && (
+            <CardContent className="p-8">
+              <div className="flex items-center gap-3 mb-8">
+                <div className="p-3 bg-blue-100 rounded-2xl text-blue-600">
+                  <Brain className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold">AI Strategy Configuration</h3>
+                  <p className="text-slate-500">We&apos;ve analyzed your data. Now tell us your aim.</p>
+                </div>
+              </div>
+              {renderStrategicStep()}
+            </CardContent>
+          )}
+
+          {step === "ai-questions" && (
+            <CardContent className="p-8 pb-12">
+              <div className="flex items-center gap-3 mb-8">
+                <div className="p-3 bg-purple-100 rounded-2xl text-purple-600">
+                  <SparkleIcon className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold">AI Guided Setup</h3>
+                  <p className="text-slate-500">Let&apos;s calibrate your synthetic model.</p>
+                </div>
+              </div>
+              <div className="space-y-6 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                {getAiQuestions().map(q => (
+                  <div key={q.key} className="space-y-2">
+                    <Label className="font-semibold text-slate-700">{q.label} {q.required && "*"}</Label>
+                    {q.type === "select" ? (
+                      <Select value={aiAnswers[q.key as keyof typeof aiAnswers] as any} onValueChange={v => handleAiAnswerChange(q.key, v)}>
+                        <SelectTrigger className="h-11"><SelectValue placeholder="Select..." /></SelectTrigger>
+                        <SelectContent>
+                          {q.options?.map(o => <SelectItem key={o} value={o}>{o.toUpperCase()}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        placeholder={q.placeholder}
+                        type={q.type}
+                        className="h-11"
+                        value={q.key.includes('.') ? (aiAnswers.major_costs as any)[q.key.split('.')[1]] : (aiAnswers[q.key as keyof typeof aiAnswers] as any)}
+                        onChange={e => handleAiAnswerChange(q.key, e.target.value)}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-4 mt-8">
+                <Button variant="ghost" onClick={() => setStep("basic")}>Back</Button>
+                <Button onClick={handleAiSubmit} disabled={loading} className="flex-1 h-12 bg-purple-600 hover:bg-purple-700 shadow-xl">
+                  {loading ? <Loader2 className="animate-spin mr-2" /> : <Plus className="mr-2" />}
+                  Generate Model
+                </Button>
+              </div>
+            </CardContent>
+          )}
+        </motion.div>
+      </AnimatePresence>
     </Card>
   )
 }

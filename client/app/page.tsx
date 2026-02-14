@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { LandingPage } from "@/components/landing-page"
+import { ModelProvider } from "@/lib/model-context"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { OverviewDashboard } from "@/components/overview-dashboard"
 import { FinancialModeling } from "@/components/financial-modeling"
@@ -35,6 +36,14 @@ import { checkUserHasData, getUserOrgId } from "@/lib/user-data-check"
 import { ErrorBoundary } from "@/components/error-boundary"
 
 export default function HomePage() {
+  return (
+    <ModelProvider>
+      <HomePageContent />
+    </ModelProvider>
+  )
+}
+
+function HomePageContent() {
   // Initialize with default values for SSR compatibility (prevents hydration mismatch)
   const [showLanding, setShowLanding] = useState(true)
   const [activeView, setActiveView] = useState("overview")
@@ -48,7 +57,7 @@ export default function HomePage() {
     // This runs only on client side, preventing hydration mismatch
     const currentHash = window.location.hash.replace("#", "")
     const authToken = localStorage.getItem("auth-token")
-    
+
     const validViews = [
       "overview", "modeling", "budget-actual", "scenarios", "simulations",
       "forecasting", "assistant", "reports", "board-reporting", "investor",
@@ -56,11 +65,11 @@ export default function HomePage() {
       "settings", "onboarding", "collaboration", "job-queue", "export-queue",
       "approvals", "ledger"
     ]
-    
+
     // If user has auth token, NEVER show landing page
     if (authToken) {
       setShowLanding(false)
-      
+
       // If there's a valid hash, set view immediately
       if (currentHash && validViews.includes(currentHash)) {
         setActiveView(currentHash)
@@ -71,7 +80,7 @@ export default function HomePage() {
 
     const checkAuthAndState = async () => {
       const hasSelectedMode = localStorage.getItem("finapilot_mode_selected")
-      
+
       // CRITICAL: Check hash FIRST before any redirect logic - if user has a valid hash, respect it
       // This prevents redirecting to integrations when user is on another component
       const validViews = [
@@ -80,7 +89,7 @@ export default function HomePage() {
         "users", "integrations", "notifications", "compliance", "pricing",
         "settings", "onboarding", "collaboration", "job-queue", "export-queue"
       ]
-      
+
       if (currentHash && validViews.includes(currentHash)) {
         // User is on a specific view (from URL hash) - ALWAYS respect it, don't redirect
         setShowLanding(false)
@@ -90,7 +99,7 @@ export default function HomePage() {
         setActiveView(currentHash)
         return // CRITICAL: Return early to prevent any redirect logic
       }
-      
+
       // If no auth token, show landing page
       if (!authToken) {
         setShowLanding(true)
@@ -99,10 +108,10 @@ export default function HomePage() {
         setDemoMode(false)
         return
       }
-      
+
       // If authenticated but hasn't selected demo/real mode, or selected real data but hasn't integrated
       if (authToken && (!hasSelectedMode || hasSelectedMode === "pending_integration")) {
-        
+
         // Check if user has imported data or connected integrations
         const orgId = await getUserOrgId()
         if (orgId) {
@@ -120,7 +129,7 @@ export default function HomePage() {
             return
           }
         }
-        
+
         // If pending_integration and no data and no hash, show integrations page
         // BUT ONLY if there's no hash (user not on a specific page)
         if (hasSelectedMode === "pending_integration" && !currentHash) {
@@ -132,7 +141,7 @@ export default function HomePage() {
           window.location.hash = "#integrations"
           return
         }
-        
+
         // User doesn't have data and hasn't selected mode - show post-login options
         if (!hasSelectedMode) {
           setShowLanding(false)
@@ -140,7 +149,7 @@ export default function HomePage() {
           setShowPostLoginOptions(true)
           return
         }
-        
+
         // If pending_integration but we got here, default to integrations (shouldn't happen, but fallback)
         setShowLanding(false)
         setShowPostLoginOptions(false)
@@ -149,7 +158,7 @@ export default function HomePage() {
         setActiveView("integrations")
         return
       }
-      
+
       // If mode is already selected (and not pending integration), go directly to dashboard
       if (hasSelectedMode && hasSelectedMode !== "pending_integration") {
         setShowLanding(false)
@@ -242,7 +251,7 @@ export default function HomePage() {
     window.addEventListener("login-success", handleLoginSuccess)
     window.addEventListener("hashchange", handleHashChange)
     window.addEventListener("navigate-view", handleNavigateView as EventListener)
-    
+
     // Check initial hash
     handleHashChange()
 
@@ -258,7 +267,7 @@ export default function HomePage() {
     // When clicking "Get Started" from landing page, check if user is logged in
     const authToken = localStorage.getItem("auth-token")
     const hasSelectedMode = localStorage.getItem("finapilot_mode_selected")
-    
+
     if (authToken && !hasSelectedMode) {
       // If logged in but hasn't selected mode, show post-login options
       setShowLanding(false)
@@ -412,18 +421,18 @@ export default function HomePage() {
     return <DemoModeOnboarding onComplete={handleOnboardingComplete} />
   }
 
-      // Handler to update both state and URL hash when view changes
-      const handleViewChange = (view: string) => {
-        setActiveView(view)
-        window.location.hash = `#${view}`
-      }
+  // Handler to update both state and URL hash when view changes
+  const handleViewChange = (view: string) => {
+    setActiveView(view)
+    window.location.hash = `#${view}`
+  }
 
-      return (
-        <>
-          <DashboardLayout activeView={activeView} onViewChange={handleViewChange} demoMode={demoMode}>
-            {demoMode && <DemoModeBanner onUpgrade={handleUpgradeToReal} />}
-            {renderActiveView()}
-          </DashboardLayout>
+  return (
+    <>
+      <DashboardLayout activeView={activeView} onViewChange={handleViewChange} demoMode={demoMode}>
+        {demoMode && <DemoModeBanner onUpgrade={handleUpgradeToReal} />}
+        {renderActiveView()}
+      </DashboardLayout>
 
       <UpgradeToRealModal
         open={showUpgradeModal}

@@ -1111,6 +1111,18 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             if projected_opex is None:
                 expense_multiplier = max(0.01, (1 + expense_growth) ** i)
                 projected_opex = max(0.0, starting_opex * expense_multiplier)
+                
+                # Add Hiring Plan salaries for this month (i + 1)
+                month_index = i + 1  # 1-indexed month from start
+                hiring_plan = final_assumptions.get('hiringPlan') or []
+                if isinstance(hiring_plan, list):
+                    for hire in hiring_plan:
+                        if isinstance(hire, dict) and hire.get('month') == month_index:
+                            salary = float(hire.get('salary') or 0)
+                            # Assuming salary provided is annualised monthly? 
+                            # SaaS usually gives monthly salary in these quick forms.
+                            projected_opex += (salary / 12.0) if salary > 5000 else salary
+                            logger.info(f"Adding hire salary ${salary} for month {month_index} to opex")
             
             projected_total_expenses = projected_cogs + projected_opex
             projected_net_income = projected_revenue - projected_total_expenses

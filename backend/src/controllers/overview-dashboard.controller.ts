@@ -44,7 +44,9 @@ export const overviewDashboardController = {
         throw new ValidationError('No access to this organization');
       }
 
-      const overviewData = await overviewDashboardService.getOverviewData(orgId);
+      const { modelId } = req.query;
+
+      const overviewData = await overviewDashboardService.getOverviewData(orgId, modelId as string);
 
       res.json({
         ok: true,

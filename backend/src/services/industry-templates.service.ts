@@ -142,6 +142,37 @@ export const industryTemplatesService = {
           },
         },
       },
+      {
+        id: 'minimal-blank',
+        name: 'Minimal / Blank',
+        industry: 'Other',
+        revenueModelType: 'hybrid',
+        description: 'Empty template with zero defaults for full manual control',
+        assumptions: {
+          revenue: {
+            baseline: 0,
+            mrr: 0,
+            churnRate: 0.05,
+            arpa: 0,
+            arr: 0,
+          },
+          expenses: {
+            baseline: 0,
+            cogs: 0,
+            payroll: 0,
+            infrastructure: 0,
+            marketing: 0,
+          },
+          cash: {
+            initialCash: 0,
+          },
+          unitEconomics: {
+            cac: 0,
+            ltv: 0,
+            paybackPeriod: 0,
+          },
+        },
+      },
     ];
   },
 

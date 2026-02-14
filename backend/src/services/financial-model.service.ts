@@ -42,6 +42,12 @@ export interface CreateModelRequest {
     marketing?: number;
   };
   cash_on_hand?: number;
+  retention_rate?: number;
+  acquisition_efficiency?: {
+    caac?: number;
+    payback?: number;
+  };
+  hiring_plan?: Array<{ month: number; role: string; salary: number }>;
 
   // MANUAL MODEL FIELDS (optional)
   assumptions?: Record<string, any>;
@@ -147,19 +153,24 @@ export const financialModelService = {
       throw new ValidationError('start_month must be in YYYY-MM format');
     }
 
-    // Apply industry template if provided
+    // Apply industry template
     let templateAssumptions: any = {};
-    if (request.industry && ['SaaS', 'E-commerce', 'Services'].includes(request.industry)) {
-      try {
-        const { industryTemplatesService } = await import('./industry-templates.service');
-        const template = industryTemplatesService.getTemplateByIndustry(request.industry);
-        if (template) {
-          templateAssumptions = template.assumptions;
-        }
-      } catch (error) {
-        // Template service not available, continue without template
-        logger.warn('Industry template service not available', { error });
+    try {
+      const { industryTemplatesService } = await import('./industry-templates.service');
+
+      let template;
+      if (request.data_source_type === 'blank' && !request.business_type) {
+        // Use minimal blank template for truly manual models
+        template = industryTemplatesService.getTemplateById('minimal-blank');
+      } else if (request.industry && ['SaaS', 'E-commerce', 'Services'].includes(request.industry)) {
+        template = industryTemplatesService.getTemplateByIndustry(request.industry);
       }
+
+      if (template) {
+        templateAssumptions = JSON.parse(JSON.stringify(template.assumptions));
+      }
+    } catch (error) {
+      logger.warn('Industry template service not available', { error });
     }
 
     // Build modelJson structure
@@ -229,6 +240,9 @@ export const financialModelService = {
           startingAov: request.starting_aov,
           majorCosts: request.major_costs,
           cashOnHand: request.cash_on_hand,
+          retentionRate: request.retention_rate,
+          acquisitionEfficiency: request.acquisition_efficiency,
+          hiringPlan: request.hiring_plan,
           // Include manual assumptions if provided
           assumptions: request.assumptions,
         },
@@ -512,29 +526,28 @@ export const financialModelService = {
     const { id, name, type, category, timeGranularity, unit, isCalculated, formula } = driverData;
 
     return await prisma.$transaction(async (tx) => {
-      const driver = await tx.driver.upsert({
-        where: { id: id && id !== 'new' ? id : '00000000-0000-0000-0000-000000000000' },
-        create: {
-          orgId,
-          modelId,
-          name,
-          type,
-          category,
-          unit,
-          timeGranularity: timeGranularity || 'monthly',
-          isCalculated: isCalculated || false,
-          formula,
-        },
-        update: {
-          name,
-          type: type || 'operational',
-          category,
-          unit,
-          timeGranularity: timeGranularity || 'monthly',
-          isCalculated: isCalculated || false,
-          formula,
-        },
-      });
+      const isExisting = id && id !== 'new' && /^[a-f0-9-]{36}$/i.test(id);
+
+      const driverDataObj = {
+        orgId,
+        modelId,
+        name,
+        type: type || 'operational',
+        category,
+        unit,
+        timeGranularity: timeGranularity || 'monthly',
+        isCalculated: isCalculated || false,
+        formula,
+      };
+
+      const driver = isExisting
+        ? await tx.driver.update({
+          where: { id },
+          data: driverDataObj,
+        })
+        : await tx.driver.create({
+          data: driverDataObj,
+        });
 
       // Handle DriverFormula table if calculated
       if (isCalculated && formula) {
@@ -592,9 +605,6 @@ export const financialModelService = {
     );
   },
 
-  /**
-   * Get scenarios for a model
-   */
   async getScenarios(orgId: string, modelId: string) {
     try {
       let scenarios = await prisma.financialScenario.findMany({
@@ -622,6 +632,31 @@ export const financialModelService = {
       console.warn('getScenarios: table may not exist yet:', error.message);
       return [];
     }
+  },
+
+  /**
+   * Perform strategic AI analysis of organization data before model creation
+   */
+  async analyzeStrategicData(orgId: string): Promise<any> {
+    const assumptions = await this.generateAssumptionsFromData(orgId, '', 'connectors');
+
+    // Enrich with strategic insight based on detected values
+    const growth = assumptions.revenue.revenueGrowth || 0;
+    const mrr = assumptions.revenue.mrr || 0;
+
+    const insight = {
+      detectedMrr: mrr,
+      detectedGrowth: growth * 100,
+      confidence: mrr > 1000 ? 'high' : 'medium',
+      summary: `AI detected ${mrr > 0 ? `$${mrr.toLocaleString()} monthly revenue` : 'no significant revenue'} with a ${(growth * 100).toFixed(1)}% historical growth trend.`,
+      recommendation: growth > 0.15 ? 'Aggressive Growth Policy' : (growth > 0 ? 'Sustainable Growth' : 'Recovery & Optimization'),
+      benchmarks: {
+        growth: growth > 0.1 ? 'above' : 'aligned',
+        text: growth > 0.1 ? 'Growth is significantly above industry average (8%).' : 'Growth is aligned with standard benchmarks.'
+      }
+    };
+
+    return { assumptions, insight };
   },
 };
 
