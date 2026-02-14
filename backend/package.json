@@ -12,7 +12,8 @@
     "build": "node --max-old-space-size=4096 node_modules/typescript/bin/tsc",
     "start": "node dist/server.js",
     "render:build": "npm install && npm run build",
-    "render:start": "npx prisma migrate resolve --applied 20260209053640_add_computation_trace || true && npx prisma migrate deploy && npm start",
+    "render:start": "npx prisma migrate deploy && npm start",
+    "prisma:repair": "npx prisma migrate resolve --applied 20260209053640_add_computation_trace && npx prisma migrate deploy",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
@@ -41,6 +42,7 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^7.0.12",
+    "pg": "^8.18.0",
     "uuid": "^9.0.1",
     "zod": "^4.1.13"
   },

@@ -1,0 +1,454 @@
+﻿-- DropForeignKey
+ALTER TABLE "board_report_schedules" DROP CONSTRAINT "board_report_schedules_created_by_id_fkey";
+
+-- DropForeignKey
+ALTER TABLE "board_report_schedules" DROP CONSTRAINT "board_report_schedules_org_id_fkey";
+
+-- DropForeignKey
+ALTER TABLE "data_import_batches" DROP CONSTRAINT "data_import_batches_org_id_fkey";
+
+-- DropForeignKey
+ALTER TABLE "excel_mappings" DROP CONSTRAINT "excel_mappings_created_by_fkey";
+
+-- DropForeignKey
+ALTER TABLE "excel_mappings" DROP CONSTRAINT "excel_mappings_org_id_fkey";
+
+-- DropForeignKey
+ALTER TABLE "excel_syncs" DROP CONSTRAINT "excel_syncs_mapping_id_fkey";
+
+-- DropForeignKey
+ALTER TABLE "excel_syncs" DROP CONSTRAINT "excel_syncs_org_id_fkey";
+
+-- DropForeignKey
+ALTER TABLE "notification_channels" DROP CONSTRAINT "notification_channels_userId_fkey";
+
+-- DropForeignKey
+ALTER TABLE "notifications" DROP CONSTRAINT "notifications_userId_fkey";
+
+-- DropForeignKey
+ALTER TABLE "org_quotas" DROP CONSTRAINT "org_quotas_org_id_fkey";
+
+-- DropForeignKey
+ALTER TABLE "raw_transactions" DROP CONSTRAINT "raw_transactions_import_batch_id_fkey";
+
+-- DropForeignKey
+ALTER TABLE "realtime_simulations" DROP CONSTRAINT "realtime_simulations_org_id_fkey";
+
+-- DropForeignKey
+ALTER TABLE "realtime_simulations" DROP CONSTRAINT "realtime_simulations_user_id_fkey";
+
+-- DropIndex
+DROP INDEX "idx_provenance_entries_source_ref_gin";
+
+-- AlterTable
+ALTER TABLE "connectors" ALTER COLUMN "auto_sync_enabled" SET NOT NULL,
+ALTER COLUMN "last_sync_status" SET DATA TYPE TEXT,
+ALTER COLUMN "updated_at" DROP DEFAULT;
+
+-- AlterTable
+ALTER TABLE "excel_mappings" ALTER COLUMN "name" SET DATA TYPE TEXT,
+ALTER COLUMN "created_at" SET NOT NULL,
+ALTER COLUMN "updated_at" SET NOT NULL;
+
+-- AlterTable
+ALTER TABLE "excel_syncs" ALTER COLUMN "file_name" SET DATA TYPE TEXT,
+ALTER COLUMN "status" SET NOT NULL,
+ALTER COLUMN "status" SET DATA TYPE TEXT,
+ALTER COLUMN "created_at" SET NOT NULL,
+ALTER COLUMN "updated_at" SET NOT NULL;
+
+-- AlterTable
+ALTER TABLE "exports" ALTER COLUMN "status" SET NOT NULL,
+ALTER COLUMN "status" SET DATA TYPE TEXT,
+ALTER COLUMN "updated_at" DROP DEFAULT;
+
+-- AlterTable
+ALTER TABLE "org_quotas" ALTER COLUMN "monte_carlo_sims_limit" SET NOT NULL,
+ALTER COLUMN "monte_carlo_sims_used" SET NOT NULL,
+ALTER COLUMN "exports_limit" SET NOT NULL,
+ALTER COLUMN "exports_used" SET NOT NULL,
+ALTER COLUMN "alerts_limit" SET NOT NULL,
+ALTER COLUMN "created_at" SET NOT NULL,
+ALTER COLUMN "updated_at" SET NOT NULL;
+
+-- AlterTable
+ALTER TABLE "realtime_simulations" ALTER COLUMN "current_month" SET NOT NULL,
+ALTER COLUMN "is_running" SET NOT NULL,
+ALTER COLUMN "created_at" SET NOT NULL,
+ALTER COLUMN "updated_at" SET NOT NULL;
+
+-- CreateTable
+CREATE TABLE "drivers" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "orgId" UUID NOT NULL,
+    "modelId" UUID NOT NULL,
+    "name" TEXT NOT NULL,
+    "description" TEXT,
+    "type" TEXT NOT NULL,
+    "category" TEXT,
+    "time_granularity" TEXT NOT NULL DEFAULT 'monthly',
+    "unit" TEXT,
+    "formula" TEXT,
+    "is_calculated" BOOLEAN NOT NULL DEFAULT false,
+    "version" INTEGER NOT NULL DEFAULT 1,
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(6) NOT NULL,
+
+    CONSTRAINT "drivers_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "driver_values" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "driverId" UUID NOT NULL,
+    "scenarioId" UUID NOT NULL,
+    "month" TEXT NOT NULL,
+    "value" DECIMAL(20,4) NOT NULL,
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(6) NOT NULL,
+
+    CONSTRAINT "driver_values_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "financial_scenarios" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "orgId" UUID NOT NULL,
+    "modelId" UUID NOT NULL,
+    "name" TEXT NOT NULL,
+    "color" TEXT,
+    "is_default" BOOLEAN NOT NULL DEFAULT false,
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "financial_scenarios_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "driver_formulas" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "orgId" UUID NOT NULL,
+    "modelId" UUID NOT NULL,
+    "driverId" UUID NOT NULL,
+    "expression" TEXT NOT NULL,
+    "dependencies" JSONB NOT NULL,
+    "version" INTEGER NOT NULL DEFAULT 1,
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "driver_formulas_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "dimensions" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "orgId" UUID NOT NULL,
+    "modelId" UUID NOT NULL,
+    "name" TEXT NOT NULL,
+    "type" TEXT NOT NULL,
+    "display_order" INTEGER NOT NULL DEFAULT 0,
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(6) NOT NULL,
+
+    CONSTRAINT "dimensions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "dimension_members" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "dimensionId" UUID NOT NULL,
+    "name" TEXT NOT NULL,
+    "code" TEXT,
+    "parentId" UUID,
+    "level" INTEGER NOT NULL DEFAULT 0,
+    "display_order" INTEGER NOT NULL DEFAULT 0,
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "metadata" JSONB,
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(6) NOT NULL,
+
+    CONSTRAINT "dimension_members_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "metric_cube" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "orgId" UUID NOT NULL,
+    "modelId" UUID NOT NULL,
+    "metric_name" TEXT NOT NULL,
+    "month" TEXT NOT NULL,
+    "geographyId" UUID,
+    "productId" UUID,
+    "departmentId" UUID,
+    "segmentId" UUID,
+    "channelId" UUID,
+    "scenarioId" UUID,
+    "custom_dim1_id" UUID,
+    "custom_dim2_id" UUID,
+    "value" DECIMAL(20,4) NOT NULL,
+    "is_calculated" BOOLEAN NOT NULL DEFAULT false,
+    "formula" TEXT,
+    "version" INTEGER NOT NULL DEFAULT 1,
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(6) NOT NULL,
+
+    CONSTRAINT "metric_cube_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "computation_traces" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "orgId" UUID NOT NULL,
+    "modelId" UUID NOT NULL,
+    "trigger_node_id" TEXT NOT NULL,
+    "trigger_user_id" UUID,
+    "affected_nodes" JSONB NOT NULL,
+    "duration_ms" INTEGER NOT NULL,
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "computation_traces_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "forecasts" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "orgId" UUID NOT NULL,
+    "modelId" UUID NOT NULL,
+    "metric_name" TEXT NOT NULL,
+    "method" TEXT NOT NULL,
+    "forecast_data" JSONB NOT NULL,
+    "historical_data" JSONB,
+    "metrics" JSONB,
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "forecasts_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE INDEX "drivers_orgId_idx" ON "drivers"("orgId");
+
+-- CreateIndex
+CREATE INDEX "drivers_modelId_idx" ON "drivers"("modelId");
+
+-- CreateIndex
+CREATE INDEX "driver_values_driverId_idx" ON "driver_values"("driverId");
+
+-- CreateIndex
+CREATE INDEX "driver_values_scenarioId_idx" ON "driver_values"("scenarioId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "driver_values_driverId_scenarioId_month_key" ON "driver_values"("driverId", "scenarioId", "month");
+
+-- CreateIndex
+CREATE INDEX "financial_scenarios_orgId_idx" ON "financial_scenarios"("orgId");
+
+-- CreateIndex
+CREATE INDEX "financial_scenarios_modelId_idx" ON "financial_scenarios"("modelId");
+
+-- CreateIndex
+CREATE INDEX "driver_formulas_modelId_idx" ON "driver_formulas"("modelId");
+
+-- CreateIndex
+CREATE INDEX "dimensions_orgId_idx" ON "dimensions"("orgId");
+
+-- CreateIndex
+CREATE INDEX "dimensions_modelId_idx" ON "dimensions"("modelId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "dimensions_orgId_modelId_name_key" ON "dimensions"("orgId", "modelId", "name");
+
+-- CreateIndex
+CREATE INDEX "dimension_members_dimensionId_idx" ON "dimension_members"("dimensionId");
+
+-- CreateIndex
+CREATE INDEX "dimension_members_parentId_idx" ON "dimension_members"("parentId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "dimension_members_dimensionId_name_key" ON "dimension_members"("dimensionId", "name");
+
+-- CreateIndex
+CREATE INDEX "metric_cube_orgId_modelId_idx" ON "metric_cube"("orgId", "modelId");
+
+-- CreateIndex
+CREATE INDEX "metric_cube_metric_name_idx" ON "metric_cube"("metric_name");
+
+-- CreateIndex
+CREATE INDEX "metric_cube_month_idx" ON "metric_cube"("month");
+
+-- CreateIndex
+CREATE INDEX "metric_cube_geographyId_idx" ON "metric_cube"("geographyId");
+
+-- CreateIndex
+CREATE INDEX "metric_cube_productId_idx" ON "metric_cube"("productId");
+
+-- CreateIndex
+CREATE INDEX "metric_cube_departmentId_idx" ON "metric_cube"("departmentId");
+
+-- CreateIndex
+CREATE INDEX "metric_cube_segmentId_idx" ON "metric_cube"("segmentId");
+
+-- CreateIndex
+CREATE INDEX "metric_cube_scenarioId_idx" ON "metric_cube"("scenarioId");
+
+-- CreateIndex
+CREATE INDEX "computation_traces_orgId_idx" ON "computation_traces"("orgId");
+
+-- CreateIndex
+CREATE INDEX "computation_traces_modelId_idx" ON "computation_traces"("modelId");
+
+-- CreateIndex
+CREATE INDEX "forecasts_orgId_idx" ON "forecasts"("orgId");
+
+-- CreateIndex
+CREATE INDEX "forecasts_modelId_idx" ON "forecasts"("modelId");
+
+-- CreateIndex
+CREATE INDEX "connectors_auto_sync_enabled_last_synced_at_idx" ON "connectors"("auto_sync_enabled", "last_synced_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "jobs_idempotency_key_key" ON "jobs"("idempotency_key");
+
+-- CreateIndex
+CREATE INDEX "jobs_idempotency_key_idx" ON "jobs"("idempotency_key");
+
+-- CreateIndex
+CREATE INDEX "notifications_created_at_idx" ON "notifications"("created_at");
+
+-- AddForeignKey
+ALTER TABLE "raw_transactions" ADD CONSTRAINT "raw_transactions_import_batch_id_fkey" FOREIGN KEY ("import_batch_id") REFERENCES "data_import_batches"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "data_import_batches" ADD CONSTRAINT "data_import_batches_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "drivers" ADD CONSTRAINT "drivers_modelId_fkey" FOREIGN KEY ("modelId") REFERENCES "models"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "drivers" ADD CONSTRAINT "drivers_orgId_fkey" FOREIGN KEY ("orgId") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "driver_values" ADD CONSTRAINT "driver_values_driverId_fkey" FOREIGN KEY ("driverId") REFERENCES "drivers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "driver_values" ADD CONSTRAINT "driver_values_scenarioId_fkey" FOREIGN KEY ("scenarioId") REFERENCES "financial_scenarios"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "financial_scenarios" ADD CONSTRAINT "financial_scenarios_modelId_fkey" FOREIGN KEY ("modelId") REFERENCES "models"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "financial_scenarios" ADD CONSTRAINT "financial_scenarios_orgId_fkey" FOREIGN KEY ("orgId") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "driver_formulas" ADD CONSTRAINT "driver_formulas_driverId_fkey" FOREIGN KEY ("driverId") REFERENCES "drivers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "driver_formulas" ADD CONSTRAINT "driver_formulas_modelId_fkey" FOREIGN KEY ("modelId") REFERENCES "models"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "driver_formulas" ADD CONSTRAINT "driver_formulas_orgId_fkey" FOREIGN KEY ("orgId") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "dimension_members" ADD CONSTRAINT "dimension_members_dimensionId_fkey" FOREIGN KEY ("dimensionId") REFERENCES "dimensions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "metric_cube" ADD CONSTRAINT "metric_cube_geographyId_fkey" FOREIGN KEY ("geographyId") REFERENCES "dimension_members"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "board_report_schedules" ADD CONSTRAINT "board_report_schedules_created_by_id_fkey" FOREIGN KEY ("created_by_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "board_report_schedules" ADD CONSTRAINT "board_report_schedules_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "computation_traces" ADD CONSTRAINT "computation_traces_modelId_fkey" FOREIGN KEY ("modelId") REFERENCES "models"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "computation_traces" ADD CONSTRAINT "computation_traces_orgId_fkey" FOREIGN KEY ("orgId") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "forecasts" ADD CONSTRAINT "forecasts_modelId_fkey" FOREIGN KEY ("modelId") REFERENCES "models"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "forecasts" ADD CONSTRAINT "forecasts_orgId_fkey" FOREIGN KEY ("orgId") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "excel_syncs" ADD CONSTRAINT "excel_syncs_mapping_id_fkey" FOREIGN KEY ("mapping_id") REFERENCES "excel_mappings"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "excel_syncs" ADD CONSTRAINT "excel_syncs_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "excel_mappings" ADD CONSTRAINT "excel_mappings_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "excel_mappings" ADD CONSTRAINT "excel_mappings_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "org_quotas" ADD CONSTRAINT "org_quotas_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "realtime_simulations" ADD CONSTRAINT "realtime_simulations_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "realtime_simulations" ADD CONSTRAINT "realtime_simulations_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- RenameIndex
+ALTER INDEX "board_report_schedules_next_run_idx" RENAME TO "board_report_schedules_next_run_at_idx";
+
+-- RenameIndex
+ALTER INDEX "board_report_schedules_org_idx" RENAME TO "board_report_schedules_org_id_idx";
+
+-- RenameIndex
+ALTER INDEX "idx_data_import_batches_file_hash" RENAME TO "data_import_batches_file_hash_idx";
+
+-- RenameIndex
+ALTER INDEX "idx_data_import_batches_org" RENAME TO "data_import_batches_org_id_idx";
+
+-- RenameIndex
+ALTER INDEX "idx_data_import_batches_source_type" RENAME TO "data_import_batches_source_type_idx";
+
+-- RenameIndex
+ALTER INDEX "idx_excel_mappings_org" RENAME TO "excel_mappings_org_id_idx";
+
+-- RenameIndex
+ALTER INDEX "idx_excel_syncs_file_hash" RENAME TO "excel_syncs_file_hash_idx";
+
+-- RenameIndex
+ALTER INDEX "idx_excel_syncs_org" RENAME TO "excel_syncs_org_id_idx";
+
+-- RenameIndex
+ALTER INDEX "idx_excel_syncs_status" RENAME TO "excel_syncs_status_idx";
+
+-- RenameIndex
+ALTER INDEX "idx_monte_carlo_jobs_params_hash" RENAME TO "monte_carlo_jobs_params_hash_idx";
+
+-- RenameIndex
+ALTER INDEX "notification_channel_unique" RENAME TO "notification_channels_orgId_userId_type_key";
+
+-- RenameIndex
+ALTER INDEX "idx_org_quotas_org" RENAME TO "org_quotas_org_id_idx";
+
+-- RenameIndex
+ALTER INDEX "idx_provenance_entries_run_cell" RENAME TO "provenance_entries_modelRunId_cell_key_idx";
+
+-- RenameIndex
+ALTER INDEX "idx_raw_transactions_import_batch_id" RENAME TO "raw_transactions_import_batch_id_idx";
+
+-- RenameIndex
+ALTER INDEX "idx_raw_transactions_is_duplicate" RENAME TO "raw_transactions_is_duplicate_idx";
+
+-- RenameIndex
+ALTER INDEX "raw_transactions_org_source_id_key" RENAME TO "raw_transactions_orgId_source_id_key";
+
+-- RenameIndex
+ALTER INDEX "idx_realtime_simulations_org" RENAME TO "realtime_simulations_org_id_idx";
+
+-- RenameIndex
+ALTER INDEX "idx_realtime_simulations_snapshot_token" RENAME TO "realtime_simulations_snapshot_token_idx";
+
+-- RenameIndex
+ALTER INDEX "idx_realtime_simulations_updated" RENAME TO "realtime_simulations_updated_at_idx";
+
+-- RenameIndex
+ALTER INDEX "idx_realtime_simulations_user" RENAME TO "realtime_simulations_user_id_idx";
+
