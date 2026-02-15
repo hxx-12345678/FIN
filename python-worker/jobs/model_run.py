@@ -117,97 +117,91 @@ def calculate_accuracy_metrics(
 def generate_summary_json(result: Dict[str, Any], model_json: Dict, params_json: Dict) -> Dict[str, Any]:
     """
     Generate comprehensive summary_json for model run.
-    
-    Args:
-        result: Computed model results
-        model_json: Model definition
-        params_json: Run parameters
-    
-    Returns:
-        Summary dictionary with key metrics
     """
     try:
-        # Extract key metrics from result
-        total_revenue = result.get('revenue', 0) or result.get('totalRevenue', 0)
-        total_expenses = result.get('expenses', 0) or result.get('totalExpenses', 0)
-        cash_balance = result.get('cash', 0) or result.get('cashBalance', 0)
-        burn_rate = result.get('burnRate', 0) or result.get('burn_rate', 0)
-        runway_months = result.get('runway', 0) or result.get('runwayMonths', 0)
+        # Extract key metrics from result - Handle 3-Statement Structure
+        total_revenue = 0
+        total_expenses = 0
+        net_income = 0
+        gross_margin = 0
+        ending_cash = 0
         
-        # Calculate derived metrics
-        net_income = total_revenue - total_expenses
-        gross_margin = (total_revenue - total_expenses) / total_revenue if total_revenue > 0 else 0
-        monthly_burn = burn_rate if burn_rate > 0 else (total_expenses / 12) if total_expenses > 0 else 0
-        
+        # Check if result has 3-statement structure
+        if 'incomeStatement' in result and 'annual' in result['incomeStatement']:
+            # Sum up all years in annual
+            for year, data in result['incomeStatement']['annual'].items():
+                total_revenue += data.get('revenue', 0)
+                total_expenses += data.get('operatingExpenses', 0) + data.get('cogs', 0) + data.get('interestExpense', 0) + data.get('incomeTax', 0)
+                net_income += data.get('netIncome', 0)
+            
+            if total_revenue > 0:
+                gross_margin = (total_revenue - (total_expenses - net_income)) / total_revenue # Approximate
+                # Better: get weighted average gross margin or from total gross profit
+                total_gross_profit = sum(d.get('grossProfit', 0) for d in result['incomeStatement']['annual'].values())
+                gross_margin = total_gross_profit / total_revenue
+        else:
+            # Fallback for flat structure
+            total_revenue = result.get('revenue', 0) or result.get('totalRevenue', 0)
+            total_expenses = result.get('expenses', 0) or result.get('totalExpenses', 0)
+            net_income = total_revenue - total_expenses
+            
+        # Cash Balance from Balance Sheet (last month)
+        if 'balanceSheet' in result and 'monthly' in result['balanceSheet']:
+            months = sorted(result['balanceSheet']['monthly'].keys())
+            if months:
+                last_month = months[-1]
+                ending_cash = result['balanceSheet']['monthly'][last_month].get('cash', 0)
+        else:
+            ending_cash = result.get('cash', 0) or result.get('cashBalance', 0)
+            
+        # Burn Rate / Runway
+        burn_rate = 0 
+        runway_months = 0
+        if 'cashFlow' in result and 'monthly' in result['cashFlow']:
+            # Calculate average burn (negative net cash flow excluding financing)
+            burns = []
+            for m, data in result['cashFlow']['monthly'].items():
+                # Operating + Investing = Burn (usually)
+                burn = -(data.get('operatingCashFlow', 0) + data.get('investingCashFlow', 0))
+                if burn > 0:
+                    burns.append(burn)
+            if burns:
+                burn_rate = sum(burns) / len(burns)
+                if burn_rate > 0:
+                    runway_months = ending_cash / burn_rate
+
         model_type = None
         if isinstance(params_json, dict):
             model_type = params_json.get('modelType') or params_json.get('model_type')
         model_type = model_type or result.get('modelType')
-        forecast_months = result.get('forecastMonths')
-        confidence = result.get('confidence')
+        forecast_months = result.get('metadata', {}).get('horizonMonths')
+        confidence = result.get('confidence', 85)
 
-        # Build comprehensive summary
         summary = {
-            # Backward-compatible aliases (some clients expect these names)
             'revenue': float(total_revenue),
             'expenses': float(total_expenses),
             'totalRevenue': float(total_revenue),
             'totalExpenses': float(total_expenses),
             'netIncome': float(net_income),
             'grossMargin': float(gross_margin),
-            'cashBalance': float(cash_balance),
+            'cashBalance': float(ending_cash),
             'burnRate': float(burn_rate),
-            'monthlyBurn': float(monthly_burn),
+            'monthlyBurn': float(burn_rate),
             'runwayMonths': float(runway_months),
-            'arr': float(result.get('arr', 0) or result.get('ARR', 0)),
-            'mrr': float(result.get('mrr', 0) or result.get('MRR', 0)),
-            'churnRate': float(result.get('churnRate', 0) or result.get('churn_rate', 0)),
-            'customerCount': int(result.get('customerCount', 0) or result.get('customers', 0)),
-            'activeCustomers': int(result.get('customerCount', 0) or result.get('customers', 0)),
+            'arr': float(total_revenue), # Approximation for now
+            'mrr': float(total_revenue / 12) if forecast_months else 0,
             'generatedAt': datetime.now(timezone.utc).isoformat(),
             'modelVersion': model_json.get('version', 1) if isinstance(model_json, dict) else 1,
             'modelType': model_type,
             'forecastMonths': forecast_months,
+            'statements': result # Include full result structure
         }
-        if confidence is not None:
-            summary['confidence'] = float(confidence)
-        
-        # Add time-series data if available
-        if 'monthly' in result:
-            summary['monthly'] = result['monthly']
-        
-        # Add 3-statement financial model if available
-        if 'statements' in result:
-            summary['statements'] = result['statements']
-            
-        # Add DAG if available
-        if 'dag' in result:
-            summary['dag'] = result['dag']
-        
-        # Add KPIs
-        summary['kpis'] = {
-            'revenueGrowth': float(result.get('revenueGrowth', 0)),
-            'expenseGrowth': float(result.get('expenseGrowth', 0)),
-            'profitMargin': float(gross_margin * 100),  # As percentage
-        }
-        if confidence is not None:
-            summary['kpis']['forecastConfidence'] = float(confidence)
-        
-        metrics = result.get('metrics') or {}
-        if metrics:
-            summary['kpis']['forecastAccuracy'] = metrics.get('forecastAccuracy')
-            summary['kpis']['accuracy'] = metrics.get('forecastAccuracy')
-            summary['kpis']['mape'] = metrics.get('mape')
-            summary['kpis']['rmse'] = metrics.get('rmse')
         
         return summary
     except Exception as e:
         logger.error(f"Error generating summary_json: {str(e)}", exc_info=True)
-        # Return minimal summary on error
         return {
-            'totalRevenue': float(result.get('revenue', 0)),
-            'totalExpenses': float(result.get('expenses', 0)),
-            'netIncome': float(result.get('revenue', 0) - result.get('expenses', 0)),
+            'totalRevenue': 0,
             'generatedAt': datetime.now(timezone.utc).isoformat(),
         }
 
@@ -427,8 +421,24 @@ def handle_model_run(job_id: str, org_id: str, object_id: str, logs: dict):
             assumptions = model_json.get('assumptions', {}) if isinstance(model_json, dict) else {}
             
             # Write provenance for monthly projections
-            if 'monthly' in result:
+            if 'incomeStatement' in result and 'monthly' in result['incomeStatement']:
+                monthly_data = result['incomeStatement']['monthly']
+                # Merge with other statements for complete picture
+                if 'cashFlow' in result and 'monthly' in result['cashFlow']:
+                    for m, d in result['cashFlow']['monthly'].items():
+                        if m in monthly_data:
+                            monthly_data[m].update(d)
+                if 'balanceSheet' in result and 'monthly' in result['balanceSheet']:
+                    for m, d in result['balanceSheet']['monthly'].items():
+                        if m in monthly_data:
+                            monthly_data[m].update(d)
+            elif 'monthly' in result:
+                # Fallback for old structure
                 monthly_data = result['monthly']
+            else:
+                monthly_data = {}
+            
+            if monthly_data:
                 for month_key, month_data in monthly_data.items():
                     # Parse month key (YYYY-MM)
                     try:

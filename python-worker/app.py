@@ -261,6 +261,18 @@ def compute_hyperblock(req: HyperblockComputeRequest):
         user_id = req.update.get('userId', 'system')
         
         logger.info(f"⚡ Incremental update: {node_id} by {user_id}")
+        
+        # Normalize values if it's a dictionary {month: value}
+        if isinstance(values, dict):
+            normalized_values = []
+            for month, val in values.items():
+                normalized_values.append({
+                    "month": month,
+                    "value": float(val),
+                    "coords": {}
+                })
+            values = normalized_values
+            
         affected_nodes = engine.update_input(node_id, values, user_id)
     else:
         # Full recompute if no specific update
