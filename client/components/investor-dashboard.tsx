@@ -24,6 +24,7 @@ import { TrendingUp, TrendingDown, Target, Share, Download, Eye, MessageSquare, 
 import { toast } from "sonner"
 import { FinancialTermTooltip } from "./financial-term-tooltip"
 import { API_BASE_URL } from "@/lib/api-config"
+import { useOrg } from "@/lib/org-context"
 
 interface DashboardData {
   executiveSummary: {
@@ -64,6 +65,7 @@ interface DashboardData {
 }
 
 export function InvestorDashboard() {
+  const { currencySymbol, formatCurrency } = useOrg()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -258,15 +260,14 @@ export function InvestorDashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="text-center">
               <div className="text-3xl font-bold text-green-600">
-                ${(executiveSummary.arr / 1000).toFixed(0)}K
+                {currencySymbol}{(executiveSummary.arr / 1000).toFixed(0)}K
               </div>
               <div className="text-sm text-muted-foreground flex items-center justify-center">
                 Annual Recurring Revenue
                 <FinancialTermTooltip term="ARR" />
               </div>
-              <div className={`flex items-center justify-center text-xs mt-1 ${
-                executiveSummary.arrGrowth >= 0 ? "text-green-600" : "text-red-600"
-              }`}>
+              <div className={`flex items-center justify-center text-xs mt-1 ${executiveSummary.arrGrowth >= 0 ? "text-green-600" : "text-red-600"
+                }`}>
                 {executiveSummary.arrGrowth >= 0 ? (
                   <TrendingUp className="mr-1 h-3 w-3" />
                 ) : (
@@ -282,9 +283,8 @@ export function InvestorDashboard() {
                 Active Customers
                 <FinancialTermTooltip term="Active Customers" />
               </div>
-              <div className={`flex items-center justify-center text-xs mt-1 ${
-                executiveSummary.customerGrowth >= 0 ? "text-blue-600" : "text-red-600"
-              }`}>
+              <div className={`flex items-center justify-center text-xs mt-1 ${executiveSummary.customerGrowth >= 0 ? "text-blue-600" : "text-red-600"
+                }`}>
                 {executiveSummary.customerGrowth >= 0 ? (
                   <TrendingUp className="mr-1 h-3 w-3" />
                 ) : (
@@ -300,9 +300,8 @@ export function InvestorDashboard() {
                 Months Runway
                 <FinancialTermTooltip term="Cash Runway" />
               </div>
-              <div className={`flex items-center justify-center text-xs mt-1 ${
-                executiveSummary.runwayChange >= 0 ? "text-green-600" : "text-yellow-600"
-              }`}>
+              <div className={`flex items-center justify-center text-xs mt-1 ${executiveSummary.runwayChange >= 0 ? "text-green-600" : "text-yellow-600"
+                }`}>
                 {executiveSummary.runwayChange >= 0 ? (
                   <TrendingUp className="mr-1 h-3 w-3" />
                 ) : (
@@ -318,13 +317,12 @@ export function InvestorDashboard() {
                 Health Score
                 <FinancialTermTooltip term="Health Score" />
               </div>
-              <div className={`flex items-center justify-center text-xs mt-1 ${
-                executiveSummary.healthScore >= 80 ? "text-green-600" : 
-                executiveSummary.healthScore >= 60 ? "text-yellow-600" : "text-red-600"
-              }`}>
+              <div className={`flex items-center justify-center text-xs mt-1 ${executiveSummary.healthScore >= 80 ? "text-green-600" :
+                  executiveSummary.healthScore >= 60 ? "text-yellow-600" : "text-red-600"
+                }`}>
                 <TrendingUp className="mr-1 h-3 w-3" />
-                {executiveSummary.healthScore >= 80 ? "Excellent" : 
-                 executiveSummary.healthScore >= 60 ? "Good" : "Needs Attention"}
+                {executiveSummary.healthScore >= 80 ? "Excellent" :
+                  executiveSummary.healthScore >= 60 ? "Good" : "Needs Attention"}
               </div>
             </div>
           </div>
@@ -345,7 +343,7 @@ export function InvestorDashboard() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
                   <YAxis />
-                  <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, ""]} />
+                  <Tooltip formatter={(value) => [formatCurrency(value as number), ""]} />
                   <Area
                     type="monotone"
                     dataKey="revenue"
@@ -395,23 +393,23 @@ export function InvestorDashboard() {
           <CardTitle>Financial Runway</CardTitle>
           <CardDescription>Monthly burn rate and cash runway projection</CardDescription>
         </CardHeader>
-          <CardContent>
-            {monthlyMetrics.length > 0 ? (
-              <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
-                <BarChart data={monthlyMetrics}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, ""]} />
-                  <Bar dataKey="burn" fill="#ff7300" name="Monthly Burn" />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground text-sm px-4 text-center">
-                No burn rate data available
-              </div>
-            )}
-          </CardContent>
+        <CardContent>
+          {monthlyMetrics.length > 0 ? (
+            <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
+              <BarChart data={monthlyMetrics}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip formatter={(value) => [formatCurrency(value as number), ""]} />
+                <Bar dataKey="burn" fill="#ff7300" name="Monthly Burn" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground text-sm px-4 text-center">
+              No burn rate data available
+            </div>
+          )}
+        </CardContent>
       </Card>
 
       {/* Milestones and Updates */}
@@ -425,13 +423,12 @@ export function InvestorDashboard() {
             {milestones.map((milestone, index) => (
               <div key={index} className="flex items-start gap-4 p-3 rounded-lg border">
                 <div
-                  className={`w-3 h-3 rounded-full mt-2 ${
-                    milestone.status === "completed"
+                  className={`w-3 h-3 rounded-full mt-2 ${milestone.status === "completed"
                       ? "bg-green-500"
                       : milestone.status === "in-progress"
                         ? "bg-blue-500"
                         : "bg-gray-300"
-                  }`}
+                    }`}
                 />
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-1">
@@ -510,7 +507,7 @@ export function InvestorDashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="text-center p-4 rounded-lg bg-green-50 border border-green-200">
               <div className="text-2xl font-bold text-green-600">
-                ${unitEconomics.ltv.toLocaleString()}
+                {formatCurrency(unitEconomics.ltv)}
               </div>
               <div className="text-sm text-green-700 flex items-center justify-center">
                 Customer LTV
@@ -520,7 +517,7 @@ export function InvestorDashboard() {
             </div>
             <div className="text-center p-4 rounded-lg bg-blue-50 border border-blue-200">
               <div className="text-2xl font-bold text-blue-600">
-                ${unitEconomics.cac.toLocaleString()}
+                {formatCurrency(unitEconomics.cac)}
               </div>
               <div className="text-sm text-blue-700 flex items-center justify-center">
                 Customer CAC

@@ -98,9 +98,19 @@ class HyperblockEngine:
             if node_id not in self.nodes_meta:
                 self.add_metric(node_id, node_id)
                 
-            # Parse formula to find dependencies
-            expr = sympy.sympify(expression)
-            dependencies = [str(s) for s in expr.free_symbols]
+            # Sanitize expression for Sympy: UUIDs with hyphens cause issues (interpreted as subtraction)
+            # We replace node IDs in the expression with a safe version (hyphens to underscores)
+            safe_expression = expression
+            for node in self.graph.nodes():
+                if '-' in node:
+                    safe_expression = safe_expression.replace(node, node.replace('-', '_'))
+            
+            # Map of safe_id -> original_id
+            safe_to_orig = {n.replace('-', '_'): n for n in self.graph.nodes()}
+            
+            expr = sympy.sympify(safe_expression)
+            safe_dependencies = [str(s) for s in expr.free_symbols]
+            dependencies = [safe_to_orig.get(sd, sd) for sd in safe_dependencies]
             
             self.formulas[node_id] = (expr, dependencies)
             self.nodes_meta[node_id]['is_calculated'] = True
@@ -246,8 +256,12 @@ class HyperblockEngine:
         # Use Sympy's lambdify with numpy for massive speedup (Vectorized Recalculation)
         # This handles the "1M+ data points" requirement efficiently
         try:
-            symbols = [sympy.Symbol(d) for d in deps]
-            # Create a vectorized numpy function from the sympy expression
+            # Use the actual symbols present in the expression
+            symbols = list(expr.free_symbols)
+            # Find the corresponding original node IDs for these symbols
+            safe_to_orig = {n.replace('-', '_'): n for n in self.graph.nodes()}
+            actual_deps = [safe_to_orig.get(str(s), str(s)) for s in symbols]
+            
             f = sympy.lambdify(symbols, expr, 'numpy')
             
             # Execute vectorized across all months and all dimensions
@@ -255,8 +269,8 @@ class HyperblockEngine:
             target_dims = self.metric_dimensions.get(node_id, [])
             args = []
             
-            for dep in deps:
-                dep_data = context[dep]
+            for dep in actual_deps:
+                dep_data = self.data.get(dep, np.zeros(len(self.months)))
                 dep_dims = self.metric_dimensions.get(dep, [])
                 
                 if dep_dims == target_dims:

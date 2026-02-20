@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { API_BASE_URL } from "@/lib/api-config"
+import { useOrg } from "@/lib/org-context"
 
 // Scenario templates - static list for quick creation
 const scenarioTemplates = [
@@ -102,6 +103,7 @@ interface Model {
 }
 
 export function ScenarioPlanning() {
+  const { currencySymbol, formatCurrency } = useOrg()
   const router = useRouter()
   const searchParams = useSearchParams()
   const currentTab = searchParams.get("tab") || "scenarios"
@@ -113,7 +115,7 @@ export function ScenarioPlanning() {
   const [loading, setLoading] = useState(true)
   const [loadingScenarios, setLoadingScenarios] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  
+
   // Scenario creation state
   const [selectedScenario, setSelectedScenario] = useState("hiring-spree")
   const [scenarioName, setScenarioName] = useState("")
@@ -121,7 +123,7 @@ export function ScenarioPlanning() {
   const [overrides, setOverrides] = useState<Record<string, any>>({})
   const [isCreating, setIsCreating] = useState(false)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
-  
+
   // NLP Query state
   const [nlpQuery, setNlpQuery] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
@@ -150,10 +152,10 @@ export function ScenarioPlanning() {
   useEffect(() => {
     const handleImportComplete = async (event: CustomEvent) => {
       const { rowsImported, orgId: importedOrgId } = event.detail || {}
-      
+
       if (importedOrgId && importedOrgId === orgId) {
         toast.success(`CSV import completed! Refreshing scenarios...`)
-        
+
         // Small delay to ensure backend has processed the data
         setTimeout(async () => {
           if (selectedModelId && orgId) {
@@ -375,7 +377,7 @@ export function ScenarioPlanning() {
 
     setIsProcessing(true)
     setAiResponse("")
-    
+
     try {
       const token = localStorage.getItem("auth-token") || document.cookie
         .split("; ")
@@ -413,10 +415,10 @@ Format the response in clear, professional English with specific numbers and per
         if (result.ok && result.plan) {
           const planJson = result.plan.planJson || {}
           const structuredResponse = planJson.structuredResponse || {}
-          
+
           // Try multiple response formats
           let responseText = ""
-          
+
           // 1. Try natural_text first
           if (structuredResponse.natural_text) {
             responseText = structuredResponse.natural_text
@@ -454,7 +456,7 @@ Format the response in clear, professional English with specific numbers and per
               }
             }
           }
-          
+
           // 7. Fallback to formatted response with better structure
           if (!responseText) {
             responseText = `📊 Scenario Analysis: ${nlpQuery}\n\n` +
@@ -470,7 +472,7 @@ Format the response in clear, professional English with specific numbers and per
               `   • Ensure sufficient runway for strategic decisions\n\n` +
               `💡 Recommendation: Create a scenario with specific parameters in the Scenario Builder to see detailed projections and compare outcomes.`
           }
-          
+
           setAiResponse(responseText)
           toast.success("AI analysis completed!")
         } else {
@@ -574,9 +576,9 @@ Format the response in clear, professional English with specific numbers and per
           <p className="text-muted-foreground">Natural language scenario modeling and what-if analysis</p>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             className="bg-transparent w-full sm:w-auto"
             onClick={handleShareScenarios}
             disabled={!selectedModelId || scenarios.length === 0}
@@ -688,8 +690,8 @@ Format the response in clear, professional English with specific numbers and per
         </CardContent>
       </Card>
 
-      <Tabs 
-        value={currentTab} 
+      <Tabs
+        value={currentTab}
         onValueChange={(value) => {
           const params = new URLSearchParams(searchParams.toString())
           params.set("tab", value)
@@ -743,9 +745,8 @@ Format the response in clear, professional English with specific numbers and per
                     {scenarioTemplates.map((template) => (
                       <div
                         key={template.id}
-                        className={`p-3 border rounded-lg cursor-pointer transition-all ${
-                          selectedScenario === template.id ? "border-primary bg-primary/5" : "hover:bg-muted/50"
-                        }`}
+                        className={`p-3 border rounded-lg cursor-pointer transition-all ${selectedScenario === template.id ? "border-primary bg-primary/5" : "hover:bg-muted/50"
+                          }`}
                         onClick={() => handleTemplateSelect(template.id)}
                       >
                         <div className="flex items-center justify-between mb-1">
@@ -761,8 +762,8 @@ Format the response in clear, professional English with specific numbers and per
                       </div>
                     ))}
 
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       className="w-full bg-transparent"
                       onClick={() => {
                         setScenarioName("")
@@ -843,7 +844,7 @@ Format the response in clear, professional English with specific numbers and per
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Scenario Name</Label>
-                        <Input 
+                        <Input
                           value={scenarioName}
                           onChange={(e) => setScenarioName(e.target.value)}
                           placeholder="e.g., Hiring 5 Engineers"
@@ -870,8 +871,8 @@ Format the response in clear, professional English with specific numbers and per
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label>Revenue Growth (%)</Label>
-                          <Input 
-                            type="number" 
+                          <Input
+                            type="number"
                             step="0.01"
                             value={overrides.revenue?.growth ? (overrides.revenue.growth * 100).toFixed(2) : ""}
                             onChange={(e) => {
@@ -886,8 +887,8 @@ Format the response in clear, professional English with specific numbers and per
                         </div>
                         <div className="space-y-2">
                           <Label>Revenue Baseline Multiplier</Label>
-                          <Input 
-                            type="number" 
+                          <Input
+                            type="number"
                             step="0.01"
                             value={overrides.revenue?.baseline || ""}
                             onChange={(e) => {
@@ -902,8 +903,8 @@ Format the response in clear, professional English with specific numbers and per
                         </div>
                         <div className="space-y-2">
                           <Label>Churn Rate (%)</Label>
-                          <Input 
-                            type="number" 
+                          <Input
+                            type="number"
                             step="0.01"
                             value={overrides.revenue?.churn ? (overrides.revenue.churn * 100).toFixed(2) : ""}
                             onChange={(e) => {
@@ -918,8 +919,8 @@ Format the response in clear, professional English with specific numbers and per
                         </div>
                         <div className="space-y-2">
                           <Label>Expense Growth (%)</Label>
-                          <Input 
-                            type="number" 
+                          <Input
+                            type="number"
                             step="0.01"
                             value={overrides.costs?.growth ? (overrides.costs.growth * 100).toFixed(2) : ""}
                             onChange={(e) => {
@@ -933,9 +934,9 @@ Format the response in clear, professional English with specific numbers and per
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label>Payroll ($)</Label>
-                          <Input 
-                            type="number" 
+                          <Label>Payroll ({currencySymbol})</Label>
+                          <Input
+                            type="number"
                             value={overrides.costs?.payroll || ""}
                             onChange={(e) => {
                               const value = parseFloat(e.target.value)
@@ -948,9 +949,9 @@ Format the response in clear, professional English with specific numbers and per
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label>Marketing ($)</Label>
-                          <Input 
-                            type="number" 
+                          <Label>Marketing ({currencySymbol})</Label>
+                          <Input
+                            type="number"
                             value={overrides.costs?.marketing || ""}
                             onChange={(e) => {
                               const value = parseFloat(e.target.value)
@@ -971,8 +972,8 @@ Format the response in clear, professional English with specific numbers and per
                         <span className="hidden sm:inline">Run Scenario</span>
                         <span className="sm:hidden">Run</span>
                       </Button>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         className="bg-transparent w-full sm:w-auto"
                         onClick={() => {
                           // Duplicate current scenario
@@ -1036,20 +1037,20 @@ Format the response in clear, professional English with specific numbers and per
                         .filter((s: any) => s.status === "done" && s.summary)
                         .slice(0, 3)
                         .map((scenario: any) => {
-                          const summary = typeof scenario.summary === 'string' 
-                            ? JSON.parse(scenario.summary) 
+                          const summary = typeof scenario.summary === 'string'
+                            ? JSON.parse(scenario.summary)
                             : scenario.summary || {};
-                          
+
                           // Use summary if available, otherwise check overrides
                           let growthRate = summary.growthRate || summary.revenueGrowth;
                           if (growthRate === undefined && scenario.overrides?.revenue?.growth !== undefined) {
                             growthRate = scenario.overrides.revenue.growth;
                           }
                           growthRate = growthRate || 0;
-                          
+
                           const revenue = summary.totalRevenue || summary.revenue || summary.mrr || 0;
                           const arr = summary.arr || (revenue * 12);
-                          
+
                           return (
                             <div key={scenario.id} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg border">
                               <div>
@@ -1061,7 +1062,7 @@ Format the response in clear, professional English with specific numbers and per
                               <div className="text-right">
                                 <div className="font-semibold">{(growthRate * 100).toFixed(1)}%</div>
                                 <div className="text-xs text-muted-foreground">
-                                  ${(arr / 1000).toFixed(0)}K ARR
+                                  {formatCurrency(arr / 1000).replace(currencySymbol, "")}K ARR
                                 </div>
                               </div>
                             </div>
@@ -1083,20 +1084,20 @@ Format the response in clear, professional English with specific numbers and per
                         .filter((s: any) => s.status === "done" && s.summary)
                         .slice(0, 3)
                         .map((scenario: any) => {
-                          const summary = typeof scenario.summary === 'string' 
-                            ? JSON.parse(scenario.summary) 
+                          const summary = typeof scenario.summary === 'string'
+                            ? JSON.parse(scenario.summary)
                             : scenario.summary || {};
-                          
+
                           // Use summary if available, otherwise check overrides
                           let churnRate = summary.churnRate;
                           if (churnRate === undefined && scenario.overrides?.revenue?.churn !== undefined) {
                             churnRate = scenario.overrides.revenue.churn;
                           }
                           churnRate = churnRate || 0;
-                          
+
                           const revenue = summary.totalRevenue || summary.revenue || summary.mrr || 0;
                           const arr = summary.arr || (revenue * 12);
-                          
+
                           return (
                             <div key={scenario.id} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg border">
                               <div>
@@ -1108,7 +1109,7 @@ Format the response in clear, professional English with specific numbers and per
                               <div className="text-right">
                                 <div className="font-semibold">{(churnRate * 100).toFixed(1)}%</div>
                                 <div className="text-xs text-muted-foreground">
-                                  ${(arr / 1000).toFixed(0)}K ARR
+                                  {formatCurrency(arr / 1000).replace(currencySymbol, "")}K ARR
                                 </div>
                               </div>
                             </div>
@@ -1125,7 +1126,7 @@ Format the response in clear, professional English with specific numbers and per
                   {/* Note about Monte Carlo */}
                   <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
                     <p className="text-sm text-blue-900 dark:text-blue-100">
-                      <strong>Note:</strong> For advanced sensitivity analysis with probability distributions and tornado charts, 
+                      <strong>Note:</strong> For advanced sensitivity analysis with probability distributions and tornado charts,
                       run Monte Carlo simulations from the Monte Carlo Forecasting page.
                     </p>
                   </div>
@@ -1180,8 +1181,8 @@ Format the response in clear, professional English with specific numbers and per
             <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
               Cancel
             </Button>
-            <Button 
-              onClick={handleCreateScenario} 
+            <Button
+              onClick={handleCreateScenario}
               disabled={!scenarioName.trim() || isCreating || !selectedModelId}
             >
               {isCreating ? (

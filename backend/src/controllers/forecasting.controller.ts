@@ -18,7 +18,10 @@ export const forecastingController = {
 
             if (!metricName) throw new ValidationError('metricName is required');
 
-            // 1. Run forecast
+            // 1. Get historical data first (we'll return it to the frontend)
+            const history = await forecastingService.getHistoricalMetricData(orgId, modelId, metricName);
+
+            // 2. Run forecast
             const result = await forecastingService.generateForecast(orgId, modelId, {
                 metricName,
                 steps: steps || 12,
@@ -26,7 +29,9 @@ export const forecastingController = {
                 period
             });
 
-            res.json({ ok: true, ...result });
+            // Include the historical data in the response so the frontend 
+            // shows actual model-specific values instead of hardcoded mock data
+            res.json({ ok: true, ...result, history, actual: history });
         } catch (error) {
             next(error);
         }

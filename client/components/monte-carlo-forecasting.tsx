@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { toast } from "sonner"
 
 import { API_BASE_URL, getAuthToken } from "@/lib/api-config"
+import { useOrg } from "@/lib/org-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -94,6 +95,7 @@ interface MonteCarloForecastingProps {
 }
 
 export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingProps = {}) {
+  const { currencySymbol, formatCurrency } = useOrg()
   const [forecastMode, setForecastMode] = useState<"deterministic" | "montecarlo">("deterministic")
   const [isSimulating, setIsSimulating] = useState(false)
   const [simulationProgress, setSimulationProgress] = useState(0)
@@ -138,7 +140,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
       min: 80,
       max: 200,
       distribution: "lognormal",
-      unit: "$",
+      unit: currencySymbol,
       impact: "medium",
     },
     {
@@ -160,7 +162,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
       min: 1500,
       max: 4000,
       distribution: "lognormal",
-      unit: "$",
+      unit: currencySymbol,
       impact: "medium",
     },
   ])
@@ -174,25 +176,25 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
     if (!percentiles) return []
 
     if (percentiles.percentiles_table) {
-       const length = percentiles.percentiles_table.p50.length;
-       // Get months from today
-       const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-       const currentMonth = new Date().getMonth();
-       
-       return Array.from({ length }).map((_, i) => {
-         const monthIndex = (currentMonth + i) % 12;
-         return {
-           month: months[monthIndex],
-           p5: percentiles.percentiles_table.p5[i],
-           p10: percentiles.percentiles_table.p10?.[i] ?? percentiles.percentiles_table.p5[i], // P10 with fallback
-           p25: percentiles.percentiles_table.p25[i],
-           median: percentiles.percentiles_table.p50[i],
-           p75: percentiles.percentiles_table.p75[i],
-           p90: percentiles.percentiles_table.p90?.[i] ?? percentiles.percentiles_table.p95[i], // P90 with fallback
-           p95: percentiles.percentiles_table.p95[i],
-           deterministic: percentiles.percentiles_table.p50[i] // Fallback for deterministic line
-         };
-       });
+      const length = percentiles.percentiles_table.p50.length;
+      // Get months from today
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const currentMonth = new Date().getMonth();
+
+      return Array.from({ length }).map((_, i) => {
+        const monthIndex = (currentMonth + i) % 12;
+        return {
+          month: months[monthIndex],
+          p5: percentiles.percentiles_table.p5[i],
+          p10: percentiles.percentiles_table.p10?.[i] ?? percentiles.percentiles_table.p5[i], // P10 with fallback
+          p25: percentiles.percentiles_table.p25[i],
+          median: percentiles.percentiles_table.p50[i],
+          p75: percentiles.percentiles_table.p75[i],
+          p90: percentiles.percentiles_table.p90?.[i] ?? percentiles.percentiles_table.p95[i], // P90 with fallback
+          p95: percentiles.percentiles_table.p95[i],
+          deterministic: percentiles.percentiles_table.p50[i] // Fallback for deterministic line
+        };
+      });
     }
     return [];
   }
@@ -218,7 +220,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
     // Return empty if no data
     return [];
   }
-  
+
   const runwayHistogram = getRunwayHistogram();
 
   // Tornado chart (sensitivity analysis) - use sensitivityJson from results if available
@@ -228,7 +230,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
       let sensitivity = typeof monteCarloResults.sensitivityJson === 'string'
         ? JSON.parse(monteCarloResults.sensitivityJson)
         : monteCarloResults.sensitivityJson;
-      
+
       // Handle both array and object formats
       if (Array.isArray(sensitivity) && sensitivity.length > 0) {
         // Already in array format - convert to tornado chart format
@@ -262,7 +264,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
         }).sort((a, b) => b.abs_correlation - a.abs_correlation);
       }
     }
-    
+
     // Also try to get from percentiles if sensitivity_json is not available
     if (percentiles && typeof percentiles === 'object') {
       const percentilesObj = percentiles as any;
@@ -300,7 +302,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
         }
       }
     }
-    
+
     // Fallback to default hardcoded data if no results available
     return [
       { driver: "Revenue Growth", low: -180000, high: 220000, impact: 400000, correlation: 0.8, abs_correlation: 0.8, p_value: 0.0 },
@@ -310,7 +312,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
       { driver: "Deal Size", low: -70000, high: 85000, impact: 155000, correlation: 0.31, abs_correlation: 0.31, p_value: 0.0 },
     ].sort((a, b) => b.impact - a.impact);
   }
-  
+
   const tornadoData = getTornadoData();
 
   // Top 3 uncertainty drivers - calculate from tornado data or use defaults
@@ -321,14 +323,14 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
       return tornadoData.slice(0, 3).map((item, index) => ({
         name: item.driver,
         contribution: totalImpact > 0 ? Math.round((item.impact / totalImpact) * 100) : 0,
-        description: index === 0 
+        description: index === 0
           ? "Highest impact on forecast uncertainty due to market volatility"
           : index === 1
-          ? "Customer retention variability significantly affects long-term projections"
-          : "Sales funnel efficiency variations create revenue uncertainty",
+            ? "Customer retention variability significantly affects long-term projections"
+            : "Sales funnel efficiency variations create revenue uncertainty",
       }));
     }
-    
+
     // Fallback to default hardcoded data
     return [
       {
@@ -348,7 +350,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
       },
     ];
   }
-  
+
   const topDrivers = getTopDrivers();
 
   // Fetch existing Monte Carlo jobs when component loads or modelId changes
@@ -401,7 +403,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
       const result = await response.json()
       if (result.ok && Array.isArray(result.monteCarloJobs)) {
         setExistingMonteCarloJobs(result.monteCarloJobs)
-        
+
         // If there are completed jobs, load the most recent one
         const completedJobs = result.monteCarloJobs.filter((job: any) => job.status === 'done' && job.hasResults)
         if (completedJobs.length > 0 && !selectedJobId) {
@@ -422,7 +424,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
 
   const loadMonteCarloJobResults = async (jobId: string, token: string) => {
     if (!jobId || !token) return;
-    
+
     try {
       let baseUrl = API_BASE_URL
       if (!baseUrl.endsWith('/api/v1')) {
@@ -451,27 +453,27 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
       if (result.ok) {
         // Set all result data
         setMonteCarloResults(result)
-        
+
         // Set selectedJobId so export button works
         setSelectedJobId(jobId)
-        
+
         // Parse and set percentiles
         if (result.percentiles) {
           setPercentiles(result.percentiles)
         } else if (result.summary) {
           setPercentiles(result.summary)
         }
-        
+
         // Set survival probability
         if (result.survivalProbability) {
           setSurvivalProbability(result.survivalProbability)
         }
-        
+
         // Ensure sensitivity data is set (from sensitivityJson)
         if (result.sensitivityJson) {
           // Already included in monteCarloResults above
         }
-        
+
         // Update completion state
         if (result.status === 'done' || result.status === 'completed') {
           setSimulationComplete(true)
@@ -480,7 +482,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
           setSimulationComplete(false)
           setSimulationProgress(result.progress || 0)
         }
-        
+
         // Switch to Monte Carlo mode if we have results
         if (result.percentiles || result.sensitivityJson) {
           setForecastMode("montecarlo")
@@ -572,7 +574,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
             // Handle different error status codes
             const errorData = await response.json().catch(() => ({}))
             const errorMsg = errorData.error?.message || errorData.message || "Failed to start Monte Carlo simulation"
-            
+
             // Handle quota/credit errors (403) with helpful message
             if (response.status === 403) {
               throw new Error(errorMsg + " Please upgrade your plan or wait for your quota to reset.")
@@ -584,21 +586,21 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : "Failed to start simulation"
-          const isNetworkError = 
+          const isNetworkError =
             errorMessage.includes("Failed to fetch") ||
             errorMessage.includes("NetworkError") ||
             errorMessage.includes("ERR_NETWORK") ||
             errorMessage.includes("ERR_CONNECTION_REFUSED") ||
             (error instanceof TypeError && error.message.includes("fetch"))
-          
+
           console.error("Error starting Monte Carlo:", error)
-          
+
           if (isNetworkError) {
             toast.error("Cannot connect to server. Please ensure the backend server is running.")
           } else {
             toast.error(errorMessage)
           }
-          
+
           clearInterval(progressInterval)
           setIsSimulating(false)
           return
@@ -611,7 +613,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
         setSimulationProgress(100)
         setIsSimulating(false)
         setSimulationComplete(true)
-        
+
         // Mock survival probability data for demonstration
         setSurvivalProbability({
           byMonth: [],
@@ -695,10 +697,10 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
           if (result.ok) {
             // API returns data directly, not nested under monteCarlo
             const status = result.status || jobStatus
-            
+
             // Calculate progress: use API progress if available, otherwise estimate from status
             let progress = result.progress !== undefined ? result.progress : (jobProgress !== undefined ? jobProgress : null)
-            
+
             // If no progress from API but we have a status, estimate progress
             if (progress === null || progress === undefined) {
               if (status === "queued") {
@@ -711,20 +713,20 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                 progress = 40 // Default to 40% if unknown
               }
             }
-            
+
             // ALWAYS clear the fake progress interval once we get any real progress data
             // This ensures we only use API progress, not the fake interval
             clearInterval(progressInterval)
-            
+
             // Update progress - use API/calculated progress
             // Ensure progress is always between 0 and 100
             const finalProgress = Math.min(Math.max(progress, 0), 100)
             setSimulationProgress(finalProgress)
-            
+
             // Check if job is complete - check both monte carlo status and job status
-            const isComplete = status === "completed" || status === "done" || 
-                             jobStatus === "completed" || jobStatus === "done"
-            
+            const isComplete = status === "completed" || status === "done" ||
+              jobStatus === "completed" || jobStatus === "done"
+
             if (isComplete) {
               clearInterval(progressInterval)
               setSimulationProgress(100)
@@ -733,7 +735,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
 
               // Store full results
               setMonteCarloResults(result)
-              
+
               // Set selectedJobId so export button works
               if (result.jobId || result.monteCarloJobId) {
                 setSelectedJobId(result.jobId || result.monteCarloJobId)
@@ -745,8 +747,8 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
               } else if (result.percentilesJson) {
                 // If percentiles are in JSON string format
                 try {
-                  const parsed = typeof result.percentilesJson === 'string' 
-                    ? JSON.parse(result.percentilesJson) 
+                  const parsed = typeof result.percentilesJson === 'string'
+                    ? JSON.parse(result.percentilesJson)
                     : result.percentilesJson
                   setPercentiles(parsed)
                 } catch (e) {
@@ -782,16 +784,16 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                   },
                 })
               }
-              
+
               toast.success("Monte Carlo simulation completed!")
               return
-            } else if (status === "failed" || status === "dead_letter" || 
-                      jobStatus === "failed" || jobStatus === "dead_letter") {
+            } else if (status === "failed" || status === "dead_letter" ||
+              jobStatus === "failed" || jobStatus === "dead_letter") {
               clearInterval(progressInterval)
               setIsSimulating(false)
               throw new Error(result.lastError || "Simulation failed")
             }
-            
+
             // Continue polling if not complete
             attempts++
             if (attempts < maxAttempts) {
@@ -809,7 +811,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
           if (jobResult.ok && jobResult.job) {
             const status = jobResult.job.status
             let progress = jobResult.job.progress
-            
+
             // If no progress, estimate from status
             if (progress === null || progress === undefined) {
               if (status === "queued") {
@@ -822,14 +824,14 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                 progress = 40
               }
             }
-            
+
             // ALWAYS clear the fake progress interval once we get any real progress data
             clearInterval(progressInterval)
-            
+
             // Update progress - use API/calculated progress
             const finalProgress = Math.min(Math.max(progress, 0), 100)
             setSimulationProgress(finalProgress)
-            
+
             if (status === "completed" || status === "done") {
               clearInterval(progressInterval)
               setSimulationProgress(100)
@@ -842,7 +844,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
               toast.success("Monte Carlo simulation completed!")
               return
             }
-            
+
             // Continue polling if not complete
             attempts++
             if (attempts < maxAttempts) {
@@ -919,8 +921,8 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
           <span className="hidden sm:inline">Save Snapshot</span>
           <span className="sm:hidden">Save</span>
         </Button>
-        <Button 
-          variant="outline" 
+        <Button
+          variant="outline"
           className="w-full sm:w-auto"
           onClick={async () => {
             const jobIdForExport = selectedJobId || monteCarloResults?.jobId || monteCarloResults?.monteCarloJobId;
@@ -928,7 +930,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
               toast.error("No simulation results to export. Please run a Monte Carlo simulation first.")
               return
             }
-            
+
             try {
               const token = getAuthToken()
               if (!token) {
@@ -1003,7 +1005,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
             <TabsTrigger value="fanChart" className="text-xs sm:text-sm">Fan Chart</TabsTrigger>
             <TabsTrigger value="sensitivity" className="text-xs sm:text-sm">Sensitivity Analysis</TabsTrigger>
             <TabsTrigger value="explainability" className="text-xs sm:text-sm">Explainability</TabsTrigger>
-        </TabsList>
+          </TabsList>
         </div>
 
         {/* Drivers Configuration */}
@@ -1014,7 +1016,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                 {forecastMode === "deterministic" ? "Configure Drivers (Deterministic)" : "Configure Key Drivers (Monte Carlo)"}
               </CardTitle>
               <CardDescription>
-                {forecastMode === "deterministic" 
+                {forecastMode === "deterministic"
                   ? "Set mean values for deterministic forecast (single-point estimates)"
                   : "Set uncertainty ranges and probability distributions for each financial driver"}
               </CardDescription>
@@ -1068,7 +1070,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                         onValueChange={([v]) => updateDriver(driver.id, "mean", v)}
                         min={driver.min}
                         max={driver.max}
-                        step={driver.unit === "$" ? 10 : 0.5}
+                        step={driver.unit === currencySymbol ? 10 : 0.5}
                       />
                     </div>
 
@@ -1082,7 +1084,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                         onValueChange={([v]) => updateDriver(driver.id, "stdDev", v)}
                         min={0}
                         max={(driver.max - driver.min) / 4}
-                        step={driver.unit === "$" ? 5 : 0.1}
+                        step={driver.unit === currencySymbol ? 5 : 0.1}
                       />
                     </div>
 
@@ -1116,7 +1118,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                     </SelectContent>
                   </Select>
                   <div className="text-xs text-muted-foreground mt-1">
-                    Est. Cost: ${estimatedCost.toFixed(2)}
+                    Est. Cost: {formatCurrency(estimatedCost)}
                   </div>
                 </div>
 
@@ -1216,7 +1218,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                             <Badge variant="outline">6 Months</Badge>
                           </div>
                           <div className="text-3xl font-bold text-green-600">
-                            {survivalProbability.runwayThresholds['6_months']?.percentage 
+                            {survivalProbability.runwayThresholds['6_months']?.percentage
                               ? survivalProbability.runwayThresholds['6_months'].percentage.toFixed(1) + '%'
                               : survivalProbability.runwayThresholds['6_months']?.probability
                                 ? (survivalProbability.runwayThresholds['6_months'].probability * 100).toFixed(1) + '%'
@@ -1235,7 +1237,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                             <Badge variant="outline">12 Months</Badge>
                           </div>
                           <div className="text-3xl font-bold text-blue-600">
-                            {survivalProbability.runwayThresholds['12_months']?.percentage 
+                            {survivalProbability.runwayThresholds['12_months']?.percentage
                               ? survivalProbability.runwayThresholds['12_months'].percentage.toFixed(1) + '%'
                               : survivalProbability.runwayThresholds['12_months']?.probability
                                 ? (survivalProbability.runwayThresholds['12_months'].probability * 100).toFixed(1) + '%'
@@ -1294,22 +1296,22 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                     <div className="text-2xl font-bold">
                       {(() => {
                         if (percentiles?.percentiles_table?.p50 && percentiles.percentiles_table.p50.length > 5) {
-                          return `$${(percentiles.percentiles_table.p50[5] / 1000).toFixed(0)}K`;
+                          return formatCurrency(percentiles.percentiles_table.p50[5]);
                         }
                         if (percentiles?.percentiles_table?.p50 && percentiles.percentiles_table.p50.length > 0) {
                           const lastIndex = percentiles.percentiles_table.p50.length - 1;
-                          return `$${(percentiles.percentiles_table.p50[lastIndex] / 1000).toFixed(0)}K`;
+                          return formatCurrency(percentiles.percentiles_table.p50[lastIndex]);
                         }
                         if (percentiles?.monthly) {
                           const monthKeys = Object.keys(percentiles.monthly);
                           if (monthKeys.length > 5 && percentiles.monthly[monthKeys[5]]?.p50) {
-                            return `$${(percentiles.monthly[monthKeys[5]].p50 / 1000).toFixed(0)}K`;
+                            return formatCurrency(percentiles.monthly[monthKeys[5]].p50);
                           }
                           if (monthKeys.length > 0 && percentiles.monthly[monthKeys[monthKeys.length - 1]]?.p50) {
-                            return `$${(percentiles.monthly[monthKeys[monthKeys.length - 1]].p50 / 1000).toFixed(0)}K`;
+                            return formatCurrency(percentiles.monthly[monthKeys[monthKeys.length - 1]].p50);
                           }
                         }
-                        return "$0K";
+                        return formatCurrency(0);
                       })()}
                     </div>
                     <p className="text-sm text-muted-foreground">6-Month Cash Position</p>
@@ -1325,22 +1327,22 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                     <div className="text-2xl font-bold text-green-600">
                       {(() => {
                         if (percentiles?.percentiles_table?.p95 && percentiles.percentiles_table.p95.length > 5) {
-                          return `$${(percentiles.percentiles_table.p95[5] / 1000).toFixed(0)}K`;
+                          return formatCurrency(percentiles.percentiles_table.p95[5]);
                         }
                         if (percentiles?.percentiles_table?.p95 && percentiles.percentiles_table.p95.length > 0) {
                           const lastIndex = percentiles.percentiles_table.p95.length - 1;
-                          return `$${(percentiles.percentiles_table.p95[lastIndex] / 1000).toFixed(0)}K`;
+                          return formatCurrency(percentiles.percentiles_table.p95[lastIndex]);
                         }
                         if (percentiles?.monthly) {
                           const monthKeys = Object.keys(percentiles.monthly);
                           if (monthKeys.length > 5 && percentiles.monthly[monthKeys[5]]?.p95) {
-                            return `$${(percentiles.monthly[monthKeys[5]].p95 / 1000).toFixed(0)}K`;
+                            return formatCurrency(percentiles.monthly[monthKeys[5]].p95);
                           }
                           if (monthKeys.length > 0 && percentiles.monthly[monthKeys[monthKeys.length - 1]]?.p95) {
-                            return `$${(percentiles.monthly[monthKeys[monthKeys.length - 1]].p95 / 1000).toFixed(0)}K`;
+                            return formatCurrency(percentiles.monthly[monthKeys[monthKeys.length - 1]].p95);
                           }
                         }
-                        return "$0K";
+                        return formatCurrency(0);
                       })()}
                     </div>
                     <p className="text-sm text-muted-foreground">Best Case Scenario</p>
@@ -1356,22 +1358,22 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                     <div className="text-2xl font-bold text-orange-600">
                       {(() => {
                         if (percentiles?.percentiles_table?.p5 && percentiles.percentiles_table.p5.length > 5) {
-                          return `$${(percentiles.percentiles_table.p5[5] / 1000).toFixed(0)}K`;
+                          return formatCurrency(percentiles.percentiles_table.p5[5]);
                         }
                         if (percentiles?.percentiles_table?.p5 && percentiles.percentiles_table.p5.length > 0) {
                           const lastIndex = percentiles.percentiles_table.p5.length - 1;
-                          return `$${(percentiles.percentiles_table.p5[lastIndex] / 1000).toFixed(0)}K`;
+                          return formatCurrency(percentiles.percentiles_table.p5[lastIndex]);
                         }
                         if (percentiles?.monthly) {
                           const monthKeys = Object.keys(percentiles.monthly);
                           if (monthKeys.length > 5 && percentiles.monthly[monthKeys[5]]?.p5) {
-                            return `$${(percentiles.monthly[monthKeys[5]].p5 / 1000).toFixed(0)}K`;
+                            return formatCurrency(percentiles.monthly[monthKeys[5]].p5);
                           }
                           if (monthKeys.length > 0 && percentiles.monthly[monthKeys[monthKeys.length - 1]]?.p5) {
-                            return `$${(percentiles.monthly[monthKeys[monthKeys.length - 1]].p5 / 1000).toFixed(0)}K`;
+                            return formatCurrency(percentiles.monthly[monthKeys[monthKeys.length - 1]].p5);
                           }
                         }
-                        return "$0K";
+                        return formatCurrency(0);
                       })()}
                     </div>
                     <p className="text-sm text-muted-foreground">Worst Case Scenario</p>
@@ -1385,8 +1387,8 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                       <Badge variant="outline">Probability</Badge>
                     </div>
                     <div className="text-2xl font-bold text-purple-600">
-                      {survivalProbability?.runwayThresholds?.['12_months']?.percentage?.toFixed(1) || 
-                       survivalProbability?.runwayThresholds?.['12_months']?.probability 
+                      {survivalProbability?.runwayThresholds?.['12_months']?.percentage?.toFixed(1) ||
+                        survivalProbability?.runwayThresholds?.['12_months']?.probability
                         ? `${(survivalProbability.runwayThresholds['12_months'].probability * 100).toFixed(1)}`
                         : survivalProbability?.overall?.percentageSurvivingFullPeriod?.toFixed(1) || "0"}%
                     </div>
@@ -1435,7 +1437,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
               <CardHeader>
                 <CardTitle>Cash Flow Fan Chart - Probabilistic Forecast</CardTitle>
                 <CardDescription>
-                  Probabilistic cash flow projections with 5th-95th percentile confidence bands. 
+                  Probabilistic cash flow projections with 5th-95th percentile confidence bands.
                   Shows the range of possible outcomes from Monte Carlo simulations.
                   {monteCarloResults?.confidenceLevel && (
                     <span className="ml-2 font-semibold">
@@ -1447,225 +1449,225 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
               <CardContent>
                 <ResponsiveContainer width="100%" height={300} className="min-h-[300px] sm:min-h-[400px]">
                   <AreaChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => [`$${value?.toLocaleString()}`, ""]} />
-                  <Legend />
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip formatter={(value: number) => [formatCurrency(value), ""]} />
+                    <Legend />
 
-                  {/* 80% Confidence Band (P10-P90) - Primary visualization with bright colors */}
-                  <Area
-                    type="monotone"
-                    dataKey="p90"
-                    stackId="1"
-                    stroke="none"
-                    fill="#10b981"
-                    fillOpacity={0.5}
-                    name="P90 (90th Percentile)"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="p75"
-                    stackId="2"
-                    stroke="none"
-                    fill="#3b82f6"
-                    fillOpacity={0.5}
-                    name="P75 (75th Percentile)"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="median"
-                    stackId="3"
-                    stroke="none"
-                    fill="#6366f1"
-                    fillOpacity={0.6}
-                    name="P50 (Median)"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="p25"
-                    stackId="4"
-                    stroke="none"
-                    fill="#8b5cf6"
-                    fillOpacity={0.5}
-                    name="P25 (25th Percentile)"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="p10"
-                    stackId="5"
-                    stroke="none"
-                    fill="#f59e0b"
-                    fillOpacity={0.5}
-                    name="P10 (10th Percentile)"
-                  />
-                  {/* Extended 90% Confidence Band (P5-P95) - Brighter overlay */}
-                  <Area
-                    type="monotone"
-                    dataKey="p95"
-                    stackId="6"
-                    stroke="none"
-                    fill="#06b6d4"
-                    fillOpacity={0.3}
-                    name="P95 (95th Percentile)"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="p5"
-                    stackId="7"
-                    stroke="none"
-                    fill="#ef4444"
-                    fillOpacity={0.3}
-                    name="P5 (5th Percentile)"
-                  />
+                    {/* 80% Confidence Band (P10-P90) - Primary visualization with bright colors */}
+                    <Area
+                      type="monotone"
+                      dataKey="p90"
+                      stackId="1"
+                      stroke="none"
+                      fill="#10b981"
+                      fillOpacity={0.5}
+                      name="P90 (90th Percentile)"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="p75"
+                      stackId="2"
+                      stroke="none"
+                      fill="#3b82f6"
+                      fillOpacity={0.5}
+                      name="P75 (75th Percentile)"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="median"
+                      stackId="3"
+                      stroke="none"
+                      fill="#6366f1"
+                      fillOpacity={0.6}
+                      name="P50 (Median)"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="p25"
+                      stackId="4"
+                      stroke="none"
+                      fill="#8b5cf6"
+                      fillOpacity={0.5}
+                      name="P25 (25th Percentile)"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="p10"
+                      stackId="5"
+                      stroke="none"
+                      fill="#f59e0b"
+                      fillOpacity={0.5}
+                      name="P10 (10th Percentile)"
+                    />
+                    {/* Extended 90% Confidence Band (P5-P95) - Brighter overlay */}
+                    <Area
+                      type="monotone"
+                      dataKey="p95"
+                      stackId="6"
+                      stroke="none"
+                      fill="#06b6d4"
+                      fillOpacity={0.3}
+                      name="P95 (95th Percentile)"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="p5"
+                      stackId="7"
+                      stroke="none"
+                      fill="#ef4444"
+                      fillOpacity={0.3}
+                      name="P5 (5th Percentile)"
+                    />
 
-                  {/* Median Line */}
-                  <Line
-                    type="monotone"
-                    dataKey="median"
-                    stroke="#6366f1"
-                    strokeWidth={3}
-                    name="Median Forecast"
-                    dot={false}
-                  />
-
-                  {/* Deterministic Comparison */}
-                  {forecastMode === "montecarlo" && (
+                    {/* Median Line */}
                     <Line
                       type="monotone"
-                      dataKey="deterministic"
-                      stroke="#10b981"
-                      strokeWidth={2}
-                      strokeDasharray="5 5"
-                      name="Deterministic"
+                      dataKey="median"
+                      stroke="#6366f1"
+                      strokeWidth={3}
+                      name="Median Forecast"
                       dot={false}
                     />
-                  )}
-                </AreaChart>
-              </ResponsiveContainer>
 
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-3 border rounded-lg">
-                  <div className="text-sm text-muted-foreground mb-1">Median Projection</div>
-                  <div className="text-xl font-bold">
-                    {(() => {
-                      if (chartData.length > 0) {
-                        const lastMonth = chartData[chartData.length - 1];
-                        if (lastMonth.median) {
-                          return `$${(lastMonth.median / 1000).toFixed(0)}K`;
+                    {/* Deterministic Comparison */}
+                    {forecastMode === "montecarlo" && (
+                      <Line
+                        type="monotone"
+                        dataKey="deterministic"
+                        stroke="#10b981"
+                        strokeWidth={2}
+                        strokeDasharray="5 5"
+                        name="Deterministic"
+                        dot={false}
+                      />
+                    )}
+                  </AreaChart>
+                </ResponsiveContainer>
+
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-3 border rounded-lg">
+                    <div className="text-sm text-muted-foreground mb-1">Median Projection</div>
+                    <div className="text-xl font-bold">
+                      {(() => {
+                        if (chartData.length > 0) {
+                          const lastMonth = chartData[chartData.length - 1];
+                          if (lastMonth.median) {
+                            return formatCurrency(lastMonth.median);
+                          }
+                          // Try to calculate from percentiles if available
+                          if (percentiles?.percentiles_table?.p50 && percentiles.percentiles_table.p50.length > 0) {
+                            const lastIndex = percentiles.percentiles_table.p50.length - 1;
+                            const median = percentiles.percentiles_table.p50[lastIndex];
+                            if (median) {
+                              return formatCurrency(median);
+                            }
+                          }
                         }
-                        // Try to calculate from percentiles if available
+                        // Fallback: calculate from percentiles if chartData is empty
                         if (percentiles?.percentiles_table?.p50 && percentiles.percentiles_table.p50.length > 0) {
                           const lastIndex = percentiles.percentiles_table.p50.length - 1;
                           const median = percentiles.percentiles_table.p50[lastIndex];
                           if (median) {
-                            return `$${(median / 1000).toFixed(0)}K`;
+                            return formatCurrency(median);
                           }
                         }
-                      }
-                      // Fallback: calculate from percentiles if chartData is empty
-                      if (percentiles?.percentiles_table?.p50 && percentiles.percentiles_table.p50.length > 0) {
-                        const lastIndex = percentiles.percentiles_table.p50.length - 1;
-                        const median = percentiles.percentiles_table.p50[lastIndex];
-                        if (median) {
-                          return `$${(median / 1000).toFixed(0)}K`;
-                        }
-                      }
-                      return "Calculating...";
-                    })()}
+                        return "Calculating...";
+                      })()}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {chartData.length > 0 ? `${chartData[chartData.length - 1].month} cash flow` : "No data"}
+                    </div>
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {chartData.length > 0 ? `${chartData[chartData.length - 1].month} cash flow` : "No data"}
-                  </div>
-                </div>
-                <div className="p-3 border rounded-lg">
-                  <div className="text-sm text-muted-foreground mb-1">90% Confidence Range</div>
-                  <div className="text-xl font-bold">
-                    {(() => {
-                      // First try chartData
-                      if (chartData.length > 0) {
-                        const lastMonth = chartData[chartData.length - 1];
-                        const p10 = lastMonth.p10 || lastMonth.p5;
-                        const p90 = lastMonth.p90 || lastMonth.p95;
-                        if (p10 !== undefined && p90 !== undefined && p10 !== null && p90 !== null && p10 > 0 && p90 > 0) {
-                          return `$${(p10 / 1000).toFixed(0)}K - $${(p90 / 1000).toFixed(0)}K`;
-                        }
-                      }
-                      
-                      // Try percentiles_table format
-                      if (percentiles?.percentiles_table) {
-                        const p50Array = percentiles.percentiles_table.p50;
-                        if (p50Array && p50Array.length > 0) {
-                          const lastIndex = p50Array.length - 1;
-                          // Try P10 and P90 first
-                          const p10 = percentiles.percentiles_table.p10?.[lastIndex];
-                          const p90 = percentiles.percentiles_table.p90?.[lastIndex];
+                  <div className="p-3 border rounded-lg">
+                    <div className="text-sm text-muted-foreground mb-1">90% Confidence Range</div>
+                    <div className="text-xl font-bold">
+                      {(() => {
+                        // First try chartData
+                        if (chartData.length > 0) {
+                          const lastMonth = chartData[chartData.length - 1];
+                          const p10 = lastMonth.p10 || lastMonth.p5;
+                          const p90 = lastMonth.p90 || lastMonth.p95;
                           if (p10 !== undefined && p90 !== undefined && p10 !== null && p90 !== null && p10 > 0 && p90 > 0) {
-                            return `$${(p10 / 1000).toFixed(0)}K - $${(p90 / 1000).toFixed(0)}K`;
-                          }
-                          // Fallback to P5 and P95
-                          const p5 = percentiles.percentiles_table.p5?.[lastIndex];
-                          const p95 = percentiles.percentiles_table.p95?.[lastIndex];
-                          if (p5 !== undefined && p95 !== undefined && p5 !== null && p95 !== null && p5 > 0 && p95 > 0) {
-                            return `$${(p5 / 1000).toFixed(0)}K - $${(p95 / 1000).toFixed(0)}K`;
+                            return `${formatCurrency(p10)} - ${formatCurrency(p90)}`;
                           }
                         }
-                      }
-                      
-                      // Try monthly format
-                      if (percentiles?.monthly) {
-                        const monthKeys = Object.keys(percentiles.monthly);
-                        if (monthKeys.length > 0) {
-                          const lastKey = monthKeys[monthKeys.length - 1];
-                          const lastMonth = percentiles.monthly[lastKey];
-                          if (lastMonth) {
-                            const p10 = lastMonth.p10 || lastMonth.p5;
-                            const p90 = lastMonth.p90 || lastMonth.p95;
+
+                        // Try percentiles_table format
+                        if (percentiles?.percentiles_table) {
+                          const p50Array = percentiles.percentiles_table.p50;
+                          if (p50Array && p50Array.length > 0) {
+                            const lastIndex = p50Array.length - 1;
+                            // Try P10 and P90 first
+                            const p10 = percentiles.percentiles_table.p10?.[lastIndex];
+                            const p90 = percentiles.percentiles_table.p90?.[lastIndex];
                             if (p10 !== undefined && p90 !== undefined && p10 !== null && p90 !== null && p10 > 0 && p90 > 0) {
-                              return `$${(p10 / 1000).toFixed(0)}K - $${(p90 / 1000).toFixed(0)}K`;
+                              return `${formatCurrency(p10)} - ${formatCurrency(p90)}`;
+                            }
+                            // Fallback to P5 and P95
+                            const p5 = percentiles.percentiles_table.p5?.[lastIndex];
+                            const p95 = percentiles.percentiles_table.p95?.[lastIndex];
+                            if (p5 !== undefined && p95 !== undefined && p5 !== null && p95 !== null && p5 > 0 && p95 > 0) {
+                              return `$${(p5 / 1000).toFixed(0)}K - $${(p95 / 1000).toFixed(0)}K`;
                             }
                           }
                         }
-                      }
-                      
-                      return "N/A";
-                    })()}
-                  </div>
-                  <div className="text-xs text-muted-foreground">P10 (conservative) to P90 (optimistic) with P50 (median)</div>
-                </div>
-                <div className="p-3 border rounded-lg">
-                  <div className="text-sm text-muted-foreground mb-1">Uncertainty Spread</div>
-                  <div className="text-xl font-bold">
-                    {(() => {
-                      if (chartData.length > 0) {
-                        const lastMonth = chartData[chartData.length - 1];
-                        const median = lastMonth.median || 0;
-                        const p10 = lastMonth.p10 || lastMonth.p5 || 0;
-                        const p90 = lastMonth.p90 || lastMonth.p95 || 0;
-                        if (median > 0) {
-                          const spread = ((p90 - p10) / (2 * median)) * 100;
-                          return `±${spread.toFixed(0)}%`;
+
+                        // Try monthly format
+                        if (percentiles?.monthly) {
+                          const monthKeys = Object.keys(percentiles.monthly);
+                          if (monthKeys.length > 0) {
+                            const lastKey = monthKeys[monthKeys.length - 1];
+                            const lastMonth = percentiles.monthly[lastKey];
+                            if (lastMonth) {
+                              const p10 = lastMonth.p10 || lastMonth.p5;
+                              const p90 = lastMonth.p90 || lastMonth.p95;
+                              if (p10 !== undefined && p90 !== undefined && p10 !== null && p90 !== null && p10 > 0 && p90 > 0) {
+                                return `${formatCurrency(p10)} - ${formatCurrency(p90)}`;
+                              }
+                            }
+                          }
                         }
-                      }
-                      // Fallback: calculate from percentiles if chartData is empty
-                      if (percentiles?.percentiles_table) {
-                        const lastIndex = percentiles.percentiles_table.p50?.length - 1 || 0;
-                        const median = percentiles.percentiles_table.p50?.[lastIndex] || 0;
-                        const p10 = percentiles.percentiles_table.p10?.[lastIndex] || percentiles.percentiles_table.p5?.[lastIndex] || 0;
-                        const p90 = percentiles.percentiles_table.p90?.[lastIndex] || percentiles.percentiles_table.p95?.[lastIndex] || 0;
-                        if (median > 0) {
-                          const spread = ((p90 - p10) / (2 * median)) * 100;
-                          return `±${spread.toFixed(0)}%`;
-                        }
-                      }
-                      return "Calculating...";
-                    })()}
+
+                        return "N/A";
+                      })()}
+                    </div>
+                    <div className="text-xs text-muted-foreground">P10 (conservative) to P90 (optimistic) with P50 (median)</div>
                   </div>
-                  <div className="text-xs text-muted-foreground">Coefficient of variation relative to median</div>
+                  <div className="p-3 border rounded-lg">
+                    <div className="text-sm text-muted-foreground mb-1">Uncertainty Spread</div>
+                    <div className="text-xl font-bold">
+                      {(() => {
+                        if (chartData.length > 0) {
+                          const lastMonth = chartData[chartData.length - 1];
+                          const median = lastMonth.median || 0;
+                          const p10 = lastMonth.p10 || lastMonth.p5 || 0;
+                          const p90 = lastMonth.p90 || lastMonth.p95 || 0;
+                          if (median > 0) {
+                            const spread = ((p90 - p10) / (2 * median)) * 100;
+                            return `±${spread.toFixed(0)}%`;
+                          }
+                        }
+                        // Fallback: calculate from percentiles if chartData is empty
+                        if (percentiles?.percentiles_table) {
+                          const lastIndex = percentiles.percentiles_table.p50?.length - 1 || 0;
+                          const median = percentiles.percentiles_table.p50?.[lastIndex] || 0;
+                          const p10 = percentiles.percentiles_table.p10?.[lastIndex] || percentiles.percentiles_table.p5?.[lastIndex] || 0;
+                          const p90 = percentiles.percentiles_table.p90?.[lastIndex] || percentiles.percentiles_table.p95?.[lastIndex] || 0;
+                          if (median > 0) {
+                            const spread = ((p90 - p10) / (2 * median)) * 100;
+                            return `±${spread.toFixed(0)}%`;
+                          }
+                        }
+                        return "Calculating...";
+                      })()}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Coefficient of variation relative to median</div>
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
           ) : (
             <Card>
               <CardContent className="p-12 text-center">
@@ -1697,13 +1699,13 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                 <ResponsiveContainer width="100%" height={300} className="min-h-[300px] sm:min-h-[400px]">
                   <BarChart data={tornadoData} layout="vertical" margin={{ top: 5, right: 30, left: 100, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis 
-                      type="number" 
+                    <XAxis
+                      type="number"
                       domain={['auto', 'auto']}
                       label={{ value: 'Impact (Correlation × Scale)', position: 'insideBottom', offset: -5 }}
                     />
                     <YAxis dataKey="driver" type="category" width={150} />
-                    <Tooltip 
+                    <Tooltip
                       formatter={(value: any, name: string, props: any) => {
                         if (name === 'Correlation') {
                           return [`${(value as number).toFixed(4)}`, 'Correlation'];
@@ -1717,26 +1719,26 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                   </BarChart>
                 </ResponsiveContainer>
 
-              <div className="mt-6 space-y-3">
-                <h4 className="font-semibold">Sensitivity Rankings (Sorted by Absolute Correlation):</h4>
-                {tornadoData.map((item: any, index: number) => (
-                  <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Badge variant={index === 0 ? "default" : index === 1 ? "secondary" : "outline"}>#{index + 1}</Badge>
-                      <span className="font-medium">{item.driver}</span>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-semibold">
-                        {item.correlation > 0 ? '+' : ''}{item.correlation.toFixed(4)}
+                <div className="mt-6 space-y-3">
+                  <h4 className="font-semibold">Sensitivity Rankings (Sorted by Absolute Correlation):</h4>
+                  {tornadoData.map((item: any, index: number) => (
+                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <Badge variant={index === 0 ? "default" : index === 1 ? "secondary" : "outline"}>#{index + 1}</Badge>
+                        <span className="font-medium">{item.driver}</span>
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        Correlation | P-value: {item.p_value?.toFixed(4) || 'N/A'}
+                      <div className="text-right">
+                        <div className="font-semibold">
+                          {item.correlation > 0 ? '+' : ''}{item.correlation.toFixed(4)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Correlation | P-value: {item.p_value?.toFixed(4) || 'N/A'}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
                   <p className="text-sm text-muted-foreground mt-4">
-                    <strong>Interpretation:</strong> Correlation values range from -1 to +1. Positive values indicate the driver increases the outcome, 
+                    <strong>Interpretation:</strong> Correlation values range from -1 to +1. Positive values indicate the driver increases the outcome,
                     negative values indicate it decreases the outcome. Higher absolute values indicate stronger influence.
                   </p>
                 </div>
@@ -1885,7 +1887,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Confidence Level:</span>
                       <span className="font-medium">
-                        {monteCarloResults?.confidenceLevel 
+                        {monteCarloResults?.confidenceLevel
                           ? `${(Number(monteCarloResults.confidenceLevel) * 100).toFixed(0)}%`
                           : "90%"}
                       </span>
@@ -1952,7 +1954,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                               const median = percentiles.percentiles_table.p50[idx];
                               const p5 = percentiles.percentiles_table.p5?.[idx];
                               if (median !== undefined && median !== null && !isNaN(median) && median > 0 &&
-                                  p5 !== undefined && p5 !== null && !isNaN(p5) && p5 < median) {
+                                p5 !== undefined && p5 !== null && !isNaN(p5) && p5 < median) {
                                 const downside = (median - p5) / 1.645; // Approximate std dev for downside
                                 if (downside > 0) {
                                   return `$${(downside / 1000).toFixed(0)}K`;
@@ -1969,7 +1971,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                                 const median = percentiles.monthly[key]?.p50;
                                 const p5 = percentiles.monthly[key]?.p5;
                                 if (median !== undefined && median !== null && !isNaN(median) && median > 0 &&
-                                    p5 !== undefined && p5 !== null && !isNaN(p5) && p5 < median) {
+                                  p5 !== undefined && p5 !== null && !isNaN(p5) && p5 < median) {
                                   const downside = (median - p5) / 1.645;
                                   if (downside > 0) {
                                     return `$${(downside / 1000).toFixed(0)}K`;
@@ -1984,7 +1986,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                             const median = lastMonth.median;
                             const p5 = lastMonth.p5;
                             if (median !== undefined && median !== null && !isNaN(median) && median > 0 &&
-                                p5 !== undefined && p5 !== null && !isNaN(p5) && p5 < median) {
+                              p5 !== undefined && p5 !== null && !isNaN(p5) && p5 < median) {
                               const downside = (median - p5) / 1.645;
                               if (downside > 0) {
                                 return `$${(downside / 1000).toFixed(0)}K`;

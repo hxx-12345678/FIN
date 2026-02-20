@@ -15,6 +15,7 @@ import { useSearchParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
 import Link from "next/link"
 import { API_BASE_URL } from "@/lib/api-config"
+import { useOrg } from "@/lib/org-context"
 
 // All data is now fetched dynamically from backend - no static fallbacks
 
@@ -91,11 +92,12 @@ const selectRunForType = (runs: ModelRun[], modelType: string) => {
   return runs.find((run) => getRunModelType(run) === normalizedType)
 }
 
-const formatCurrency = (value?: number | null) => {
+// Helper for formatting currency within this file
+const formatCurrencyLocal = (value?: number | null, symbol: string = "$") => {
   if (value === null || value === undefined || isNaN(Number(value))) {
     return "N/A"
   }
-  return `$${Number(value).toLocaleString()}`
+  return `${symbol}${Number(value).toLocaleString()}`
 }
 
 const buildBaselineInsight = (summary: any, runId?: string): InsightCard | null => {
@@ -117,13 +119,13 @@ const buildBaselineInsight = (summary: any, runId?: string): InsightCard | null 
   // Build more detailed forecasting insight
   let description = `Forecast Analysis: `
   if (revenue > 0) {
-    description += `Projected revenue of ${formatCurrency(revenue)}. `
+    description += `Projected revenue of ${formatCurrencyLocal(revenue)}. `
   }
   if (runway > 0) {
     description += `Cash runway of ${Math.round(runway)} months. `
   }
   if (burnRate > 0) {
-    description += `Monthly burn rate of ${formatCurrency(burnRate)}. `
+    description += `Monthly burn rate of ${formatCurrencyLocal(burnRate)}. `
   }
   if (revenueGrowth > 0) {
     description += `Revenue growth rate of ${(revenueGrowth * 100).toFixed(1)}%. `
@@ -142,6 +144,7 @@ const buildBaselineInsight = (summary: any, runId?: string): InsightCard | null 
 }
 
 export function AIForecasting() {
+  const { currencySymbol, formatCurrency } = useOrg()
   const router = useRouter()
   const searchParams = useSearchParams()
   const currentTab = searchParams.get("tab") || "revenue"
@@ -190,10 +193,10 @@ export function AIForecasting() {
   useEffect(() => {
     const handleImportComplete = async (event: CustomEvent) => {
       const { rowsImported, orgId: importedOrgId } = event.detail || {}
-      
+
       if (importedOrgId && importedOrgId === orgId) {
         toast.success(`CSV import completed! Refreshing forecast data...`)
-        
+
         // Small delay to ensure backend has processed the data
         setTimeout(async () => {
           if (selectedModelId && orgId) {
@@ -241,53 +244,53 @@ export function AIForecasting() {
           const runs = result.runs
             .map((run: ModelRun) => normalizeRun(run))
             .filter((r: ModelRun) => r.status === "completed" || r.status === "done")
-          
+
           // Group runs by model type
           const prophetRuns = runs.filter((r: ModelRun) => {
             const params = r.paramsJson || {}
             const modelType = params.modelType || params.model_type || ''
             return modelType.toLowerCase() === 'prophet'
           })
-          
+
           const arimaRuns = runs.filter((r: ModelRun) => {
             const params = r.paramsJson || {}
             const modelType = params.modelType || params.model_type || ''
             return modelType.toLowerCase() === 'arima'
           })
-          
+
           const neuralRuns = runs.filter((r: ModelRun) => {
             const params = r.paramsJson || {}
             const modelType = params.modelType || params.model_type || ''
             return modelType.toLowerCase() === 'neural' || modelType.toLowerCase() === 'neural_network'
           })
-          
+
           // Get latest run for each type
-          const latestProphet = prophetRuns.sort((a: ModelRun, b: ModelRun) => 
+          const latestProphet = prophetRuns.sort((a: ModelRun, b: ModelRun) =>
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
           )[0]
-          
-          const latestArima = arimaRuns.sort((a: ModelRun, b: ModelRun) => 
+
+          const latestArima = arimaRuns.sort((a: ModelRun, b: ModelRun) =>
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
           )[0]
-          
-          const latestNeural = neuralRuns.sort((a: ModelRun, b: ModelRun) => 
+
+          const latestNeural = neuralRuns.sort((a: ModelRun, b: ModelRun) =>
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
           )[0]
-          
+
           // Build metrics from actual runs - extract real metrics from summaryJson
           const getMetrics = (run: ModelRun | undefined) => {
             if (!run || !run.summaryJson) return { accuracy: 0, mape: 0, rmse: 0 };
-            
-            const summary = typeof run.summaryJson === 'string' 
-              ? JSON.parse(run.summaryJson) 
+
+            const summary = typeof run.summaryJson === 'string'
+              ? JSON.parse(run.summaryJson)
               : run.summaryJson;
-            
+
             // Try to get actual model metrics from summary
             const kpis = summary.kpis || {};
             const accuracy = kpis.accuracy || kpis.forecastAccuracy || (kpis.profitMargin ? kpis.profitMargin : 0);
             const mape = kpis.mape || kpis.meanAbsolutePercentageError || 0;
             const rmse = kpis.rmse || kpis.rootMeanSquaredError || 0;
-            
+
             return { accuracy, mape, rmse };
           };
 
@@ -375,8 +378,8 @@ export function AIForecasting() {
         return current
       }
       // Safely parse summaryJson
-      const summary = typeof latestRun.summaryJson === "string" 
-        ? safeJsonParse(latestRun.summaryJson) 
+      const summary = typeof latestRun.summaryJson === "string"
+        ? safeJsonParse(latestRun.summaryJson)
         : latestRun.summaryJson;
       const baseline = buildBaselineInsight(summary, latestRun.id)
       return baseline ? [baseline] : current
@@ -453,19 +456,19 @@ export function AIForecasting() {
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to fetch models"
-      const isNetworkError = 
+      const isNetworkError =
         errorMessage.includes("Failed to fetch") ||
         errorMessage.includes("NetworkError") ||
         errorMessage.includes("ERR_NETWORK") ||
         errorMessage.includes("ERR_CONNECTION_REFUSED") ||
         (error instanceof TypeError && error.message.includes("fetch"))
-      
+
       if (isNetworkError) {
         // Network errors are expected when backend is not running - don't show error toast
         console.warn("Backend server appears to be unavailable. Models will not be loaded until server is running.")
       } else {
-      console.error("Failed to fetch models:", error)
-      toast.error("Failed to load models")
+        console.error("Failed to fetch models:", error)
+        toast.error("Failed to load models")
       }
     } finally {
       setLoading(false)
@@ -510,7 +513,8 @@ export function AIForecasting() {
       if (!summary || Object.keys(summary).length === 0) return
 
       // Get monthly data from summary
-      const monthly = summary.monthly || {}
+      // IMPORTANT: Python worker may store projections under fullResult.monthly
+      const monthly = summary.monthly || summary.fullResult?.monthly || {}
       const forecastPoints: ForecastDataPoint[] = []
       const cashFlowPoints: any[] = []
 
@@ -528,13 +532,13 @@ export function AIForecasting() {
           console.warn(`Invalid month key format: ${monthKey}, skipping...`)
           return // Skip invalid month keys
         }
-        
+
         const monthNum = parseInt(month)
         if (monthNum < 1 || monthNum > 12) {
           console.warn(`Invalid month number: ${monthNum} in key ${monthKey}, skipping...`)
           return // Skip invalid month numbers
         }
-        
+
         const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
         const monthName = `${monthNames[monthNum - 1]} ${year}`
 
@@ -672,7 +676,7 @@ export function AIForecasting() {
 6. Comparison of forecasted vs historical performance patterns
 
 Use the model run data to provide specific, data-driven insights about the forecast projections, not just general financial advice.`
-        
+
         // Generate AI insights based on model run
         const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/ai-plans`, {
           method: "POST",
@@ -699,7 +703,7 @@ Use the model run data to provide specific, data-driven insights about the forec
             // Extract insights from plan
             const planJson = result.plan.planJson || {}
             const structuredResponse = planJson.structuredResponse || {}
-            
+
             // Process insights
             const extractedInsights: any[] = []
             const extractedRecommendations: any[] = []
@@ -733,10 +737,10 @@ Use the model run data to provide specific, data-driven insights about the forec
             // Extract insights from analysis
             if (structuredResponse.analysis) {
               const analysis = structuredResponse.analysis
-              
+
               // Extract forecast trends
               if (analysis.trends) {
-                const trendsText = typeof analysis.trends === 'string' ? analysis.trends : 
+                const trendsText = typeof analysis.trends === 'string' ? analysis.trends :
                   (Array.isArray(analysis.trends) ? analysis.trends.join('. ') : JSON.stringify(analysis.trends))
                 extractedInsights.push({
                   type: "trend",
@@ -746,10 +750,10 @@ Use the model run data to provide specific, data-driven insights about the forec
                   impact: "positive",
                 })
               }
-              
+
               // Extract forecast risks
               if (analysis.risks) {
-                const risksText = typeof analysis.risks === 'string' ? analysis.risks : 
+                const risksText = typeof analysis.risks === 'string' ? analysis.risks :
                   (Array.isArray(analysis.risks) ? analysis.risks.join('. ') : JSON.stringify(analysis.risks))
                 extractedInsights.push({
                   type: "risk",
@@ -759,10 +763,10 @@ Use the model run data to provide specific, data-driven insights about the forec
                   impact: "warning",
                 })
               }
-              
+
               // Extract forecast opportunities
               if (analysis.opportunities) {
-                const oppsText = typeof analysis.opportunities === 'string' ? analysis.opportunities : 
+                const oppsText = typeof analysis.opportunities === 'string' ? analysis.opportunities :
                   (Array.isArray(analysis.opportunities) ? analysis.opportunities.join('. ') : JSON.stringify(analysis.opportunities))
                 extractedInsights.push({
                   type: "opportunity",
@@ -772,11 +776,11 @@ Use the model run data to provide specific, data-driven insights about the forec
                   impact: "positive",
                 })
               }
-              
+
               // Extract forecast accuracy insights
               if (analysis.forecastAccuracy || analysis.accuracy) {
-                const accuracyText = typeof (analysis.forecastAccuracy || analysis.accuracy) === 'string' 
-                  ? (analysis.forecastAccuracy || analysis.accuracy) 
+                const accuracyText = typeof (analysis.forecastAccuracy || analysis.accuracy) === 'string'
+                  ? (analysis.forecastAccuracy || analysis.accuracy)
                   : `Forecast accuracy: ${JSON.stringify(analysis.forecastAccuracy || analysis.accuracy)}`
                 extractedInsights.push({
                   type: "analysis",
@@ -793,16 +797,16 @@ Use the model run data to provide specific, data-driven insights about the forec
             if (naturalText) {
               // Split natural text into paragraphs and extract key forecasting insights
               const textLines = naturalText.split('\n').filter((line: string) => line.trim().length > 0)
-              
+
               // Look for forecasting-specific keywords to create better insights
               const forecastKeywords = ['forecast', 'projection', 'trajectory', 'runway', 'growth', 'trend', 'revenue', 'cash flow', 'burn rate']
-              
+
               if (textLines.length > 0) {
                 // Try to extract multiple insights from different paragraphs
-                const relevantParagraphs = textLines.filter((line: string) => 
+                const relevantParagraphs = textLines.filter((line: string) =>
                   forecastKeywords.some(keyword => line.toLowerCase().includes(keyword))
                 )
-                
+
                 if (relevantParagraphs.length > 0) {
                   // Create insights from relevant paragraphs
                   relevantParagraphs.slice(0, 3).forEach((para: string, idx: number) => {
@@ -874,7 +878,7 @@ Use the model run data to provide specific, data-driven insights about the forec
                 const revenue = summaryForInsights.totalRevenue ?? summaryForInsights.arr ?? summaryForInsights.mrr ?? 0
                 const runway = summaryForInsights.runwayMonths ?? summaryForInsights.runway ?? 0
                 const growth = summaryForInsights.revenueGrowth ?? 0
-                
+
                 if (revenue > 0 || runway > 0) {
                   extractedInsights.push({
                     type: "analysis",
@@ -925,7 +929,7 @@ Use the model run data to provide specific, data-driven insights about the forec
               const latestPlan = plansResult.plans[0]
               const planJson = latestPlan.planJson || {}
               const structuredResponse = planJson.structuredResponse || {}
-              
+
               const extractedInsights: any[] = []
               const extractedRecommendations: any[] = []
 
@@ -986,7 +990,7 @@ Use the model run data to provide specific, data-driven insights about the forec
               const latestPlan = plansResult.plans[0]
               const planJson = latestPlan.planJson || {}
               const structuredResponse = planJson.structuredResponse || {}
-              
+
               const extractedInsights: any[] = []
               const extractedRecommendations: any[] = []
 
@@ -1074,10 +1078,10 @@ Use the model run data to provide specific, data-driven insights about the forec
       }
 
       const result = await response.json()
-      
+
       if (result.ok && result.export) {
         toast.success("Export job created. Processing...")
-        
+
         // Poll for export completion
         if (result.jobId) {
           await pollExportStatus(result.jobId, result.export.id, token)
@@ -1107,7 +1111,7 @@ Use the model run data to provide specific, data-driven insights about the forec
         if (!baseUrl.endsWith('/api/v1')) {
           baseUrl = baseUrl.replace(/\/$/, '') + '/api/v1'
         }
-        
+
         const response = await fetch(`${baseUrl}/jobs/${jobId}`, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -1205,10 +1209,10 @@ Use the model run data to provide specific, data-driven insights about the forec
       }
 
       const result = await response.json()
-      
+
       if (result.ok) {
         toast.success("Forecast generation started. This may take a few moments...")
-        
+
         // Poll for completion
         if (result.jobId) {
           await pollJobStatus(result.jobId)
@@ -1299,7 +1303,7 @@ Use the model run data to provide specific, data-driven insights about the forec
 
   useEffect(() => {
     if (forecastData.length > 0) {
-    initForecast(forecastData)
+      initForecast(forecastData)
     }
   }, [forecastData, initForecast])
 
@@ -1385,7 +1389,7 @@ Use the model run data to provide specific, data-driven insights about the forec
               {modelMetrics.map((model, index) => {
                 const isActive = model.model.toLowerCase() === selectedModelType.toLowerCase()
                 const hasData = model.runCount > 0 && model.accuracy > 0
-                
+
                 return (
                   <div key={index} className="p-4 rounded-lg border bg-background">
                     <div className="flex items-center justify-between mb-2">
@@ -1452,8 +1456,8 @@ Use the model run data to provide specific, data-driven insights about the forec
       </Card>
 
       {/* Forecasting Tabs */}
-      <Tabs 
-        value={currentTab} 
+      <Tabs
+        value={currentTab}
         onValueChange={(value) => {
           const params = new URLSearchParams(searchParams.toString())
           params.set("tab", value)
@@ -1468,7 +1472,7 @@ Use the model run data to provide specific, data-driven insights about the forec
             <TabsTrigger value="insights" className="text-xs sm:text-sm">AI Insights</TabsTrigger>
             <TabsTrigger value="scenarios" className="text-xs sm:text-sm">Scenarios</TabsTrigger>
             <TabsTrigger value="montecarlo" className="text-xs sm:text-sm">Monte Carlo</TabsTrigger>
-        </TabsList>
+          </TabsList>
         </div>
 
         <TabsContent value="revenue" className="space-y-4 overflow-x-auto overflow-y-visible">
@@ -1491,32 +1495,32 @@ Use the model run data to provide specific, data-driven insights about the forec
                   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
               ) : forecastData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300} className="min-h-[300px] sm:min-h-[400px]">
+                <ResponsiveContainer width="100%" height={300} className="min-h-[300px] sm:min-h-[400px]">
                   <ComposedChart data={paginatedForecastData.length > 0 ? paginatedForecastData : forecastData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => [`$${value?.toLocaleString()}`, ""]} />
-                  <Line
-                    type="monotone"
-                    dataKey="actual"
-                    stroke="#3b82f6"
-                    strokeWidth={3}
-                    name="Actual Revenue"
-                    connectNulls={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="forecast"
-                    stroke="#10b981"
-                    strokeWidth={3}
-                    strokeDasharray="5 5"
-                    name="AI Forecast"
-                    connectNulls={false}
-                  />
-                  <Bar dataKey="confidence" fill="#e2e8f0" name="Confidence %" />
-                </ComposedChart>
-              </ResponsiveContainer>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip formatter={(value: number) => [formatCurrency(value), ""]} />
+                    <Line
+                      type="monotone"
+                      dataKey="actual"
+                      stroke="#3b82f6"
+                      strokeWidth={3}
+                      name="Actual Revenue"
+                      connectNulls={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="forecast"
+                      stroke="#10b981"
+                      strokeWidth={3}
+                      strokeDasharray="5 5"
+                      name="AI Forecast"
+                      connectNulls={false}
+                    />
+                    <Bar dataKey="confidence" fill="#e2e8f0" name="Confidence %" />
+                  </ComposedChart>
+                </ResponsiveContainer>
               ) : (
                 <div className="flex items-center justify-center h-400 text-muted-foreground">
                   <p>No forecast data available. Select a model and generate a forecast.</p>
@@ -1535,8 +1539,8 @@ Use the model run data to provide specific, data-driven insights about the forec
                       {(() => {
                         // Calculate actual 6-month revenue from monthly data
                         if (latestRun?.summaryJson) {
-                          const summary = typeof latestRun.summaryJson === "string" 
-                            ? safeJsonParse(latestRun.summaryJson) 
+                          const summary = typeof latestRun.summaryJson === "string"
+                            ? safeJsonParse(latestRun.summaryJson)
                             : latestRun.summaryJson;
                           const monthly = summary?.monthly || {};
                           const monthlyKeys = Object.keys(monthly).sort().slice(0, 6);
@@ -1548,12 +1552,12 @@ Use the model run data to provide specific, data-driven insights about the forec
                             }
                           });
                           if (sixMonthRevenue > 0) {
-                            return `$${(sixMonthRevenue / 1000).toFixed(0)}K`;
+                            return formatCurrency(sixMonthRevenue);
                           }
                           // Fallback to total revenue / 2 if monthly calculation fails
                           const totalRevenue = summary?.totalRevenue || summary?.revenue || 0;
                           if (totalRevenue > 0) {
-                            return `$${((totalRevenue / 2) / 1000).toFixed(0)}K`;
+                            return formatCurrency(totalRevenue / 2);
                           }
                         }
                         return "N/A";
@@ -1565,8 +1569,8 @@ Use the model run data to provide specific, data-driven insights about the forec
                 <div className="mt-2 text-xs text-muted-foreground">
                   {(() => {
                     if (latestRun?.summaryJson) {
-                      const summary = typeof latestRun.summaryJson === "string" 
-                        ? safeJsonParse(latestRun.summaryJson) 
+                      const summary = typeof latestRun.summaryJson === "string"
+                        ? safeJsonParse(latestRun.summaryJson)
                         : latestRun.summaryJson;
                       const revenueGrowth = summary?.kpis?.revenueGrowth || summary?.revenueGrowth || 0;
                       if (revenueGrowth > 0) {
@@ -1590,8 +1594,8 @@ Use the model run data to provide specific, data-driven insights about the forec
                     <p className="text-2xl font-bold text-blue-600">
                       {(() => {
                         if (latestRun?.summaryJson) {
-                          const summary = typeof latestRun.summaryJson === "string" 
-                            ? safeJsonParse(latestRun.summaryJson) 
+                          const summary = typeof latestRun.summaryJson === "string"
+                            ? safeJsonParse(latestRun.summaryJson)
                             : latestRun.summaryJson;
                           // Forecast Accuracy should NOT use profitMargin - that's a different metric
                           const accuracy = summary?.kpis?.forecastAccuracy || summary?.kpis?.accuracy || 0;
@@ -1647,23 +1651,23 @@ Use the model run data to provide specific, data-driven insights about the forec
             </CardHeader>
             <CardContent>
               {cashFlowForecast.length > 0 ? (
-              <ResponsiveContainer width="100%" height={400}>
-                <ComposedChart data={cashFlowForecast}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => [`$${value?.toLocaleString()}`, ""]} />
-                  <Bar dataKey="inflow" fill="#10b981" name="Cash Inflow" />
-                  <Bar dataKey="outflow" fill="#ef4444" name="Cash Outflow" />
-                  <Line
-                    type="monotone"
-                    dataKey="cumulativeCash"
-                    stroke="#8b5cf6"
-                    strokeWidth={3}
-                    name="Cumulative Cash"
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
+                <ResponsiveContainer width="100%" height={400}>
+                  <ComposedChart data={cashFlowForecast}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip formatter={(value: number) => [formatCurrency(value), ""]} />
+                    <Bar dataKey="inflow" fill="#10b981" name="Cash Inflow" />
+                    <Bar dataKey="outflow" fill="#ef4444" name="Cash Outflow" />
+                    <Line
+                      type="monotone"
+                      dataKey="cumulativeCash"
+                      stroke="#8b5cf6"
+                      strokeWidth={3}
+                      name="Cumulative Cash"
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
               ) : (
                 <div className="flex items-center justify-center h-400 text-muted-foreground">
                   <p>No cash flow forecast data available.</p>
@@ -1682,7 +1686,7 @@ Use the model run data to provide specific, data-driven insights about the forec
                   <span className="text-muted-foreground">Total Inflow (6 months)</span>
                   <span className="font-semibold text-green-600">
                     {cashFlowForecast.length > 0
-                      ? `$${cashFlowForecast.slice(0, 6).reduce((sum, item) => sum + (item.inflow || 0), 0).toLocaleString()}`
+                      ? formatCurrency(cashFlowForecast.slice(0, 6).reduce((sum, item) => sum + (item.inflow || 0), 0))
                       : "N/A"}
                   </span>
                 </div>
@@ -1690,7 +1694,7 @@ Use the model run data to provide specific, data-driven insights about the forec
                   <span className="text-muted-foreground">Total Outflow (6 months)</span>
                   <span className="font-semibold text-red-600">
                     {cashFlowForecast.length > 0
-                      ? `$${cashFlowForecast.slice(0, 6).reduce((sum, item) => sum + (item.outflow || 0), 0).toLocaleString()}`
+                      ? formatCurrency(cashFlowForecast.slice(0, 6).reduce((sum, item) => sum + (item.outflow || 0), 0))
                       : "N/A"}
                   </span>
                 </div>
@@ -1698,7 +1702,7 @@ Use the model run data to provide specific, data-driven insights about the forec
                   <span className="text-muted-foreground">Net Cash Flow</span>
                   <span className="font-semibold text-blue-600">
                     {cashFlowForecast.length > 0
-                      ? `$${cashFlowForecast.slice(0, 6).reduce((sum, item) => sum + (item.netCashFlow || 0), 0).toLocaleString()}`
+                      ? formatCurrency(cashFlowForecast.slice(0, 6).reduce((sum, item) => sum + (item.netCashFlow || 0), 0))
                       : "N/A"}
                   </span>
                 </div>
@@ -1707,18 +1711,18 @@ Use the model run data to provide specific, data-driven insights about the forec
                   <span className="font-semibold text-purple-600">
                     {(() => {
                       if (latestRun?.summaryJson) {
-                        const summary = typeof latestRun.summaryJson === "string" 
-                          ? safeJsonParse(latestRun.summaryJson) 
+                        const summary = typeof latestRun.summaryJson === "string"
+                          ? safeJsonParse(latestRun.summaryJson)
                           : latestRun.summaryJson;
                         const cashBalance = summary?.cashBalance || summary?.cash || 0;
                         if (cashBalance > 0) {
-                          return `$${cashBalance.toLocaleString()}`;
+                          return formatCurrency(cashBalance);
                         }
                       }
                       if (cashFlowForecast.length > 0) {
                         const lastCash = cashFlowForecast[cashFlowForecast.length - 1]?.cumulativeCash || 0;
                         if (lastCash > 0) {
-                          return `$${lastCash.toLocaleString()}`;
+                          return formatCurrency(lastCash);
                         }
                       }
                       return "N/A";
@@ -1737,8 +1741,8 @@ Use the model run data to provide specific, data-driven insights about the forec
                   <div className="text-3xl font-bold text-green-600">
                     {(() => {
                       if (latestRun?.summaryJson) {
-                        const summary = typeof latestRun.summaryJson === "string" 
-                          ? safeJsonParse(latestRun.summaryJson) 
+                        const summary = typeof latestRun.summaryJson === "string"
+                          ? safeJsonParse(latestRun.summaryJson)
                           : latestRun.summaryJson;
                         const burnRate = summary?.burnRate || summary?.monthlyBurnRate || 0;
                         const runway = summary?.runwayMonths || summary?.runway || 0;
@@ -1759,12 +1763,12 @@ Use the model run data to provide specific, data-driven insights about the forec
                     <span>
                       {(() => {
                         if (latestRun?.summaryJson) {
-                          const summary = typeof latestRun.summaryJson === "string" 
-                            ? safeJsonParse(latestRun.summaryJson) 
+                          const summary = typeof latestRun.summaryJson === "string"
+                            ? safeJsonParse(latestRun.summaryJson)
                             : latestRun.summaryJson;
                           const burnRate = summary?.burnRate || summary?.monthlyBurnRate || 0;
                           if (burnRate !== 0) {
-                            return `$${((Math.abs(burnRate)) / 1000).toFixed(0)}K/month${burnRate < 0 ? ' (profitable)' : ''}`;
+                            return `${formatCurrency(Math.abs(burnRate))}/month${burnRate < 0 ? ' (profitable)' : ''}`;
                           }
                         }
                         return "N/A";
@@ -1776,12 +1780,12 @@ Use the model run data to provide specific, data-driven insights about the forec
                     <span>
                       {(() => {
                         if (latestRun?.summaryJson) {
-                          const summary = typeof latestRun.summaryJson === "string" 
-                            ? safeJsonParse(latestRun.summaryJson) 
+                          const summary = typeof latestRun.summaryJson === "string"
+                            ? safeJsonParse(latestRun.summaryJson)
                             : latestRun.summaryJson;
                           const monthlyBurn = summary?.monthlyBurn || 0;
                           if (monthlyBurn !== 0) {
-                            return `$${(Math.abs(monthlyBurn) / 1000).toFixed(0)}K/month${monthlyBurn < 0 ? ' (profitable)' : ''}`;
+                            return `${formatCurrency(Math.abs(monthlyBurn))}/month${monthlyBurn < 0 ? ' (profitable)' : ''}`;
                           }
                         }
                         return "N/A";
@@ -1825,8 +1829,8 @@ Use the model run data to provide specific, data-driven insights about the forec
                     </span>
                   </CardDescription>
                 </div>
-                <Button 
-                  onClick={fetchAIInsights} 
+                <Button
+                  onClick={fetchAIInsights}
                   disabled={loadingInsights || !latestRun}
                   variant="outline"
                 >
@@ -1845,7 +1849,7 @@ Use the model run data to provide specific, data-driven insights about the forec
               </div>
             </CardHeader>
           </Card>
-          
+
           {loadingInsights ? (
             <div className="flex items-center justify-center h-64">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -1855,13 +1859,12 @@ Use the model run data to provide specific, data-driven insights about the forec
               {aiInsights.map((insight, index) => (
                 <Card
                   key={index}
-                  className={`border-l-4 ${
-                    insight.impact === "positive"
-                      ? "border-l-green-500"
-                      : insight.impact === "warning"
-                        ? "border-l-yellow-500"
-                        : "border-l-red-500"
-                  }`}
+                  className={`border-l-4 ${insight.impact === "positive"
+                    ? "border-l-green-500"
+                    : insight.impact === "warning"
+                      ? "border-l-yellow-500"
+                      : "border-l-red-500"
+                    }`}
                 >
                   <CardHeader>
                     <div className="flex items-center justify-between">
@@ -1891,13 +1894,13 @@ Use the model run data to provide specific, data-driven insights about the forec
                 <Brain className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                 <p className="text-muted-foreground mb-2 font-medium">No insights available yet.</p>
                 <p className="text-sm text-muted-foreground mb-4">
-                  {latestRun 
+                  {latestRun
                     ? "Click 'Generate AI Insights' above to analyze your forecast and get recommendations."
                     : "Generate a forecast first, then click 'Generate AI Insights' to analyze it."}
                 </p>
                 {latestRun && (
-                  <Button 
-                    onClick={fetchAIInsights} 
+                  <Button
+                    onClick={fetchAIInsights}
                     disabled={loadingInsights}
                     variant="default"
                   >
@@ -1928,13 +1931,12 @@ Use the model run data to provide specific, data-driven insights about the forec
                 aiRecommendations.map((rec, index) => (
                   <div
                     key={index}
-                    className={`p-4 rounded-lg border ${
-                      rec.impact === "positive"
-                        ? "bg-green-50 border-green-200"
-                        : rec.impact === "warning"
+                    className={`p-4 rounded-lg border ${rec.impact === "positive"
+                      ? "bg-green-50 border-green-200"
+                      : rec.impact === "warning"
                         ? "bg-yellow-50 border-yellow-200"
                         : "bg-blue-50 border-blue-200"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-start gap-3">
                       {rec.impact === "positive" ? (
@@ -1945,22 +1947,20 @@ Use the model run data to provide specific, data-driven insights about the forec
                         <Zap className="h-5 w-5 text-blue-600 mt-0.5" />
                       )}
                       <div>
-                        <h3 className={`font-medium ${
-                          rec.impact === "positive"
-                            ? "text-green-800"
-                            : rec.impact === "warning"
+                        <h3 className={`font-medium ${rec.impact === "positive"
+                          ? "text-green-800"
+                          : rec.impact === "warning"
                             ? "text-yellow-800"
                             : "text-blue-800"
-                        }`}>
+                          }`}>
                           {rec.title}
                         </h3>
-                        <p className={`text-sm ${
-                          rec.impact === "positive"
-                            ? "text-green-700"
-                            : rec.impact === "warning"
+                        <p className={`text-sm ${rec.impact === "positive"
+                          ? "text-green-700"
+                          : rec.impact === "warning"
                             ? "text-yellow-700"
                             : "text-blue-700"
-                        }`}>
+                          }`}>
                           {rec.description}
                         </p>
                       </div>
@@ -1969,43 +1969,43 @@ Use the model run data to provide specific, data-driven insights about the forec
                 ))
               ) : (
                 <>
-              <div className="p-4 rounded-lg bg-green-50 border border-green-200">
-                <div className="flex items-start gap-3">
-                  <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
-                  <div>
-                    <h3 className="font-medium text-green-800">Accelerate Growth</h3>
-                    <p className="text-sm text-green-700">
-                      Current trajectory suggests you can safely increase marketing spend by 25% to accelerate customer
-                      acquisition.
-                    </p>
+                  <div className="p-4 rounded-lg bg-green-50 border border-green-200">
+                    <div className="flex items-start gap-3">
+                      <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
+                      <div>
+                        <h3 className="font-medium text-green-800">Accelerate Growth</h3>
+                        <p className="text-sm text-green-700">
+                          Current trajectory suggests you can safely increase marketing spend by 25% to accelerate customer
+                          acquisition.
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
 
-              <div className="p-4 rounded-lg bg-blue-50 border border-blue-200">
-                <div className="flex items-start gap-3">
-                  <Zap className="h-5 w-5 text-blue-600 mt-0.5" />
-                  <div>
-                    <h3 className="font-medium text-blue-800">Optimize Pricing</h3>
-                    <p className="text-sm text-blue-700">
-                      Consider introducing a premium tier at $199/month. Model suggests 15% of customers would upgrade.
-                    </p>
+                  <div className="p-4 rounded-lg bg-blue-50 border border-blue-200">
+                    <div className="flex items-start gap-3">
+                      <Zap className="h-5 w-5 text-blue-600 mt-0.5" />
+                      <div>
+                        <h3 className="font-medium text-blue-800">Optimize Pricing</h3>
+                        <p className="text-sm text-blue-700">
+                          Consider introducing a premium tier at $199/month. Model suggests 15% of customers would upgrade.
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
 
-              <div className="p-4 rounded-lg bg-yellow-50 border border-yellow-200">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
-                  <div>
-                    <h3 className="font-medium text-yellow-800">Monitor Churn</h3>
-                    <p className="text-sm text-yellow-700">
-                      Churn rate may increase to 3.2% in Q4. Implement retention strategies for customers aged 6+
-                      months.
-                    </p>
+                  <div className="p-4 rounded-lg bg-yellow-50 border border-yellow-200">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
+                      <div>
+                        <h3 className="font-medium text-yellow-800">Monitor Churn</h3>
+                        <p className="text-sm text-yellow-700">
+                          Churn rate may increase to 3.2% in Q4. Implement retention strategies for customers aged 6+
+                          months.
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
                 </>
               )}
             </CardContent>
@@ -2027,25 +2027,25 @@ Use the model run data to provide specific, data-driven insights about the forec
               </CardDescription>
             </CardHeader>
           </Card>
-          
+
           {loadingScenarios ? (
             <div className="flex items-center justify-center h-64">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : scenarios.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {scenarios.map((scenario) => {
                 // Handle both summary and summaryJson (backend returns 'summary')
                 // Safely parse summary if it's a string
                 const rawSummary = scenario.summary || scenario.summaryJson || {}
-                const summary = typeof rawSummary === "string" 
-                  ? safeJsonParse(rawSummary) 
+                const summary = typeof rawSummary === "string"
+                  ? safeJsonParse(rawSummary)
                   : rawSummary;
                 const scenarioName = scenario.name || scenario.scenarioName || scenario.scenario_name || "Unnamed Scenario"
                 const paramsJson = scenario.paramsJson || {}
                 const scenarioType = scenario.scenarioType || paramsJson.scenarioType || scenario.scenario_type || "adhoc"
                 const isBaseCase = scenarioType === "baseline" || scenarioName.toLowerCase().includes("base") || scenarioName.toLowerCase().includes("baseline")
-                
+
                 // Calculate 6-month revenue from monthly data
                 let sixMonthRevenue = 0
                 let sixMonthNetIncome = 0
@@ -2063,31 +2063,31 @@ Use the model run data to provide specific, data-driven insights about the forec
                     }
                   })
                 }
-                
+
                 // Fallback to totalRevenue if monthly calculation fails
                 if (sixMonthRevenue === 0 && summary.totalRevenue) {
                   // If totalRevenue exists but we couldn't calculate from monthly, use a fraction
                   // Assuming 12 months, 6 months would be roughly half
                   sixMonthRevenue = (summary.totalRevenue / 2) || 0
                 }
-                
+
                 // Get runway (prefer runwayMonths, fallback to runway)
-                const runway = summary.runwayMonths !== undefined 
-                  ? summary.runwayMonths 
+                const runway = summary.runwayMonths !== undefined
+                  ? summary.runwayMonths
                   : (summary.runway !== undefined ? summary.runway : null)
-                
+
                 // Get net income (prefer calculated 6-month, fallback to total)
-                const netIncome = sixMonthNetIncome !== 0 
-                  ? sixMonthNetIncome 
+                const netIncome = sixMonthNetIncome !== 0
+                  ? sixMonthNetIncome
                   : (summary.netIncome !== undefined ? summary.netIncome : null)
-                
+
                 // Check if scenario is still processing
                 const isProcessing = scenario.status === 'queued' || scenario.status === 'running' || scenario.status === 'processing'
                 const hasData = !isProcessing && (sixMonthRevenue > 0 || summary.totalRevenue) && runway !== null && netIncome !== null
-                
+
                 return (
                   <Card key={scenario.id} className={isBaseCase ? "ring-2 ring-primary" : ""}>
-              <CardHeader>
+                    <CardHeader>
                       <CardTitle>{scenarioName}</CardTitle>
                       <CardDescription>
                         {scenario.description || `${scenarioType.charAt(0).toUpperCase() + scenarioType.slice(1)} scenario analysis`}
@@ -2097,29 +2097,29 @@ Use the model run data to provide specific, data-driven insights about the forec
                           </Badge>
                         )}
                       </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {isProcessing ? (
-                  <div className="flex items-center justify-center py-8">
-                    <div className="text-center">
-                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mx-auto mb-2" />
-                      <p className="text-sm text-muted-foreground">Processing scenario...</p>
-                    </div>
-                  </div>
-                ) : hasData ? (
-                  <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">6-month revenue</span>
+                    </CardHeader>
+                    <CardContent>
+                      {isProcessing ? (
+                        <div className="flex items-center justify-center py-8">
+                          <div className="text-center">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mx-auto mb-2" />
+                            <p className="text-sm text-muted-foreground">Processing scenario...</p>
+                          </div>
+                        </div>
+                      ) : hasData ? (
+                        <div className="space-y-3">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">6-month revenue</span>
                             <span className="font-semibold">
                               {sixMonthRevenue > 0
-                                ? `$${(sixMonthRevenue / 1000).toFixed(0)}K`
+                                ? formatCurrency(sixMonthRevenue)
                                 : summary.totalRevenue
-                                ? `$${((summary.totalRevenue / 2) / 1000).toFixed(0)}K`
-                                : "N/A"}
+                                  ? formatCurrency(summary.totalRevenue / 2)
+                                  : "N/A"}
                             </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Runway</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Runway</span>
                             <span className="font-semibold">
                               {(() => {
                                 const scenBurnRate = summary.burnRate || summary.monthlyBurnRate || 0;
@@ -2133,27 +2133,27 @@ Use the model run data to provide specific, data-driven insights about the forec
                                 return "N/A";
                               })()}
                             </span>
-                    </div>
-                    <div className="flex justify-between">
+                          </div>
+                          <div className="flex justify-between">
                             <span className="text-muted-foreground">Net Income</span>
                             <span className="font-semibold">
                               {netIncome !== null && netIncome !== undefined
-                                ? `$${(netIncome / 1000).toFixed(0)}K`
+                                ? formatCurrency(netIncome)
                                 : "N/A"}
                             </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-4 text-sm text-muted-foreground">
-                    <p>No data available yet</p>
-                    <p className="text-xs mt-1">Scenario may still be processing</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center py-4 text-sm text-muted-foreground">
+                          <p>No data available yet</p>
+                          <p className="text-xs mt-1">Scenario may still be processing</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
                 )
               })}
-                  </div>
+            </div>
           ) : (
             <Card>
               <CardContent className="p-8 text-center">

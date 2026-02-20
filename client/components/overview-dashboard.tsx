@@ -38,7 +38,8 @@ import { API_BASE_URL, getAuthToken, getAuthHeaders, handleUnauthorized } from "
 import { FinancialTermTooltip } from "./financial-term-tooltip"
 import { DataDrivenTooltip } from "./data-driven-tooltip"
 import { useModel } from "@/lib/model-context"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useOrg } from "@/lib/org-context"
+import { Select, SelectContent, SelectItem, SelectValue, SelectTrigger } from "@/components/ui/select"
 
 interface OverviewData {
   healthScore: number
@@ -99,6 +100,7 @@ const defaultExpenseBreakdown = [
 
 export function OverviewDashboard() {
   const { selectedModelId, setSelectedModelId, orgId: contextOrgId, setOrgId: setContextOrgId } = useModel()
+  const { currencySymbol, formatCurrency } = useOrg()
   const [data, setData] = useState<OverviewData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -562,7 +564,7 @@ export function OverviewDashboard() {
           <CardContent>
             <DataDrivenTooltip
               metric="Monthly Revenue"
-              value={`$${overviewData.monthlyRevenue.toLocaleString()}`}
+              value={formatCurrency(overviewData.monthlyRevenue)}
               dataContext={{
                 monthlyRevenue: overviewData.monthlyRevenue,
                 revenueGrowth: overviewData.revenueGrowth,
@@ -586,7 +588,7 @@ export function OverviewDashboard() {
           <CardContent>
             <DataDrivenTooltip
               metric="Monthly Burn Rate"
-              value={`$${overviewData.monthlyBurnRate.toLocaleString()}`}
+              value={formatCurrency(overviewData.monthlyBurnRate)}
               dataContext={{
                 monthlyBurnRate: overviewData.monthlyBurnRate,
                 burnRateChange: overviewData.burnRateChange,
@@ -662,7 +664,7 @@ export function OverviewDashboard() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
                   <YAxis />
-                  <Tooltip formatter={(value: any) => [`$${Number(value).toLocaleString()}`, ""]} />
+                  <Tooltip formatter={(value: any) => [formatCurrency(value), ""]} />
                   <Line type="monotone" dataKey="revenue" stroke="#8884d8" strokeWidth={2} name="Actual Revenue" />
                   <Line
                     type="monotone"
@@ -744,7 +746,7 @@ export function OverviewDashboard() {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => [`$${value.toLocaleString()}`, ""]} />
+                  <Tooltip formatter={(value) => [formatCurrency(value as number), ""]} />
                 </PieChart>
               </ResponsiveContainer>
             ) : (

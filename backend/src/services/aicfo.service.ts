@@ -35,8 +35,8 @@ export const aicfoService = {
     userId: string,
     params: GeneratePlanParams
   ) => {
-      validateUUID(orgId, 'Organization ID');
-      validateUUID(userId, 'User ID');
+    validateUUID(orgId, 'Organization ID');
+    validateUUID(userId, 'User ID');
 
     const role = await prisma.userOrgRole.findUnique({
       where: { userId_orgId: { userId, orgId } },
@@ -55,17 +55,17 @@ export const aicfoService = {
 
     // Handle meta-queries (UI suggestions) that need special responses
     // Check for exact match or key phrases
-    const isConnectQuery = queryLower === 'connect accounting system' || 
-                          queryLower.includes('connect accounting') ||
-                          (queryLower.includes('connect') && queryLower.includes('accounting'));
-    
+    const isConnectQuery = queryLower === 'connect accounting system' ||
+      queryLower.includes('connect accounting') ||
+      (queryLower.includes('connect') && queryLower.includes('accounting'));
+
     if (isConnectQuery) {
       // Check if already connected
-      const connectors = await prisma.connector.findMany({ 
-        where: { orgId, status: { in: ['connected', 'syncing'] } }, 
-        select: { id: true, type: true } 
+      const connectors = await prisma.connector.findMany({
+        where: { orgId, status: { in: ['connected', 'syncing'] } },
+        select: { id: true, type: true }
       });
-      
+
       if (connectors.length > 0) {
         // Already connected - provide helpful message
         const plan = await prisma.aICFOPlan.create({
@@ -122,12 +122,12 @@ export const aicfoService = {
         return plan;
       }
     }
-    
+
     const isAnotherQuestionQuery = queryLower === 'ask another financial question' ||
-                                   queryLower === 'another financial question' ||
-                                   (queryLower.includes('ask another') && queryLower.includes('question')) ||
-                                   (queryLower.includes('another') && queryLower.includes('financial') && queryLower.includes('question'));
-    
+      queryLower === 'another financial question' ||
+      (queryLower.includes('ask another') && queryLower.includes('question')) ||
+      (queryLower.includes('another') && queryLower.includes('financial') && queryLower.includes('question'));
+
     if (isAnotherQuestionQuery) {
       // User wants to ask a different question - prompt them
       const plan = await prisma.aICFOPlan.create({
@@ -159,7 +159,7 @@ export const aicfoService = {
 
     let modelRun = null;
     if (params.modelRunId) {
-        validateUUID(params.modelRunId, 'Model run ID');
+      validateUUID(params.modelRunId, 'Model run ID');
       modelRun = await prisma.modelRun.findUnique({ where: { id: params.modelRunId } });
     }
 
@@ -186,19 +186,19 @@ export const aicfoService = {
       ]);
       intentClassification = intentRes;
       console.log(`Parallel Intent + Data Check: ${Date.now() - startParallel}ms`);
-      
+
       // Step 2: Grounding (OPTIMIZED)
       const startGrounding = Date.now();
       groundingContext = await groundingService.retrieve(orgId, intentClassification.intent, intentClassification.slots);
       console.log(`Grounding: ${Date.now() - startGrounding}ms`);
-      
+
       transactionCount = transactionCountResult;
       hasConnectedAccounting = connectors.length > 0;
       hasFinancialData = transactionCount > 0 || (overviewDataResult && (overviewDataResult.monthlyRevenue > 0 || overviewDataResult.monthlyBurnRate > 0));
 
       // Step 3: Planning & Calculations (OPTIMIZED)
       const startPlanning = Date.now();
-      
+
       // Fast path for calculations from overview data
       calculations = {};
       if (overviewDataResult) {
@@ -216,7 +216,7 @@ export const aicfoService = {
       if (plannerResult.validation.ok && !plannerResult.requiresApproval) {
         executionResults = await actionOrchestrator.execute(orgId, userId, plannerResult.actions, params.modelRunId || undefined);
       }
-      
+
       for (const result of executionResults) {
         const val = result.result !== undefined ? result.result : result.params?.result;
         if (typeof val === 'number') {
@@ -230,7 +230,7 @@ export const aicfoService = {
       console.log(`Planning & execution: ${Date.now() - startPlanning}ms`);
 
       // Step 4: AI Response Generation - Shifted to Python for performance and quality
-      
+
       // Create the plan in 'queued' status FIRST to get an ID
       const plan = await prisma.aICFOPlan.create({
         data: {
@@ -286,7 +286,7 @@ export const aicfoService = {
       const maxAttempts = 40; // 20 seconds total
       for (let i = 0; i < maxAttempts; i++) {
         await new Promise(resolve => setTimeout(resolve, 500));
-        
+
         const updatedPlan = await prisma.aICFOPlan.findUnique({
           where: { id: plan.id }
         });
@@ -295,7 +295,7 @@ export const aicfoService = {
           completedPlan = updatedPlan;
           break;
         }
-        
+
         // If failed, don't throw - fall through to catch block for fallback
         if (updatedPlan && updatedPlan.status === 'failed') {
           console.log('Worker marked plan as failed, using fallback');
@@ -310,11 +310,11 @@ export const aicfoService = {
           return completedPlan;
         } else {
           console.log('Completed plan missing structuredResponse, using fallback');
-          // Fall through to catch block for proper fallback
+          throw new Error('Completed plan missing structuredResponse, using fallback');
         }
       } else {
         console.log('Plan not completed in time, using fallback');
-        // Fall through to catch block for fallback
+        throw new Error('Plan not completed in time, using fallback');
       }
 
     } catch (error: any) {
@@ -332,9 +332,9 @@ export const aicfoService = {
       } catch {
         // If even the check fails, use defaults (false)
       }
-      
+
       stagedChanges = await generateDeepCFOAnalysis(sanitizedGoal, params.constraints, modelRun, orgId, intentClassification?.intent || 'strategy_recommendation');
-      
+
       // Generate proper natural language response from the recommendations (NO GENERIC ERROR MESSAGE)
       let naturalText = '';
       if (stagedChanges.length > 0) {
@@ -362,10 +362,10 @@ export const aicfoService = {
         // Last resort - still query-specific
         naturalText = `I've analyzed your query: "${sanitizedGoal}". Based on your financial data, I recommend focusing on optimizing your cash position and growth trajectory.`;
       }
-      
-      structuredResponse = { 
+
+      structuredResponse = {
         intent: intentClassification?.intent || 'strategy_recommendation',
-        calculations, 
+        calculations,
         natural_text: naturalText || 'I have analyzed your financial position and provided actionable recommendations based on your current metrics.'
       };
 
@@ -487,7 +487,7 @@ export const aicfoService = {
       };
     } catch (error: any) {
       console.error('[AICFO] Agent orchestration error:', error);
-      
+
       // Fallback to existing system
       const fallbackPlan = await aicfoService.generatePlan(orgId, userId, {
         goal: sanitizedQuery,
@@ -559,15 +559,15 @@ async function generateDeepCFOAnalysis(
   const lowerGoal = goal.toLowerCase();
 
   // Default context (Industry standard SaaS)
-  let context: any = { 
-    cashBalance: 500000, 
-    burnRate: 80000, 
-    runwayMonths: 6.25, 
-    revenue: 67000, 
-    revenueGrowth: 0.08, 
+  let context: any = {
+    cashBalance: 500000,
+    burnRate: 80000,
+    runwayMonths: 6.25,
+    revenue: 67000,
+    revenueGrowth: 0.08,
     topExpense: 'Payroll',
     topExpenseValue: 45000,
-    hasRealData: false 
+    hasRealData: false
   };
 
   // Load real data if available
@@ -577,22 +577,22 @@ async function generateDeepCFOAnalysis(
     const data = await overviewDashboardService.getOverviewData(orgId).catch(() => null);
     if (data && (data.monthlyRevenue > 0 || data.monthlyBurnRate > 0)) {
       context = {
-        cashBalance: (data.cashRunway * data.monthlyBurnRate) || 100000, 
-        burnRate: data.monthlyBurnRate, 
-        runwayMonths: data.cashRunway, 
-        revenue: data.monthlyRevenue, 
+        cashBalance: (data.cashRunway * data.monthlyBurnRate) || 100000,
+        burnRate: data.monthlyBurnRate,
+        runwayMonths: data.cashRunway,
+        revenue: data.monthlyRevenue,
         revenueGrowth: (data.revenueGrowth || 0) / 100,
         topExpense: data.expenseBreakdown?.[0]?.name || 'OpEx',
         topExpenseValue: data.expenseBreakdown?.[0]?.value || 0,
-        hasRealData: true 
+        hasRealData: true
       };
     }
   }
 
   const baseEvidence = [
-    `Cash: $${(context.cashBalance || 0).toLocaleString()}`, 
-    `Burn: $${(context.burnRate || 0).toLocaleString()}/mo`, 
-    `Runway: ${(context.runwayMonths || 0).toFixed(1)}m` 
+    `Cash: $${(context.cashBalance || 0).toLocaleString()}`,
+    `Burn: $${(context.burnRate || 0).toLocaleString()}/mo`,
+    `Runway: ${(context.runwayMonths || 0).toFixed(1)}m`
   ];
 
   // Convert evidence strings to dataSources format for auditability
@@ -604,47 +604,47 @@ async function generateDeepCFOAnalysis(
 
   // Logic based on Intent - MUCH MORE VARIED
   if (intent === 'runway_calculation' || lowerGoal.includes('runway') || lowerGoal.includes('how long')) {
-      changes.push({
-      type: 'runway_optimization', 
-      category: 'cash', 
+    changes.push({
+      type: 'runway_optimization',
+      category: 'cash',
       title: `Maintain runway at ${(context.runwayMonths || 0).toFixed(1)} months`,
       summary: `Your current runway is healthy at ${(context.runwayMonths || 0).toFixed(1)} months. Maintaining this buffer provides strategic optionality.`,
-      action: `Maintain runway at ${(context.runwayMonths || 0).toFixed(1)} months`, 
+      action: `Maintain runway at ${(context.runwayMonths || 0).toFixed(1)} months`,
       reasoning: `Your current runway is healthy at ${(context.runwayMonths || 0).toFixed(1)} months. Maintaining this buffer provides strategic optionality.`,
       explain: `Stable cash position allows for focused execution without immediate fundraising pressure.`,
-      impact: { runwayStability: 'High', bufferSafety: 'Excellent' }, 
-        priority: 'high',
-      confidence: 1.0, 
+      impact: { runwayStability: 'High', bufferSafety: 'Excellent' },
+      priority: 'high',
+      confidence: 1.0,
       evidence: baseEvidence,
       dataSources: baseDataSources
-      });
+    });
   } else if (intent === 'burn_rate_calculation' || lowerGoal.includes('burn')) {
-      changes.push({
-      type: 'burn_efficiency', 
-      category: 'efficiency', 
+    changes.push({
+      type: 'burn_efficiency',
+      category: 'efficiency',
       title: `Optimize monthly burn of $${(context.burnRate || 0).toLocaleString()}`,
       summary: `Analyzing ${context.topExpense || 'major expenses'} which accounts for $${(context.topExpenseValue || 0).toLocaleString()} of spend.`,
-      action: `Optimize monthly burn of $${(context.burnRate || 0).toLocaleString()}`, 
+      action: `Optimize monthly burn of $${(context.burnRate || 0).toLocaleString()}`,
       reasoning: `Analyzing ${context.topExpense || 'major expenses'} which accounts for $${(context.topExpenseValue || 0).toLocaleString()} of spend.`,
       explain: `Incremental efficiency in ${context.topExpense || 'operations'} can significantly extend runway.`,
-      impact: { burnReduction: '5-10%', capitalEfficiency: '+15%' }, 
-        priority: 'medium',
-      confidence: 0.9, 
+      impact: { burnReduction: '5-10%', capitalEfficiency: '+15%' },
+      priority: 'medium',
+      confidence: 0.9,
       evidence: baseEvidence,
       dataSources: baseDataSources
-      });
+    });
   } else if (intent === 'fundraising_readiness' || lowerGoal.includes('raise') || lowerGoal.includes('funding')) {
-        changes.push({
-      type: 'fundraising_strategy', 
-      category: 'capital', 
+    changes.push({
+      type: 'fundraising_strategy',
+      category: 'capital',
       title: 'Strategic Fundraising Readiness Audit',
       summary: `With ${(context.runwayMonths || 0).toFixed(1)}m runway, you are in a "position of strength" to raise.`,
-      action: 'Strategic Fundraising Readiness Audit', 
+      action: 'Strategic Fundraising Readiness Audit',
       reasoning: `With ${(context.runwayMonths || 0).toFixed(1)}m runway, you are in a "position of strength" to raise.`,
       explain: `Capital markets reward companies with 18+ months runway and predictable growth.`,
-      impact: { valuationPremium: 'Targeted', dilutionControl: 'High' }, 
-          priority: 'high',
-      confidence: 0.85, 
+      impact: { valuationPremium: 'Targeted', dilutionControl: 'High' },
+      priority: 'high',
+      confidence: 0.85,
       evidence: [...baseEvidence, `Growth: ${(context.revenueGrowth * 100).toFixed(1)}% MoM`],
       dataSources: [...baseDataSources, {
         type: 'growth_metric',
@@ -653,67 +653,67 @@ async function generateDeepCFOAnalysis(
       }]
     });
   } else if (intent === 'revenue_forecast' || lowerGoal.includes('revenue') || lowerGoal.includes('growth')) {
-      changes.push({
-      type: 'growth_acceleration', 
-        category: 'revenue',
+    changes.push({
+      type: 'growth_acceleration',
+      category: 'revenue',
       title: 'Accelerate high-margin subscription growth',
       summary: `Current revenue is $${(context.revenue || 0).toLocaleString()} with ${(context.revenueGrowth * 100).toFixed(1)}% growth.`,
-      action: 'Accelerate high-margin subscription growth', 
+      action: 'Accelerate high-margin subscription growth',
       reasoning: `Current revenue is $${(context.revenue || 0).toLocaleString()} with ${(context.revenueGrowth * 100).toFixed(1)}% growth.`,
       explain: `Focusing on Net Revenue Retention (NRR) will maximize the LTV of your existing base.`,
-      impact: { arrGrowth: '+12%', ltvExpansion: 'Significant' }, 
-        priority: 'high',
-      confidence: 0.95, 
+      impact: { arrGrowth: '+12%', ltvExpansion: 'Significant' },
+      priority: 'high',
+      confidence: 0.95,
       evidence: [...baseEvidence, `MRR: $${(context.revenue || 0).toLocaleString()}`],
       dataSources: [...baseDataSources, {
         type: 'revenue_metric',
         id: 'mrr',
         snippet: `MRR: $${(context.revenue || 0).toLocaleString()}`
       }]
-      });
+    });
   } else if (intent === 'cost_optimization' || lowerGoal.includes('cost') || lowerGoal.includes('save') || lowerGoal.includes('reduce')) {
-      changes.push({
-      type: 'cost_structure_optimization', 
-      category: 'opEx', 
+    changes.push({
+      type: 'cost_structure_optimization',
+      category: 'opEx',
       title: `Review ${context.topExpense || 'major'} cost structure`,
       summary: `${context.topExpense || 'Major expense'} is $${(context.topExpenseValue || 0).toLocaleString()}. Benchmarking against industry peers.`,
-      action: `Review ${context.topExpense || 'major'} cost structure`, 
+      action: `Review ${context.topExpense || 'major'} cost structure`,
       reasoning: `${context.topExpense || 'Major expense'} is $${(context.topExpenseValue || 0).toLocaleString()}. Benchmarking against industry peers.`,
       explain: `Targeting a 7% reduction in non-core operational expenses.`,
-      impact: { monthlySavings: `$${((context.burnRate || 0) * 0.07).toLocaleString()}`, runwayExtension: '+2 months' }, 
-      priority: 'medium', 
-      confidence: 0.9, 
+      impact: { monthlySavings: `$${((context.burnRate || 0) * 0.07).toLocaleString()}`, runwayExtension: '+2 months' },
+      priority: 'medium',
+      confidence: 0.9,
       evidence: baseEvidence,
       dataSources: baseDataSources
     });
   } else if (intent === 'unit_economics_analysis' || lowerGoal.includes('metric') || lowerGoal.includes('kpi')) {
-      changes.push({
-      type: 'metric_benchmarking', 
-      category: 'metrics', 
+    changes.push({
+      type: 'metric_benchmarking',
+      category: 'metrics',
       title: 'Benchmark SaaS Unit Economics',
       summary: `Revenue per customer and acquisition cost analysis based on $${(context.revenue || 0).toLocaleString()} MRR.`,
-      action: 'Benchmark SaaS Unit Economics', 
+      action: 'Benchmark SaaS Unit Economics',
       reasoning: `Revenue per customer and acquisition cost analysis based on $${(context.revenue || 0).toLocaleString()} MRR.`,
       explain: `Ensuring LTV:CAC ratio remains above 3x for sustainable scaling.`,
-      impact: { paybackPeriod: '< 12 months', unitProfitability: 'Positive' }, 
-      priority: 'medium', 
-      confidence: 0.8, 
+      impact: { paybackPeriod: '< 12 months', unitProfitability: 'Positive' },
+      priority: 'medium',
+      confidence: 0.8,
       evidence: baseEvidence,
       dataSources: baseDataSources
     });
   } else {
     // Default strategic review
     changes.push({
-      type: 'strategic_review', 
+      type: 'strategic_review',
       category: 'strategy',
       title: 'Comprehensive Strategic Financial Health Check',
       summary: `Overall assessment of cash ($${(context.cashBalance || 0).toLocaleString()}) and growth (${(context.revenueGrowth * 100).toFixed(1)}%).`,
-      action: 'Comprehensive Strategic Financial Health Check', 
+      action: 'Comprehensive Strategic Financial Health Check',
       reasoning: `Overall assessment of cash ($${(context.cashBalance || 0).toLocaleString()}) and growth (${(context.revenueGrowth * 100).toFixed(1)}%).`,
       explain: `A holistic review ensures all financial levers are aligned with the company's long-term vision.`,
-      impact: { strategicClarity: 'High', executionAlignment: 'Verified' }, 
+      impact: { strategicClarity: 'High', executionAlignment: 'Verified' },
       priority: 'medium',
-      confidence: 0.8, 
+      confidence: 0.8,
       evidence: baseEvidence,
       dataSources: baseDataSources
     });
@@ -723,36 +723,36 @@ async function generateDeepCFOAnalysis(
   if (changes.length < 3) {
     // Add items that haven't been added yet
     const types = changes.map(c => c.type);
-    
+
     if (!types.includes('scenario_planning')) {
       changes.push({
-        type: 'scenario_planning', 
-        category: 'strategy', 
+        type: 'scenario_planning',
+        category: 'strategy',
         title: 'Dynamic Scenario Modeling (Upside/Downside)',
         summary: 'Testing resilience against market volatility and growth acceleration opportunities.',
-        action: 'Dynamic Scenario Modeling (Upside/Downside)', 
+        action: 'Dynamic Scenario Modeling (Upside/Downside)',
         reasoning: 'Testing resilience against market volatility and growth acceleration opportunities.',
         explain: 'Modeling a 25% revenue growth burst vs. a 15% market downturn.',
-        impact: { riskMitigation: 'High', capitalizationReadiness: '100%' }, 
+        impact: { riskMitigation: 'High', capitalizationReadiness: '100%' },
         priority: 'medium',
-        confidence: 0.9, 
+        confidence: 0.9,
         evidence: baseEvidence,
         dataSources: baseDataSources
       });
     }
-    
+
     if (changes.length < 3 && !types.includes('data_automation')) {
-    changes.push({
-        type: 'data_automation', 
-        category: 'operations', 
+      changes.push({
+        type: 'data_automation',
+        category: 'operations',
         title: 'Enhance Real-time Financial Data Integrity',
         summary: 'Automating the flow between accounting and planning for zero-latency insights.',
-        action: 'Enhance Real-time Financial Data Integrity', 
+        action: 'Enhance Real-time Financial Data Integrity',
         reasoning: 'Automating the flow between accounting and planning for zero-latency insights.',
         explain: `Ensuring all ${context.hasRealData ? 'active' : 'pending'} connectors provide granular visibility.`,
-        impact: { insightLatency: '-90%', decisionSpeed: 'Accelerated' }, 
-      priority: 'low',
-        confidence: 1.0, 
+        impact: { insightLatency: '-90%', decisionSpeed: 'Accelerated' },
+        priority: 'low',
+        confidence: 1.0,
         evidence: [`Data Source: ${context.hasRealData ? 'Connected' : 'Sync Required'}`],
         dataSources: [{
           type: 'data_connection',

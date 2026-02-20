@@ -28,6 +28,7 @@ import { Play, Pause, RotateCcw, Zap, TrendingUp, Users, DollarSign, Activity, L
 import { useSearchParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { API_BASE_URL } from "@/lib/api-config"
+import { useOrg } from "@/lib/org-context"
 
 interface SimulationParams {
   monthlyGrowthRate: number
@@ -50,6 +51,7 @@ const initialParams: SimulationParams = {
 }
 
 export function RealtimeSimulations() {
+  const { currencySymbol, formatCurrency } = useOrg()
   const router = useRouter()
   const searchParams = useSearchParams()
   const currentTab = searchParams.get("tab") || "revenue"
@@ -165,7 +167,7 @@ export function RealtimeSimulations() {
             "Content-Type": "application/json",
           },
           credentials: "include",
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             simulationId: simulationId || undefined,
             params,
             currentMonth,
@@ -180,7 +182,7 @@ export function RealtimeSimulations() {
             if (result.simulation.id && result.simulation.id !== simulationId) {
               setSimulationId(result.simulation.id)
             }
-            
+
             // ALWAYS return calculated results from backend - this is the source of truth
             if (result.simulation.results && Array.isArray(result.simulation.results) && result.simulation.results.length > 0) {
               return result.simulation.results
@@ -271,7 +273,7 @@ export function RealtimeSimulations() {
   // Fetch orgId first, then simulation data - ensures backend connection
   useEffect(() => {
     let isMounted = true
-    
+
     const initialize = async () => {
       try {
         // First, ensure we have orgId
@@ -300,9 +302,9 @@ export function RealtimeSimulations() {
         }
       }
     }
-    
+
     initialize()
-    
+
     return () => {
       isMounted = false
     }
@@ -312,10 +314,10 @@ export function RealtimeSimulations() {
   useEffect(() => {
     const handleImportComplete = async (event: CustomEvent) => {
       const { rowsImported, orgId: importedOrgId } = event.detail || {}
-      
+
       if (importedOrgId && importedOrgId === orgId) {
         toast.success(`CSV import completed! Refreshing simulation data...`)
-        
+
         // Small delay to ensure backend has processed the data
         setTimeout(async () => {
           if (orgId) {
@@ -438,7 +440,7 @@ export function RealtimeSimulations() {
       const result = await response.json()
       if (result.ok && result.simulation) {
         setSimulationId(result.simulation.id)
-        
+
         // Use simulation params if available, otherwise keep current or use initial values
         if (result.simulation.params && Object.keys(result.simulation.params).length > 0) {
           setParams(result.simulation.params)
@@ -452,7 +454,7 @@ export function RealtimeSimulations() {
             }))
           }
         }
-        
+
         // ALWAYS use backend results - this is the source of truth
         if (result.simulation.results && Array.isArray(result.simulation.results) && result.simulation.results.length > 0) {
           setSimulationData(result.simulation.results)
@@ -468,7 +470,7 @@ export function RealtimeSimulations() {
             toast.error("Failed to generate simulation data. Please try again.")
           }
         }
-        
+
         setCurrentMonth(result.simulation.currentMonth !== undefined ? result.simulation.currentMonth : 0)
         setIsRunning(result.simulation.isRunning !== undefined ? result.simulation.isRunning : false)
       } else {
@@ -526,13 +528,13 @@ export function RealtimeSimulations() {
   // Update simulation data when parameters change - ALWAYS use backend
   useEffect(() => {
     if (loading || !orgId) return // Don't update while initial loading or if no orgId
-    
+
     let timeoutId: NodeJS.Timeout
     let isCancelled = false
-    
+
     const updateData = async () => {
       if (isCancelled) return
-      
+
       try {
         // ALWAYS use backend when orgId is available - no fallback to client-side
         const data = await generateSimulationData(params, true)
@@ -604,7 +606,7 @@ export function RealtimeSimulations() {
 
     setSaving(true)
     const maxRetries = 2
-    
+
     try {
       const token = localStorage.getItem("auth-token") || document.cookie
         .split("; ")
@@ -638,12 +640,12 @@ export function RealtimeSimulations() {
           if (result.simulation.id && result.simulation.id !== simulationId) {
             setSimulationId(result.simulation.id)
           }
-          
+
           // Update simulation data if backend returned results
           if (result.simulation.results && Array.isArray(result.simulation.results) && result.simulation.results.length > 0) {
             setSimulationData(result.simulation.results)
           }
-          
+
           // Only show success toast for explicit saves (not auto-saves)
           if (retryCount === 0) {
             // Silent success for auto-saves
@@ -652,14 +654,14 @@ export function RealtimeSimulations() {
       } else {
         const errorData = await response.json().catch(() => ({}))
         const errorMessage = errorData.error?.message || errorData.message || `Failed to save simulation: ${response.statusText}`
-        
+
         // Retry logic for transient errors
         if (retryCount < maxRetries && (response.status >= 500 || response.status === 429)) {
           console.warn(`Save failed, retrying... (${retryCount + 1}/${maxRetries})`)
           await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1))) // Exponential backoff
           return saveSimulation(retryCount + 1)
         }
-        
+
         console.error("Failed to save simulation:", errorData)
         toast.error(errorMessage)
         throw new Error(errorMessage)
@@ -667,19 +669,19 @@ export function RealtimeSimulations() {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to save simulation"
       console.error("Failed to save simulation:", error)
-      
+
       // Retry logic for network errors
       if (retryCount < maxRetries && errorMessage.includes("fetch")) {
         console.warn(`Network error, retrying... (${retryCount + 1}/${maxRetries})`)
         await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)))
         return saveSimulation(retryCount + 1)
       }
-      
+
       // Only show error toast if not an auto-save or if it's the final retry
       if (retryCount >= maxRetries) {
         toast.error("Failed to save simulation. Your changes are saved locally and will sync when connection is restored.")
       }
-      
+
       // Don't throw - allow simulation to continue even if save fails
     } finally {
       setSaving(false)
@@ -694,7 +696,7 @@ export function RealtimeSimulations() {
     setParams(initialParams)
     setCurrentMonth(0)
     setIsRunning(false)
-    
+
     // Save reset state and regenerate data via backend
     if (orgId) {
       try {
@@ -726,7 +728,7 @@ export function RealtimeSimulations() {
       try {
         // Save current state when pausing or starting
         await saveSimulation()
-        
+
         const token = localStorage.getItem("auth-token") || document.cookie
           .split("; ")
           .find((row) => row.startsWith("auth-token="))
@@ -777,7 +779,7 @@ export function RealtimeSimulations() {
   }
 
   // Get current month's data from backend-calculated simulation data
-  const currentData = simulationData && simulationData.length > 0 
+  const currentData = simulationData && simulationData.length > 0
     ? (simulationData[currentMonth] || simulationData[0] || null)
     : null
 
@@ -885,8 +887,8 @@ export function RealtimeSimulations() {
                     {simulationData.length > 0 ? Math.round(((currentMonth + 1) / simulationData.length) * 100) : 0}% Complete
                   </span>
                 </div>
-                <Progress 
-                  value={simulationData.length > 0 ? ((currentMonth + 1) / simulationData.length) * 100 : 0} 
+                <Progress
+                  value={simulationData.length > 0 ? ((currentMonth + 1) / simulationData.length) * 100 : 0}
                   className="h-2"
                 />
               </div>
@@ -901,7 +903,7 @@ export function RealtimeSimulations() {
                 </div>
                 <div className="text-center transition-all duration-300">
                   <div className="text-3xl font-bold text-green-600 transition-all duration-300">
-                    ${(currentData.revenue || 0).toLocaleString()}
+                    {formatCurrency(currentData.revenue || 0)}
                   </div>
                   <div className="text-sm text-muted-foreground">Monthly Revenue</div>
                 </div>
@@ -912,10 +914,9 @@ export function RealtimeSimulations() {
                   <div className="text-sm text-muted-foreground">Cash Runway</div>
                 </div>
                 <div className="text-center transition-all duration-300">
-                  <div className={`text-3xl font-bold transition-all duration-300 ${
-                    (currentData.netIncome || 0) >= 0 ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    ${(currentData.netIncome || 0).toLocaleString()}
+                  <div className={`text-3xl font-bold transition-all duration-300 ${(currentData.netIncome || 0) >= 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                    {formatCurrency(currentData.netIncome || 0)}
                   </div>
                   <div className="text-sm text-muted-foreground">Net Income</div>
                 </div>
@@ -958,7 +959,7 @@ export function RealtimeSimulations() {
                   <div className="text-center">
                     <p className="text-xs text-blue-600 font-bold uppercase mb-1">Survival Odds</p>
                     <div className="text-3xl font-black text-blue-900">
-                      {decisionImpact?.estimatedNewSurvivalProbability 
+                      {decisionImpact?.estimatedNewSurvivalProbability
                         ? Math.round((decisionImpact.estimatedNewSurvivalProbability || 0.85) * 100)
                         : decisionImpact?.currentSurvivalProbability
                           ? Math.round((decisionImpact.currentSurvivalProbability || 0.85) * 100)
@@ -990,18 +991,18 @@ export function RealtimeSimulations() {
                     {decisionImpact.cashOutDateImpact}
                   </p>
                 </div>
-                
+
                 {/* Strategic Buffers - PAIN POINT 4 & 6 */}
                 <div className="pt-2 border-t border-purple-100 space-y-2">
                   <div className="flex justify-between items-center">
                     <span className="text-xs font-semibold text-purple-700 uppercase">Hiring Buffer</span>
-                    <span className="text-sm font-bold text-purple-900">+${(decisionImpact.sensitivity.maxAdditionalBurn / 1000).toFixed(0)}k/mo</span>
+                    <span className="text-sm font-bold text-purple-900">+{formatCurrency(decisionImpact.sensitivity.maxAdditionalBurn / 1000).replace(currencySymbol, "")}k/mo</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-xs font-semibold text-purple-700 uppercase">Revenue Buffer</span>
                     <span className="text-sm font-bold text-purple-900">
                       {decisionImpact?.sensitivity?.revenueBuffer && decisionImpact.sensitivity.revenueBuffer > 0
-                        ? `-$${(decisionImpact.sensitivity.revenueBuffer / 1000).toFixed(0)}k/mo`
+                        ? `-${formatCurrency(decisionImpact.sensitivity.revenueBuffer / 1000).replace(currencySymbol, "")}k/mo`
                         : decisionImpact?.sensitivity?.revenueBuffer === 0
                           ? '$0/mo'
                           : 'N/A'}
@@ -1054,7 +1055,7 @@ export function RealtimeSimulations() {
             </div>
 
             <div className="space-y-2">
-              <Label>Customer Acquisition Cost: ${params.customerAcquisitionCost}</Label>
+              <Label>Customer Acquisition Cost: {formatCurrency(params.customerAcquisitionCost)}</Label>
               <Slider
                 value={[params.customerAcquisitionCost]}
                 onValueChange={([value]) => handleParamChange("customerAcquisitionCost", value)}
@@ -1066,7 +1067,7 @@ export function RealtimeSimulations() {
             </div>
 
             <div className="space-y-2">
-              <Label>Customer Lifetime Value: ${params.customerLifetimeValue}</Label>
+              <Label>Customer Lifetime Value: {formatCurrency(params.customerLifetimeValue)}</Label>
               <Slider
                 value={[params.customerLifetimeValue]}
                 onValueChange={([value]) => handleParamChange("customerLifetimeValue", value)}
@@ -1090,7 +1091,7 @@ export function RealtimeSimulations() {
             </div>
 
             <div className="space-y-2">
-              <Label>Pricing Tier: ${params.pricingTier}/month</Label>
+              <Label>Pricing Tier: {formatCurrency(params.pricingTier)}/month</Label>
               <Slider
                 value={[params.pricingTier]}
                 onValueChange={([value]) => handleParamChange("pricingTier", value)}
@@ -1114,7 +1115,7 @@ export function RealtimeSimulations() {
             </div>
 
             <div className="space-y-2">
-              <Label>Marketing Spend: ${params.marketingSpend}/month</Label>
+              <Label>Marketing Spend: {formatCurrency(params.marketingSpend)}/month</Label>
               <Slider
                 value={[params.marketingSpend]}
                 onValueChange={([value]) => handleParamChange("marketingSpend", value)}
@@ -1129,8 +1130,8 @@ export function RealtimeSimulations() {
 
         {/* Simulation Results */}
         <div className="lg:col-span-2 space-y-6">
-          <Tabs 
-            value={currentTab} 
+          <Tabs
+            value={currentTab}
             onValueChange={(value) => {
               const params = new URLSearchParams(searchParams.toString())
               params.set("tab", value)
@@ -1158,14 +1159,14 @@ export function RealtimeSimulations() {
                     <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
                       <AreaChart data={simulationData}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis 
-                          dataKey="month" 
+                        <XAxis
+                          dataKey="month"
                           tick={{ fill: '#6b7280', fontSize: 12 }}
                         />
                         <YAxis tick={{ fill: '#6b7280', fontSize: 12 }} />
-                        <Tooltip 
-                          formatter={(value) => [`$${value.toLocaleString()}`, ""]}
-                          contentStyle={{ 
+                        <Tooltip
+                          formatter={(value: number) => [formatCurrency(value), ""]}
+                          contentStyle={{
                             backgroundColor: 'rgba(255, 255, 255, 0.95)',
                             border: '1px solid #e5e7eb',
                             borderRadius: '6px'
@@ -1182,16 +1183,16 @@ export function RealtimeSimulations() {
                         />
                         {/* Vertical line at current month - show always, not just when running */}
                         {simulationData[currentMonth] && (
-                          <ReferenceLine 
-                            x={simulationData[currentMonth].month} 
-                            stroke={isRunning ? "#ef4444" : "#f59e0b"} 
+                          <ReferenceLine
+                            x={simulationData[currentMonth].month}
+                            stroke={isRunning ? "#ef4444" : "#f59e0b"}
                             strokeWidth={2}
                             strokeDasharray="5 5"
-                            label={{ 
-                              value: isRunning ? "Current" : `Month ${currentMonth + 1}`, 
-                              position: "top", 
-                              fill: isRunning ? "#ef4444" : "#f59e0b", 
-                              fontSize: 12 
+                            label={{
+                              value: isRunning ? "Current" : `Month ${currentMonth + 1}`,
+                              position: "top",
+                              fill: isRunning ? "#ef4444" : "#f59e0b",
+                              fontSize: 12
                             }}
                           />
                         )}
@@ -1217,13 +1218,13 @@ export function RealtimeSimulations() {
                     <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
                       <LineChart data={simulationData}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis 
-                          dataKey="month" 
+                        <XAxis
+                          dataKey="month"
                           tick={{ fill: '#6b7280', fontSize: 12 }}
                         />
                         <YAxis tick={{ fill: '#6b7280', fontSize: 12 }} />
-                        <Tooltip 
-                          contentStyle={{ 
+                        <Tooltip
+                          contentStyle={{
                             backgroundColor: 'rgba(255, 255, 255, 0.95)',
                             border: '1px solid #e5e7eb',
                             borderRadius: '6px'
@@ -1259,16 +1260,16 @@ export function RealtimeSimulations() {
                         />
                         {/* Vertical line at current month - show always, not just when running */}
                         {simulationData[currentMonth] && (
-                          <ReferenceLine 
-                            x={simulationData[currentMonth].month} 
-                            stroke={isRunning ? "#ef4444" : "#f59e0b"} 
+                          <ReferenceLine
+                            x={simulationData[currentMonth].month}
+                            stroke={isRunning ? "#ef4444" : "#f59e0b"}
                             strokeWidth={2}
                             strokeDasharray="5 5"
-                            label={{ 
-                              value: isRunning ? "Current" : `Month ${currentMonth + 1}`, 
-                              position: "top", 
-                              fill: isRunning ? "#ef4444" : "#f59e0b", 
-                              fontSize: 12 
+                            label={{
+                              value: isRunning ? "Current" : `Month ${currentMonth + 1}`,
+                              position: "top",
+                              fill: isRunning ? "#ef4444" : "#f59e0b",
+                              fontSize: 12
                             }}
                           />
                         )}
@@ -1294,38 +1295,38 @@ export function RealtimeSimulations() {
                     <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
                       <BarChart data={simulationData}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis 
-                          dataKey="month" 
+                        <XAxis
+                          dataKey="month"
                           tick={{ fill: '#6b7280', fontSize: 12 }}
                         />
                         <YAxis tick={{ fill: '#6b7280', fontSize: 12 }} />
-                        <Tooltip 
+                        <Tooltip
                           formatter={(value) => [`${value} months`, ""]}
-                          contentStyle={{ 
+                          contentStyle={{
                             backgroundColor: 'rgba(255, 255, 255, 0.95)',
                             border: '1px solid #e5e7eb',
                             borderRadius: '6px'
                           }}
                         />
-                        <Bar 
-                          dataKey="runway" 
-                          fill="#8b5cf6" 
+                        <Bar
+                          dataKey="runway"
+                          fill="#8b5cf6"
                           name="Runway (months)"
                           animationDuration={300}
                           radius={[4, 4, 0, 0]}
                         />
                         {/* Vertical line at current month - show always, not just when running */}
                         {simulationData[currentMonth] && (
-                          <ReferenceLine 
-                            x={simulationData[currentMonth].month} 
-                            stroke={isRunning ? "#ef4444" : "#f59e0b"} 
+                          <ReferenceLine
+                            x={simulationData[currentMonth].month}
+                            stroke={isRunning ? "#ef4444" : "#f59e0b"}
                             strokeWidth={2}
                             strokeDasharray="5 5"
-                            label={{ 
-                              value: isRunning ? "Current" : `Month ${currentMonth + 1}`, 
-                              position: "top", 
-                              fill: isRunning ? "#ef4444" : "#f59e0b", 
-                              fontSize: 12 
+                            label={{
+                              value: isRunning ? "Current" : `Month ${currentMonth + 1}`,
+                              position: "top",
+                              fill: isRunning ? "#ef4444" : "#f59e0b",
+                              fontSize: 12
                             }}
                           />
                         )}

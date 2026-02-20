@@ -300,46 +300,64 @@ def compute_hyperblock(req: HyperblockComputeRequest):
 def compute_forecast(req: ForecastRequest):
     """
     Industrial scale forecasting endpoint.
+    Returns flat forecast array + confidence bands for bracket testing.
     """
     try:
         explanation = {}
+        raw_result = None
+        
         if req.method == "arima":
-            forecast = ForecastingEngine.forecast_arima(req.history, req.steps)
+            raw_result = ForecastingEngine.forecast_arima(req.history, req.steps)
             explanation = {"info": "ARIMA(1,1,1) model fitted to historical trend."}
         elif req.method == "seasonal":
-            forecast = ForecastingEngine.forecast_seasonal(req.history, req.steps, req.period)
+            raw_result = ForecastingEngine.forecast_seasonal(req.history, req.steps, req.period)
             explanation = {"info": f"Seasonal decomposition (period={req.period}) applied."}
         elif req.method == "trend":
-            forecast = ForecastingEngine.forecast_trend(req.history, req.steps)
+            raw_result = ForecastingEngine.forecast_trend(req.history, req.steps)
             explanation = {"info": "Linear regression trend projection."}
         elif req.method == "regression" and req.drivers_history:
-            forecast = ForecastingEngine.forecast_regression(req.history, req.steps, req.drivers_history, req.drivers_forecast)
+            raw_result = ForecastingEngine.forecast_regression(req.history, req.steps, req.drivers_history, req.drivers_forecast)
             explanation = {"info": "Multi-variate regression using operational drivers."}
-            # Simplified: add driver names to explanation
             if req.driver_names:
                 explanation["drivers"] = req.driver_names
         else: # auto
-            if req.drivers_history: # Prefer regression if drivers provided
-                forecast = ForecastingEngine.forecast_regression(req.history, req.steps, req.drivers_history, req.drivers_forecast)
+            if req.drivers_history:
+                raw_result = ForecastingEngine.forecast_regression(req.history, req.steps, req.drivers_history, req.drivers_forecast)
                 explanation = {"info": "Auto-selected multi-variate regression."}
             elif len(req.history) >= req.period * 2:
-                forecast = ForecastingEngine.forecast_seasonal(req.history, req.steps, req.period)
+                raw_result = ForecastingEngine.forecast_seasonal(req.history, req.steps, req.period)
                 explanation = {"info": "Auto-selected seasonal model due to sufficient history."}
             else:
-                forecast = ForecastingEngine.forecast_arima(req.history, req.steps)
+                raw_result = ForecastingEngine.forecast_arima(req.history, req.steps)
                 explanation = {"info": "Auto-selected ARIMA model for short history."}
         
+        # Normalize: methods now return {mean, lower, upper} dicts
+        if isinstance(raw_result, dict):
+            forecast_flat = raw_result.get('mean', [])
+            confidence_bands = {
+                "lower": raw_result.get('lower', []),
+                "upper": raw_result.get('upper', [])
+            }
+        else:
+            # Legacy fallback (shouldn't happen)
+            forecast_flat = raw_result if raw_result else []
+            confidence_bands = {"lower": forecast_flat, "upper": forecast_flat}
+        
         # Calculate fitting accuracy on history (MAPE)
-        backtest = ForecastingEngine.calculate_metrics(req.history, ForecastingEngine.forecast_trend(req.history, 0)) # simplified
+        fit_forecast = ForecastingEngine.forecast_trend(req.history, 0)
+        # forecast_trend(h, 0) returns the mean list for backward compat
+        backtest = ForecastingEngine.calculate_metrics(req.history, fit_forecast)
         
         return {
             "status": "success",
-            "forecast": forecast,
+            "forecast": forecast_flat,
+            "confidenceBands": confidence_bands,
             "method": req.method,
             "explanation": explanation,
             "metrics": backtest
         }
     except Exception as e:
+        logger.error(f"❌ Forecast failed: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/compute/forecast/backtest")
@@ -380,6 +398,7 @@ class ReasoningRequest(BaseModel):
     data: Optional[Dict[str, Any]] = None
     goal: str = "increase"
     num_months: int = 12
+    months: Optional[List[str]] = None
 
 @app.post("/compute/reasoning")
 def compute_reasoning(req: ReasoningRequest):
@@ -389,7 +408,7 @@ def compute_reasoning(req: ReasoningRequest):
     try:
         engine = ModelReasoningEngine(req.modelId)
         if req.nodes:
-            engine.hydrate_from_json(req.nodes, req.data)
+            engine.hydrate_from_json(req.nodes, req.data, req.months)
         
         analysis = engine.analyze_drivers(req.target)
         suggestions = engine.suggest_strategic_improvements(req.target)

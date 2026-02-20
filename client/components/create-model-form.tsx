@@ -393,6 +393,10 @@ export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false, co
       if (formData.tax_region) payload.tax_region = formData.tax_region
       if (formData.description) payload.description = formData.description
 
+      if (extraAssumptions && typeof extraAssumptions === "object") {
+        payload.assumptions = extraAssumptions
+      }
+
       // Add AI-generated fields if applicable
       if (isAiGenerated) {
         payload.business_type = aiAnswers.business_type

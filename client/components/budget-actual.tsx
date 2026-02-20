@@ -33,6 +33,7 @@ import { generateBudgetActualTemplate, generateBudgetTemplate, downloadCSV } fro
 import { DataDrivenTooltip } from "./data-driven-tooltip"
 import { API_BASE_URL } from "@/lib/api-config"
 import { useModel } from "@/lib/model-context"
+import { useOrg } from "@/lib/org-context"
 
 interface BudgetActualPeriod {
   period: string
@@ -79,6 +80,7 @@ interface BudgetActualData {
 }
 
 export function BudgetActual() {
+  const { currencySymbol, formatCurrency } = useOrg()
   const router = useRouter()
   const searchParams = useSearchParams()
   const currentTab = searchParams.get("tab") || "overview"
@@ -527,7 +529,7 @@ export function BudgetActual() {
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${summary.revenueVariance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {summary.revenueVariance >= 0 ? '+' : ''}${Math.abs(summary.revenueVariance).toLocaleString()}
+              {summary.revenueVariance >= 0 ? '+' : '-'}{formatCurrency(Math.abs(summary.revenueVariance))}
             </div>
           </CardContent>
         </Card>
@@ -537,7 +539,7 @@ export function BudgetActual() {
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${summary.expenseVariance <= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {summary.expenseVariance <= 0 ? '-' : '+'}${Math.abs(summary.expenseVariance).toLocaleString()}
+              {summary.expenseVariance <= 0 ? '-' : '+'}{formatCurrency(Math.abs(summary.expenseVariance))}
             </div>
           </CardContent>
         </Card>
@@ -547,7 +549,7 @@ export function BudgetActual() {
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${summary.netVariance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {summary.netVariance >= 0 ? '+' : ''}${Math.abs(summary.netVariance).toLocaleString()}
+              {summary.netVariance >= 0 ? '+' : '-'}{formatCurrency(Math.abs(summary.netVariance))}
             </div>
           </CardContent>
         </Card>
@@ -593,10 +595,10 @@ export function BudgetActual() {
                   {categoryBreakdown.map((cat, i) => (
                     <TableRow key={i}>
                       <TableCell>{cat.category}</TableCell>
-                      <TableCell className="text-right">${cat.budget.toLocaleString()}</TableCell>
-                      <TableCell className="text-right">${cat.actual.toLocaleString()}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(cat.budget)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(cat.actual)}</TableCell>
                       <TableCell className={`text-right ${cat.variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        ${cat.variance.toLocaleString()}
+                        {cat.variance >= 0 ? '+' : '-'}{formatCurrency(Math.abs(cat.variance))}
                       </TableCell>
                     </TableRow>
                   ))}

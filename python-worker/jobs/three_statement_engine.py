@@ -41,7 +41,8 @@ class ThreeStatementEngine:
         start_month: datetime,
         horizon_months: int,
         initial_values: Dict[str, float],
-        growth_assumptions: Dict[str, float]
+        growth_assumptions: Dict[str, float],
+        monthly_overrides: Dict[str, Dict[str, float]] = None
     ) -> Dict[str, Any]:
         """
         Compute all three statements for the given projection period.
@@ -51,6 +52,9 @@ class ThreeStatementEngine:
             horizon_months: Number of months to project (12, 24, 36)
             initial_values: Starting values (cash, ar, ap, assets, etc.)
             growth_assumptions: Growth rates and percentages
+            monthly_overrides: Optional dictionary of monthly values (revenue, cogs, opex) 
+                              keyed by 'YYYY-MM' to override growth logic.
+                              Used for driver-based scenarios.
             
         Returns:
             Complete 3-statement model with monthly breakdowns
@@ -59,6 +63,7 @@ class ThreeStatementEngine:
         monthly_pl = {}
         monthly_cf = {}
         monthly_bs = {}
+        monthly_overrides = monthly_overrides or {}
         
         # Extract initial values with defaults
         initial_cash = float(initial_values.get('cash', 500000))
@@ -100,19 +105,38 @@ class ThreeStatementEngine:
             # INCOME STATEMENT (P&L)
             # ============================================
             
-            # Revenue with growth
-            growth_factor = (1 + revenue_growth) ** i
-            revenue = round(starting_revenue * growth_factor, 2)
+            # Check for overrides (Driver-Based Input)
+            override = monthly_overrides.get(month_key, {})
+            
+            # Revenue
+            if 'revenue' in override:
+                revenue = float(override['revenue'])
+            else:
+                growth_factor = (1 + revenue_growth) ** i
+                revenue = round(starting_revenue * growth_factor, 2)
             
             # Cost of Goods Sold
-            cogs = round(revenue * cogs_percentage, 2)
+            if 'cogs' in override:
+                cogs = float(override['cogs'])
+            else:
+                cogs = round(revenue * cogs_percentage, 2)
             
             # Gross Profit (Calculated from rounded components)
             gross_profit = round(revenue - cogs, 2)
             gross_margin = round(gross_profit / revenue, 4) if revenue > 0 else 0
             
             # Operating Expenses
-            operating_expenses = round(revenue * opex_percentage, 2)
+            if 'opex' in override:
+                operating_expenses = float(override['opex'])
+            elif 'operatingExpenses' in override:
+                operating_expenses = float(override['operatingExpenses'])
+            elif 'expenses' in override:
+                 # Be careful, 'expenses' often means Total Expenses (COGS + OpEx) in other contexts
+                 # But here we assume it maps to OpEx if COGS is separate.
+                 # Safest is to calculate if specific OpEx key missing.
+                 operating_expenses = round(revenue * opex_percentage, 2)
+            else:
+                operating_expenses = round(revenue * opex_percentage, 2)
             
             # Depreciation (on PPE)
             depreciation = round(running_ppe * depreciation_rate, 2)
@@ -436,19 +460,11 @@ def compute_three_statements(
     start_month: str,
     horizon_months: int,
     initial_values: Dict[str, float],
-    growth_assumptions: Dict[str, float]
+    growth_assumptions: Dict[str, float],
+    monthly_overrides: Dict[str, Dict[str, float]] = None
 ) -> Dict[str, Any]:
     """
     Convenience function to compute 3-statement model.
-    
-    Args:
-        start_month: Starting month in 'YYYY-MM' format
-        horizon_months: Number of months to project
-        initial_values: Starting balance sheet values
-        growth_assumptions: Growth rates and percentages
-        
-    Returns:
-        Complete 3-statement financial model
     """
     engine = ThreeStatementEngine()
     
@@ -460,7 +476,8 @@ def compute_three_statements(
         start_month=start_dt,
         horizon_months=horizon_months,
         initial_values=initial_values,
-        growth_assumptions=growth_assumptions
+        growth_assumptions=growth_assumptions,
+        monthly_overrides=monthly_overrides
     )
     
     # Validate

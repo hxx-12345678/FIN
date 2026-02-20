@@ -56,21 +56,33 @@ class RiskEngine:
         # 3. Inject Stochastic Inputs
         rng = np.random.default_rng()
         for node_id, config in proportions.items():
-            # Safety check: if node was not in the nodes list, add it as a basic metric
+            actual_node_id = node_id
+            
+            # Safety check: if node was not in the nodes list, try to find it by name
             if node_id not in engine.data:
-                logger.warning(f"Node {node_id} found in distributions but not in nodes list. Adding dynamically.")
-                engine.add_metric(node_id, node_id, "operational", ["_simulation"])
+                # Search by name in nodes_meta
+                found = False
+                for nid, meta in engine.nodes_meta.items():
+                    if meta.get('name') == node_id:
+                        actual_node_id = nid
+                        found = True
+                        break
+                
+                if not found:
+                    logger.warning(f"Node {node_id} found in distributions but not in nodes list. Adding dynamically.")
+                    engine.add_metric(node_id, node_id, "operational", ["_simulation"])
+                    actual_node_id = node_id
             
             dist = config.get('dist', 'normal')
             params = config.get('params', {})
             
             # Target shape: (num_simulations, dimensions..., months)
             # For simplicity, we sample for each simulation across all other dimensions/months
-            target_shape = engine.data[node_id].shape
+            target_shape = engine.data[actual_node_id].shape
             
             if dist == 'normal':
-                mu = params.get('mu', 0.0)
-                sigma = params.get('sigma', 0.1)
+                mu = params.get('mu', params.get('mean', 0.0)) # Handle both mu and mean
+                sigma = params.get('sigma', params.get('std', 0.1)) # Handle both sigma and std
                 samples = rng.normal(mu, sigma, size=target_shape)
             elif dist == 'uniform':
                 low = params.get('min', -0.1)
@@ -84,7 +96,7 @@ class RiskEngine:
             else:
                 samples = np.full(target_shape, params.get('value', 0.0))
                 
-            engine.data[node_id] = samples
+            engine.data[actual_node_id] = samples
             
         # 4. Execute Full Recompute
         engine.full_recompute()
@@ -123,18 +135,56 @@ class RiskEngine:
         # Probability of Runway failure (Cash < 0)
         # Assumes a node named 'cash' exists
         failure_prob = []
-        if 'cash' in engine.data:
-            cash_data = engine.data['cash']
+        cash_node_id = 'cash'
+        # Try to find by name
+        for nid, meta in engine.nodes_meta.items():
+            if meta.get('name', '').lower() == 'cash':
+                cash_node_id = nid
+                break
+        
+        var_95 = 0
+        fatal_risk_prob = 0
+        risk_insights = []
+
+        if cash_node_id in engine.data:
+            cash_data = engine.data[cash_node_id]
             if len(cash_data.shape) > 2:
                  cash_data = np.mean(cash_data, axis=tuple(range(1, len(cash_data.shape)-1)))
+            
+            # Probability of bankruptcy (cash < 0 at any point)
+            bankrupt_sims = np.any(cash_data < 0, axis=1)
+            fatal_risk_prob = float(np.sum(bankrupt_sims) / num_simulations)
+            
+            # VaR at 95% for the last month
+            final_cash = cash_data[:, -1]
+            var_95 = float(np.percentile(final_cash, 5))
             
             for m in range(len(self.months)):
                 fail_count = np.sum(cash_data[:, m] < 0)
                 failure_prob.append(float(fail_count / num_simulations))
+
+            # Insights
+            if fatal_risk_prob > 0.2:
+                risk_insights.append({"type": "critical", "msg": f"High bankruptcy risk detected: {fatal_risk_prob*100:.1f}%"})
+            elif fatal_risk_prob > 0.05:
+                risk_insights.append({"type": "warning", "msg": f"Moderate bankruptcy risk: {fatal_risk_prob*100:.1f}%"})
+            else:
+                risk_insights.append({"type": "info", "msg": "Bankruptcy risk is minimal under current assumptions."})
         
+        # 7. Summary Metrics for the Hub
+        # Map IDs to names for the frontend
+        keyed_by_name = {}
+        for nid, meta in engine.nodes_meta.items():
+            name = meta.get('name', nid)
+            keyed_by_name[name] = output_metrics.get(nid)
+
         return {
             "metrics": output_metrics,
+            "metricsByName": keyed_by_name,
             "failureProbability": failure_prob,
+            "fatalRisk": fatal_risk_prob,
+            "var95": var_95,
+            "insights": risk_insights,
             "simulations": num_simulations,
             "months": self.months
         }

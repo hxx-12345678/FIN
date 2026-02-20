@@ -38,7 +38,7 @@ export const forecastingService = {
                 period: params.period || 12
             });
 
-            const { forecast, method, explanation, metrics } = response.data;
+            const { forecast, confidenceBands, method, explanation, metrics } = response.data;
 
             // 3. Persist forecast
             const savedForecast = await (prisma as any).forecast.create({
@@ -47,7 +47,7 @@ export const forecastingService = {
                     modelId,
                     metricName: params.metricName,
                     method,
-                    forecastData: forecast.map((v: number, i: number) => ({ index: i, value: v })),
+                    forecastData: Array.isArray(forecast) ? forecast.map((v: number, i: number) => ({ index: i, value: v })) : [],
                     historicalData: history
                 }
             });
@@ -55,6 +55,7 @@ export const forecastingService = {
             return {
                 id: savedForecast.id,
                 forecast,
+                confidenceBands,
                 method,
                 explanation,
                 metrics
@@ -91,32 +92,87 @@ export const forecastingService = {
 
     /**
      * Get historical data for a metric from the DB or Cube
+     * Falls back to latest model run data if cube is empty
      */
     getHistoricalMetricData: async (orgId: string, modelId: string, metricName: string) => {
         try {
-            // Fetch from MetricCube (our multi-dimensional store)
-            const entries = await (prisma as any).metricCube.findMany({
+            // First try: Fetch from MetricCube (our multi-dimensional store)
+            let cubeData: number[] = [];
+            try {
+                const entries = await (prisma as any).metricCube.findMany({
+                    where: {
+                        orgId,
+                        modelId,
+                        metricName
+                    },
+                    orderBy: {
+                        month: 'asc'
+                    }
+                });
+
+                // Group by month and sum values (if multi-dimensional)
+                const monthlyData: Record<string, number> = {};
+                entries.forEach((e: any) => {
+                    monthlyData[e.month] = (monthlyData[e.month] || 0) + Number(e.value);
+                });
+
+                cubeData = Object.entries(monthlyData)
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([_, val]) => val);
+            } catch (cubeError: any) {
+                console.warn('MetricCube lookup failed (table may not exist):', cubeError.message);
+            }
+
+            if (cubeData.length > 0) {
+                return cubeData;
+            }
+
+            // Fallback: Extract from the latest completed model run's monthly data
+            // This ensures forecasting works even if metric_cubes table doesn't exist
+            console.log(`MetricCube empty for ${metricName}, falling back to latest model run data`);
+            const latestRun = await prisma.modelRun.findFirst({
                 where: {
-                    orgId,
                     modelId,
-                    metricName
+                    orgId,
+                    status: 'done'
                 },
-                orderBy: {
-                    month: 'asc'
+                orderBy: { createdAt: 'desc' },
+                select: { summaryJson: true }
+            });
+
+            if (latestRun?.summaryJson) {
+                const summary = latestRun.summaryJson as any;
+                const monthly = summary?.monthly || summary?.fullResult?.monthly || {};
+
+                // Map metricName to the correct field in monthly data
+                const metricKeyMap: Record<string, string> = {
+                    'revenue': 'revenue',
+                    'expenses': 'expenses',
+                    'opex': 'opex',
+                    'cogs': 'cogs',
+                    'netIncome': 'netIncome',
+                    'cashBalance': 'cashBalance',
+                    'burnRate': 'burnRate',
+                    'grossProfit': 'grossProfit',
+                    'headcount': 'headcount',
+                };
+                const dataKey = metricKeyMap[metricName] || metricName;
+
+                const sortedMonths = Object.keys(monthly).sort();
+                const values = sortedMonths.map(m => {
+                    const val = monthly[m]?.[dataKey];
+                    return typeof val === 'number' ? val : 0;
+                }).filter(v => v !== 0);
+
+                if (values.length > 0) {
+                    console.log(`Extracted ${values.length} data points from latest model run for ${metricName}`);
+                    return values;
                 }
-            });
+            }
 
-            // Group by month and sum values (if multi-dimensional)
-            const monthlyData: Record<string, number> = {};
-            entries.forEach((e: any) => {
-                monthlyData[e.month] = (monthlyData[e.month] || 0) + Number(e.value);
-            });
-
-            return Object.entries(monthlyData)
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([_, val]) => val);
+            return [];
         } catch (error: any) {
-            console.warn('getHistoricalMetricData: table may not exist:', error.message);
+            console.warn('getHistoricalMetricData error:', error.message);
             return [];
         }
     }

@@ -31,6 +31,7 @@ import {
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { API_BASE_URL } from "@/lib/api-config"
+import { useOrg } from "@/lib/org-context"
 
 interface ForecastResult {
     forecast: number[]
@@ -48,6 +49,7 @@ interface ForecastResult {
 }
 
 export function IndustrialForecasting({ orgId, modelId }: { orgId: string | null, modelId: string | null }) {
+    const { currencySymbol, formatCurrency } = useOrg()
     const [selectedMetric, setSelectedMetric] = useState("revenue")
     const [method, setMethod] = useState("auto")
     const [forecastData, setForecastData] = useState<any[]>([])
@@ -75,33 +77,52 @@ export function IndustrialForecasting({ orgId, modelId }: { orgId: string | null
             })
             const data = await res.json()
             if (data.ok) {
-                // Mock historical data for visualization if we don't have it from API
-                const historical = [45000, 52000, 48000, 55000, 60000, 58000, 62000, 70000, 75000, 72000, 80000, 85000]
-                const forecast = data.forecast
+                const forecast: number[] = data.forecast || []
+                const bands = data.confidenceBands || {}
+                const lowerBand: number[] = bands.lower || []
+                const upperBand: number[] = bands.upper || []
 
-                const combined = historical.map((val, i) => ({
-                    name: `M-${11 - i}`,
-                    actual: val
-                }))
+                // Use actual historical data from the API if available
+                const historical: number[] = data.actual || data.history || []
+
+                const combined: any[] = []
+
+                if (historical.length > 0) {
+                    historical.forEach((val: number, i: number) => {
+                        combined.push({
+                            name: `M-${historical.length - i}`,
+                            actual: val
+                        })
+                    })
+                }
 
                 forecast.forEach((val: number, i: number) => {
                     combined.push({
                         name: `F+${i + 1}`,
-                        forecast: val
+                        forecast: val,
+                        lower: lowerBand[i] ?? val,
+                        upper: upperBand[i] ?? val
                     } as any)
                 })
 
-                const sanitized = (combined as any[]).map(d => ({
+                const sanitized = combined.map(d => ({
                     ...d,
                     actual: typeof d.actual === 'number' && Number.isFinite(d.actual) ? d.actual : undefined,
-                    forecast: typeof d.forecast === 'number' && Number.isFinite(d.forecast) ? d.forecast : undefined
+                    forecast: typeof d.forecast === 'number' && Number.isFinite(d.forecast) ? d.forecast : undefined,
+                    lower: typeof d.lower === 'number' && Number.isFinite(d.lower) ? d.lower : undefined,
+                    upper: typeof d.upper === 'number' && Number.isFinite(d.upper) ? d.upper : undefined
                 }))
 
                 setForecastData(sanitized)
                 setExplanation(data.explanation?.info || "")
-                toast.success(`Generated ${data.method} forecast`)
+                setMetrics(data.metrics || null)
+                if (forecast.length > 0) {
+                    toast.success(`Generated ${data.method} forecast with ${historical.length} data points`)
+                } else {
+                    toast.info("Run model first to generate forecast data")
+                }
             } else {
-                toast.error(data.message || "Forecasting failed")
+                toast.error(data.message || data.error || "Forecasting failed")
             }
         } catch (error) {
             console.error(error)
@@ -130,8 +151,7 @@ export function IndustrialForecasting({ orgId, modelId }: { orgId: string | null
             const data = await res.json()
             if (data.ok && data.results) {
                 setBacktestResults(data.results)
-                setMetrics(data.results.metrics || {})
-                toast.success("Backtest complete")
+                toast.success(`Backtest complete — Best model: ${data.results.best_model || 'unknown'}`)
             } else {
                 toast.error(data.error || data.message || "Insufficient data for backtesting")
             }
@@ -225,9 +245,12 @@ export function IndustrialForecasting({ orgId, modelId }: { orgId: string | null
                                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
                                 <RechartsTooltip
                                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
-                                    formatter={(value: number) => [`$${value.toLocaleString()}`, ""]}
+                                    formatter={(value: number) => [formatCurrency(value), ""]}
                                 />
                                 <Area type="monotone" dataKey="actual" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorActual)" name="Historical" />
+                                {/* Confidence bracket bands */}
+                                <Area type="monotone" dataKey="upper" stroke="none" fill="#c4b5fd" fillOpacity={0.25} name="Upper Bound" />
+                                <Area type="monotone" dataKey="lower" stroke="none" fill="#c4b5fd" fillOpacity={0.25} name="Lower Bound" />
                                 <Area type="monotone" dataKey="forecast" stroke="#8b5cf6" strokeWidth={3} strokeDasharray="5 5" fillOpacity={1} fill="url(#colorForecast)" name="Forecast" />
                             </AreaChart>
                         </ResponsiveContainer>
@@ -244,12 +267,16 @@ export function IndustrialForecasting({ orgId, modelId }: { orgId: string | null
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-bold mb-1">84.2%</div>
-                            <p className="text-indigo-100 text-xs">Based on historical variance and model fit</p>
+                            <div className="text-3xl font-bold mb-1">
+                                {metrics ? (Math.max(50, 100 - (metrics.mape || 0))).toFixed(1) : "--"}%
+                            </div>
+                            <p className="text-indigo-100 text-xs text-wrap">Based on historical variance and {method} model fit</p>
                             <div className="mt-4 pt-4 border-t border-indigo-500/30">
                                 <div className="flex justify-between items-center text-xs">
                                     <span className="text-indigo-200">Stability Index</span>
-                                    <Badge className="bg-white/20 text-white border-none">High</Badge>
+                                    <Badge className="bg-white/20 text-white border-none">
+                                        {(metrics && (metrics.mape || 100) < 5) ? "High" : "Moderate"}
+                                    </Badge>
                                 </div>
                             </div>
                         </CardContent>
@@ -266,10 +293,20 @@ export function IndustrialForecasting({ orgId, modelId }: { orgId: string | null
                             <div className="space-y-2">
                                 <div className="flex justify-between text-xs">
                                     <span className="text-slate-500">MAPE (Error)</span>
-                                    <span className="font-bold">{metrics?.auto?.mape ? `${metrics.auto.mape.toFixed(2)}%` : "4.31%"}</span>
+                                    <span className="font-bold">{metrics?.mape != null ? `${metrics.mape.toFixed(2)}%` : "--"}</span>
                                 </div>
                                 <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                                    <div className="bg-indigo-500 h-full rounded-full" style={{ width: '15%' }}></div>
+                                    <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${Math.min((metrics?.mape || 0) * 3, 100)}%` }}></div>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <div className="flex justify-between text-xs">
+                                    <span className="text-slate-500">RMSE</span>
+                                    <span className="font-bold">{metrics?.rmse != null ? formatCurrency(metrics.rmse) : "--"}</span>
+                                </div>
+                                <div className="flex justify-between text-xs">
+                                    <span className="text-slate-500">MAE</span>
+                                    <span className="font-bold">{metrics?.mae != null ? formatCurrency(metrics.mae) : "--"}</span>
                                 </div>
                             </div>
 
@@ -279,13 +316,13 @@ export function IndustrialForecasting({ orgId, modelId }: { orgId: string | null
                                 </Button>
                             </div>
 
-                            {metrics && (
+                            {backtestResults && backtestResults.metrics && (
                                 <div className="mt-2 p-3 bg-slate-50 rounded-xl space-y-2">
                                     <div className="flex justify-between text-[10px] uppercase font-bold text-slate-400">
                                         <span>Model</span>
                                         <span>MAPE</span>
                                     </div>
-                                    {Object.entries(metrics).map(([key, val]: [string, any]) => (
+                                    {Object.entries(backtestResults.metrics).map(([key, val]: [string, any]) => (
                                         <div key={key} className="flex justify-between text-xs">
                                             <span className="capitalize">{key}</span>
                                             <span className={val.mape < 5 ? "text-green-600" : "text-amber-600"}>
@@ -293,6 +330,14 @@ export function IndustrialForecasting({ orgId, modelId }: { orgId: string | null
                                             </span>
                                         </div>
                                     ))}
+                                    {backtestResults.best_model && (
+                                        <div className="pt-1 border-t mt-1">
+                                            <div className="flex justify-between text-xs font-bold">
+                                                <span>Best Model</span>
+                                                <span className="text-green-600 capitalize">{backtestResults.best_model}</span>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </CardContent>

@@ -39,6 +39,7 @@ import { MultiDimensionalViewer } from "./hyperblock/multi-dimensional-viewer"
 import { ModelReasoningHub } from "./reasoning/model-reasoning-hub"
 import { API_BASE_URL } from "@/lib/api-config"
 import { useModel } from "@/lib/model-context"
+import { useOrg } from "@/lib/org-context"
 
 
 const defaultFinancialData = [
@@ -151,6 +152,7 @@ interface ModelRun {
 }
 
 export function FinancialModeling() {
+  const { currencySymbol, formatCurrency } = useOrg()
   const router = useRouter()
   const searchParams = useSearchParams()
   const currentTab = searchParams.get("tab") || "statements"
@@ -607,41 +609,9 @@ export function FinancialModeling() {
             } else {
               // If no monthly data but run is done, try to generate from summary top-level data
               if (run.status === "done" && summary) {
-                const revenue = Number(summary.revenue || summary.mrr || 0)
-                const expenses = Number(summary.expenses || 0)
-                const cogs = Number(summary.cogs || revenue * 0.2)
-
-                if (revenue > 0 || expenses > 0) {
-                  // Generate 12 months of data from summary
-                  const generatedData: any[] = []
-                  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-                  const now = new Date()
-
-                  for (let i = 0; i < 12; i++) {
-                    const monthDate = new Date(now.getFullYear(), now.getMonth() + i, 1)
-                    const monthKey = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}`
-                    const growthFactor = Math.pow(1.08, i) // 8% monthly growth
-
-                    generatedData.push({
-                      month: monthNames[monthDate.getMonth()],
-                      monthKey: monthKey,
-                      revenue: Math.round(revenue * growthFactor),
-                      cogs: Math.round(cogs * growthFactor),
-                      grossProfit: Math.round((revenue - cogs) * growthFactor),
-                      opex: Math.round(expenses * growthFactor),
-                      netIncome: Math.round((revenue - cogs - expenses) * growthFactor),
-                      cashFlow: Math.round((revenue - expenses) * growthFactor),
-                    })
-                  }
-
-                  if (generatedData.length > 0) {
-                    setFinancialData(generatedData)
-                  } else {
-                    setFinancialData([])
-                  }
-                } else {
-                  setFinancialData([])
-                }
+                // Do not fabricate projections with hardcoded growth rates.
+                // If backend did not produce monthly projections, show empty state and prompt user to run again or review assumptions.
+                setFinancialData([])
               } else if (run.status === "done") {
                 setFinancialData([])
               }
@@ -1488,22 +1458,23 @@ export function FinancialModeling() {
       // This makes the AI generation much more accurate and professional
       let aiAssumptions: any = {}
       if (aiData.calculations) {
-        // Normalize growth rate if it's over 1 (likely a percentage)
-        let growth = aiData.calculations.growth || aiData.calculations.revenueGrowth || 0.08
-        if (growth > 1) growth = growth / 100
+        const revenueValue = aiData.calculations.revenue ?? aiData.calculations.monthlyRevenue
+        const burnValue = aiData.calculations.burnRate ?? aiData.calculations.monthlyBurnRate
+        const cashValue = aiData.calculations.cashBalance ?? aiData.calculations.cash
+        let growth = aiData.calculations.growth ?? aiData.calculations.revenueGrowth
+        if (typeof growth === "number" && growth > 1) growth = growth / 100
 
-        aiAssumptions = {
-          revenue: {
-            baselineRevenue: aiData.calculations.revenue || aiData.calculations.monthlyRevenue || 100000,
-            revenueGrowth: growth,
-          },
-          costs: {
-            baselineExpenses: aiData.calculations.burnRate || aiData.calculations.monthlyBurnRate || 80000,
-            expenseGrowth: 0.05,
-          },
-          cash: {
-            initialCash: aiData.calculations.cashBalance || aiData.calculations.cash || 500000
-          }
+        aiAssumptions = {}
+        if (revenueValue !== undefined || growth !== undefined) {
+          aiAssumptions.revenue = {}
+          if (revenueValue !== undefined) aiAssumptions.revenue.baselineRevenue = revenueValue
+          if (growth !== undefined) aiAssumptions.revenue.revenueGrowth = growth
+        }
+        if (burnValue !== undefined) {
+          aiAssumptions.costs = { baselineExpenses: burnValue }
+        }
+        if (cashValue !== undefined) {
+          aiAssumptions.cash = { initialCash: cashValue }
         }
       }
 
@@ -1514,7 +1485,11 @@ export function FinancialModeling() {
             const match = rec.impact.revenue.match(/(\d+)%/)
             if (match) {
               const impact = parseInt(match[1]) / 100
-              aiAssumptions.revenue.revenueGrowth = (aiAssumptions.revenue.revenueGrowth || 0.08) + impact
+              if (!aiAssumptions.revenue) aiAssumptions.revenue = {}
+              const currentGrowth = typeof aiAssumptions.revenue.revenueGrowth === 'number'
+                ? aiAssumptions.revenue.revenueGrowth
+                : 0
+              aiAssumptions.revenue.revenueGrowth = currentGrowth + impact
             }
           }
         })
@@ -2198,18 +2173,18 @@ export function FinancialModeling() {
             let actualValue = value // Always prefer the passed value (from table cell)
 
             // If no value was passed, try to extract from API response
-            if (!actualValue || actualValue === 'N/A' || actualValue === '$0') {
+            if (!actualValue || actualValue === 'N/A' || actualValue === `${currencySymbol}0`) {
               const firstEntry = result.entries[0]
 
               // Try to get value from summary (for transaction-based) - but this might be aggregate
               if (firstEntry.summary && firstEntry.summary.totalAmount !== undefined) {
-                actualValue = `$${Number(firstEntry.summary.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                actualValue = `${currencySymbol}${Number(firstEntry.summary.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
               }
               // Try to get value from assumptionRef (for assumption-based)
               else if (firstEntry.assumptionRef && firstEntry.assumptionRef.value !== undefined) {
                 const val = firstEntry.assumptionRef.value
                 if (typeof val === 'number') {
-                  actualValue = `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  actualValue = `${currencySymbol}${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                 } else {
                   actualValue = String(val)
                 }
@@ -2218,7 +2193,7 @@ export function FinancialModeling() {
               else if (firstEntry.sourceRef && typeof firstEntry.sourceRef === 'object' && firstEntry.sourceRef.value !== undefined) {
                 const val = firstEntry.sourceRef.value
                 if (typeof val === 'number') {
-                  actualValue = `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  actualValue = `${currencySymbol}${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                 } else {
                   actualValue = String(val)
                 }
@@ -2248,11 +2223,11 @@ export function FinancialModeling() {
                   // Extract assumption value properly
                   const assumptionValue = ref.value !== undefined
                     ? (typeof ref.value === 'number'
-                      ? `$${ref.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      ? `${currencySymbol}${ref.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                       : String(ref.value))
                     : (ref.assumption_value !== undefined
                       ? (typeof ref.assumption_value === 'number'
-                        ? `$${ref.assumption_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        ? `${currencySymbol}${ref.assumption_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                         : String(ref.assumption_value))
                       : 'N/A')
                   return {
@@ -2290,10 +2265,10 @@ export function FinancialModeling() {
         if (summary && summary.monthly && monthKey) {
           const monthData = summary.monthly[monthKey]
           if (monthData) {
-            if (cellId === 'revenue') fallbackValue = `$${(monthData.revenue || 0).toLocaleString()}`
-            else if (cellId === 'cogs') fallbackValue = `$${(monthData.cogs || 0).toLocaleString()}`
-            else if (cellId === 'gross_profit') fallbackValue = `$${(monthData.grossProfit || 0).toLocaleString()}`
-            else if (cellId === 'net_income') fallbackValue = `$${(monthData.netIncome || 0).toLocaleString()}`
+            if (cellId === 'revenue') fallbackValue = `${currencySymbol}${(monthData.revenue || 0).toLocaleString()}`
+            else if (cellId === 'cogs') fallbackValue = `${currencySymbol}${(monthData.cogs || 0).toLocaleString()}`
+            else if (cellId === 'gross_profit') fallbackValue = `${currencySymbol}${(monthData.grossProfit || 0).toLocaleString()}`
+            else if (cellId === 'net_income') fallbackValue = `${currencySymbol}${(monthData.netIncome || 0).toLocaleString()}`
           }
         }
       }
@@ -2334,16 +2309,16 @@ export function FinancialModeling() {
     const cac = Number(summary.cac ?? 0)
     const ltv = Number(summary.ltv ?? 0)
 
-    const formatCurrency = (v: number) =>
-      v ? `$${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "N/A"
+    const formatValLocal = (v: number) =>
+      v ? `${currencySymbol}${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "N/A"
 
     return {
-      mrr: formatCurrency(mrr),
-      arr: formatCurrency(arr),
-      burn_rate: formatCurrency(burn),
+      mrr: formatValLocal(mrr),
+      arr: formatValLocal(arr),
+      burn_rate: formatValLocal(burn),
       runway: runway ? `${runway.toFixed(1)} months` : "N/A",
-      cac: cac ? formatCurrency(cac) : "N/A",
-      ltv: ltv ? formatCurrency(ltv) : "N/A",
+      cac: cac ? formatValLocal(cac) : "N/A",
+      ltv: ltv ? formatValLocal(ltv) : "N/A",
     } as Record<string, string>
   }, [currentRun])
 

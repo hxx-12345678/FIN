@@ -24,36 +24,65 @@ export const reasoningService = {
                 orderBy: { createdAt: 'desc' }
             });
 
-            // Extract nodes from modelJson (assuming Anaplan-style structure)
+            // Extract nodes from modelJson or fallback to drivers table
             const modelData = model?.modelJson as any;
-            const nodes = modelData?.nodes || [];
+            let nodes = modelData?.nodes || [];
 
-            // Extract baseline data
+            if (nodes.length === 0) {
+                // Fallback: fetch from drivers table
+                const drivers = await prisma.driver.findMany({
+                    where: { modelId }
+                });
+                const formulas = await prisma.driverFormula.findMany({
+                    where: { modelId }
+                });
+
+                nodes = drivers.map(d => ({
+                    id: d.id,
+                    name: d.name,
+                    category: d.category,
+                    formula: formulas.find(f => f.driverId === d.id)?.expression || d.formula
+                }));
+            }
+
+            // Extract baseline data from latest run if available
             const resultData = latestRun?.summaryJson as any;
+            const months = resultData?.months || [];
 
+            console.log(`Calling reasoning engine with target: ${metric} and ${nodes.length} nodes`);
             const response = await axios.post(`${PYTHON_WORKER_URL}/compute/reasoning`, {
                 modelId,
                 target: metric,
                 nodes: nodes,
                 data: resultData?.metrics || {}, // Assuming metrics map in summary
                 goal,
-                num_months: 12
+                num_months: 12,
+                months: months
             });
 
             return response.data;
         } catch (error: any) {
             console.error('Reasoning engine error:', error.message);
+            if (error.response) console.error('Worker diagnostic:', JSON.stringify(error.response.data));
             // Fallback: heuristic logic if Python worker fails
             return {
-                analysis: [
-                    { driver: 'revenue', action: 'increase', reasoning: 'Primary driver of runway extension.', estimated_impact: 'High' },
-                    { driver: 'opex', action: 'decrease', reasoning: 'Direct correlation with cash burn.', estimated_impact: 'Medium' }
-                ],
+                analysis: {
+                    target: metric,
+                    drivers: [
+                        { id: 'revenue', name: 'Revenue', sensitivity: 0.15, impact: 'high' },
+                        { id: 'opex', name: 'Operating Expenses', sensitivity: -0.08, impact: 'medium' }
+                    ]
+                },
                 suggestions: [
-                    { driver: 'Sales Velocity', action: 'Optimize', reasoning: 'Increasing sales speed offsets burn.' }
+                    { driver: 'Revenue', action: 'Optimize/Scale', impact: 'High', reasoning: 'Primary driver of runway extension.' },
+                    { driver: 'Operating Expenses', action: 'Reduce/Control', impact: 'Medium', reasoning: 'Direct correlation with cash burn.' }
                 ],
                 explanation: {
-                    description: 'Heuristic fallback: Revenue and Opex are key levers.'
+                    formula: `${metric} = f(revenue, expenses, ...)`,
+                    steps: [
+                        'Heuristic fallback: Revenue and Opex are key levers.',
+                        'Connect the Python worker for detailed causal analysis.'
+                    ]
                 },
                 weakAssumptions: []
             };

@@ -20,15 +20,16 @@ class ModelReasoningEngine:
         # For this implementation, we initialize a fresh engine for the model.
         self.engine = HyperblockEngine(model_id)
     
-    def hydrate_from_json(self, nodes: List[Dict], h_data: Dict[str, Any] = None):
+    def hydrate_from_json(self, nodes: List[Dict], h_data: Dict[str, Any] = None, months: List[str] = None):
         """
         Hydrates the engine from external JSON state.
         nodes: List of {id, name, type, formula, dims, etc.}
         h_data: Dict of {node_id: {month: value}} or similar
         """
         # 1. Initialize horizon (infer from data or use default)
-        months = ["Jan 2024", "Feb 2024", "Mar 2024", "Apr 2024", "May 2024", "Jun 2024", 
-                  "Jul 2024", "Aug 2024", "Sep 2024", "Oct 2024", "Nov 2024", "Dec 2024"]
+        if not months:
+            months = ["Jan 2024", "Feb 2024", "Mar 2024", "Apr 2024", "May 2024", "Jun 2024", 
+                      "Jul 2024", "Aug 2024", "Sep 2024", "Oct 2024", "Nov 2024", "Dec 2024"]
         self.engine.initialize_horizon(months)
 
         # 2. Add metrics and formulas
@@ -42,11 +43,26 @@ class ModelReasoningEngine:
         # 3. Load data
         if h_data:
             for node_id, values in h_data.items():
-                if node_id in self.engine.data:
+                # Try both ID match and Name match for data hydration
+                actual_nid = node_id
+                if node_id not in self.engine.data:
+                    for nid, meta in self.engine.nodes_meta.items():
+                        if meta.get('name') == node_id:
+                            actual_nid = nid
+                            break
+                            
+                if actual_nid in self.engine.data:
                     update_list = []
-                    for month, val in values.items():
-                        update_list.append({'month': month, 'value': float(val)})
-                    self.engine.update_input(node_id, update_list)
+                    if isinstance(values, dict):
+                        for month, val in values.items():
+                            update_list.append({'month': month, 'value': float(val)})
+                    elif isinstance(values, (int, float)):
+                        # If single value, apply to all months (or just first one)
+                        for month in months:
+                            update_list.append({'month': month, 'value': float(values)})
+                    
+                    if update_list:
+                        self.engine.update_input(actual_nid, update_list)
         
         # 4. Initial compute
         self.engine.full_recompute()
@@ -56,7 +72,14 @@ class ModelReasoningEngine:
         Identifies key drivers for a target metric using sensitivity analysis.
         """
         if target_node not in self.engine.graph:
-            return {"error": f"Node {target_node} not found"}
+            # Try to find by name
+            for nid, meta in self.engine.nodes_meta.items():
+                if meta.get('name') == target_node:
+                    target_node = nid
+                    break
+            
+            if target_node not in self.engine.graph:
+                return {"error": f"Node {target_node} not found"}
             
         # 1. Trace upstream dependencies (ancestors)
         upstream = list(nx.ancestors(self.engine.graph, target_node))
@@ -117,7 +140,14 @@ class ModelReasoningEngine:
         Runs a simulation given percentage overrides on specific nodes.
         """
         if target_node not in self.engine.graph:
-            return {"error": f"Node {target_node} not found"}
+            # Try to find by name
+            for nid, meta in self.engine.nodes_meta.items():
+                if meta.get('name') == target_node:
+                    target_node = nid
+                    break
+            
+            if target_node not in self.engine.graph:
+                return {"error": f"Node {target_node} not found"}
             
         baseline_val = float(np.sum(self.engine.data[target_node]))
         
@@ -183,18 +213,18 @@ class ModelReasoningEngine:
         suggestions = []
         for d in drivers:
             if d['sensitivity'] > 0:
-                # Positive driver: We should optimize/increase
                 suggestions.append({
                     "driver": d['name'],
                     "action": "Optimize/Scale",
+                    "impact": d['impact'],
                     "reasoning": f"{d['name']} is a primary positive driver of {target_node}.",
                     "confidence": 0.85
                 })
             elif d['sensitivity'] < 0:
-                # Negative driver: We should reduce/control
                 suggestions.append({
                     "driver": d['name'],
                     "action": "Reduce/Control",
+                    "impact": d['impact'],
                     "reasoning": f"{d['name']} negatively impacts {target_node}, suggesting efficiency gains are possible.",
                     "confidence": 0.9
                 })
@@ -206,7 +236,14 @@ class ModelReasoningEngine:
         Provides a deep explanation of how a metric is derived.
         """
         if node_id not in self.engine.graph:
-            return {"error": "Metric not found"}
+            # Try to find by name
+            for nid, meta in self.engine.nodes_meta.items():
+                if meta.get('name') == node_id:
+                    node_id = nid
+                    break
+            
+            if node_id not in self.engine.graph:
+                return {"error": "Metric not found"}
             
         meta = self.engine.nodes_meta.get(node_id, {})
         formula_info = self.engine.formulas.get(node_id)
@@ -216,17 +253,32 @@ class ModelReasoningEngine:
                 "id": node_id,
                 "name": meta.get('name', node_id),
                 "type": "Direct Input",
+                "formula": f"{meta.get('name', node_id)} = [user input]",
+                "steps": ["This value is provided as a direct input to the model.",
+                          "No upstream calculations affect this metric."],
                 "derivation": "This value is provided as a direct input to the model."
             }
             
         expr, deps = formula_info
         dep_names = [self.engine.nodes_meta.get(d, {}).get('name', d) for d in deps]
         
+        steps = [
+            f"Formula: {meta.get('name', node_id)} = {expr}",
+            f"This metric depends on {len(dep_names)} upstream driver(s): {', '.join(dep_names)}.",
+        ]
+        
+        # Add step for each dependency
+        for dep_name in dep_names:
+            steps.append(f"\u2192 {dep_name}: contributes to the final calculation.")
+        
+        steps.append(f"The engine evaluates this formula vectorized across all time periods.")
+        
         return {
             "id": node_id,
             "name": meta.get('name', node_id),
             "type": "Calculated Metric",
             "formula": str(expr),
+            "steps": steps,
             "inputs": dep_names,
             "derivation": f"Derived from {', '.join(dep_names)} using the logic: {expr}."
         }

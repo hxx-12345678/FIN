@@ -35,11 +35,15 @@ import { IntegrationRequiredBanner } from "@/components/integration-required-ban
 import { checkUserHasData, getUserOrgId } from "@/lib/user-data-check"
 import { ErrorBoundary } from "@/components/error-boundary"
 
+import { OrgProvider } from "@/lib/org-context"
+
 export default function HomePage() {
   return (
-    <ModelProvider>
-      <HomePageContent />
-    </ModelProvider>
+    <OrgProvider>
+      <ModelProvider>
+        <HomePageContent />
+      </ModelProvider>
+    </OrgProvider>
   )
 }
 

@@ -32,12 +32,14 @@ import {
   Loader2,
   Copy,
   Trash2,
+  ShieldCheck,
 } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ExportProgressModal } from "./exports/export-progress-modal"
 import { ReportApprovalManager } from "./reports/report-approval-manager"
 import { toast } from "sonner"
 import { API_BASE_URL } from "@/lib/api-config"
+import { useOrg } from "@/lib/org-context"
 
 interface BoardTemplate {
   id: string
@@ -113,6 +115,7 @@ const formatMonthLabel = (date: Date) =>
   })
 
 export function BoardReporting() {
+  const { currencySymbol, formatCurrency } = useOrg()
   const [selectedTemplate, setSelectedTemplate] = useState("board-deck")
   const [templates, setTemplates] = useState<BoardTemplate[]>(FALLBACK_TEMPLATES)
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>([])
@@ -124,7 +127,15 @@ export function BoardReporting() {
   const [kpiMetrics, setKpiMetrics] = useState<any[]>([])
   const [chartData, setChartData] = useState<any[]>([])
   const [recentReports, setRecentReports] = useState<any[]>([])
-  const [aiContent, setAiContent] = useState<any>(null)
+  const [aiContent, setAiContent] = useState<{
+    executiveSummary: string
+    keyHighlights: any[]
+    areasOfFocus: string
+    summary?: string
+    risks?: string
+    dataSources?: any[]
+    metadata?: any
+  } | null>(null)
   const [loadingAiContent, setLoadingAiContent] = useState(false)
   const [reportTitle, setReportTitle] = useState("Monthly Board Update")
   const [reportingPeriod, setReportingPeriod] = useState("current")
@@ -164,25 +175,20 @@ export function BoardReporting() {
 
   // Update content when template changes
   useEffect(() => {
-    if (orgId && selectedTemplate) {
+    if (orgId && selectedTemplate && kpiMetrics.length > 0) {
       // Update report title based on template
       const template = templates.find(t => t.id === selectedTemplate)
       if (template) {
         setReportTitle(template.name)
       }
-      
-      // Regenerate AI content for new template
-      if (orgId) {
-        fetchAIContent()
-      }
-      
+
       // Update selected metrics based on template type
       if (selectedTemplate === "financial-review") {
         // Financial review should include all financial metrics
-        setSelectedMetrics(kpiMetrics.filter((m: any) => 
-          m.name.includes("Revenue") || 
-          m.name.includes("Cash") || 
-          m.name.includes("Burn") || 
+        setSelectedMetrics(kpiMetrics.filter((m: any) =>
+          m.name.includes("Revenue") ||
+          m.name.includes("Cash") ||
+          m.name.includes("Burn") ||
           m.name.includes("Runway") ||
           m.name.includes("Margin")
         ).map((m: any) => m.name))
@@ -191,13 +197,16 @@ export function BoardReporting() {
         setSelectedMetrics(kpiMetrics.slice(0, 4).map((m: any) => m.name))
       } else if (selectedTemplate === "investor-update") {
         // Investor update should include growth and financial metrics
-        setSelectedMetrics(kpiMetrics.filter((m: any) => 
-          m.name.includes("Revenue") || 
-          m.name.includes("Growth") || 
+        setSelectedMetrics(kpiMetrics.filter((m: any) =>
+          m.name.includes("Revenue") ||
+          m.name.includes("Growth") ||
           m.name.includes("Customers") ||
           m.name.includes("ARR")
         ).map((m: any) => m.name))
       }
+
+      // We only want to regenerate AI content when user manually changes template or first load
+      // fetchAIContent()  <-- removed to avoid infinite loops when kpiMetrics updates
     }
   }, [selectedTemplate, orgId, templates, kpiMetrics])
 
@@ -401,7 +410,7 @@ export function BoardReporting() {
       // Build context with template-specific information
       const template = templates.find(t => t.id === selectedTemplate)
       const templateName = template?.name || selectedTemplate
-      
+
       const contextData: any = {
         reportingPeriod,
         selectedMetrics: selectedMetrics.length > 0 ? selectedMetrics : kpiMetrics.slice(0, 4).map((m: any) => m.name),
@@ -427,13 +436,15 @@ export function BoardReporting() {
 
       if (response.ok) {
         const result = await response.json()
-        if (result.ok && result.plan) {
+        if (result.ok && (result.plan || result.id)) {
           // Handle different response formats
-          const planData = result.plan.planJson || result.plan;
-          const naturalLanguage = planData?.naturalLanguage || planData?.natural_text || planData?.summary || "";
+          const planRecord = result.plan || result;
+          const planData = planRecord.planJson || planRecord;
+          const naturalLanguage = planData?.structuredResponse?.natural_text || planData?.naturalLanguage || planData?.natural_text || planData?.summary || "";
           const insights = planData?.insights || planData?.stagedChanges || [];
           const recommendations = planData?.recommendations || planData?.stagedChanges || [];
-          
+          const dataSources = planData?.metadata?.dataSources || planData?.dataSources || [];
+
           // Extract executive summary from natural language or first insight
           let executiveSummary = naturalLanguage;
           if (!executiveSummary && insights.length > 0) {
@@ -442,36 +453,42 @@ export function BoardReporting() {
           if (!executiveSummary) {
             executiveSummary = "Based on the current financial data and selected metrics, this report provides a comprehensive overview of the organization's performance.";
           }
-          
+
           // Extract key highlights from recommendations
           const highlights = recommendations.slice(0, 4).map((r: any) => {
             if (typeof r === 'string') return r;
             return r.title || r.summary || r.explain || r.description || JSON.stringify(r);
           }).filter((h: any) => h && h.length > 0);
-          
+
           // Extract areas of focus from insights or recommendations
-          let areasOfFocus = insights.find((i: any) => i.type === "risk" || i.category === "risk")?.summary || 
-                           insights.find((i: any) => i.type === "focus" || i.category === "focus")?.summary ||
-                           recommendations.find((r: any) => r.type === "action" || r.priority === "high")?.summary ||
-                           "Continue monitoring key financial metrics and maintain focus on revenue growth and cost optimization.";
-          
+          let areasOfFocus = insights.find((i: any) => i.type === "risk" || i.category === "risk")?.summary ||
+            insights.find((i: any) => i.type === "focus" || i.category === "focus")?.summary ||
+            recommendations.find((r: any) => r.type === "action" || r.priority === "high")?.summary ||
+            "Continue monitoring key financial metrics and maintain focus on revenue growth and cost optimization.";
+
           setAiContent({
             executiveSummary,
             keyHighlights: highlights.length > 0 ? highlights : ["Revenue performance", "Cost management", "Cash flow", "Growth metrics"],
             areasOfFocus,
+            dataSources: dataSources.length > 0 ? dataSources : [
+              { type: 'grounding', id: 'financial_metrics', snippet: 'Latest financial metrics' },
+              { type: 'integration', id: 'accounting', snippet: 'Standard accounting records' }
+            ],
+            metadata: planData.metadata
           })
-          
+
           toast.success("AI content generated successfully!", {
             description: "Review and edit the content as needed before generating your report",
             duration: 5000,
           })
         } else {
-          throw new Error("Invalid response from AI service");
+          console.error("Malformed AI Response:", result);
+          throw new Error("Invalid response from AI service: plan data missing");
         }
       } else {
         const errorData = await response.json().catch(() => ({}))
         const errorMsg = errorData.error?.message || errorData.message || `Failed to generate AI content: ${response.statusText}`;
-        
+
         // Handle specific error codes
         if (response.status === 504 || errorData.error?.code === 'TIMEOUT') {
           throw new Error('AI generation is taking longer than expected. Please try again with a simpler request.');
@@ -480,13 +497,13 @@ export function BoardReporting() {
         } else if (response.status === 401) {
           throw new Error('Your session has expired. Please log in again.');
         }
-        
+
         throw new Error(errorMsg);
       }
     } catch (error) {
       console.error("Failed to fetch AI content:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to generate AI content. Please try again.";
-      
+
       // Check if it's a timeout/abort error
       if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('timeout'))) {
         setAiContent({
@@ -552,7 +569,7 @@ export function BoardReporting() {
               duration: 5000,
             })
             setTimeout(fetchRecentReports, 2000)
-            
+
             // Poll for completion and show success toast
             const pollForCompletion = async () => {
               try {
@@ -563,12 +580,12 @@ export function BoardReporting() {
                   },
                   credentials: "include",
                 })
-                
+
                 if (statusResponse.ok) {
                   const statusData = await statusResponse.json()
                   const exportData = statusData.export || statusData
                   const status = exportData.status || statusData.status
-                  
+
                   if (status === "completed" || status === "done") {
                     toast.success("Report generated successfully!", {
                       description: "You can download it from Reports & Analytics → Custom Reports tab or Export Queue",
@@ -585,7 +602,7 @@ export function BoardReporting() {
                     return
                   }
                 }
-                
+
                 // Continue polling if not completed
                 setTimeout(pollForCompletion, 3000)
               } catch (error) {
@@ -594,7 +611,7 @@ export function BoardReporting() {
                 setTimeout(pollForCompletion, 5000)
               }
             }
-            
+
             // Start polling after 3 seconds
             setTimeout(pollForCompletion, 3000)
           } else {
@@ -979,6 +996,25 @@ export function BoardReporting() {
                         {aiContent.areasOfFocus || aiContent.risks || "No risk areas highlighted."}
                       </p>
                     </div>
+
+                    {aiContent.dataSources && aiContent.dataSources.length > 0 && (
+                      <div className="pt-2">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                          <ShieldCheck className="h-3.5 w-3.5 text-green-600" />
+                          Data Provenance & Trust
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {aiContent.dataSources.map((source: any, idx: number) => (
+                            <Badge key={idx} variant="outline" className="text-[10px] font-normal py-0 px-2 bg-slate-50 border-slate-200">
+                              {source.type === 'integration' && <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mr-1.5" />}
+                              {source.type === 'grounding' && <div className="w-1.5 h-1.5 rounded-full bg-green-500 mr-1.5" />}
+                              {source.type === 'audit' && <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5" />}
+                              {source.id || source.type}: {source.snippet?.length > 25 ? source.snippet.substring(0, 25) + '...' : source.snippet || 'Analyzed'}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
@@ -1010,9 +1046,8 @@ export function BoardReporting() {
                   {kpiMetrics.map((metric) => (
                     <div
                       key={metric.name}
-                      className={`p-4 border rounded-lg cursor-pointer transition-all ${
-                        selectedMetrics.includes(metric.name) ? "border-primary bg-primary/5" : "border-gray-200 hover:border-gray-300"
-                      }`}
+                      className={`p-4 border rounded-lg cursor-pointer transition-all ${selectedMetrics.includes(metric.name) ? "border-primary bg-primary/5" : "border-gray-200 hover:border-gray-300"
+                        }`}
                       onClick={() => handleMetricToggle(metric.name)}
                     >
                       <div className="flex items-center justify-between mb-2">

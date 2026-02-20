@@ -19,7 +19,7 @@ export const authenticate = async (
     }
 
     const token = authHeader.substring(7);
-    
+
     if (!token || token.trim().length === 0) {
       throw new UnauthorizedError('Token is empty');
     }

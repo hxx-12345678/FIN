@@ -118,92 +118,122 @@ def generate_summary_json(result: Dict[str, Any], model_json: Dict, params_json:
     """
     Generate comprehensive summary_json for model run.
     """
+def generate_summary_json(result: Dict, model_json: Dict, params_json: Dict) -> Dict:
+    """
+    Generate a high-level summary of the model run for the dashboard.
+    Works with both flat industry-standard metrics and nested 3-statement structures.
+    """
     try:
-        # Extract key metrics from result - Handle 3-Statement Structure
+        # 1. Identify the 3-statement source
+        # It could be at top level or nested in 'statements' key (standard for deterministic runs)
+        statements = result.get('statements', result)
+        
+        # Use statements as primary source if it contains financial statements
+        has_statements = isinstance(statements, dict) and 'incomeStatement' in statements
+        src = statements if has_statements else result
+        
+        # 2. Extract Aggregate Metrics
         total_revenue = 0
         total_expenses = 0
         net_income = 0
-        gross_margin = 0
-        ending_cash = 0
         
-        # Check if result has 3-statement structure
-        if 'incomeStatement' in result and 'annual' in result['incomeStatement']:
-            # Sum up all years in annual
-            for year, data in result['incomeStatement']['annual'].items():
-                total_revenue += data.get('revenue', 0)
-                total_expenses += data.get('operatingExpenses', 0) + data.get('cogs', 0) + data.get('interestExpense', 0) + data.get('incomeTax', 0)
-                net_income += data.get('netIncome', 0)
-            
-            if total_revenue > 0:
-                gross_margin = (total_revenue - (total_expenses - net_income)) / total_revenue # Approximate
-                # Better: get weighted average gross margin or from total gross profit
-                total_gross_profit = sum(d.get('grossProfit', 0) for d in result['incomeStatement']['annual'].values())
-                gross_margin = total_gross_profit / total_revenue
+        if has_statements and 'annual' in src['incomeStatement']:
+            # Aggregate from first year annual P&L for dashboard (standard)
+            annual_is = src['incomeStatement']['annual']
+            years = sorted(annual_is.keys())
+            if years:
+                # Use only first year (usually current/first forecast year) for the high-level summary cards
+                first_year = years[0]
+                data = annual_is[first_year]
+                total_revenue = data.get('revenue', 0)
+                total_expenses = (data.get('operatingExpenses', 0) + 
+                                 data.get('cogs', 0) + 
+                                 data.get('interestExpense', 0) + 
+                                 data.get('incomeTax', 0))
+                net_income = data.get('netIncome', 0)
         else:
-            # Fallback for flat structure
-            total_revenue = result.get('revenue', 0) or result.get('totalRevenue', 0)
-            total_expenses = result.get('expenses', 0) or result.get('totalExpenses', 0)
-            net_income = total_revenue - total_expenses
-            
-        # Cash Balance from Balance Sheet (last month)
-        if 'balanceSheet' in result and 'monthly' in result['balanceSheet']:
-            months = sorted(result['balanceSheet']['monthly'].keys())
-            if months:
-                last_month = months[-1]
-                ending_cash = result['balanceSheet']['monthly'][last_month].get('cash', 0)
+            # Fallback to flat result keys
+            total_revenue = result.get('revenue') or result.get('totalRevenue') or 0
+            total_expenses = result.get('expenses') or result.get('totalExpenses') or 0
+            net_income = result.get('netIncome') or (float(total_revenue) - float(total_expenses))
+
+        # 3. Cash & Runway (Last visible month)
+        ending_cash = 0
+        burn_rate = result.get('burnRate') or result.get('monthlyBurn') or 0
+        runway_months = result.get('runwayMonths') or result.get('runway') or 0
+        
+        if has_statements and 'balanceSheet' in src and 'monthly' in src['balanceSheet']:
+            bs_monthly = src['balanceSheet']['monthly']
+            if bs_monthly:
+                last_m = sorted(bs_monthly.keys())[-1]
+                ending_cash = bs_monthly[last_m].get('cash', 0)
         else:
-            ending_cash = result.get('cash', 0) or result.get('cashBalance', 0)
+            ending_cash = result.get('cashBalance') or result.get('cash') or 0
+
+        # 4. Flatten Monthly Data for Charts/Hypercube
+        flat_monthly = {}
+        monthly_is = src.get('incomeStatement', {}).get('monthly') if has_statements else result.get('monthly')
+        
+        if monthly_is and isinstance(monthly_is, dict):
+            monthly_cf = src.get('cashFlow', {}).get('monthly', {}) if has_statements else {}
+            monthly_bs = src.get('balanceSheet', {}).get('monthly', {}) if has_statements else {}
             
-        # Burn Rate / Runway
-        burn_rate = 0 
-        runway_months = 0
-        if 'cashFlow' in result and 'monthly' in result['cashFlow']:
-            # Calculate average burn (negative net cash flow excluding financing)
-            burns = []
-            for m, data in result['cashFlow']['monthly'].items():
-                # Operating + Investing = Burn (usually)
-                burn = -(data.get('operatingCashFlow', 0) + data.get('investingCashFlow', 0))
-                if burn > 0:
-                    burns.append(burn)
-            if burns:
-                burn_rate = sum(burns) / len(burns)
-                if burn_rate > 0:
-                    runway_months = ending_cash / burn_rate
+            for m, data in monthly_is.items():
+                if not isinstance(data, dict): continue
+                
+                entry = {**data}
+                # Merge statements if we have them
+                if m in monthly_cf: entry.update(monthly_cf[m])
+                if m in monthly_bs: entry.update(monthly_bs[m])
+                
+                # Ensure compatibility keys for frontend
+                if 'cash' not in entry and 'endingCash' in entry: entry['cash'] = entry['endingCash']
+                if 'expenses' not in entry:
+                    # Sum components if total missing
+                    entry['expenses'] = (entry.get('operatingExpenses', 0) + 
+                                       entry.get('cogs', 0) + 
+                                       entry.get('interestExpense', 0) + 
+                                       entry.get('incomeTax', 0))
+                
+                flat_monthly[m] = entry
+        else:
+            # Fallback to whatever monthly data is present
+            flat_monthly = result.get('monthly', {})
 
-        model_type = None
-        if isinstance(params_json, dict):
-            model_type = params_json.get('modelType') or params_json.get('model_type')
-        model_type = model_type or result.get('modelType')
-        forecast_months = result.get('metadata', {}).get('horizonMonths')
-        confidence = result.get('confidence', 85)
-
+        # 5. Build Final Summary Object
         summary = {
             'revenue': float(total_revenue),
             'expenses': float(total_expenses),
             'totalRevenue': float(total_revenue),
             'totalExpenses': float(total_expenses),
             'netIncome': float(net_income),
-            'grossMargin': float(gross_margin),
+            'grossMargin': float(result.get('grossMargin', 0)),
             'cashBalance': float(ending_cash),
             'burnRate': float(burn_rate),
             'monthlyBurn': float(burn_rate),
             'runwayMonths': float(runway_months),
-            'arr': float(total_revenue), # Approximation for now
-            'mrr': float(total_revenue / 12) if forecast_months else 0,
+            'arr': float(result.get('arr', total_revenue)),
+            'mrr': float(result.get('mrr', total_revenue / 12)),
             'generatedAt': datetime.now(timezone.utc).isoformat(),
             'modelVersion': model_json.get('version', 1) if isinstance(model_json, dict) else 1,
-            'modelType': model_type,
-            'forecastMonths': forecast_months,
-            'statements': result # Include full result structure
+            'modelType': params_json.get('modelType', result.get('modelType', 'baseline')),
+            'forecastMonths': src.get('metadata', {}).get('horizonMonths') or result.get('forecastMonths', 12),
+            'statements': statements, # The actual 3-statement model (incomeStatement, cashFlow, balanceSheet)
+            'monthly': flat_monthly,   # Flattened month-by-month metrics
+            'kpis': result.get('metrics', {}),
         }
         
         return summary
+
     except Exception as e:
-        logger.error(f"Error generating summary_json: {str(e)}", exc_info=True)
+        logger.error(f"Failed to generate summary_json: {str(e)}", exc_info=True)
+        # Extreme fallback
         return {
-            'totalRevenue': 0,
-            'generatedAt': datetime.now(timezone.utc).isoformat(),
+            'revenue': float(result.get('revenue', 0)),
+            'error': str(e),
+            'generatedAt': datetime.now(timezone.utc).isoformat()
         }
+
 
 
 def handle_model_run(job_id: str, org_id: str, object_id: str, logs: dict):
@@ -292,7 +322,7 @@ def handle_model_run(job_id: str, org_id: str, object_id: str, logs: dict):
                 
                 # Compute model using industry-standard 3-statement financial model
                 # Uses actual transaction data from raw_transactions as baseline
-                result = compute_model_deterministic(model_json, params_json, run_type, org_id, cursor)
+                result = compute_model_deterministic(model_json, params_json, run_type, org_id, cursor, model_id=model_id, job_id=job_id)
                 
                 update_progress(job_id, 60, {'status': 'generating_summary'})
                 
@@ -704,7 +734,7 @@ def handle_model_run(job_id: str, org_id: str, object_id: str, logs: dict):
                 pass
 
 
-def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: str, org_id: str, cursor) -> Dict[str, Any]:
+def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: str, org_id: str, cursor, model_id: str = None, job_id: str = None) -> Dict[str, Any]:
     """
     Compute deterministic model results using industry-standard 3-statement financial model.
     Uses actual transaction data from raw_transactions as baseline.
@@ -861,15 +891,36 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
         else:
             logger.warning("No start month in model metadata, using current month")
             current_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            # DETERMINISM FIX: Lock start_month into model metadata on first run
+            # so subsequent runs always produce identical results
+            start_month_str = current_month.strftime('%Y-%m')
+            try:
+                if isinstance(model_json, dict):
+                    if 'metadata' not in model_json:
+                        model_json['metadata'] = {}
+                    model_json['metadata']['startMonth'] = start_month_str
+                    model_id_for_update = model_json.get('id')
+                    if model_id_for_update:
+                        cursor.execute(
+                            """UPDATE models SET model_json = jsonb_set(
+                                COALESCE(model_json, '{}')::jsonb,
+                                '{metadata,startMonth}',
+                                %s::jsonb
+                            ) WHERE id = %s""",
+                            (json.dumps(start_month_str), model_id_for_update)
+                        )
+                        logger.info(f"Locked start_month={start_month_str} into model metadata for determinism")
+            except Exception as e:
+                logger.warning(f"Could not lock start_month: {e}")
         
         # --- NEW: Driver-Based Engine Implementation ---
-        model_id = model_json.get('id')
+        current_model_id = model_id or model_json.get('id')
         has_drivers = False
-        if model_id:
+        if current_model_id:
             try:
                 # Use a savepoint so we don't abort the global transaction if the table is missing
                 cursor.execute("SAVEPOINT check_drivers")
-                cursor.execute("SELECT id FROM drivers WHERE model_id = %s LIMIT 1", (model_id,))
+                cursor.execute("SELECT id FROM drivers WHERE model_id = %s LIMIT 1", (current_model_id,))
                 has_drivers = cursor.fetchone() is not None
                 cursor.execute("RELEASE SAVEPOINT check_drivers")
             except Exception as e:
@@ -879,17 +930,17 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
         
         driver_results = {}
         if has_drivers:
-            logger.info(f"Found drivers for model {model_id}, executing Driver-Based Engine")
+            logger.info(f"Found drivers for model {current_model_id}, executing Driver-Based Engine")
             engine = DriverBasedEngine()
             
             # 1. Fetch all drivers
-            cursor.execute("SELECT id, name, type, category, is_calculated, formula FROM drivers WHERE model_id = %s", (model_id,))
+            cursor.execute("SELECT id, name, type, category, is_calculated, formula FROM drivers WHERE model_id = %s", (current_model_id,))
             drivers = cursor.fetchall()
             for d in drivers:
                 engine.add_driver(str(d[0]), d[1], d[2], d[3])
             
             # 2. Fetch all formulas
-            cursor.execute("SELECT driver_id, expression, dependencies FROM driver_formulas WHERE model_id = %s", (model_id,))
+            cursor.execute("SELECT driver_id, expression, dependencies FROM driver_formulas WHERE model_id = %s", (current_model_id,))
             formulas = cursor.fetchall()
             for f in formulas:
                 engine.add_formula(str(f[0]), f[1], f[2] if isinstance(f[2], list) else json.loads(f[2]))
@@ -897,7 +948,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             # 3. Fetch values for the current scenario
             # Use run_type or a specific scenario if provided in params
             scenario_name = params_json.get('scenarioName', 'Base')
-            cursor.execute("SELECT id FROM financial_scenarios WHERE model_id = %s AND name = %s", (model_id, scenario_name))
+            cursor.execute("SELECT id FROM financial_scenarios WHERE model_id = %s AND name = %s", (current_model_id, scenario_name))
             scenario_row = cursor.fetchone()
             if scenario_row:
                 scenario_id = scenario_row[0]
@@ -924,74 +975,123 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             logger.info(f"Driver-Based Engine computation complete. Nodes: {len(driver_results)}")
         # --- END Driver-Based Engine ---
 
-        # Filter transactions to use most recent data available
-
-        # Prefer last 12 months before start, but use all available if that's all we have
-        #
-        # IMPORTANT: raw_transactions.date is a SQL DATE, which psycopg returns as datetime.date.
-        # Comparing datetime.date to datetime.datetime raises TypeError, which previously caused
-        # the entire computation to fall back to defaults with an empty monthly forecast.
-        cutoff_date_dt = current_month.replace(day=1) - timedelta(days=365)  # 12 months before start
-        cutoff_date = cutoff_date_dt.date()
-        recent_transactions = [tx for tx in transactions if tx[0] >= cutoff_date]
+        # Baseline logic: Use the last 12 months strictly BEFORE the model start date.
+        # This prevents future actuals (from a partial import or multi-year ledger) 
+        # from leaking into the starting point as an "average".
+        start_month_date = current_month.date()
+        cutoff_date_dt = current_month.replace(day=1) - timedelta(days=365)
+        cutoff_date_start = cutoff_date_dt.date()
         
-        # If no recent transactions, use all available (but warn)
-        if len(recent_transactions) == 0 and len(transactions) > 0:
-            logger.warning(f"No transactions in last 12 months before start ({start_month_str}). Using all available transactions (may be outdated).")
-            recent_transactions = transactions
-            # Find the date range of available transactions
-            if transactions:
-                oldest_date = min(tx[0] for tx in transactions)
-                newest_date = max(tx[0] for tx in transactions)
-                current_month_date = current_month.date()
-                days_old = (current_month_date - newest_date).days
-                if days_old > 180:  # More than 6 months old
-                    logger.warning(
-                        f"Transaction data is {days_old} days old (newest: {newest_date}, oldest: {oldest_date}). "
-                        f"Consider importing recent data."
-                    )
-        elif len(recent_transactions) < len(transactions):
-            logger.info(f"Filtered transactions: {len(transactions)} -> {len(recent_transactions)} (using last 12 months before start)")
+        # 1. Filter for baseline calculation (strictly 12 months before start)
+        baseline_transactions = [tx for tx in transactions if cutoff_date_start <= tx[0] < start_month_date]
         
-        # Recalculate baseline from filtered transactions
-        if len(recent_transactions) != len(transactions):
-            baseline_monthly_revenue = {}
-            baseline_monthly_expenses = {}
-            total_revenue = 0
-            total_expenses = 0
+        # 2. Map ALL transactions to a full monthly actuals dict for overrides/actuals display
+        ledger_actuals = {}
+        for tx in transactions:
+            tx_date = tx[0]
+            tx_amount = float(tx[1]) if tx[1] else 0
+            m_key = f"{tx_date.year}-{str(tx_date.month).zfill(2)}"
+            if m_key not in ledger_actuals:
+                ledger_actuals[m_key] = {'revenue': 0, 'expenses': 0, 'cogs': 0, 'opex': 0, 'netIncome': 0}
             
-            for tx in recent_transactions:
-                tx_date = tx[0]
-                tx_amount = float(tx[1]) if tx[1] else 0
-                month_key = f"{tx_date.year}-{str(tx_date.month).zfill(2)}"
-                
-                if tx_amount > 0:
-                    baseline_monthly_revenue[month_key] = baseline_monthly_revenue.get(month_key, 0) + tx_amount
-                    total_revenue += tx_amount
+            if tx_amount > 0:
+                ledger_actuals[m_key]['revenue'] += tx_amount
+            else:
+                ledger_actuals[m_key]['expenses'] += abs(tx_amount)
+                # Categorization logic for ledger actuals fallback
+                cat = (tx[2] or '').lower()
+                if 'cogs' in cat or 'inventory' in cat or 'cost of' in cat:
+                    ledger_actuals[m_key]['cogs'] += abs(tx_amount)
                 else:
-                    baseline_monthly_expenses[month_key] = baseline_monthly_expenses.get(month_key, 0) + abs(tx_amount)
-                    total_expenses += abs(tx_amount)
-            
-            logger.info(f"Baseline calculated from {len(recent_transactions)} transactions: Revenue=${total_revenue:,.2f}, Expenses=${total_expenses:,.2f}")
+                    ledger_actuals[m_key]['opex'] += abs(tx_amount)
+            ledger_actuals[m_key]['netIncome'] = ledger_actuals[m_key]['revenue'] - ledger_actuals[m_key]['expenses']
+
+        recent_transactions = baseline_transactions
+        if len(recent_transactions) == 0 and len(transactions) > 0:
+            logger.warning(f"No transactions strictly before {start_month_str}. Using all available prior to start.")
+            recent_transactions = [tx for tx in transactions if tx[0] < start_month_date]
         
-        # Calculate average monthly revenue/expenses from historical data
-        if baseline_monthly_revenue:
+        if len(recent_transactions) > 0:
+            logger.info(f"Using {len(recent_transactions)} baseline transactions before {start_month_str}")
+        else:
+            logger.warning(f"No baseline transactions found for org {org_id} before {start_month_str}")
+        
+        # ALWAYS populate baseline metrics from the filtered recent_transactions
+        baseline_monthly_revenue = {}
+        baseline_monthly_expenses = {}
+        total_revenue = 0
+        total_expenses = 0
+        
+        for tx in recent_transactions:
+            tx_date = tx[0]
+            tx_amount = float(tx[1]) if tx[1] else 0
+            month_key = f"{tx_date.year}-{str(tx_date.month).zfill(2)}"
+            
+            if tx_amount > 0:
+                baseline_monthly_revenue[month_key] = baseline_monthly_revenue.get(month_key, 0) + tx_amount
+                total_revenue += tx_amount
+            else:
+                baseline_monthly_expenses[month_key] = baseline_monthly_expenses.get(month_key, 0) + abs(tx_amount)
+                total_expenses += abs(tx_amount)
+        
+        latest_baseline_month = max(baseline_monthly_revenue.keys()) if baseline_monthly_revenue else "None"
+        logger.info(f"Baseline: {len(recent_transactions)} txs, Revenue=${total_revenue:,.2f}, Latest month: {latest_baseline_month}")
+        update_progress(job_id, 35, {
+            'status': 'baseline_calculated', 
+            'tx_count': len(recent_transactions),
+            'latest_baseline': latest_baseline_month
+        })
+        
+        # Calculate average monthly revenue/expenses
+        # CRITICAL FIX: Prioritize explicit assumptions (from AI or User) over re-calculation
+        # detailed transaction averaging is a fallback, not the primary source if we have a model
+        
+        # Check if baselineRevenue is explicitly provided in inputs
+        explicit_baseline_revenue = final_assumptions.get('baselineRevenue')
+        if explicit_baseline_revenue is not None and float(explicit_baseline_revenue) > 0:
+            avg_monthly_revenue = float(explicit_baseline_revenue)
+            logger.info(f"Using explicit baseline revenue from assumptions: ${avg_monthly_revenue:,.2f}")
+        elif baseline_monthly_revenue:
             avg_monthly_revenue = sum(baseline_monthly_revenue.values()) / len(baseline_monthly_revenue)
+            logger.info(f"Calculated baseline revenue from transactions: ${avg_monthly_revenue:,.2f}")
         else:
             avg_monthly_revenue = float(final_assumptions.get('baselineRevenue', 100000))
+            logger.info(f"Using default baseline revenue: ${avg_monthly_revenue:,.2f}")
         
-        if baseline_monthly_expenses:
+        # Same for expenses
+        explicit_baseline_expenses = final_assumptions.get('baselineExpenses')
+        # Also check breakdown keys
+        explicit_payroll = final_assumptions.get('payroll')
+        explicit_marketing = final_assumptions.get('marketing')
+        
+        if explicit_baseline_expenses is not None and float(explicit_baseline_expenses) > 0:
+            avg_monthly_expenses = float(explicit_baseline_expenses)
+            logger.info(f"Using explicit baseline expenses from assumptions: ${avg_monthly_expenses:,.2f}")
+        elif (explicit_payroll or explicit_marketing):
+             # If components are provided, sum them
+             avg_monthly_expenses = float(explicit_payroll or 0) + float(explicit_marketing or 0) + float(final_assumptions.get('infrastructure') or 0)
+             logger.info(f"Using explicit expense components: ${avg_monthly_expenses:,.2f}")
+        elif baseline_monthly_expenses:
             avg_monthly_expenses = sum(baseline_monthly_expenses.values()) / len(baseline_monthly_expenses)
+            logger.info(f"Calculated baseline expenses from transactions: ${avg_monthly_expenses:,.2f}")
         else:
             avg_monthly_expenses = float(final_assumptions.get('baselineExpenses', 80000))
+            logger.info(f"Using default baseline expenses: ${avg_monthly_expenses:,.2f}")
         
         # Industry Standard: Separate COGS from Operating Expenses
         # If not provided, estimate COGS as percentage of revenue (typically 20-30% for SaaS)
         cogs_percentage = float(final_assumptions.get('cogsPercentage', 0.20))
         estimated_monthly_cogs = avg_monthly_revenue * cogs_percentage
         estimated_monthly_opex = avg_monthly_expenses - estimated_monthly_cogs
-        if estimated_monthly_opex < 0:
-            # If expenses are less than estimated COGS, assume all expenses are COGS
+        
+        # If explicit expenses are provided, they typically refer to OPEX (Operating Expenses)
+        # unless stated otherwise. If calculated from transactions, it's Total Expenses.
+        if (explicit_baseline_expenses or explicit_payroll) and not baseline_monthly_expenses:
+             # Assume explicit assumptions defined OPEX structure
+             # Use the calculated COGS and the provided OPEX
+             pass 
+        elif estimated_monthly_opex < 0:
+            # If total expenses < COGS, clamp
             estimated_monthly_cogs = avg_monthly_expenses
             estimated_monthly_opex = 0
         
@@ -1059,8 +1159,8 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                 logger.warning(f"Invalid start month format: {start_month_str}, using current month")
                 current_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         else:
-            logger.warning("No start month in model metadata, using current month")
-            current_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            # Use the locked start_month from earlier in this same run
+            pass  # current_month already set from the first start_month resolution above
         
         # Use latest month's actuals as starting point
         starting_revenue = baseline_monthly_revenue[max(baseline_monthly_revenue.keys())] if baseline_monthly_revenue else avg_monthly_revenue
@@ -1096,19 +1196,16 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
 
             # Fallback to deterministic logic if driver not found
             if projected_revenue is None:
-                # Industry Standard: Baseline runs should be clean and steady
-                if run_type == 'baseline':
-                    seasonal = 0
-                    innovation = 0
-                    volatility = 0
+                # CHECK FOR ACTUALS IN LEDGER - This is crucial for verifying accuracy
+                if month_key in ledger_actuals:
+                    projected_revenue = ledger_actuals[month_key]['revenue']
+                    projected_cogs = ledger_actuals[month_key]['cogs']
+                    projected_opex = ledger_actuals[month_key]['opex']
+                    logger.debug(f"Month {month_key}: Using ledger actuals for revenue/expenses")
                 else:
-                    seasonal = model_profile['seasonality_amplitude'] * math.sin(2 * math.pi * (i + 1) / 12.0)
-                    innovation = model_profile['innovation_factor'] * math.cos(2 * math.pi * (i + 1) / 6.0)
-                    volatility = model_profile['volatility'] * (1 if i % 2 == 0 else -1)
-                
-                growth_multiplier = max(0.01, (1 + revenue_growth) ** i)
-                projected_revenue = starting_revenue * growth_multiplier
-                projected_revenue *= max(0.5, 1 + seasonal + innovation + volatility)
+                    # DETERMINISM FIX: ALL run types now use clean, deterministic growth
+                    growth_multiplier = max(0.01, (1 + revenue_growth) ** i)
+                    projected_revenue = starting_revenue * growth_multiplier
             
             projected_revenue = max(0.0, projected_revenue)
             
@@ -1275,7 +1372,8 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                 'arDays': float(final_assumptions.get('arDays', 30)),
                 'apDays': float(final_assumptions.get('apDays', 45)),
                 'capexPercentage': float(final_assumptions.get('capexPercentage', 0.05))
-            }
+            },
+            monthly_overrides=monthly_data
         )
         logger.info(f"3-Statement Model validation: {three_statement_model.get('validation', {}).get('passed', False)}")
         
@@ -1303,7 +1401,8 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
         monthly_burn = max(0, last_month_pl.get('cogs', 0) + last_month_pl.get('operatingExpenses', 0) - last_month_pl.get('revenue', 0))
         runway_months = ending_cash / monthly_burn if monthly_burn > 0 else 999
         
-        return {
+        # Construct the result dictionary
+        result = {
             'revenue': float(annual_revenue),
             'expenses': float(annual_expenses),
             'netIncome': float(annual_net_income),
@@ -1333,6 +1432,93 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             'statements': three_statement_model
         }
 
+        # ======================================================================
+        # STEP 7: Write results to metric_cubes table
+        # This populates the Hypercube, Forecasting, and Risk Engine tabs
+        # ======================================================================
+        try:
+            # Use provided model_id or fallback to json (prefer explicit)
+            model_id_for_cubes = model_id or (model_json.get('id') if isinstance(model_json, dict) else None)
+            
+            if model_id_for_cubes and monthly_data:
+                logger.info(f"Writing {len(monthly_data)} months to metric_cube for model {model_id_for_cubes}")
+                
+                # Clear previous cube data for this model to avoid stale data
+                cursor.execute("SAVEPOINT write_cubes")
+                cursor.execute('DELETE FROM metric_cube WHERE "modelId" = %s AND "orgId" = %s', 
+                             (model_id_for_cubes, org_id))
+                
+                # Write each month's metrics to the cube
+                cube_metrics = ['revenue', 'cogs', 'opex', 'expenses', 'netIncome', 'cashBalance', 'burnRate', 'grossProfit']
+                import uuid
+                inserted_count = 0
+                for month_key, mdata in monthly_data.items():
+                    for metric_name in cube_metrics:
+                        metric_val = mdata.get(metric_name, 0)
+                        if metric_val and float(metric_val) != 0:
+                            # Generate a unique ID for each cube entry
+                            cube_id = str(uuid.uuid4())
+                            cursor.execute("""
+                                INSERT INTO metric_cube (id, "orgId", "modelId", metric_name, month, value, updated_at)
+                                VALUES (%s::uuid, %s::uuid, %s::uuid, %s, %s, %s, NOW())
+                                ON CONFLICT DO NOTHING
+                            """, (
+                                cube_id, org_id, model_id_for_cubes, metric_name, month_key, float(metric_val)
+                            ))
+                            inserted_count += 1
+                
+                cursor.execute("RELEASE SAVEPOINT write_cubes")
+                logger.info(f"Successfully wrote {inserted_count} metric_cube rows")
+        except Exception as cube_err:
+            logger.warning(f"Could not write metric_cube (check schema): {cube_err}")
+            try:
+                cursor.execute("ROLLBACK TO SAVEPOINT write_cubes")
+            except:
+                pass
+        
+        # ======================================================================
+        # STEP 8: Auto-initialize dimensions if not present
+        # This ensures the Hypercube tab works out of the box
+        # ======================================================================
+        try:
+            model_id_for_dims = model_json.get('id') if isinstance(model_json, dict) else None
+            if model_id_for_dims:
+                cursor.execute("SAVEPOINT check_dims")
+                cursor.execute('SELECT COUNT(*) FROM dimensions WHERE "orgId" = %s', (org_id,))
+                dim_count = cursor.fetchone()[0]
+                
+                if dim_count == 0:
+                    logger.info("Auto-initializing dimensions for Hypercube...")
+                    default_dims = [
+                        ('Geography', 'geography', [('North America', 'NA'), ('Europe', 'EU'), ('Asia Pacific', 'APAC')]),
+                        ('Product Line', 'product', [('Core Product', 'CORE'), ('Enterprise', 'ENT'), ('SMB', 'SMB')]),
+                        ('Department', 'department', [('Engineering', 'ENG'), ('Sales', 'SALES'), ('Marketing', 'MKT'), ('G&A', 'GA')]),
+                    ]
+                    
+                    for dim_name, dim_type, members in default_dims:
+                        import uuid
+                        dim_id = str(uuid.uuid4())
+                        cursor.execute(
+                            'INSERT INTO dimensions (id, "orgId", "modelId", name, type) VALUES (%s, %s, %s, %s, %s)',
+                            (dim_id, org_id, model_id_for_dims, dim_name, dim_type)
+                        )
+                        for member_name, member_code in members:
+                            member_id = str(uuid.uuid4())
+                            cursor.execute(
+                                'INSERT INTO dimension_members (id, "dimensionId", name, code) VALUES (%s, %s, %s, %s)',
+                                (member_id, dim_id, member_name, member_code)
+                            )
+                    logger.info("Auto-initialized 3 dimensions with members")
+                
+                cursor.execute("RELEASE SAVEPOINT check_dims")
+        except Exception as dim_err:
+            logger.warning(f"Could not auto-init dimensions (table may not exist): {dim_err}")
+            try:
+                cursor.execute("ROLLBACK TO SAVEPOINT check_dims")
+            except:
+                pass
+        
+        return result
 
     except Exception as e:
         logger.error(f"Error computing model: {str(e)}", exc_info=True)

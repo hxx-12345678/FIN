@@ -27,6 +27,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { API_BASE_URL } from "@/lib/api-config"
+import { useOrg } from "@/lib/org-context"
 
 interface StatementData {
     incomeStatement?: {
@@ -60,15 +61,16 @@ interface ThreeStatementViewerProps {
     statements: StatementData | null
 }
 
-const formatCurrency = (value: number) => {
+// Local formatter that respects organization currency
+const formatValueLineItem = (value: number, symbol: string) => {
     if (value === undefined || value === null) return '-'
     const absValue = Math.abs(value)
     if (absValue >= 1000000) {
-        return `$${(value / 1000000).toFixed(2)}M`
+        return `${symbol}${(value / 1000000).toFixed(2)}M`
     } else if (absValue >= 1000) {
-        return `$${(value / 1000).toFixed(1)}K`
+        return `${symbol}${(value / 1000).toFixed(1)}K`
     }
-    return `$${value.toFixed(0)}`
+    return `${symbol}${value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 }
 
 const formatPercent = (value: number) => {
@@ -77,6 +79,7 @@ const formatPercent = (value: number) => {
 }
 
 export function ThreeStatementViewer({ orgId, modelId, runId, statements }: ThreeStatementViewerProps) {
+    const { currencySymbol } = useOrg()
     const [activeStatement, setActiveStatement] = useState<'income' | 'cashflow' | 'balance'>('income')
     const [viewMode, setViewMode] = useState<'monthly' | 'annual'>('monthly')
     const [selectedScenario, setSelectedScenario] = useState('base')
@@ -243,7 +246,7 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             </TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyPL[period] : annualPL[period]
-                                                return <TableCell key={period} className="text-right text-green-700">{formatCurrency(data?.revenue)}</TableCell>
+                                                return <TableCell key={period} className="text-right text-green-700">{formatValueLineItem(data?.revenue, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
                                         {/* COGS */}
@@ -251,7 +254,7 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             <TableCell className="pl-8">Cost of Goods Sold</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyPL[period] : annualPL[period]
-                                                return <TableCell key={period} className="text-right text-red-600">({formatCurrency(data?.cogs)})</TableCell>
+                                                return <TableCell key={period} className="text-right text-red-600">({formatValueLineItem(data?.cogs, currencySymbol)})</TableCell>
                                             })}
                                         </TableRow>
                                         {/* Gross Profit */}
@@ -259,7 +262,7 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             <TableCell>Gross Profit</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyPL[period] : annualPL[period]
-                                                return <TableCell key={period} className="text-right">{formatCurrency(data?.grossProfit)}</TableCell>
+                                                return <TableCell key={period} className="text-right">{formatValueLineItem(data?.grossProfit, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
                                         {/* Gross Margin */}
@@ -275,7 +278,7 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             <TableCell className="pl-8">Operating Expenses</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyPL[period] : annualPL[period]
-                                                return <TableCell key={period} className="text-right text-red-600">({formatCurrency(data?.operatingExpenses)})</TableCell>
+                                                return <TableCell key={period} className="text-right text-red-600">({formatValueLineItem(data?.operatingExpenses, currencySymbol)})</TableCell>
                                             })}
                                         </TableRow>
                                         {/* Depreciation */}
@@ -283,7 +286,7 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             <TableCell className="pl-8">Depreciation</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyPL[period] : annualPL[period]
-                                                return <TableCell key={period} className="text-right text-muted-foreground">({formatCurrency(data?.depreciation)})</TableCell>
+                                                return <TableCell key={period} className="text-right text-muted-foreground">({formatValueLineItem(data?.depreciation, currencySymbol)})</TableCell>
                                             })}
                                         </TableRow>
                                         {/* EBITDA */}
@@ -294,7 +297,7 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             </TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyPL[period] : annualPL[period]
-                                                return <TableCell key={period} className="text-right text-blue-700">{formatCurrency(data?.ebitda)}</TableCell>
+                                                return <TableCell key={period} className="text-right text-blue-700">{formatValueLineItem(data?.ebitda, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
                                         {/* Interest Expense */}
@@ -302,7 +305,7 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             <TableCell className="pl-8">Interest Expense</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyPL[period] : annualPL[period]
-                                                return <TableCell key={period} className="text-right">({formatCurrency(data?.interestExpense)})</TableCell>
+                                                return <TableCell key={period} className="text-right">({formatValueLineItem(data?.interestExpense, currencySymbol)})</TableCell>
                                             })}
                                         </TableRow>
                                         {/* Income Tax */}
@@ -310,7 +313,7 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             <TableCell className="pl-8">Income Tax</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyPL[period] : annualPL[period]
-                                                return <TableCell key={period} className="text-right text-red-600">({formatCurrency(data?.incomeTax)})</TableCell>
+                                                return <TableCell key={period} className="text-right text-red-600">({formatValueLineItem(data?.incomeTax, currencySymbol)})</TableCell>
                                             })}
                                         </TableRow>
                                         {/* Net Income */}
@@ -324,7 +327,7 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                                 const value = data?.netIncome || 0
                                                 return (
                                                     <TableCell key={period} className={`text-right ${value >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                                                        {formatCurrency(value)}
+                                                        {formatValueLineItem(value, currencySymbol)}
                                                         {value >= 0 ?
                                                             <ArrowUpRight className="h-3 w-3 inline ml-1" /> :
                                                             <ArrowDownRight className="h-3 w-3 inline ml-1" />
@@ -379,14 +382,14 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             <TableCell className="pl-8">Net Income</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyCF[period] : annualCF[period]
-                                                return <TableCell key={period} className="text-right">{formatCurrency(data?.netIncome)}</TableCell>
+                                                return <TableCell key={period} className="text-right">{formatValueLineItem(data?.netIncome, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
                                         <TableRow>
                                             <TableCell className="pl-8">+ Depreciation</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyCF[period] : annualCF[period]
-                                                return <TableCell key={period} className="text-right text-green-600">{formatCurrency(data?.depreciation)}</TableCell>
+                                                return <TableCell key={period} className="text-right text-green-600">{formatValueLineItem(data?.depreciation, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
                                         <TableRow>
@@ -394,14 +397,14 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyCF[period] : annualCF[period]
                                                 const value = data?.workingCapitalChange || 0
-                                                return <TableCell key={period} className={`text-right ${value >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(value)}</TableCell>
+                                                return <TableCell key={period} className={`text-right ${value >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatValueLineItem(value, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
                                         <TableRow className="font-semibold border-t">
                                             <TableCell>Operating Cash Flow</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyCF[period] : annualCF[period]
-                                                return <TableCell key={period} className="text-right text-blue-700">{formatCurrency(data?.operatingCashFlow)}</TableCell>
+                                                return <TableCell key={period} className="text-right text-blue-700">{formatValueLineItem(data?.operatingCashFlow, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
 
@@ -415,14 +418,14 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             <TableCell className="pl-8">Capital Expenditures</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyCF[period] : annualCF[period]
-                                                return <TableCell key={period} className="text-right text-red-600">{formatCurrency(data?.capex)}</TableCell>
+                                                return <TableCell key={period} className="text-right text-red-600">{formatValueLineItem(data?.capex, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
                                         <TableRow className="font-semibold border-t">
                                             <TableCell>Investing Cash Flow</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyCF[period] : annualCF[period]
-                                                return <TableCell key={period} className="text-right text-amber-700">{formatCurrency(data?.investingCashFlow)}</TableCell>
+                                                return <TableCell key={period} className="text-right text-amber-700">{formatValueLineItem(data?.investingCashFlow, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
 
@@ -436,14 +439,14 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             <TableCell className="pl-8">Debt Repayment</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyCF[period] : annualCF[period]
-                                                return <TableCell key={period} className="text-right text-red-600">{formatCurrency(data?.debtRepayment)}</TableCell>
+                                                return <TableCell key={period} className="text-right text-red-600">{formatValueLineItem(data?.debtRepayment, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
                                         <TableRow className="font-semibold border-t">
                                             <TableCell>Financing Cash Flow</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyCF[period] : annualCF[period]
-                                                return <TableCell key={period} className="text-right text-purple-700">{formatCurrency(data?.financingCashFlow)}</TableCell>
+                                                return <TableCell key={period} className="text-right text-purple-700">{formatValueLineItem(data?.financingCashFlow, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
 
@@ -455,7 +458,7 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                                 const value = data?.netCashFlow || 0
                                                 return (
                                                     <TableCell key={period} className={`text-right ${value >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                                                        {formatCurrency(value)}
+                                                        {formatValueLineItem(value, currencySymbol)}
                                                     </TableCell>
                                                 )
                                             })}
@@ -468,7 +471,7 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             </TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyCF[period] : annualCF[period]
-                                                return <TableCell key={period} className="text-right text-blue-700">{formatCurrency(data?.endingCash)}</TableCell>
+                                                return <TableCell key={period} className="text-right text-blue-700">{formatValueLineItem(data?.endingCash, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
                                     </TableBody>
@@ -517,56 +520,56 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             <TableCell className="pl-8">Cash & Equivalents</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyBS[period] : annualBS[period]
-                                                return <TableCell key={period} className="text-right text-green-600">{formatCurrency(data?.cash)}</TableCell>
+                                                return <TableCell key={period} className="text-right text-green-600">{formatValueLineItem(data?.cash, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
                                         <TableRow>
                                             <TableCell className="pl-8">Accounts Receivable</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyBS[period] : annualBS[period]
-                                                return <TableCell key={period} className="text-right">{formatCurrency(data?.accountsReceivable)}</TableCell>
+                                                return <TableCell key={period} className="text-right">{formatValueLineItem(data?.accountsReceivable, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
                                         <TableRow>
                                             <TableCell className="pl-8">Inventory</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyBS[period] : annualBS[period]
-                                                return <TableCell key={period} className="text-right">{formatCurrency(data?.inventory)}</TableCell>
+                                                return <TableCell key={period} className="text-right">{formatValueLineItem(data?.inventory, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
                                         <TableRow className="font-medium border-t">
                                             <TableCell className="pl-4">Current Assets</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyBS[period] : annualBS[period]
-                                                return <TableCell key={period} className="text-right">{formatCurrency(data?.currentAssets)}</TableCell>
+                                                return <TableCell key={period} className="text-right">{formatValueLineItem(data?.currentAssets, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
                                         <TableRow>
                                             <TableCell className="pl-8">Property, Plant & Equipment</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyBS[period] : annualBS[period]
-                                                return <TableCell key={period} className="text-right">{formatCurrency(data?.ppe)}</TableCell>
+                                                return <TableCell key={period} className="text-right">{formatValueLineItem(data?.ppe, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
                                         <TableRow>
                                             <TableCell className="pl-8 text-muted-foreground">Less: Accum. Depreciation</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyBS[period] : annualBS[period]
-                                                return <TableCell key={period} className="text-right text-red-600">({formatCurrency(data?.accumulatedDepreciation)})</TableCell>
+                                                return <TableCell key={period} className="text-right text-red-600">({formatValueLineItem(data?.accumulatedDepreciation, currencySymbol)})</TableCell>
                                             })}
                                         </TableRow>
                                         <TableRow className="font-medium border-t">
                                             <TableCell className="pl-4">Fixed Assets</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyBS[period] : annualBS[period]
-                                                return <TableCell key={period} className="text-right">{formatCurrency(data?.fixedAssets)}</TableCell>
+                                                return <TableCell key={period} className="text-right">{formatValueLineItem(data?.fixedAssets, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
                                         <TableRow className="font-bold border-t-2 bg-green-100">
                                             <TableCell>TOTAL ASSETS</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyBS[period] : annualBS[period]
-                                                return <TableCell key={period} className="text-right text-green-700">{formatCurrency(data?.totalAssets)}</TableCell>
+                                                return <TableCell key={period} className="text-right text-green-700">{formatValueLineItem(data?.totalAssets, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
 
@@ -580,28 +583,28 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             <TableCell className="pl-8">Accounts Payable</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyBS[period] : annualBS[period]
-                                                return <TableCell key={period} className="text-right">{formatCurrency(data?.accountsPayable)}</TableCell>
+                                                return <TableCell key={period} className="text-right">{formatValueLineItem(data?.accountsPayable, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
                                         <TableRow className="font-medium border-t">
                                             <TableCell className="pl-4">Current Liabilities</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyBS[period] : annualBS[period]
-                                                return <TableCell key={period} className="text-right">{formatCurrency(data?.currentLiabilities)}</TableCell>
+                                                return <TableCell key={period} className="text-right">{formatValueLineItem(data?.currentLiabilities, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
                                         <TableRow>
                                             <TableCell className="pl-8">Long-Term Debt</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyBS[period] : annualBS[period]
-                                                return <TableCell key={period} className="text-right">{formatCurrency(data?.longTermDebt)}</TableCell>
+                                                return <TableCell key={period} className="text-right">{formatValueLineItem(data?.longTermDebt, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
                                         <TableRow className="font-bold border-t-2 bg-red-100">
                                             <TableCell>TOTAL LIABILITIES</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyBS[period] : annualBS[period]
-                                                return <TableCell key={period} className="text-right text-red-700">{formatCurrency(data?.totalLiabilities)}</TableCell>
+                                                return <TableCell key={period} className="text-right text-red-700">{formatValueLineItem(data?.totalLiabilities, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
 
@@ -615,21 +618,21 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             <TableCell className="pl-8">Common Stock</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyBS[period] : annualBS[period]
-                                                return <TableCell key={period} className="text-right">{formatCurrency(data?.commonStock)}</TableCell>
+                                                return <TableCell key={period} className="text-right">{formatValueLineItem(data?.commonStock, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
                                         <TableRow>
                                             <TableCell className="pl-8">Retained Earnings</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyBS[period] : annualBS[period]
-                                                return <TableCell key={period} className="text-right">{formatCurrency(data?.retainedEarnings)}</TableCell>
+                                                return <TableCell key={period} className="text-right">{formatValueLineItem(data?.retainedEarnings, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
                                         <TableRow className="font-bold border-t-2 bg-blue-100">
                                             <TableCell>TOTAL EQUITY</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyBS[period] : annualBS[period]
-                                                return <TableCell key={period} className="text-right text-blue-700">{formatCurrency(data?.totalEquity)}</TableCell>
+                                                return <TableCell key={period} className="text-right text-blue-700">{formatValueLineItem(data?.totalEquity, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
 
@@ -642,7 +645,7 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyBS[period] : annualBS[period]
                                                 const total = (data?.totalLiabilities || 0) + (data?.totalEquity || 0)
-                                                return <TableCell key={period} className="text-right text-purple-700">{formatCurrency(total)}</TableCell>
+                                                return <TableCell key={period} className="text-right text-purple-700">{formatValueLineItem(total, currencySymbol)}</TableCell>
                                             })}
                                         </TableRow>
                                     </TableBody>

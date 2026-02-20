@@ -105,17 +105,54 @@ export function RiskAnalysisHub({ orgId, modelId }: { orgId: string | null, mode
     }
 
     const getChartData = () => {
-        if (!riskData || !riskData.metrics[selectedMetric]) return []
-        const metric = riskData.metrics[selectedMetric]
+        if (!riskData) return []
+
+        // Try to find the metric by ID first, then by name in metricsByName
+        let metric = riskData.metrics?.[selectedMetric]
+        if (!metric && riskData.metricsByName) {
+            // Try exact match
+            metric = riskData.metricsByName[selectedMetric]
+            if (!metric) {
+                // Try case-insensitive match
+                const lowerSelected = selectedMetric.toLowerCase()
+                for (const [key, val] of Object.entries(riskData.metricsByName)) {
+                    if (key.toLowerCase() === lowerSelected || key.toLowerCase().includes(lowerSelected)) {
+                        metric = val as any
+                        break
+                    }
+                }
+            }
+        }
+
+        if (!metric || !metric.p50) return []
+
         return riskData.months.map((m: string, i: number) => ({
             name: m,
-            p5: metric.p5[i],
-            p25: metric.p25[i],
-            p50: metric.p50[i],
-            p75: metric.p75[i],
-            p95: metric.p95[i],
-            mean: metric.mean[i]
+            p5: metric.p5?.[i] ?? 0,
+            p25: metric.p25?.[i] ?? 0,
+            p50: metric.p50?.[i] ?? 0,
+            p75: metric.p75?.[i] ?? 0,
+            p95: metric.p95?.[i] ?? 0,
+            mean: metric.mean?.[i] ?? 0
         }))
+    }
+
+    const getMetricForSelected = () => {
+        if (!riskData) return null
+        let metric = riskData.metrics?.[selectedMetric]
+        if (!metric && riskData.metricsByName) {
+            metric = riskData.metricsByName[selectedMetric]
+            if (!metric) {
+                const lowerSelected = selectedMetric.toLowerCase()
+                for (const [key, val] of Object.entries(riskData.metricsByName)) {
+                    if (key.toLowerCase() === lowerSelected || key.toLowerCase().includes(lowerSelected)) {
+                        metric = val as any
+                        break
+                    }
+                }
+            }
+        }
+        return metric as any
     }
 
     return (
@@ -219,11 +256,11 @@ export function RiskAnalysisHub({ orgId, modelId }: { orgId: string | null, mode
                                 <div className="flex gap-4">
                                     <div className="text-right">
                                         <div className="text-xs text-slate-400">Mean Result</div>
-                                        <div className="text-lg font-bold">${Math.round(riskData.metrics[selectedMetric]?.mean[11] || 0).toLocaleString()}</div>
+                                        <div className="text-lg font-bold">${Math.round(getMetricForSelected()?.mean?.[11] || 0).toLocaleString()}</div>
                                     </div>
                                     <div className="text-right">
                                         <div className="text-xs text-slate-400">Survival Prob.</div>
-                                        <div className="text-lg font-bold text-rose-500">92.4%</div>
+                                        <div className="text-lg font-bold text-rose-500">{((1 - (riskData.fatalRisk || 0)) * 100).toFixed(1)}%</div>
                                     </div>
                                 </div>
                             )}
@@ -272,7 +309,9 @@ export function RiskAnalysisHub({ orgId, modelId }: { orgId: string | null, mode
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-bold mb-1">-$24,500</div>
+                            <div className="text-3xl font-bold mb-1">
+                                {riskData.var95 < 0 ? '-' : ''}${Math.abs(Math.round(riskData.var95)).toLocaleString()}
+                            </div>
                             <p className="text-rose-100 text-xs">Maximum expected loss at 95% confidence</p>
                         </CardContent>
                     </Card>
@@ -287,15 +326,17 @@ export function RiskAnalysisHub({ orgId, modelId }: { orgId: string | null, mode
                         <CardContent className="space-y-4">
                             <div className="flex justify-between items-end">
                                 <div>
-                                    <div className="text-2xl font-bold">2.4%</div>
+                                    <div className="text-2xl font-bold">{(riskData.fatalRisk * 100).toFixed(1)}%</div>
                                     <div className="text-[10px] text-slate-400 font-bold uppercase">Prob. of Cash Zero</div>
                                 </div>
                                 <div className="text-right">
-                                    <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-none">Low Risk</Badge>
+                                    <Badge className={`${riskData.fatalRisk > 0.2 ? "bg-rose-100 text-rose-700" : "bg-green-100 text-green-700"} border-none`}>
+                                        {riskData.fatalRisk > 0.2 ? "High Risk" : riskData.fatalRisk > 0.05 ? "Moderate" : "Low Risk"}
+                                    </Badge>
                                 </div>
                             </div>
                             <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                                <div className="h-full bg-rose-500" style={{ width: '2.4%' }}></div>
+                                <div className="h-full bg-rose-500" style={{ width: `${Math.min(riskData.fatalRisk * 100, 100)}%` }}></div>
                             </div>
                         </CardContent>
                     </Card>
@@ -305,13 +346,22 @@ export function RiskAnalysisHub({ orgId, modelId }: { orgId: string | null, mode
                             <h4 className="text-xs font-bold uppercase tracking-wider text-rose-400">Risk Mitigation Insight</h4>
                         </div>
                         <CardContent className="p-4 space-y-3">
+                            {riskData.insights && riskData.insights.length > 0 ? (
+                                riskData.insights.map((insight: any, i: number) => (
+                                    <div key={i} className="flex items-start gap-2 text-xs">
+                                        <ChevronRight className="h-3 w-3 text-rose-500 mt-0.5" />
+                                        <span>{insight.msg}</span>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="flex items-center gap-2 text-xs">
+                                    <ChevronRight className="h-3 w-3 text-rose-500" />
+                                    <span>Sensitivity: <b>Revenue Growth</b> drives variability</span>
+                                </div>
+                            )}
                             <div className="flex items-center gap-2 text-xs">
                                 <ChevronRight className="h-3 w-3 text-rose-500" />
-                                <span>Sensitivity: <b>Revenue Growth</b> drives 74% of variance</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-xs">
-                                <ChevronRight className="h-3 w-3 text-rose-500" />
-                                <span>Optimal Buffer: <b>$55k</b> recommended liquidity</span>
+                                <span>Optimal Buffer: <b>${Math.abs(Math.round(riskData.var95 * 1.2)).toLocaleString()}</b> recommended liquidity</span>
                             </div>
                         </CardContent>
                     </Card>
