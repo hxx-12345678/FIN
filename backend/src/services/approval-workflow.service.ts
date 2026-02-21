@@ -65,6 +65,19 @@ export const approvalWorkflowService = {
       throw new ValidationError(`Request is already ${request.status}`);
     }
 
+    // Verify approver has permission in the org
+    const approverRole = await prisma.userOrgRole.findUnique({
+      where: {
+        userId_orgId: {
+          userId: approverId,
+          orgId: request.orgId,
+        },
+      },
+    });
+    if (!approverRole || !['admin', 'finance'].includes(approverRole.role)) {
+      throw new ForbiddenError('Only admins and finance users can approve requests');
+    }
+
     // Update request status
     const updatedRequest = await prismaClient.approvalRequest.update({
       where: { id: requestId },
@@ -111,6 +124,19 @@ export const approvalWorkflowService = {
       throw new ValidationError(`Request is already ${request.status}`);
     }
 
+    // Verify approver has permission in the org
+    const approverRole = await prisma.userOrgRole.findUnique({
+      where: {
+        userId_orgId: {
+          userId: approverId,
+          orgId: request.orgId,
+        },
+      },
+    });
+    if (!approverRole || !['admin', 'finance'].includes(approverRole.role)) {
+      throw new ForbiddenError('Only admins and finance users can reject requests');
+    }
+
     const updatedRequest = await prismaClient.approvalRequest.update({
       where: { id: requestId },
       data: {
@@ -150,6 +176,22 @@ export const approvalWorkflowService = {
         },
       },
       orderBy: { createdAt: 'desc' },
+    });
+  },
+
+  /**
+   * List all requests for an org (history).
+   */
+  listAllRequests: async (orgId: string) => {
+    return await prismaClient.approvalRequest.findMany({
+      where: { orgId },
+      include: {
+        requester: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
     });
   },
 };

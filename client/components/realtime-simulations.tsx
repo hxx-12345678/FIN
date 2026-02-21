@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import {
   LineChart,
@@ -1042,86 +1043,183 @@ export function RealtimeSimulations() {
             <CardDescription>Adjust parameters to see real-time impact</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <Label>Monthly Growth Rate: {params.monthlyGrowthRate}%</Label>
+            <div className="space-y-2 group">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2 flex-1">
+                  <Label className="whitespace-nowrap">Monthly Growth Rate</Label>
+                  <Input
+                    type="number"
+                    value={params.monthlyGrowthRate}
+                    onChange={(e) => handleParamChange("monthlyGrowthRate", parseFloat(e.target.value) || 0)}
+                    className="h-7 w-16 text-[10px] px-1"
+                  />
+                  <span className="text-[10px] text-muted-foreground">%</span>
+                </div>
+                <div className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                  Benchmark: 5-15% (Scale-up)
+                </div>
+              </div>
               <Slider
                 value={[params.monthlyGrowthRate]}
                 onValueChange={([value]) => handleParamChange("monthlyGrowthRate", value)}
-                max={25}
-                min={0}
+                max={50}
+                min={-10}
                 step={0.5}
                 className="w-full"
               />
             </div>
 
-            <div className="space-y-2">
-              <Label>Customer Acquisition Cost: {formatCurrency(params.customerAcquisitionCost)}</Label>
+            <div className="space-y-2 group">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2 flex-1">
+                  <Label className="whitespace-nowrap">CAC</Label>
+                  <Input
+                    type="number"
+                    value={params.customerAcquisitionCost}
+                    onChange={(e) => handleParamChange("customerAcquisitionCost", parseFloat(e.target.value) || 0)}
+                    className="h-7 w-20 text-[10px] px-1"
+                  />
+                  <span className="text-[10px] text-muted-foreground">{currencySymbol}</span>
+                </div>
+                <div className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                  Target: LTV &gt; 3x CAC
+                </div>
+              </div>
               <Slider
                 value={[params.customerAcquisitionCost]}
                 onValueChange={([value]) => handleParamChange("customerAcquisitionCost", value)}
-                max={500}
-                min={50}
-                step={5}
-                className="w-full"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Customer Lifetime Value: {formatCurrency(params.customerLifetimeValue)}</Label>
-              <Slider
-                value={[params.customerLifetimeValue]}
-                onValueChange={([value]) => handleParamChange("customerLifetimeValue", value)}
-                max={5000}
-                min={500}
-                step={100}
-                className="w-full"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Monthly Churn Rate: {params.churnRate}%</Label>
-              <Slider
-                value={[params.churnRate]}
-                onValueChange={([value]) => handleParamChange("churnRate", value)}
-                max={10}
-                min={0.5}
-                step={0.1}
-                className="w-full"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Pricing Tier: {formatCurrency(params.pricingTier)}/month</Label>
-              <Slider
-                value={[params.pricingTier]}
-                onValueChange={([value]) => handleParamChange("pricingTier", value)}
-                max={500}
-                min={29}
+                max={2000}
+                min={0}
                 step={10}
                 className="w-full"
               />
             </div>
 
-            <div className="space-y-2">
-              <Label>Team Size: {params.teamSize} people</Label>
+            <div className="space-y-2 group">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2 flex-1">
+                  <Label className="whitespace-nowrap">LTV</Label>
+                  <Input
+                    type="number"
+                    value={params.customerLifetimeValue}
+                    onChange={(e) => handleParamChange("customerLifetimeValue", parseFloat(e.target.value) || 0)}
+                    className="h-7 w-20 text-[10px] px-1"
+                  />
+                  <span className="text-[10px] text-muted-foreground">{currencySymbol}</span>
+                </div>
+                <div className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                  SaaS Median: $2k - $10k
+                </div>
+              </div>
+              <Slider
+                value={[params.customerLifetimeValue]}
+                onValueChange={([value]) => handleParamChange("customerLifetimeValue", value)}
+                max={25000}
+                min={0}
+                step={100}
+                className="w-full"
+              />
+            </div>
+
+            <div className="space-y-2 group">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2 flex-1">
+                  <Label className="whitespace-nowrap">Monthly Churn</Label>
+                  <Input
+                    type="number"
+                    value={params.churnRate}
+                    onChange={(e) => handleParamChange("churnRate", parseFloat(e.target.value) || 0)}
+                    className="h-7 w-16 text-[10px] px-1"
+                  />
+                  <span className="text-[10px] text-muted-foreground">%</span>
+                </div>
+                <div className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                  Good: &lt; 2%, Critical: &gt; 5%
+                </div>
+              </div>
+              <Slider
+                value={[params.churnRate]}
+                onValueChange={([value]) => handleParamChange("churnRate", value)}
+                max={20}
+                min={0}
+                step={0.1}
+                className="w-full"
+              />
+            </div>
+
+            <div className="space-y-2 group">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2 flex-1">
+                  <Label className="whitespace-nowrap">Pricing/mo</Label>
+                  <Input
+                    type="number"
+                    value={params.pricingTier}
+                    onChange={(e) => handleParamChange("pricingTier", parseFloat(e.target.value) || 0)}
+                    className="h-7 w-16 text-[10px] px-1"
+                  />
+                  <span className="text-[10px] text-muted-foreground">{currencySymbol}</span>
+                </div>
+                <div className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                  Avg. ACV / 12
+                </div>
+              </div>
+              <Slider
+                value={[params.pricingTier]}
+                onValueChange={([value]) => handleParamChange("pricingTier", value)}
+                max={2000}
+                min={0}
+                step={10}
+                className="w-full"
+              />
+            </div>
+
+            <div className="space-y-2 group">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2 flex-1">
+                  <Label className="whitespace-nowrap">Team Size</Label>
+                  <Input
+                    type="number"
+                    value={params.teamSize}
+                    onChange={(e) => handleParamChange("teamSize", parseInt(e.target.value) || 0)}
+                    className="h-7 w-16 text-[10px] px-1"
+                  />
+                </div>
+                <div className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                  Avg. Cost: $8k/mo/head
+                </div>
+              </div>
               <Slider
                 value={[params.teamSize]}
                 onValueChange={([value]) => handleParamChange("teamSize", value)}
-                max={50}
-                min={5}
+                max={100}
+                min={1}
                 step={1}
                 className="w-full"
               />
             </div>
 
-            <div className="space-y-2">
-              <Label>Marketing Spend: {formatCurrency(params.marketingSpend)}/month</Label>
+            <div className="space-y-2 group">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2 flex-1">
+                  <Label className="whitespace-nowrap">Marketing Spend/mo</Label>
+                  <Input
+                    type="number"
+                    value={params.marketingSpend}
+                    onChange={(e) => handleParamChange("marketingSpend", parseFloat(e.target.value) || 0)}
+                    className="h-7 w-24 text-[10px] px-1"
+                  />
+                  <span className="text-[10px] text-muted-foreground">{currencySymbol}</span>
+                </div>
+                <div className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                  Rec: 10-30% of Revenue
+                </div>
+              </div>
               <Slider
                 value={[params.marketingSpend]}
                 onValueChange={([value]) => handleParamChange("marketingSpend", value)}
-                max={50000}
-                min={1000}
-                step={500}
+                max={250000}
+                min={0}
+                step={1000}
                 className="w-full"
               />
             </div>

@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -1022,9 +1023,55 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              <div className="flex flex-col md:flex-row gap-6 p-4 bg-muted/30 rounded-lg border border-muted-foreground/10">
+                <div className="space-y-4 flex-1">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-sm font-semibold">Forecast Mode</Label>
+                    <Badge variant="outline" className="text-[10px] uppercase">{forecastMode}</Badge>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={forecastMode === "deterministic" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setForecastMode("deterministic")}
+                      className="flex-1 text-xs"
+                    >
+                      Deterministic
+                    </Button>
+                    <Button
+                      variant={forecastMode === "montecarlo" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setForecastMode("montecarlo")}
+                      className="flex-1 text-xs"
+                    >
+                      Monte Carlo
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-4 flex-1">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-sm font-semibold">Simulations: {numSimulations}</Label>
+                    <Badge variant="secondary" className="text-[10px]">Est. Cost: ${estimatedCost.toFixed(2)}</Badge>
+                  </div>
+                  <Slider
+                    value={[numSimulations]}
+                    onValueChange={([v]) => setNumSimulations(v)}
+                    min={100}
+                    max={10000}
+                    step={100}
+                    className="py-2"
+                  />
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>Quick (100)</span>
+                    <span>Deep (10k)</span>
+                  </div>
+                </div>
+              </div>
+
               {drivers.map((driver) => (
                 <div key={driver.id} className="p-4 border rounded-lg space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between group">
                     <div>
                       <h3 className="font-semibold">{driver.name}</h3>
                       <p className="text-sm text-muted-foreground">
@@ -1033,16 +1080,25 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                         {driver.unit}
                       </p>
                     </div>
-                    <Badge
-                      variant={
-                        driver.impact === "high" ? "destructive" : driver.impact === "medium" ? "default" : "secondary"
-                      }
-                    >
-                      {driver.impact} impact
-                    </Badge>
+                    <div className="flex flex-col items-end gap-1">
+                      <Badge
+                        variant={
+                          driver.impact === "high" ? "destructive" : driver.impact === "medium" ? "default" : "secondary"
+                        }
+                      >
+                        {driver.impact} impact
+                      </Badge>
+                      <div className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                        {driver.id === "revenue_growth" && "Benchmark: 5-15% (Scale-up)"}
+                        {driver.id === "churn_rate" && "Good: < 2%, Critical: > 5%"}
+                        {driver.id === "cac" && "Target: LTV > 3x CAC"}
+                        {driver.id === "conversion_rate" && "SaaS Avg: 2-5% (B2B)"}
+                        {driver.id === "avg_deal_size" && "Total ACV / Customers"}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label>Distribution Type</Label>
                       <Select
@@ -1083,18 +1139,29 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
                         value={[driver.stdDev]}
                         onValueChange={([v]) => updateDriver(driver.id, "stdDev", v)}
                         min={0}
-                        max={(driver.max - driver.min) / 4}
+                        max={(driver.max - driver.min) / 2}
                         step={driver.unit === currencySymbol ? 5 : 0.1}
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Range</Label>
-                      <div className="text-sm text-muted-foreground">
-                        Min: {driver.min}
-                        {driver.unit} | Max: {driver.max}
-                        {driver.unit}
-                      </div>
+                      <Label>Min Bound ({driver.unit})</Label>
+                      <Input
+                        type="number"
+                        value={driver.min}
+                        onChange={(e) => updateDriver(driver.id, "min", parseFloat(e.target.value) || 0)}
+                        className="h-8"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Max Bound ({driver.unit})</Label>
+                      <Input
+                        type="number"
+                        value={driver.max}
+                        onChange={(e) => updateDriver(driver.id, "max", parseFloat(e.target.value) || 0)}
+                        className="h-8"
+                      />
                     </div>
                   </div>
                 </div>

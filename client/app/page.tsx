@@ -31,7 +31,7 @@ import { PostLoginOptions } from "@/components/post-login-options"
 import { isDemoMode, resetDemoDataIfNeeded } from "@/lib/demo-data-generator"
 import { JobQueue } from "@/components/jobs/job-queue"
 import { ExportJobQueue } from "@/components/exports/export-job-queue"
-import { IntegrationRequiredBanner } from "@/components/integration-required-banner"
+
 import { checkUserHasData, getUserOrgId } from "@/lib/user-data-check"
 import { ErrorBoundary } from "@/components/error-boundary"
 
@@ -50,16 +50,55 @@ export default function HomePage() {
 function HomePageContent() {
   // Initialize with default values for SSR compatibility (prevents hydration mismatch)
   const [showLanding, setShowLanding] = useState(true)
-  const [activeView, setActiveView] = useState("overview")
+  const [activeView, setActiveViewState] = useState("overview")
+
+  // Wrapper to persist activeView to localStorage
+  const setActiveView = (view: string) => {
+    setActiveViewState(view)
+    try { localStorage.setItem("finapilot_active_view", view) } catch (_e) { /* ignore */ }
+  }
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [showPostLoginOptions, setShowPostLoginOptions] = useState(false)
   const [demoMode, setDemoMode] = useState(false)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
 
+  // State to persist tabs per view
+  const [viewTabs, setViewTabs] = useState<Record<string, string>>({})
+
+  // Handler to update both state and URL hash when view changes
+  const handleViewChange = (view: string) => {
+    // Save current tab before switching
+    const currentParams = new URLSearchParams(window.location.search)
+    const currentTab = currentParams.get("tab")
+
+    if (currentTab) {
+      setViewTabs(prev => ({ ...prev, [activeView]: currentTab }))
+    }
+
+    setActiveView(view)
+    window.location.hash = `#${view}`
+
+    // Restore tab for the next view if it exists
+    const nextTab = viewTabs[view]
+    const nextParams = new URLSearchParams(window.location.search)
+
+    if (nextTab) {
+      nextParams.set("tab", nextTab)
+    } else {
+      nextParams.delete("tab")
+    }
+
+    const newSearch = nextParams.toString()
+    const newUrl = `${window.location.pathname}${newSearch ? "?" + newSearch : ""}${window.location.hash}`
+    window.history.replaceState({}, "", newUrl)
+  }
+
   useEffect(() => {
     // CRITICAL: Check hash and auth synchronously FIRST to prevent landing page flash
     // This runs only on client side, preventing hydration mismatch
     const currentHash = window.location.hash.replace("#", "")
+    const searchParams = new URLSearchParams(window.location.search)
+    const tabParam = searchParams.get("tab")
     const authToken = localStorage.getItem("auth-token")
 
     const validViews = [
@@ -77,6 +116,17 @@ function HomePageContent() {
       // If there's a valid hash, set view immediately
       if (currentHash && validViews.includes(currentHash)) {
         setActiveView(currentHash)
+      } else if (tabParam && validViews.includes(tabParam)) {
+        // Fallback: check query param if hash is missing (UX improvement for refreshes)
+        setActiveView(tabParam)
+        window.location.hash = `#${tabParam}`
+      } else {
+        // Fallback: recover from localStorage (e.g. hard refresh with no hash)
+        const savedView = localStorage.getItem("finapilot_active_view")
+        if (savedView && validViews.includes(savedView)) {
+          setActiveView(savedView)
+          window.location.hash = `#${savedView}`
+        }
       }
     } else {
       setShowLanding(true)
@@ -91,16 +141,23 @@ function HomePageContent() {
         "overview", "modeling", "budget-actual", "scenarios", "simulations",
         "forecasting", "assistant", "reports", "board-reporting", "investor",
         "users", "integrations", "notifications", "compliance", "pricing",
-        "settings", "onboarding", "collaboration", "job-queue", "export-queue"
+        "settings", "onboarding", "collaboration", "job-queue", "export-queue",
+        "approvals", "ledger"
       ]
 
-      if (currentHash && validViews.includes(currentHash)) {
-        // User is on a specific view (from URL hash) - ALWAYS respect it, don't redirect
+      // Determine the effective view from hash, tab param, or localStorage
+      const effectiveView = (currentHash && validViews.includes(currentHash)) ? currentHash
+        : (tabParam && validViews.includes(tabParam)) ? tabParam
+          : null
+
+      if (effectiveView) {
+        // User is on a specific view - ALWAYS respect it, don't redirect
         setShowLanding(false)
         setShowPostLoginOptions(false)
         setShowOnboarding(false)
         setDemoMode(false)
-        setActiveView(currentHash)
+        setActiveView(effectiveView)
+        if (!currentHash) window.location.hash = `#${effectiveView}`
         return // CRITICAL: Return early to prevent any redirect logic
       }
 
@@ -179,7 +236,8 @@ function HomePageContent() {
             "overview", "modeling", "budget-actual", "scenarios", "simulations",
             "forecasting", "assistant", "reports", "board-reporting", "investor",
             "users", "integrations", "notifications", "compliance", "pricing",
-            "settings", "onboarding", "collaboration", "job-queue", "export-queue"
+            "settings", "onboarding", "collaboration", "job-queue", "export-queue",
+            "approvals", "ledger"
           ]
           if (validViews.includes(currentHash)) {
             setActiveView(currentHash)
@@ -236,7 +294,8 @@ function HomePageContent() {
           "overview", "modeling", "budget-actual", "scenarios", "simulations",
           "forecasting", "assistant", "reports", "board-reporting", "investor",
           "users", "integrations", "notifications", "compliance", "pricing",
-          "settings", "onboarding", "collaboration", "job-queue", "export-queue"
+          "settings", "onboarding", "collaboration", "job-queue", "export-queue",
+          "approvals", "ledger"
         ]
         if (validViews.includes(hash)) {
           setActiveView(hash)
@@ -332,13 +391,7 @@ function HomePageContent() {
     setActiveView("integrations")
   }
 
-  // Views that should show integration banner (excluding integrations page itself)
-  const viewsNeedingIntegration = [
-    "overview", "modeling", "budget-actual", "scenarios", "simulations",
-    "forecasting", "assistant", "reports", "board-reporting", "investor"
-  ]
 
-  const shouldShowIntegrationBanner = viewsNeedingIntegration.includes(activeView) && !demoMode
 
   const renderActiveView = () => {
     const viewComponent = (() => {
@@ -394,11 +447,7 @@ function HomePageContent() {
 
     return (
       <>
-        {shouldShowIntegrationBanner && (
-          <IntegrationRequiredBanner
-            onNavigateToIntegrations={() => setActiveView("integrations")}
-          />
-        )}
+
         <ErrorBoundary>
           {viewComponent}
         </ErrorBoundary>
@@ -425,11 +474,6 @@ function HomePageContent() {
     return <DemoModeOnboarding onComplete={handleOnboardingComplete} />
   }
 
-  // Handler to update both state and URL hash when view changes
-  const handleViewChange = (view: string) => {
-    setActiveView(view)
-    window.location.hash = `#${view}`
-  }
 
   return (
     <>

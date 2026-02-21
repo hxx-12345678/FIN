@@ -5,6 +5,14 @@ import { requireOrgRole, validateUUIDParams } from '../middlewares/rbac';
 
 const router = Router();
 
+router.get(
+  '/orgs/:orgId/approvals',
+  authenticate,
+  requireOrgRole('finance', 'orgId'),
+  validateUUIDParams(['orgId']),
+  approvalController.listAll
+);
+
 router.post(
   '/orgs/:orgId/approvals',
   authenticate,

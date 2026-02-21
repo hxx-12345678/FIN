@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -137,6 +137,7 @@ export function BoardReporting() {
     metadata?: any
   } | null>(null)
   const [loadingAiContent, setLoadingAiContent] = useState(false)
+  const aiContentFetchedRef = useRef(false) // Track if AI content has ever been fetched
   const [reportTitle, setReportTitle] = useState("Monthly Board Update")
   const [reportingPeriod, setReportingPeriod] = useState("current")
   const [reportFormat, setReportFormat] = useState("pptx")
@@ -168,7 +169,8 @@ export function BoardReporting() {
       fetchBoardTemplates()
       fetchInvestorDashboardData()
       fetchRecentReports()
-      fetchAIContent()
+      // NOTE: fetchAIContent() is NOT called here anymore.
+      // AI content generation is expensive and should only happen on user request.
       fetchBoardSchedules()
     }
   }, [orgId])
@@ -398,6 +400,7 @@ export function BoardReporting() {
 
   const fetchAIContent = async () => {
     if (!orgId) return
+    aiContentFetchedRef.current = true // Mark as fetched (even on failure)
 
     setLoadingAiContent(true)
     try {
@@ -969,9 +972,9 @@ export function BoardReporting() {
                     <div className="p-4 rounded-lg bg-blue-50 border border-blue-200">
                       <div className="flex items-center justify-between">
                         <h3 className="font-medium text-blue-800">Executive Summary</h3>
-                        <Button size="sm" variant="ghost" onClick={fetchAIContent}>
-                          <Edit className="mr-1 h-3 w-3" />
-                          Regenerate
+                        <Button size="sm" variant="outline" onClick={fetchAIContent} disabled={loadingAiContent}>
+                          {loadingAiContent ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Edit className="mr-1 h-3 w-3" />}
+                          Regenerate Content
                         </Button>
                       </div>
                       <p className="text-sm text-blue-700 mt-2 whitespace-pre-wrap">
@@ -1018,9 +1021,11 @@ export function BoardReporting() {
                   </>
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
-                    <p>No AI content yet.</p>
-                    <Button size="sm" variant="outline" className="mt-4" onClick={fetchAIContent}>
-                      <Zap className="mr-1 h-3 w-3" />
+                    <Zap className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                    <p className="font-medium mb-1">AI Content Not Generated Yet</p>
+                    <p className="text-sm mb-4">Click the button below to generate an executive summary, key highlights, and risk areas powered by AI.</p>
+                    <Button size="sm" variant="default" onClick={fetchAIContent} disabled={loadingAiContent}>
+                      {loadingAiContent ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Zap className="mr-1 h-4 w-4" />}
                       Generate AI Content
                     </Button>
                   </div>

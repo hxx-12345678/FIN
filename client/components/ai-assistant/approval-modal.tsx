@@ -15,6 +15,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Loader2, CheckCircle2, XCircle, AlertCircle, Info, ArrowRight } from "lucide-react"
 import { API_BASE_URL } from "@/lib/api-config"
+import { toast } from "sonner"
 
 interface StagedChange {
   id: string
@@ -47,6 +48,7 @@ export function ApprovalModal({ changeId, open, onClose, onApprove, onReject }: 
   const [isLoading, setIsLoading] = useState(false)
   const [isApproving, setIsApproving] = useState(false)
   const [isRejecting, setIsRejecting] = useState(false)
+  const [isSubmittingForGovernance, setIsSubmittingForGovernance] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -135,6 +137,77 @@ export function ApprovalModal({ changeId, open, onClose, onApprove, onReject }: 
       setError(err instanceof Error ? err.message : "Failed to load change details")
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleSendToGovernance = async () => {
+    if (!change) return
+
+    setIsSubmittingForGovernance(true)
+    setError(null)
+
+    try {
+      const orgId = localStorage.getItem("orgId")
+      if (!orgId) {
+        throw new Error("Organization ID not found")
+      }
+
+      const token = localStorage.getItem("auth-token") || document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("auth-token="))
+        ?.split("=")[1]
+
+      if (!token) {
+        throw new Error("Authentication token not found")
+      }
+
+      if (!change.planId) {
+        throw new Error("Plan ID not found for this change")
+      }
+
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/approvals`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          type: "ai_cfo_staged_change",
+          objectType: "aicfo_plan",
+          objectId: change.planId,
+          payloadJson: {
+            changeId: change.id,
+            planId: change.planId,
+            changeIndex: change.changeIndex,
+            description: change.description,
+            impactSummary: change.impactSummary,
+            oldValue: change.oldValue,
+            newValue: change.newValue,
+            confidenceScore: change.confidenceScore,
+            promptId: change.promptId,
+            dataSources: change.dataSources,
+          },
+          comment: "AI CFO staged change submitted for approval",
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error?.message || errorData.message || "Failed to submit for approval")
+      }
+
+      const result = await response.json()
+      if (!result.ok) {
+        throw new Error(result.error?.message || result.message || "Failed to submit for approval")
+      }
+
+      toast.success("Submitted to Governance for approval")
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to submit for approval")
+    } finally {
+      setIsSubmittingForGovernance(false)
     }
   }
 
@@ -253,6 +326,23 @@ export function ApprovalModal({ changeId, open, onClose, onApprove, onReject }: 
               <div className="flex items-center justify-end gap-2 pt-4 border-t">
                 <Button variant="outline" onClick={onClose} disabled={isApproving || isRejecting}>
                   Cancel
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleSendToGovernance}
+                  disabled={isApproving || isRejecting || isSubmittingForGovernance}
+                >
+                  {isSubmittingForGovernance ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <ArrowRight className="mr-2 h-4 w-4" />
+                      Send to Governance
+                    </>
+                  )}
                 </Button>
                 <Button
                   variant="outline"

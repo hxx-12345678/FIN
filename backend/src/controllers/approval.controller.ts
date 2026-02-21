@@ -65,6 +65,16 @@ export const approvalController = {
       next(error);
     }
   },
+
+  listAll: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { orgId } = req.params;
+      const result = await approvalWorkflowService.listAllRequests(orgId);
+      res.json({ ok: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  },
 };
 
 

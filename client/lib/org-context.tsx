@@ -45,9 +45,10 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
                 return
             }
 
-            const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/organization`, {
+            const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/organization?t=${Date.now()}`, {
                 headers: { Authorization: `Bearer ${token}` },
                 credentials: "include",
+                cache: "no-cache"
             })
 
             if (response.ok) {

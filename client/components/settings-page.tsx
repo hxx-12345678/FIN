@@ -41,6 +41,7 @@ import { MFASetupWizard } from "./auth/mfa-setup-wizard"
 import { SessionManagement } from "./auth/session-management"
 import { toast } from "sonner"
 import { useSearchParams, useRouter } from "next/navigation"
+import { useOrg } from "@/lib/org-context"
 import {
   Dialog,
   DialogContent,
@@ -109,13 +110,14 @@ function SessionManagementButton() {
 export function SettingsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { refreshOrganization } = useOrg()
   const currentTab = searchParams.get("tab") || "profile"
-  
+
   const [orgId, setOrgId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
-  
+
   // Profile state
   const [profile, setProfile] = useState({
     name: "",
@@ -125,7 +127,7 @@ export function SettingsPage() {
     bio: "",
     timezone: "UTC",
   })
-  
+
   // Organization state
   const [organization, setOrganization] = useState<any>({
     name: "",
@@ -137,7 +139,7 @@ export function SettingsPage() {
     currency: "USD",
     dataRetentionDays: 365,
   })
-  
+
   // Appearance state
   const [appearance, setAppearance] = useState({
     theme: "light" as "light" | "dark" | "auto",
@@ -146,7 +148,7 @@ export function SettingsPage() {
     dateFormat: "MM/DD/YYYY",
     animations: true,
   })
-  
+
   // Notification preferences state
   const [notificationPrefs, setNotificationPrefs] = useState({
     emailNotifications: true,
@@ -155,7 +157,7 @@ export function SettingsPage() {
     alertNotifications: true,
     marketingEmails: false,
   })
-  
+
   // Localization state
   const [localization, setLocalization] = useState({
     language: "en",
@@ -164,7 +166,7 @@ export function SettingsPage() {
     dateFormat: "MM/DD/YYYY",
     numberFormat: "1,234.56",
   })
-  
+
   // Security state
   const [showApiKey, setShowApiKey] = useState(false)
   const [apiKey, setApiKey] = useState("")
@@ -174,7 +176,7 @@ export function SettingsPage() {
     newPassword: "",
     confirmPassword: "",
   })
-  
+
   // Sync audit state
   const [syncAuditLog, setSyncAuditLog] = useState<any[]>([])
   const [loadingSyncLog, setLoadingSyncLog] = useState(false)
@@ -393,7 +395,7 @@ export function SettingsPage() {
     if (!orgId) return
     setSaving(true)
     const errors: string[] = []
-    
+
     try {
       // Save profile
       try {
@@ -410,7 +412,7 @@ export function SettingsPage() {
       } catch (error) {
         errors.push("Profile: Network error")
       }
-      
+
       // Save organization (admin only)
       try {
         const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/organization`, {
@@ -429,7 +431,7 @@ export function SettingsPage() {
       } catch (error) {
         errors.push("Organization: Network error")
       }
-      
+
       // Save appearance
       try {
         const response = await fetch(`${API_BASE_URL}/users/appearance`, {
@@ -445,7 +447,7 @@ export function SettingsPage() {
       } catch (error) {
         errors.push("Appearance: Network error")
       }
-      
+
       // Save notification preferences
       try {
         const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/notifications/preferences`, {
@@ -461,14 +463,15 @@ export function SettingsPage() {
       } catch (error) {
         errors.push("Notifications: Network error")
       }
-      
+
       // Note: Localization is saved separately via LocalizationSettings component's own Save button
-      
+
       if (errors.length > 0) {
         toast.error(`Some settings failed to save: ${errors.join(", ")}`)
       } else {
         toast.success("All settings saved successfully")
         // Refresh data to ensure UI is in sync
+        await refreshOrganization()
         await fetchAllData()
         // Reset initial values after save
         setInitialValues({
@@ -523,12 +526,12 @@ export function SettingsPage() {
       toast.error("New passwords do not match")
       return
     }
-    
+
     if (passwordData.newPassword.length < 8) {
       toast.error("Password must be at least 8 characters")
       return
     }
-    
+
     try {
       const response = await fetch(`${API_BASE_URL}/users/password/change`, {
         method: "POST",
@@ -539,7 +542,7 @@ export function SettingsPage() {
           newPassword: passwordData.newPassword,
         }),
       })
-      
+
       if (response.ok) {
         toast.success("Password changed successfully")
         setShowChangePasswordDialog(false)
@@ -665,9 +668,9 @@ export function SettingsPage() {
           <p className="text-sm md:text-base text-muted-foreground">Manage your account and workspace preferences</p>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          <Button 
-            variant="outline" 
-            size="sm" 
+          <Button
+            variant="outline"
+            size="sm"
             className="bg-transparent w-full sm:w-auto"
             onClick={handleExportData}
           >
@@ -675,7 +678,7 @@ export function SettingsPage() {
             <span className="hidden sm:inline">Export Data</span>
             <span className="sm:hidden">Export</span>
           </Button>
-          <Button 
+          <Button
             size="sm"
             onClick={handleSaveAll}
             disabled={saving || !hasChanges}
@@ -701,8 +704,8 @@ export function SettingsPage() {
         </Alert>
       )}
 
-      <Tabs 
-        value={currentTab} 
+      <Tabs
+        value={currentTab}
         onValueChange={(value) => {
           const params = new URLSearchParams(searchParams.toString())
           params.set("tab", value)
@@ -756,40 +759,40 @@ export function SettingsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="name">Full Name</Label>
-                  <Input 
-                    id="name" 
+                  <Input
+                    id="name"
                     value={profile.name}
                     onChange={(e) => setProfile({ ...profile, name: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email Address</Label>
-                  <Input 
-                    id="email" 
-                    type="email" 
+                  <Input
+                    id="email"
+                    type="email"
                     value={profile.email}
                     onChange={(e) => setProfile({ ...profile, email: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="phone">Phone Number</Label>
-                  <Input 
-                    id="phone" 
+                  <Input
+                    id="phone"
                     value={profile.phone}
                     onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="jobTitle">Job Title</Label>
-                  <Input 
-                    id="jobTitle" 
+                  <Input
+                    id="jobTitle"
                     value={profile.jobTitle}
                     onChange={(e) => setProfile({ ...profile, jobTitle: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="timezone">Timezone</Label>
-                  <Select 
+                  <Select
                     value={profile.timezone}
                     onValueChange={(value) => setProfile({ ...profile, timezone: value })}
                   >
@@ -837,15 +840,15 @@ export function SettingsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="companyName">Company Name</Label>
-                  <Input 
-                    id="companyName" 
+                  <Input
+                    id="companyName"
                     value={organization.name}
                     onChange={(e) => setOrganization({ ...organization, name: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="industry">Industry</Label>
-                  <Select 
+                  <Select
                     value={organization.industry}
                     onValueChange={(value) => setOrganization({ ...organization, industry: value })}
                   >
@@ -863,7 +866,7 @@ export function SettingsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="companySize">Company Size</Label>
-                  <Select 
+                  <Select
                     value={organization.companySize}
                     onValueChange={(value) => setOrganization({ ...organization, companySize: value })}
                   >
@@ -881,24 +884,24 @@ export function SettingsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="website">Website</Label>
-                  <Input 
-                    id="website" 
+                  <Input
+                    id="website"
                     value={organization.website}
                     onChange={(e) => setOrganization({ ...organization, website: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="taxId">Tax ID</Label>
-                  <Input 
-                    id="taxId" 
+                  <Input
+                    id="taxId"
                     value={organization.taxId}
                     onChange={(e) => setOrganization({ ...organization, taxId: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="dataRetention">Data Retention (Days) (GDPR)</Label>
-                  <Input 
-                    id="dataRetention" 
+                  <Input
+                    id="dataRetention"
                     type="number"
                     value={organization.dataRetentionDays || 365}
                     onChange={(e) => setOrganization({ ...organization, dataRetentionDays: parseInt(e.target.value) })}
@@ -907,7 +910,7 @@ export function SettingsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="currency">Default Currency</Label>
-                  <Select 
+                  <Select
                     value={organization.currency}
                     onValueChange={(value) => setOrganization({ ...organization, currency: value })}
                   >
@@ -1057,8 +1060,8 @@ export function SettingsPage() {
                   <Label htmlFor="emailNotifications">Email Notifications</Label>
                   <p className="text-sm text-muted-foreground">Receive notifications via email</p>
                 </div>
-                <Switch 
-                  id="emailNotifications" 
+                <Switch
+                  id="emailNotifications"
                   checked={notificationPrefs.emailNotifications}
                   onCheckedChange={(checked) => {
                     setNotificationPrefs({ ...notificationPrefs, emailNotifications: checked })
@@ -1072,8 +1075,8 @@ export function SettingsPage() {
                   <Label htmlFor="marketingEmails">Marketing & Newsletter (GDPR Consent)</Label>
                   <p className="text-sm text-muted-foreground">Receive product updates and tips</p>
                 </div>
-                <Switch 
-                  id="marketingEmails" 
+                <Switch
+                  id="marketingEmails"
                   checked={notificationPrefs.marketingEmails}
                   onCheckedChange={(checked) => {
                     setNotificationPrefs({ ...notificationPrefs, marketingEmails: checked })
@@ -1106,8 +1109,8 @@ export function SettingsPage() {
               <CardDescription>View synchronization history and status</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={fetchSyncAuditLog}
                 disabled={loadingSyncLog}
                 className="mb-4"

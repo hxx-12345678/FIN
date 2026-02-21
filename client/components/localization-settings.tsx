@@ -56,7 +56,10 @@ interface LocalizationData {
   complianceData: any
 }
 
+import { useOrg } from "@/lib/org-context"
+
 export function LocalizationSettings() {
+  const { refreshOrganization } = useOrg()
   const [orgId, setOrgId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -95,13 +98,13 @@ export function LocalizationSettings() {
           headers: getAuthHeaders(),
           credentials: "include",
         })
-        
+
         if (response.status === 401) {
           console.warn("[Localization] Unauthorized - token expired or invalid")
           handleUnauthorized()
           return
         }
-        
+
         if (response.ok) {
           const data = await response.json()
           if (data.orgs && data.orgs.length > 0) {
@@ -147,8 +150,8 @@ export function LocalizationSettings() {
             const data = await response.json()
             if (data.ok && data.data) {
               const updatedRates = data.data.fxRates || {}
-              setLocalization({ 
-                ...localization, 
+              setLocalization({
+                ...localization,
                 fxRates: updatedRates,
               })
               // Silently update - don't show toast for automatic updates
@@ -211,6 +214,7 @@ export function LocalizationSettings() {
       })
       if (response.ok) {
         toast.success("Localization settings saved successfully")
+        await refreshOrganization()
       } else {
         const error = await response.json()
         toast.error(error.error?.message || "Failed to save localization settings")
@@ -238,8 +242,8 @@ export function LocalizationSettings() {
         const data = await response.json()
         if (data.ok && data.data) {
           const updatedRates = data.data.fxRates || {}
-          setLocalization({ 
-            ...localization, 
+          setLocalization({
+            ...localization,
             fxRates: updatedRates,
             baseCurrency: data.data.baseCurrency || localization.baseCurrency,
           })
@@ -311,15 +315,15 @@ export function LocalizationSettings() {
           <p className="text-muted-foreground">Multi-currency support and India-specific compliance management</p>
         </div>
         <div className="flex gap-2">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={handleUpdateFxRates}
             disabled={updatingFxRates}
           >
             {updatingFxRates ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
-            <RefreshCw className="mr-2 h-4 w-4" />
+              <RefreshCw className="mr-2 h-4 w-4" />
             )}
             {updatingFxRates ? "Updating..." : "Update FX Rates"}
           </Button>
@@ -327,7 +331,7 @@ export function LocalizationSettings() {
             {saving ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
-            <Download className="mr-2 h-4 w-4" />
+              <Download className="mr-2 h-4 w-4" />
             )}
             Save Changes
           </Button>
@@ -355,8 +359,8 @@ export function LocalizationSettings() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label>Base Currency</Label>
-                  <Select 
-                    value={localization.baseCurrency} 
+                  <Select
+                    value={localization.baseCurrency}
                     onValueChange={(value) => setLocalization({ ...localization, baseCurrency: value })}
                   >
                     <SelectTrigger>
@@ -375,8 +379,8 @@ export function LocalizationSettings() {
 
                 <div className="space-y-2">
                   <Label>Display Currency</Label>
-                  <Select 
-                    value={localization.displayCurrency} 
+                  <Select
+                    value={localization.displayCurrency}
                     onValueChange={(value) => setLocalization({ ...localization, displayCurrency: value })}
                   >
                     <SelectTrigger>
@@ -398,8 +402,8 @@ export function LocalizationSettings() {
                     <Label>Auto-update FX Rates</Label>
                     <p className="text-xs text-muted-foreground">Fetch daily exchange rates automatically</p>
                   </div>
-                  <Switch 
-                    checked={localization.autoFxUpdate} 
+                  <Switch
+                    checked={localization.autoFxUpdate}
                     onCheckedChange={(checked) => setLocalization({ ...localization, autoFxUpdate: checked })}
                   />
                 </div>
@@ -415,27 +419,27 @@ export function LocalizationSettings() {
                 <div className="space-y-3">
                   {currencies.map((currency) => {
                     // Get rate from fetched rates or fallback to default
-                    const rate = localization.fxRates && localization.fxRates[currency.code] 
-                      ? localization.fxRates[currency.code] 
+                    const rate = localization.fxRates && localization.fxRates[currency.code]
+                      ? localization.fxRates[currency.code]
                       : (currency.code === localization.baseCurrency ? 1 : currency.rate)
                     const isBaseCurrency = currency.code === localization.baseCurrency
                     return (
                       <div key={currency.code} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10">
-                          <span className="font-bold text-primary">{currency.symbol}</span>
-                        </div>
-                        <div>
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10">
+                            <span className="font-bold text-primary">{currency.symbol}</span>
+                          </div>
+                          <div>
                             <div className="font-medium flex items-center gap-2">
                               {currency.code}
                               {isBaseCurrency && (
                                 <Badge variant="outline" className="text-xs">Base</Badge>
                               )}
                             </div>
-                          <div className="text-xs text-muted-foreground">{currency.name}</div>
+                            <div className="text-xs text-muted-foreground">{currency.name}</div>
+                          </div>
                         </div>
-                      </div>
-                      <div className="text-right">
+                        <div className="text-right">
                           <div className="font-semibold text-lg">
                             {isBaseCurrency ? "1.0000" : rate.toFixed(4)}
                           </div>
@@ -453,8 +457,8 @@ export function LocalizationSettings() {
                     <div className="flex-1">
                       <p className="text-xs text-blue-800 font-medium mb-1">Live Exchange Rates</p>
                       <p className="text-xs text-blue-700">
-                        Rates are fetched from free currency APIs (exchangerate-api.com). 
-                        Click "Update FX Rates" to refresh with latest rates. 
+                        Rates are fetched from free currency APIs (exchangerate-api.com).
+                        Click "Update FX Rates" to refresh with latest rates.
                         {localization.fxRates && Object.keys(localization.fxRates).length > 0 && (
                           <span className="block mt-1">
                             Last updated: {new Date().toLocaleString()}
@@ -480,8 +484,8 @@ export function LocalizationSettings() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label>Date Format</Label>
-                  <Select 
-                    value={localization.dateFormat} 
+                  <Select
+                    value={localization.dateFormat}
                     onValueChange={(value) => setLocalization({ ...localization, dateFormat: value })}
                   >
                     <SelectTrigger>
@@ -498,8 +502,8 @@ export function LocalizationSettings() {
 
                 <div className="space-y-2">
                   <Label>Number Format</Label>
-                  <Select 
-                    value={localization.numberFormat} 
+                  <Select
+                    value={localization.numberFormat}
                     onValueChange={(value) => setLocalization({ ...localization, numberFormat: value })}
                   >
                     <SelectTrigger>
@@ -516,8 +520,8 @@ export function LocalizationSettings() {
 
                 <div className="space-y-2">
                   <Label>Language</Label>
-                  <Select 
-                    value={localization.language} 
+                  <Select
+                    value={localization.language}
                     onValueChange={(value) => setLocalization({ ...localization, language: value })}
                   >
                     <SelectTrigger>
@@ -537,8 +541,8 @@ export function LocalizationSettings() {
 
                 <div className="space-y-2">
                   <Label>Time Zone</Label>
-                  <Select 
-                    value={localization.timezone} 
+                  <Select
+                    value={localization.timezone}
                     onValueChange={(value) => setLocalization({ ...localization, timezone: value })}
                   >
                     <SelectTrigger>
@@ -564,27 +568,27 @@ export function LocalizationSettings() {
                     <span className="text-muted-foreground">Date:</span>
                     <span className="font-medium">
                       {localization.dateFormat === "DD/MM/YYYY" ? "31/12/2024" :
-                       localization.dateFormat === "MM/DD/YYYY" ? "12/31/2024" :
-                       localization.dateFormat === "YYYY-MM-DD" ? "2024-12-31" : "31.12.2024"}
+                        localization.dateFormat === "MM/DD/YYYY" ? "12/31/2024" :
+                          localization.dateFormat === "YYYY-MM-DD" ? "2024-12-31" : "31.12.2024"}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Number:</span>
                     <span className="font-medium">
                       {localization.numberFormat === "indian" ? "₹1,00,000.00" :
-                       localization.numberFormat === "international" ? "₹100,000.00" :
-                       localization.numberFormat === "1,234.56" ? "₹1,234.56" : "₹1.234,56"}
+                        localization.numberFormat === "international" ? "₹100,000.00" :
+                          localization.numberFormat === "1,234.56" ? "₹1,234.56" : "₹1.234,56"}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Language:</span>
                     <span className="font-medium">
                       {localization.language === "en" ? "English" :
-                       localization.language === "hi" ? "हिन्दी" :
-                       localization.language === "es" ? "Español" :
-                       localization.language === "fr" ? "Français" :
-                       localization.language === "de" ? "Deutsch" :
-                       localization.language === "ja" ? "日本語" : "中文"}
+                        localization.language === "hi" ? "हिन्दी" :
+                          localization.language === "es" ? "Español" :
+                            localization.language === "fr" ? "Français" :
+                              localization.language === "de" ? "Deutsch" :
+                                localization.language === "ja" ? "日本語" : "中文"}
                     </span>
                   </div>
                 </div>
@@ -688,13 +692,12 @@ export function LocalizationSettings() {
                 {taxLiabilities.map((liability, index) => (
                   <div
                     key={index}
-                    className={`p-4 border rounded-lg ${
-                      liability.status === "overdue"
-                        ? "border-red-200 bg-red-50"
-                        : liability.status === "due"
-                          ? "border-orange-200 bg-orange-50"
-                          : "border-gray-200"
-                    }`}
+                    className={`p-4 border rounded-lg ${liability.status === "overdue"
+                      ? "border-red-200 bg-red-50"
+                      : liability.status === "due"
+                        ? "border-orange-200 bg-orange-50"
+                        : "border-gray-200"
+                      }`}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -749,8 +752,8 @@ export function LocalizationSettings() {
                   <Label>GST Tracking</Label>
                   <p className="text-xs text-muted-foreground">Track GST collections and payments in cash flow</p>
                 </div>
-                <Switch 
-                  checked={localization.gstEnabled} 
+                <Switch
+                  checked={localization.gstEnabled}
                   onCheckedChange={(checked) => setLocalization({ ...localization, gstEnabled: checked })}
                 />
               </div>
@@ -762,8 +765,8 @@ export function LocalizationSettings() {
                     Automatically calculate TDS on applicable transactions
                   </p>
                 </div>
-                <Switch 
-                  checked={localization.tdsEnabled} 
+                <Switch
+                  checked={localization.tdsEnabled}
                   onCheckedChange={(checked) => setLocalization({ ...localization, tdsEnabled: checked })}
                 />
               </div>
@@ -773,8 +776,8 @@ export function LocalizationSettings() {
                   <Label>E-Invoicing</Label>
                   <p className="text-xs text-muted-foreground">Enable e-invoicing for B2B transactions</p>
                 </div>
-                <Switch 
-                  checked={localization.einvoicingEnabled} 
+                <Switch
+                  checked={localization.einvoicingEnabled}
                   onCheckedChange={(checked) => setLocalization({ ...localization, einvoicingEnabled: checked })}
                 />
               </div>
