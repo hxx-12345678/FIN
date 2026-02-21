@@ -223,32 +223,87 @@ CREATE INDEX IF NOT EXISTS "jobs_idempotency_key_idx" ON "jobs"("idempotency_key
 CREATE INDEX IF NOT EXISTS "notifications_created_at_idx" ON "notifications"("created_at");
 
 -- Foreign Keys
-ALTER TABLE "raw_transactions" ADD CONSTRAINT "raw_transactions_import_batch_id_fkey" FOREIGN KEY ("import_batch_id") REFERENCES "data_import_batches"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-ALTER TABLE "data_import_batches" ADD CONSTRAINT "data_import_batches_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "drivers" ADD CONSTRAINT "drivers_modelId_fkey" FOREIGN KEY ("modelId") REFERENCES "models"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "drivers" ADD CONSTRAINT "drivers_orgId_fkey" FOREIGN KEY ("orgId") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "driver_values" ADD CONSTRAINT "driver_values_driverId_fkey" FOREIGN KEY ("driverId") REFERENCES "drivers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "driver_values" ADD CONSTRAINT "driver_values_scenarioId_fkey" FOREIGN KEY ("scenarioId") REFERENCES "financial_scenarios"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "financial_scenarios" ADD CONSTRAINT "financial_scenarios_modelId_fkey" FOREIGN KEY ("modelId") REFERENCES "models"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "financial_scenarios" ADD CONSTRAINT "financial_scenarios_orgId_fkey" FOREIGN KEY ("orgId") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "driver_formulas" ADD CONSTRAINT "driver_formulas_driverId_fkey" FOREIGN KEY ("driverId") REFERENCES "drivers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "driver_formulas" ADD CONSTRAINT "driver_formulas_modelId_fkey" FOREIGN KEY ("modelId") REFERENCES "models"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "driver_formulas" ADD CONSTRAINT "driver_formulas_orgId_fkey" FOREIGN KEY ("orgId") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "dimension_members" ADD CONSTRAINT "dimension_members_dimensionId_fkey" FOREIGN KEY ("dimensionId") REFERENCES "dimensions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "metric_cube" ADD CONSTRAINT "metric_cube_geographyId_fkey" FOREIGN KEY ("geographyId") REFERENCES "dimension_members"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-ALTER TABLE "board_report_schedules" ADD CONSTRAINT "board_report_schedules_created_by_id_fkey" FOREIGN KEY ("created_by_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-ALTER TABLE "board_report_schedules" ADD CONSTRAINT "board_report_schedules_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "computation_traces" ADD CONSTRAINT "computation_traces_modelId_fkey" FOREIGN KEY ("modelId") REFERENCES "models"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "computation_traces" ADD CONSTRAINT "computation_traces_orgId_fkey" FOREIGN KEY ("orgId") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "forecasts" ADD CONSTRAINT "forecasts_modelId_fkey" FOREIGN KEY ("modelId") REFERENCES "models"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "forecasts" ADD CONSTRAINT "forecasts_orgId_fkey" FOREIGN KEY ("orgId") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "excel_syncs" ADD CONSTRAINT "excel_syncs_mapping_id_fkey" FOREIGN KEY ("mapping_id") REFERENCES "excel_mappings"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-ALTER TABLE "excel_syncs" ADD CONSTRAINT "excel_syncs_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "excel_mappings" ADD CONSTRAINT "excel_mappings_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-ALTER TABLE "excel_mappings" ADD CONSTRAINT "excel_mappings_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "org_quotas" ADD CONSTRAINT "org_quotas_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "realtime_simulations" ADD CONSTRAINT "realtime_simulations_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "realtime_simulations" ADD CONSTRAINT "realtime_simulations_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'raw_transactions_import_batch_id_fkey') THEN
+        ALTER TABLE "raw_transactions" ADD CONSTRAINT "raw_transactions_import_batch_id_fkey" FOREIGN KEY ("import_batch_id") REFERENCES "data_import_batches"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'data_import_batches_org_id_fkey') THEN
+        ALTER TABLE "data_import_batches" ADD CONSTRAINT "data_import_batches_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'drivers_modelId_fkey') THEN
+        ALTER TABLE "drivers" ADD CONSTRAINT "drivers_modelId_fkey" FOREIGN KEY ("modelId") REFERENCES "models"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'drivers_orgId_fkey') THEN
+        ALTER TABLE "drivers" ADD CONSTRAINT "drivers_orgId_fkey" FOREIGN KEY ("orgId") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'driver_values_driverId_fkey') THEN
+        ALTER TABLE "driver_values" ADD CONSTRAINT "driver_values_driverId_fkey" FOREIGN KEY ("driverId") REFERENCES "drivers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'driver_values_scenarioId_fkey') THEN
+        ALTER TABLE "driver_values" ADD CONSTRAINT "driver_values_scenarioId_fkey" FOREIGN KEY ("scenarioId") REFERENCES "financial_scenarios"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'financial_scenarios_modelId_fkey') THEN
+        ALTER TABLE "financial_scenarios" ADD CONSTRAINT "financial_scenarios_modelId_fkey" FOREIGN KEY ("modelId") REFERENCES "models"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'financial_scenarios_orgId_fkey') THEN
+        ALTER TABLE "financial_scenarios" ADD CONSTRAINT "financial_scenarios_orgId_fkey" FOREIGN KEY ("orgId") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'driver_formulas_driverId_fkey') THEN
+        ALTER TABLE "driver_formulas" ADD CONSTRAINT "driver_formulas_driverId_fkey" FOREIGN KEY ("driverId") REFERENCES "drivers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'driver_formulas_modelId_fkey') THEN
+        ALTER TABLE "driver_formulas" ADD CONSTRAINT "driver_formulas_modelId_fkey" FOREIGN KEY ("modelId") REFERENCES "models"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'driver_formulas_orgId_fkey') THEN
+        ALTER TABLE "driver_formulas" ADD CONSTRAINT "driver_formulas_orgId_fkey" FOREIGN KEY ("orgId") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'dimension_members_dimensionId_fkey') THEN
+        ALTER TABLE "dimension_members" ADD CONSTRAINT "dimension_members_dimensionId_fkey" FOREIGN KEY ("dimensionId") REFERENCES "dimensions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'metric_cube_geographyId_fkey') THEN
+        ALTER TABLE "metric_cube" ADD CONSTRAINT "metric_cube_geographyId_fkey" FOREIGN KEY ("geographyId") REFERENCES "dimension_members"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'board_report_schedules_created_by_id_fkey') THEN
+        ALTER TABLE "board_report_schedules" ADD CONSTRAINT "board_report_schedules_created_by_id_fkey" FOREIGN KEY ("created_by_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'board_report_schedules_org_id_fkey') THEN
+        ALTER TABLE "board_report_schedules" ADD CONSTRAINT "board_report_schedules_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'computation_traces_modelId_fkey') THEN
+        ALTER TABLE "computation_traces" ADD CONSTRAINT "computation_traces_modelId_fkey" FOREIGN KEY ("modelId") REFERENCES "models"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'computation_traces_orgId_fkey') THEN
+        ALTER TABLE "computation_traces" ADD CONSTRAINT "computation_traces_orgId_fkey" FOREIGN KEY ("orgId") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'forecasts_modelId_fkey') THEN
+        ALTER TABLE "forecasts" ADD CONSTRAINT "forecasts_modelId_fkey" FOREIGN KEY ("modelId") REFERENCES "models"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'forecasts_orgId_fkey') THEN
+        ALTER TABLE "forecasts" ADD CONSTRAINT "forecasts_orgId_fkey" FOREIGN KEY ("orgId") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'excel_syncs_mapping_id_fkey') THEN
+        ALTER TABLE "excel_syncs" ADD CONSTRAINT "excel_syncs_mapping_id_fkey" FOREIGN KEY ("mapping_id") REFERENCES "excel_mappings"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'excel_syncs_org_id_fkey') THEN
+        ALTER TABLE "excel_syncs" ADD CONSTRAINT "excel_syncs_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'excel_mappings_created_by_fkey') THEN
+        ALTER TABLE "excel_mappings" ADD CONSTRAINT "excel_mappings_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'excel_mappings_org_id_fkey') THEN
+        ALTER TABLE "excel_mappings" ADD CONSTRAINT "excel_mappings_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'org_quotas_org_id_fkey') THEN
+        ALTER TABLE "org_quotas" ADD CONSTRAINT "org_quotas_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'realtime_simulations_org_id_fkey') THEN
+        ALTER TABLE "realtime_simulations" ADD CONSTRAINT "realtime_simulations_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'realtime_simulations_user_id_fkey') THEN
+        ALTER TABLE "realtime_simulations" ADD CONSTRAINT "realtime_simulations_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+END $$;
 
 -- RenameIndices (Safely using RENAME TO if exist)
 DO $$
