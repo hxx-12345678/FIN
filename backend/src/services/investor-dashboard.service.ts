@@ -691,6 +691,22 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
 
   // Get milestones and updates
   const milestones = getMilestones(arr, runwayMonths);
+
+  // Add onboarding milestone if no model run exists but we have data
+  const modelRunCount = await prisma.modelRun.count({
+    where: { orgId, status: 'done' }
+  });
+
+  if (modelRunCount === 0 && (arr > 0 || transactions.length > 0)) {
+    milestones.unshift({
+      title: 'Initialize AI Financial Model',
+      description: 'Run your first financial model to unlock AI storytelling, growth forecasts, and investor-ready reporting.',
+      status: 'in-progress',
+      date: new Date().toISOString(),
+      progress: 50
+    });
+  }
+
   const keyUpdates = await getKeyUpdates(orgId, new Date());
 
   return {

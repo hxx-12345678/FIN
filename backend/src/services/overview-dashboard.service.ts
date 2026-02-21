@@ -341,11 +341,14 @@ export const overviewDashboardService = {
         return Math.min(100, Math.max(0, score));
       };
 
+      // For accounts with NO arr growth (first month), provide a base score if they have runway
+      const effectiveArrGrowth = arr > 0 && revenueGrowth === 0 ? 5 : revenueGrowth;
+
       healthScore = calculateHealthScore({
         arr,
         burnRate: monthlyBurnRate,
         runwayMonths,
-        arrGrowth: revenueGrowth,
+        arrGrowth: effectiveArrGrowth,
       });
     }
 
@@ -491,9 +494,13 @@ export const overviewDashboardService = {
 
     // Generate comprehensive AI-powered alerts based on actual data
     const alerts: Array<{ type: 'warning' | 'success' | 'info'; title: string; message: string }> = [];
-
     // Only show alerts if we have meaningful data
     const hasData = transactions.length > 0 || monthlyRevenue > 0 || monthlyBurnRate > 0;
+
+    // Check for previous successful model runs
+    const modelRunCount = await prisma.modelRun.count({
+      where: { orgId, status: 'done' }
+    });
 
     if (!hasData) {
       // Only show welcome message if no data
@@ -503,6 +510,14 @@ export const overviewDashboardService = {
         message: 'Connect your accounting system or import transactions to get real-time financial insights and AI-powered recommendations.',
       });
     } else {
+      // Data detected, check if a model has been run
+      if (modelRunCount === 0) {
+        alerts.push({
+          type: 'info',
+          title: '💼 Financial Data Detected',
+          message: 'We\'ve analyzed your imported transactions. To unlock deep AI forecasting, unit economics (LTV/CAC), and custom growth scenarios, run your first financial model now.',
+        });
+      }
       // Cash Runway Alerts (Critical Priority)
       if (runwayMonths > 0 && runwayMonths < 3) {
         alerts.push({

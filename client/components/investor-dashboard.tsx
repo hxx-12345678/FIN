@@ -20,8 +20,9 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
-import { TrendingUp, TrendingDown, Target, Share, Download, Eye, MessageSquare, Loader2, AlertCircle } from "lucide-react"
+import { TrendingUp, TrendingDown, Target, Share, Download, Eye, MessageSquare, Loader2, AlertCircle, Sparkles } from "lucide-react"
 import { toast } from "sonner"
+import { useRouter } from "next/navigation"
 import { FinancialTermTooltip } from "./financial-term-tooltip"
 import { API_BASE_URL } from "@/lib/api-config"
 import { useOrg } from "@/lib/org-context"
@@ -65,6 +66,7 @@ interface DashboardData {
 }
 
 export function InvestorDashboard() {
+  const router = useRouter()
   const { currencySymbol, formatCurrency } = useOrg()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -318,7 +320,7 @@ export function InvestorDashboard() {
                 <FinancialTermTooltip term="Health Score" />
               </div>
               <div className={`flex items-center justify-center text-xs mt-1 ${executiveSummary.healthScore >= 80 ? "text-green-600" :
-                  executiveSummary.healthScore >= 60 ? "text-yellow-600" : "text-red-600"
+                executiveSummary.healthScore >= 60 ? "text-yellow-600" : "text-red-600"
                 }`}>
                 <TrendingUp className="mr-1 h-3 w-3" />
                 {executiveSummary.healthScore >= 80 ? "Excellent" :
@@ -424,10 +426,10 @@ export function InvestorDashboard() {
               <div key={index} className="flex items-start gap-4 p-3 rounded-lg border">
                 <div
                   className={`w-3 h-3 rounded-full mt-2 ${milestone.status === "completed"
-                      ? "bg-green-500"
-                      : milestone.status === "in-progress"
-                        ? "bg-blue-500"
-                        : "bg-gray-300"
+                    ? "bg-green-500"
+                    : milestone.status === "in-progress"
+                      ? "bg-blue-500"
+                      : "bg-gray-300"
                     }`}
                 />
                 <div className="flex-1">
@@ -504,50 +506,68 @@ export function InvestorDashboard() {
           <CardDescription>Key financial metrics and ratios</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="text-center p-4 rounded-lg bg-green-50 border border-green-200">
-              <div className="text-2xl font-bold text-green-600">
-                {formatCurrency(unitEconomics.ltv)}
-              </div>
-              <div className="text-sm text-green-700 flex items-center justify-center">
-                Customer LTV
-                <FinancialTermTooltip term="LTV" />
-              </div>
-              <div className="text-xs text-muted-foreground mt-1">Lifetime Value</div>
+          {unitEconomics.ltv === 0 && unitEconomics.cac === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center bg-muted/30 rounded-lg border border-dashed">
+              <Sparkles className="h-8 w-8 text-indigo-500 mb-3" />
+              <h3 className="font-semibold text-slate-900">Advanced Metrics Required</h3>
+              <p className="text-sm text-muted-foreground max-w-md mt-2 px-4">
+                We've imported your transaction data, but deep unit economics (LTV, CAC, Payback) require an active financial model.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                onClick={() => router.push('/dashboard/modeling')}
+              >
+                Run First Model
+              </Button>
             </div>
-            <div className="text-center p-4 rounded-lg bg-blue-50 border border-blue-200">
-              <div className="text-2xl font-bold text-blue-600">
-                {formatCurrency(unitEconomics.cac)}
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="text-center p-4 rounded-lg bg-green-50 border border-green-200">
+                <div className="text-2xl font-bold text-green-600">
+                  {formatCurrency(unitEconomics.ltv)}
+                </div>
+                <div className="text-sm text-green-700 flex items-center justify-center">
+                  Customer LTV
+                  <FinancialTermTooltip term="LTV" />
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">Lifetime Value</div>
               </div>
-              <div className="text-sm text-blue-700 flex items-center justify-center">
-                Customer CAC
-                <FinancialTermTooltip term="CAC" />
+              <div className="text-center p-4 rounded-lg bg-blue-50 border border-blue-200">
+                <div className="text-2xl font-bold text-blue-600">
+                  {formatCurrency(unitEconomics.cac)}
+                </div>
+                <div className="text-sm text-blue-700 flex items-center justify-center">
+                  Customer CAC
+                  <FinancialTermTooltip term="CAC" />
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">Acquisition Cost</div>
               </div>
-              <div className="text-xs text-muted-foreground mt-1">Acquisition Cost</div>
+              <div className="text-center p-4 rounded-lg bg-purple-50 border border-purple-200">
+                <div className="text-2xl font-bold text-purple-600">
+                  {unitEconomics.ltvCacRatio.toFixed(1)}:1
+                </div>
+                <div className="text-sm text-purple-700 flex items-center justify-center">
+                  LTV:CAC Ratio
+                  <FinancialTermTooltip term="LTV:CAC Ratio" />
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {unitEconomics.ltvCacRatio >= 3 ? "Excellent" : unitEconomics.ltvCacRatio >= 1 ? "Good" : "Needs Improvement"}
+                </div>
+              </div>
+              <div className="text-center p-4 rounded-lg bg-orange-50 border border-orange-200">
+                <div className="text-2xl font-bold text-orange-600">
+                  {unitEconomics.paybackPeriod.toFixed(1)} months
+                </div>
+                <div className="text-sm text-orange-700 flex items-center justify-center">
+                  Payback Period
+                  <FinancialTermTooltip term="Payback Period" />
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">Time to recover CAC</div>
+              </div>
             </div>
-            <div className="text-center p-4 rounded-lg bg-purple-50 border border-purple-200">
-              <div className="text-2xl font-bold text-purple-600">
-                {unitEconomics.ltvCacRatio.toFixed(1)}:1
-              </div>
-              <div className="text-sm text-purple-700 flex items-center justify-center">
-                LTV:CAC Ratio
-                <FinancialTermTooltip term="LTV:CAC Ratio" />
-              </div>
-              <div className="text-xs text-muted-foreground mt-1">
-                {unitEconomics.ltvCacRatio >= 3 ? "Excellent" : unitEconomics.ltvCacRatio >= 1 ? "Good" : "Needs Improvement"}
-              </div>
-            </div>
-            <div className="text-center p-4 rounded-lg bg-orange-50 border border-orange-200">
-              <div className="text-2xl font-bold text-orange-600">
-                {unitEconomics.paybackPeriod.toFixed(1)} months
-              </div>
-              <div className="text-sm text-orange-700 flex items-center justify-center">
-                Payback Period
-                <FinancialTermTooltip term="Payback Period" />
-              </div>
-              <div className="text-xs text-muted-foreground mt-1">Time to recover CAC</div>
-            </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 

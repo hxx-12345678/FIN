@@ -672,7 +672,7 @@ export function OverviewDashboard() {
                     stroke="#82ca9d"
                     strokeWidth={2}
                     strokeDasharray="5 5"
-                    name="AI Forecast"
+                    name={selectedModelId ? "AI Forecast" : "Estimated Growth"}
                   />
                 </LineChart>
               </ResponsiveContainer>

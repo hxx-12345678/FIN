@@ -30,7 +30,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
-import { FileText, Download, Share, Calendar, TrendingUp, TrendingDown, Zap, Filter, Eye, ListTodo } from "lucide-react"
+import { FileText, Download, Share, Calendar, TrendingUp, TrendingDown, Zap, Filter, Eye, ListTodo, Sparkles } from "lucide-react"
 import Link from "next/link"
 
 // Report templates - static list of available templates
@@ -154,10 +154,10 @@ export function ReportsAnalytics() {
   useEffect(() => {
     const handleImportComplete = async (event: CustomEvent) => {
       const { rowsImported, orgId: importedOrgId } = event.detail || {}
-      
+
       if (importedOrgId && importedOrgId === orgId) {
         toast.success(`CSV import completed! Refreshing overview data...`)
-        
+
         // Small delay to ensure backend has processed the data
         setTimeout(async () => {
           if (orgId) {
@@ -258,36 +258,36 @@ export function ReportsAnalytics() {
         const result = await response.json()
         if (result.ok && result.data) {
           const data = result.data
-          
+
           // Process KPI data from overview
           const kpis = [
-            { 
-              name: "Revenue", 
-              current: data.monthlyRevenue || 0, 
-              target: data.monthlyRevenue ? Math.round(data.monthlyRevenue * 1.1) : 0, 
-              change: data.revenueGrowth || 0, 
-              trend: (data.revenueGrowth || 0) > 0 ? "up" : "down" 
+            {
+              name: "Revenue",
+              current: data.monthlyRevenue || 0,
+              target: data.monthlyRevenue ? Math.round(data.monthlyRevenue * 1.1) : 0,
+              change: data.revenueGrowth || 0,
+              trend: (data.revenueGrowth || 0) > 0 ? "up" : "down"
             },
-            { 
-              name: "Customers", 
-              current: data.activeCustomers || 0, 
-              target: data.activeCustomers ? Math.round(data.activeCustomers * 1.1) : 0, 
-              change: 0, 
-              trend: "up" 
+            {
+              name: "Customers",
+              current: data.activeCustomers || 0,
+              target: data.activeCustomers ? Math.round(data.activeCustomers * 1.1) : 0,
+              change: 0,
+              trend: "up"
             },
-            { 
-              name: "Burn Rate", 
-              current: data.monthlyBurnRate || 0, 
-              target: data.monthlyBurnRate ? Math.round(data.monthlyBurnRate * 0.9) : 0, 
-              change: data.burnRateChange || 0, 
-              trend: (data.burnRateChange || 0) < 0 ? "down" : "up" 
+            {
+              name: "Burn Rate",
+              current: data.monthlyBurnRate || 0,
+              target: data.monthlyBurnRate ? Math.round(data.monthlyBurnRate * 0.9) : 0,
+              change: data.burnRateChange || 0,
+              trend: (data.burnRateChange || 0) < 0 ? "down" : "up"
             },
-            { 
-              name: "Cash Runway", 
-              current: Math.round(data.cashRunway || 0), 
-              target: 12, 
-              change: data.runwayChange || 0, 
-              trend: (data.runwayChange || 0) > 0 ? "up" : "down" 
+            {
+              name: "Cash Runway",
+              current: Math.round(data.cashRunway || 0),
+              target: 12,
+              change: data.runwayChange || 0,
+              trend: (data.runwayChange || 0) > 0 ? "up" : "down"
             },
           ]
           setKpiData(kpis)
@@ -310,7 +310,7 @@ export function ReportsAnalytics() {
             if (processedRevenue.some((r: any) => r.date)) {
               processedRevenue = processedRevenue.filter((item: any) => !item.date || item.date >= startDate)
             }
-            
+
             // Sort by date and take last 6 months
             processedRevenue.sort((a: any, b: any) => {
               if (a.date && b.date) return a.date.getTime() - b.date.getTime()
@@ -521,11 +521,11 @@ export function ReportsAnalytics() {
         const result = await response.json()
         if (result.ok && result.shareableLink) {
           const shareUrl = result.shareableLink.shareUrl
-          
+
           // Copy to clipboard
           try {
             await navigator.clipboard.writeText(shareUrl)
-            
+
             // Show a prominent toast with the link
             toast.success(
               <div className="space-y-3 w-full max-w-md">
@@ -657,7 +657,7 @@ export function ReportsAnalytics() {
         const modelsResult = await modelsResponse.json()
         if (modelsResult.ok && modelsResult.models && modelsResult.models.length > 0) {
           const firstModel = modelsResult.models[0]
-          
+
           // Get latest run for this model
           const runsResponse = await fetch(`${API_BASE_URL}/models/${firstModel.id}/runs`, {
             headers: {
@@ -671,10 +671,10 @@ export function ReportsAnalytics() {
             const runsResult = await runsResponse.json()
             if (runsResult.ok && runsResult.runs && runsResult.runs.length > 0) {
               const latestRun = runsResult.runs[0]
-              
+
               // Determine export type based on template
               const exportType = selectedTemplate === "investor-update" ? "memo" : "pdf"
-              
+
               // Create export with template information
               const exportResponse = await fetch(`${API_BASE_URL}/model-runs/${latestRun.id}/export`, {
                 method: "POST",
@@ -683,7 +683,7 @@ export function ReportsAnalytics() {
                   "Content-Type": "application/json",
                 },
                 credentials: "include",
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                   type: exportType,
                   template: selectedTemplate, // Pass template type for context-specific generation
                 }),
@@ -693,7 +693,7 @@ export function ReportsAnalytics() {
                 const exportResult = await exportResponse.json()
                 toast.success("Report generation started. Check Export Queue for status.")
                 // Refresh exports list after a delay
-    setTimeout(() => {
+                setTimeout(() => {
                   fetchExports()
                 }, 2000)
               } else {
@@ -766,6 +766,36 @@ export function ReportsAnalytics() {
         </div>
       </div>
 
+      {/* Onboarding Banner for No Models */}
+      {!loading && customReports.length === 0 && (
+        <Card className="bg-indigo-600 text-white overflow-hidden relative border-0 shadow-lg mb-6">
+          <div className="absolute top-0 right-0 p-6 opacity-20 transform translate-x-1/4 -translate-y-1/4">
+            <Zap className="h-48 w-48" />
+          </div>
+          <CardHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <Sparkles className="h-6 w-6 text-indigo-300" />
+              <Badge className="bg-indigo-500 text-white border-none">AI FEATURE READY</Badge>
+            </div>
+            <CardTitle className="text-2xl font-bold">Unlock AI-Powered Financial Reports</CardTitle>
+            <CardDescription className="text-indigo-100 text-lg">
+              Generate board-ready decks, investor updates, and detailed P&L analysis in seconds using your data.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="relative z-10 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+            <Button
+              className="bg-white text-indigo-600 hover:bg-indigo-50 font-bold px-8 h-12"
+              onClick={() => router.push('/dashboard/modeling')}
+            >
+              Run Your First Model
+            </Button>
+            <p className="text-sm text-indigo-100 italic">
+              * Requires an active model run to populate AI storytelling and scenario data.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Key Metrics Overview */}
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
@@ -783,32 +813,31 @@ export function ReportsAnalytics() {
           ))}
         </div>
       ) : kpiData.length > 0 ? (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {kpiData.map((kpi, index) => (
-          <Card key={index}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{kpi.name}</CardTitle>
-              {kpi.trend === "up" ? (
-                <TrendingUp className={`h-4 w-4 ${kpi.change > 0 ? "text-green-600" : "text-red-600"}`} />
-              ) : (
-                <TrendingDown className={`h-4 w-4 ${kpi.change < 0 ? "text-green-600" : "text-red-600"}`} />
-              )}
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {kpi.name.includes("Rate") || kpi.name.includes("Churn")
-                  ? `${kpi.current}%`
-                  : kpi.name.includes("Revenue") ||
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {kpiData.map((kpi, index) => (
+            <Card key={index}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">{kpi.name}</CardTitle>
+                {kpi.trend === "up" ? (
+                  <TrendingUp className={`h-4 w-4 ${kpi.change > 0 ? "text-green-600" : "text-red-600"}`} />
+                ) : (
+                  <TrendingDown className={`h-4 w-4 ${kpi.change < 0 ? "text-green-600" : "text-red-600"}`} />
+                )}
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {kpi.name.includes("Rate") || kpi.name.includes("Churn")
+                    ? `${kpi.current}%`
+                    : kpi.name.includes("Revenue") ||
                       kpi.name.includes("CAC") ||
                       kpi.name.includes("LTV") ||
                       kpi.name.includes("Burn")
-                    ? `$${kpi.current.toLocaleString()}`
-                    : kpi.current.toLocaleString()}
-              </div>
-              <div className="flex items-center justify-between mt-2">
-                <div
-                  className={`text-xs ${
-                    Math.abs(kpi.change) > 0
+                      ? `$${kpi.current.toLocaleString()}`
+                      : kpi.current.toLocaleString()}
+                </div>
+                <div className="flex items-center justify-between mt-2">
+                  <div
+                    className={`text-xs ${Math.abs(kpi.change) > 0
                       ? kpi.name.includes("Churn")
                         ? kpi.change < 0
                           ? "text-green-600"
@@ -817,27 +846,27 @@ export function ReportsAnalytics() {
                           ? "text-green-600"
                           : "text-red-600"
                       : "text-muted-foreground"
-                  }`}
-                >
-                  {kpi.change > 0 ? "+" : ""}
-                  {kpi.change}% from last month
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Target:{" "}
-                  {kpi.name.includes("Rate") || kpi.name.includes("Churn")
-                    ? `${kpi.target}%`
-                    : kpi.name.includes("Revenue") ||
+                      }`}
+                  >
+                    {kpi.change > 0 ? "+" : ""}
+                    {kpi.change}% from last month
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Target:{" "}
+                    {kpi.name.includes("Rate") || kpi.name.includes("Churn")
+                      ? `${kpi.target}%`
+                      : kpi.name.includes("Revenue") ||
                         kpi.name.includes("CAC") ||
                         kpi.name.includes("LTV") ||
                         kpi.name.includes("Burn")
-                      ? `$${kpi.target.toLocaleString()}`
-                      : kpi.target.toLocaleString()}
+                        ? `$${kpi.target.toLocaleString()}`
+                        : kpi.target.toLocaleString()}
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       ) : (
         <Card>
           <CardContent className="p-8 text-center">
@@ -846,8 +875,8 @@ export function ReportsAnalytics() {
         </Card>
       )}
 
-      <Tabs 
-        value={currentTab} 
+      <Tabs
+        value={currentTab}
         onValueChange={(value) => {
           const params = new URLSearchParams(searchParams.toString())
           params.set("tab", value)
@@ -869,9 +898,8 @@ export function ReportsAnalytics() {
             {reportTemplates.map((template) => (
               <Card
                 key={template.id}
-                className={`cursor-pointer transition-all hover:shadow-md ${
-                  selectedTemplate === template.id ? "ring-2 ring-primary" : ""
-                }`}
+                className={`cursor-pointer transition-all hover:shadow-md ${selectedTemplate === template.id ? "ring-2 ring-primary" : ""
+                  }`}
                 onClick={() => setSelectedTemplate(template.id)}
               >
                 <CardHeader>
@@ -903,8 +931,8 @@ export function ReportsAnalytics() {
                     </div>
                   </div>
                   <div className="flex gap-2 mt-4">
-                    <Button 
-                      size="sm" 
+                    <Button
+                      size="sm"
                       className="flex-1"
                       onClick={() => {
                         setSelectedTemplate(template.id)
@@ -919,8 +947,8 @@ export function ReportsAnalytics() {
                         </>
                       ) : (
                         <>
-                      <FileText className="mr-1 h-3 w-3" />
-                      Generate
+                          <FileText className="mr-1 h-3 w-3" />
+                          Generate
                         </>
                       )}
                     </Button>
@@ -944,23 +972,23 @@ export function ReportsAnalytics() {
                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                   </div>
                 ) : revenueData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
-                  <LineChart data={revenueData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <Tooltip formatter={(value) => [`$${value.toLocaleString()}`, ""]} />
-                    <Line type="monotone" dataKey="revenue" stroke="#8884d8" strokeWidth={2} name="Actual Revenue" />
-                    <Line
-                      type="monotone"
-                      dataKey="target"
-                      stroke="#82ca9d"
-                      strokeWidth={2}
-                      strokeDasharray="5 5"
-                      name="Target"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+                  <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
+                    <LineChart data={revenueData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="month" />
+                      <YAxis />
+                      <Tooltip formatter={(value) => [`$${value.toLocaleString()}`, ""]} />
+                      <Line type="monotone" dataKey="revenue" stroke="#8884d8" strokeWidth={2} name="Actual Revenue" />
+                      <Line
+                        type="monotone"
+                        dataKey="target"
+                        stroke="#82ca9d"
+                        strokeWidth={2}
+                        strokeDasharray="5 5"
+                        name="Target"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
                 ) : (
                   <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground text-sm px-4 text-center">
                     <p>No revenue data available</p>
@@ -980,22 +1008,22 @@ export function ReportsAnalytics() {
                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                   </div>
                 ) : revenueData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
-                  <AreaChart data={revenueData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <Tooltip />
-                    <Area
-                      type="monotone"
-                      dataKey="customers"
-                      stroke="#8884d8"
-                      fill="#8884d8"
-                      fillOpacity={0.6}
-                      name="Customers"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+                  <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
+                    <AreaChart data={revenueData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="month" />
+                      <YAxis />
+                      <Tooltip />
+                      <Area
+                        type="monotone"
+                        dataKey="customers"
+                        stroke="#8884d8"
+                        fill="#8884d8"
+                        fillOpacity={0.6}
+                        name="Customers"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
                 ) : (
                   <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground text-sm px-4 text-center">
                     <p>No customer data available</p>
@@ -1015,29 +1043,29 @@ export function ReportsAnalytics() {
                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                   </div>
                 ) : expenseBreakdown.length > 0 ? (
-                <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
-                  <PieChart>
-                    <Pie
-                      data={expenseBreakdown}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={(props: any) => {
-                        const name = props.name ?? ''
-                        const percent = props.percent ?? 0
-                        return `${name} ${(percent * 100).toFixed(0)}%`
-                      }}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {expenseBreakdown.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => [`$${value.toLocaleString()}`, ""]} />
-                  </PieChart>
-                </ResponsiveContainer>
+                  <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
+                    <PieChart>
+                      <Pie
+                        data={expenseBreakdown}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={(props: any) => {
+                          const name = props.name ?? ''
+                          const percent = props.percent ?? 0
+                          return `${name} ${(percent * 100).toFixed(0)}%`
+                        }}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {expenseBreakdown.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => [`$${value.toLocaleString()}`, ""]} />
+                    </PieChart>
+                  </ResponsiveContainer>
                 ) : (
                   <div className="flex items-center justify-center h-[300px] text-muted-foreground">
                     <p>No expense data available</p>
@@ -1057,15 +1085,15 @@ export function ReportsAnalytics() {
                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                   </div>
                 ) : revenueData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
-                  <BarChart data={revenueData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <Tooltip formatter={(value) => [`$${value.toLocaleString()}`, ""]} />
-                    <Bar dataKey="revenue" fill="#8884d8" name="Revenue" />
-                  </BarChart>
-                </ResponsiveContainer>
+                  <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
+                    <BarChart data={revenueData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="month" />
+                      <YAxis />
+                      <Tooltip formatter={(value) => [`$${value.toLocaleString()}`, ""]} />
+                      <Bar dataKey="revenue" fill="#8884d8" name="Revenue" />
+                    </BarChart>
+                  </ResponsiveContainer>
                 ) : (
                   <div className="flex items-center justify-center h-[300px] text-muted-foreground">
                     <p>No trend data available</p>
@@ -1109,83 +1137,83 @@ export function ReportsAnalytics() {
               </div>
             </CardHeader>
             <CardContent>
-                  {loading ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : customReports.length > 0 ? (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Created By</TableHead>
-                      <TableHead>Last Modified</TableHead>
-                      <TableHead>Views</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {customReports.map((report) => (
-                      <TableRow key={report.id}>
-                        <TableCell className="font-medium">{report.name}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{report.type}</Badge>
-                        </TableCell>
-                        <TableCell>{report.createdBy}</TableCell>
-                        <TableCell>{report.lastModified}</TableCell>
-                        <TableCell>{report.views}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              report.status === "published"
-                                ? "default"
-                                : report.status === "processing"
-                                  ? "secondary"
-                                  : report.status === "failed"
-                                    ? "destructive"
-                                    : "outline"
-                            }
-                          >
-                            {report.status === "published" ? "Ready" : report.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button 
-                              size="sm" 
-                              variant="outline" 
-                              className="bg-transparent"
-                              onClick={() => handleDownloadExport(report.id, report.exportType || "pdf")}
-                              disabled={report.status !== "published"}
-                              title={report.status === "processing" ? "Report is still generating..." : "Download report"}
-                            >
-                              <Download className="h-3 w-3" />
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              variant="outline" 
-                              className="bg-transparent"
-                              onClick={() => handleShareExport(report.id)}
-                              disabled={report.status !== "published"}
-                              title={report.status === "processing" ? "Report is still generating..." : "Create shareable link"}
-                            >
-                              <Share className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </TableCell>
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : customReports.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Created By</TableHead>
+                        <TableHead>Last Modified</TableHead>
+                        <TableHead>Views</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Actions</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <p>No custom reports yet. Generate a report to see it here.</p>
-                    </div>
-                  )}
+                    </TableHeader>
+                    <TableBody>
+                      {customReports.map((report) => (
+                        <TableRow key={report.id}>
+                          <TableCell className="font-medium">{report.name}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{report.type}</Badge>
+                          </TableCell>
+                          <TableCell>{report.createdBy}</TableCell>
+                          <TableCell>{report.lastModified}</TableCell>
+                          <TableCell>{report.views}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                report.status === "published"
+                                  ? "default"
+                                  : report.status === "processing"
+                                    ? "secondary"
+                                    : report.status === "failed"
+                                      ? "destructive"
+                                      : "outline"
+                              }
+                            >
+                              {report.status === "published" ? "Ready" : report.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="bg-transparent"
+                                onClick={() => handleDownloadExport(report.id, report.exportType || "pdf")}
+                                disabled={report.status !== "published"}
+                                title={report.status === "processing" ? "Report is still generating..." : "Download report"}
+                              >
+                                <Download className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="bg-transparent"
+                                onClick={() => handleShareExport(report.id)}
+                                disabled={report.status !== "published"}
+                                title={report.status === "processing" ? "Report is still generating..." : "Create shareable link"}
+                              >
+                                <Share className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>No custom reports yet. Generate a report to see it here.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1257,21 +1285,21 @@ export function ReportsAnalytics() {
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
                 ) : scheduledReports.length > 0 ? (
-                <div className="space-y-4">
+                  <div className="space-y-4">
                     {scheduledReports.map((schedule: any, index: number) => (
                       <div key={schedule.id || index} className="p-3 border rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-medium">{schedule.name}</h3>
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="font-medium">{schedule.name}</h3>
                           <Badge variant="outline">Scheduled</Badge>
-                      </div>
-                      <div className="text-sm text-muted-foreground space-y-1">
+                        </div>
+                        <div className="text-sm text-muted-foreground space-y-1">
                           <div>Last Modified: {schedule.lastModified}</div>
                           <div>Status: {schedule.status}</div>
-                      </div>
-                      <div className="flex gap-2 mt-2">
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
+                        </div>
+                        <div className="flex gap-2 mt-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
                             className="bg-transparent"
                             onClick={() => handleDownloadExport(schedule.id, schedule.exportType || "pdf")}
                             disabled={schedule.status !== "published"}
@@ -1279,10 +1307,10 @@ export function ReportsAnalytics() {
                           >
                             <Download className="h-3 w-3 mr-1" />
                             Download
-                        </Button>
-                        <Button 
-                            size="sm" 
-                            variant="outline" 
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
                             className="bg-transparent"
                             onClick={() => handleShareExport(schedule.id)}
                             disabled={schedule.status !== "published"}
@@ -1290,11 +1318,11 @@ export function ReportsAnalytics() {
                           >
                             <Share className="h-3 w-3 mr-1" />
                             Share
-                        </Button>
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
                     <p>No scheduled reports. Create a schedule to see them here.</p>
