@@ -23,49 +23,23 @@
 
 */
 -- DropForeignKey
-ALTER TABLE "board_report_schedules" DROP CONSTRAINT "board_report_schedules_created_by_id_fkey";
-
--- DropForeignKey
-ALTER TABLE "board_report_schedules" DROP CONSTRAINT "board_report_schedules_org_id_fkey";
-
--- DropForeignKey
-ALTER TABLE "data_import_batches" DROP CONSTRAINT "data_import_batches_org_id_fkey";
-
--- DropForeignKey
-ALTER TABLE "excel_mappings" DROP CONSTRAINT "excel_mappings_created_by_fkey";
-
--- DropForeignKey
-ALTER TABLE "excel_mappings" DROP CONSTRAINT "excel_mappings_org_id_fkey";
-
--- DropForeignKey
-ALTER TABLE "excel_syncs" DROP CONSTRAINT "excel_syncs_mapping_id_fkey";
-
--- DropForeignKey
-ALTER TABLE "excel_syncs" DROP CONSTRAINT "excel_syncs_org_id_fkey";
-
--- DropForeignKey
-ALTER TABLE "notification_channels" DROP CONSTRAINT "notification_channels_userId_fkey";
-
--- DropForeignKey
-ALTER TABLE "notifications" DROP CONSTRAINT "notifications_userId_fkey";
-
--- DropForeignKey
-ALTER TABLE "org_quotas" DROP CONSTRAINT "org_quotas_org_id_fkey";
-
--- DropForeignKey
-ALTER TABLE "raw_transactions" DROP CONSTRAINT "raw_transactions_import_batch_id_fkey";
-
--- DropForeignKey
-ALTER TABLE "realtime_simulations" DROP CONSTRAINT "realtime_simulations_org_id_fkey";
-
--- DropForeignKey
-ALTER TABLE "realtime_simulations" DROP CONSTRAINT "realtime_simulations_user_id_fkey";
+ALTER TABLE "board_report_schedules" DROP CONSTRAINT IF EXISTS "board_report_schedules_created_by_id_fkey";
+ALTER TABLE "board_report_schedules" DROP CONSTRAINT IF EXISTS "board_report_schedules_org_id_fkey";
+ALTER TABLE "data_import_batches" DROP CONSTRAINT IF EXISTS "data_import_batches_org_id_fkey";
+ALTER TABLE "excel_mappings" DROP CONSTRAINT IF EXISTS "excel_mappings_created_by_fkey";
+ALTER TABLE "excel_mappings" DROP CONSTRAINT IF EXISTS "excel_mappings_org_id_fkey";
+ALTER TABLE "excel_syncs" DROP CONSTRAINT IF EXISTS "excel_syncs_mapping_id_fkey";
+ALTER TABLE "excel_syncs" DROP CONSTRAINT IF EXISTS "excel_syncs_org_id_fkey";
+ALTER TABLE "notification_channels" DROP CONSTRAINT IF EXISTS "notification_channels_userId_fkey";
+ALTER TABLE "notifications" DROP CONSTRAINT IF EXISTS "notifications_userId_fkey";
+ALTER TABLE "org_quotas" DROP CONSTRAINT IF EXISTS "org_quotas_org_id_fkey";
+ALTER TABLE "raw_transactions" DROP CONSTRAINT IF EXISTS "raw_transactions_import_batch_id_fkey";
+ALTER TABLE "realtime_simulations" DROP CONSTRAINT IF EXISTS "realtime_simulations_org_id_fkey";
+ALTER TABLE "realtime_simulations" DROP CONSTRAINT IF EXISTS "realtime_simulations_user_id_fkey";
 
 -- DropIndex
-DROP INDEX "idx_provenance_entries_source_ref_gin";
-
--- DropIndex
-DROP INDEX "raw_transactions_org_source_id_key";
+DROP INDEX IF EXISTS "idx_provenance_entries_source_ref_gin";
+DROP INDEX IF EXISTS "raw_transactions_org_source_id_key";
 
 -- AlterTable
 ALTER TABLE "connectors" ALTER COLUMN "auto_sync_enabled" SET NOT NULL,
@@ -105,7 +79,7 @@ ALTER COLUMN "created_at" SET NOT NULL,
 ALTER COLUMN "updated_at" SET NOT NULL;
 
 -- CreateTable
-CREATE TABLE "drivers" (
+CREATE TABLE IF NOT EXISTS "drivers" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "orgId" UUID NOT NULL,
     "modelId" UUID NOT NULL,
@@ -125,7 +99,7 @@ CREATE TABLE "drivers" (
 );
 
 -- CreateTable
-CREATE TABLE "driver_values" (
+CREATE TABLE IF NOT EXISTS "driver_values" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "driverId" UUID NOT NULL,
     "scenarioId" UUID NOT NULL,
@@ -138,7 +112,7 @@ CREATE TABLE "driver_values" (
 );
 
 -- CreateTable
-CREATE TABLE "financial_scenarios" (
+CREATE TABLE IF NOT EXISTS "financial_scenarios" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "orgId" UUID NOT NULL,
     "modelId" UUID NOT NULL,
@@ -152,7 +126,7 @@ CREATE TABLE "financial_scenarios" (
 );
 
 -- CreateTable
-CREATE TABLE "driver_formulas" (
+CREATE TABLE IF NOT EXISTS "driver_formulas" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "orgId" UUID NOT NULL,
     "modelId" UUID NOT NULL,
@@ -167,7 +141,7 @@ CREATE TABLE "driver_formulas" (
 );
 
 -- CreateTable
-CREATE TABLE "computation_traces" (
+CREATE TABLE IF NOT EXISTS "computation_traces" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "orgId" UUID NOT NULL,
     "modelId" UUID NOT NULL,
@@ -181,46 +155,20 @@ CREATE TABLE "computation_traces" (
 );
 
 -- CreateIndex
-CREATE INDEX "drivers_orgId_idx" ON "drivers"("orgId");
-
--- CreateIndex
-CREATE INDEX "drivers_modelId_idx" ON "drivers"("modelId");
-
--- CreateIndex
-CREATE INDEX "driver_values_driverId_idx" ON "driver_values"("driverId");
-
--- CreateIndex
-CREATE INDEX "driver_values_scenarioId_idx" ON "driver_values"("scenarioId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "driver_values_driverId_scenarioId_month_key" ON "driver_values"("driverId", "scenarioId", "month");
-
--- CreateIndex
-CREATE INDEX "financial_scenarios_orgId_idx" ON "financial_scenarios"("orgId");
-
--- CreateIndex
-CREATE INDEX "financial_scenarios_modelId_idx" ON "financial_scenarios"("modelId");
-
--- CreateIndex
-CREATE INDEX "driver_formulas_modelId_idx" ON "driver_formulas"("modelId");
-
--- CreateIndex
-CREATE INDEX "computation_traces_orgId_idx" ON "computation_traces"("orgId");
-
--- CreateIndex
-CREATE INDEX "computation_traces_modelId_idx" ON "computation_traces"("modelId");
-
--- CreateIndex
-CREATE INDEX "connectors_auto_sync_enabled_last_synced_at_idx" ON "connectors"("auto_sync_enabled", "last_synced_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "jobs_idempotency_key_key" ON "jobs"("idempotency_key");
-
--- CreateIndex
-CREATE INDEX "jobs_idempotency_key_idx" ON "jobs"("idempotency_key");
-
--- CreateIndex
-CREATE INDEX "notifications_created_at_idx" ON "notifications"("created_at");
+CREATE INDEX IF NOT EXISTS "drivers_orgId_idx" ON "drivers"("orgId");
+CREATE INDEX IF NOT EXISTS "drivers_modelId_idx" ON "drivers"("modelId");
+CREATE INDEX IF NOT EXISTS "driver_values_driverId_idx" ON "driver_values"("driverId");
+CREATE INDEX IF NOT EXISTS "driver_values_scenarioId_idx" ON "driver_values"("scenarioId");
+CREATE UNIQUE INDEX IF NOT EXISTS "driver_values_driverId_scenarioId_month_key" ON "driver_values"("driverId", "scenarioId", "month");
+CREATE INDEX IF NOT EXISTS "financial_scenarios_orgId_idx" ON "financial_scenarios"("orgId");
+CREATE INDEX IF NOT EXISTS "financial_scenarios_modelId_idx" ON "financial_scenarios"("modelId");
+CREATE INDEX IF NOT EXISTS "driver_formulas_modelId_idx" ON "driver_formulas"("modelId");
+CREATE INDEX IF NOT EXISTS "computation_traces_orgId_idx" ON "computation_traces"("orgId");
+CREATE INDEX IF NOT EXISTS "computation_traces_modelId_idx" ON "computation_traces"("modelId");
+CREATE INDEX IF NOT EXISTS "connectors_auto_sync_enabled_last_synced_at_idx" ON "connectors"("auto_sync_enabled", "last_synced_at");
+CREATE UNIQUE INDEX IF NOT EXISTS "jobs_idempotency_key_key" ON "jobs"("idempotency_key");
+CREATE INDEX IF NOT EXISTS "jobs_idempotency_key_idx" ON "jobs"("idempotency_key");
+CREATE INDEX IF NOT EXISTS "notifications_created_at_idx" ON "notifications"("created_at");
 
 -- AddForeignKey
 ALTER TABLE "raw_transactions" ADD CONSTRAINT "raw_transactions_import_batch_id_fkey" FOREIGN KEY ("import_batch_id") REFERENCES "data_import_batches"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -289,58 +237,63 @@ ALTER TABLE "realtime_simulations" ADD CONSTRAINT "realtime_simulations_org_id_f
 ALTER TABLE "realtime_simulations" ADD CONSTRAINT "realtime_simulations_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- RenameIndex
-ALTER INDEX "board_report_schedules_next_run_idx" RENAME TO "board_report_schedules_next_run_at_idx";
-
--- RenameIndex
-ALTER INDEX "board_report_schedules_org_idx" RENAME TO "board_report_schedules_org_id_idx";
-
--- RenameIndex
-ALTER INDEX "idx_data_import_batches_file_hash" RENAME TO "data_import_batches_file_hash_idx";
-
--- RenameIndex
-ALTER INDEX "idx_data_import_batches_org" RENAME TO "data_import_batches_org_id_idx";
-
--- RenameIndex
-ALTER INDEX "idx_data_import_batches_source_type" RENAME TO "data_import_batches_source_type_idx";
-
--- RenameIndex
-ALTER INDEX "idx_excel_mappings_org" RENAME TO "excel_mappings_org_id_idx";
-
--- RenameIndex
-ALTER INDEX "idx_excel_syncs_file_hash" RENAME TO "excel_syncs_file_hash_idx";
-
--- RenameIndex
-ALTER INDEX "idx_excel_syncs_org" RENAME TO "excel_syncs_org_id_idx";
-
--- RenameIndex
-ALTER INDEX "idx_excel_syncs_status" RENAME TO "excel_syncs_status_idx";
-
--- RenameIndex
-ALTER INDEX "idx_monte_carlo_jobs_params_hash" RENAME TO "monte_carlo_jobs_params_hash_idx";
-
--- RenameIndex
-ALTER INDEX "notification_channel_unique" RENAME TO "notification_channels_orgId_userId_type_key";
-
--- RenameIndex
-ALTER INDEX "idx_org_quotas_org" RENAME TO "org_quotas_org_id_idx";
-
--- RenameIndex
-ALTER INDEX "idx_provenance_entries_run_cell" RENAME TO "provenance_entries_modelRunId_cell_key_idx";
-
--- RenameIndex
-ALTER INDEX "idx_raw_transactions_import_batch_id" RENAME TO "raw_transactions_import_batch_id_idx";
-
--- RenameIndex
-ALTER INDEX "idx_raw_transactions_is_duplicate" RENAME TO "raw_transactions_is_duplicate_idx";
-
--- RenameIndex
-ALTER INDEX "idx_realtime_simulations_org" RENAME TO "realtime_simulations_org_id_idx";
-
--- RenameIndex
-ALTER INDEX "idx_realtime_simulations_snapshot_token" RENAME TO "realtime_simulations_snapshot_token_idx";
-
--- RenameIndex
-ALTER INDEX "idx_realtime_simulations_updated" RENAME TO "realtime_simulations_updated_at_idx";
-
--- RenameIndex
-ALTER INDEX "idx_realtime_simulations_user" RENAME TO "realtime_simulations_user_id_idx";
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'board_report_schedules_next_run_idx') THEN
+        ALTER INDEX "board_report_schedules_next_run_idx" RENAME TO "board_report_schedules_next_run_at_idx";
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'board_report_schedules_org_idx') THEN
+        ALTER INDEX "board_report_schedules_org_idx" RENAME TO "board_report_schedules_org_id_idx";
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_data_import_batches_file_hash') THEN
+        ALTER INDEX "idx_data_import_batches_file_hash" RENAME TO "data_import_batches_file_hash_idx";
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_data_import_batches_org') THEN
+        ALTER INDEX "idx_data_import_batches_org" RENAME TO "data_import_batches_org_id_idx";
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_data_import_batches_source_type') THEN
+        ALTER INDEX "idx_data_import_batches_source_type" RENAME TO "data_import_batches_source_type_idx";
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_excel_mappings_org') THEN
+        ALTER INDEX "idx_excel_mappings_org" RENAME TO "excel_mappings_org_id_idx";
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_excel_syncs_file_hash') THEN
+        ALTER INDEX "idx_excel_syncs_file_hash" RENAME TO "excel_syncs_file_hash_idx";
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_excel_syncs_org') THEN
+        ALTER INDEX "idx_excel_syncs_org" RENAME TO "excel_syncs_org_id_idx";
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_excel_syncs_status') THEN
+        ALTER INDEX "idx_excel_syncs_status" RENAME TO "excel_syncs_status_idx";
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_monte_carlo_jobs_params_hash') THEN
+        ALTER INDEX "idx_monte_carlo_jobs_params_hash" RENAME TO "monte_carlo_jobs_params_hash_idx";
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'notification_channel_unique') THEN
+        ALTER INDEX "notification_channel_unique" RENAME TO "notification_channels_orgId_userId_type_key";
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_org_quotas_org') THEN
+        ALTER INDEX "idx_org_quotas_org" RENAME TO "org_quotas_org_id_idx";
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_provenance_entries_run_cell') THEN
+        ALTER INDEX "idx_provenance_entries_run_cell" RENAME TO "provenance_entries_modelRunId_cell_key_idx";
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_raw_transactions_import_batch_id') THEN
+        ALTER INDEX "idx_raw_transactions_import_batch_id" RENAME TO "raw_transactions_import_batch_id_idx";
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_raw_transactions_is_duplicate') THEN
+        ALTER INDEX "idx_raw_transactions_is_duplicate" RENAME TO "raw_transactions_is_duplicate_idx";
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_realtime_simulations_org') THEN
+        ALTER INDEX "idx_realtime_simulations_org" RENAME TO "realtime_simulations_org_id_idx";
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_realtime_simulations_snapshot_token') THEN
+        ALTER INDEX "idx_realtime_simulations_snapshot_token" RENAME TO "realtime_simulations_snapshot_token_idx";
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_realtime_simulations_updated') THEN
+        ALTER INDEX "idx_realtime_simulations_updated" RENAME TO "realtime_simulations_updated_at_idx";
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_realtime_simulations_user') THEN
+        ALTER INDEX "idx_realtime_simulations_user" RENAME TO "realtime_simulations_user_id_idx";
+    END IF;
+END $$;
