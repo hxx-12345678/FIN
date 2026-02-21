@@ -1,4 +1,4 @@
- npm run render:build{
+{
   "name": "finapilot-backend",
   "version": "1.0.0",
   "description": "FinaPilot Backend API Server",
@@ -13,7 +13,7 @@
     "start": "node dist/server.js",
     "render:build": "npm install && npm run build",
     "render:start": "npx prisma migrate resolve --rolled-back 20260209053640_add_computation_trace || true && npx prisma migrate resolve --rolled-back 20260214223000_repair_schema_sync || true && npx prisma migrate deploy && npm start",
-    "prisma:repair": "npx prisma migrate resolve --rolled-back 20260209053640_add_computation_trace && npx prisma migrate deploy",
+    "prisma:repair": "npx prisma migrate resolve --rolled-back 20260209053640_add_computation_trace && npx prisma migrate resolve --rolled-back 20260214223000_repair_schema_sync && npx prisma migrate deploy",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
