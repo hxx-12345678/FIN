@@ -76,7 +76,7 @@ export const investorDashboardService = {
     const expenses = Number(summary.expenses || 0);
     const burnRate = Number(summary.burnRate || expenses || 0);
     const cashBalance = Number(summary.cashBalance || 0);
-    
+
     // Use standardized runway calculation
     const { runwayCalculationService } = await import('./runway-calculation.service');
     const runwayData = await runwayCalculationService.calculateRunway(orgId);
@@ -130,7 +130,7 @@ export const investorDashboardService = {
 
         if (csvJob && csvJob.logs) {
           const logs = typeof csvJob.logs === 'string' ? JSON.parse(csvJob.logs) : csvJob.logs;
-          
+
           // Check logs.params directly (job repository stores params here)
           if (typeof logs === 'object' && logs.params) {
             const initialCustomers = logs.params.initialCustomers || logs.params.startingCustomers;
@@ -139,7 +139,7 @@ export const investorDashboardService = {
               console.log(`[InvestorDashboard] Using initialCustomers from job logs.params: ${activeCustomers}`);
             }
           }
-          
+
           // Also check array format (if params are in log entries)
           if ((activeCustomers === 0 || activeCustomers > 1000) && Array.isArray(logs)) {
             for (const entry of logs) {
@@ -177,14 +177,14 @@ export const investorDashboardService = {
     // If still 0 customers but we have revenue, count from transactions
     if (activeCustomers === 0 && arr > 0) {
       const transactions = await prisma.rawTransaction.findMany({
-      where: {
-        orgId,
-        isDuplicate: false,
-        amount: { gt: 0 }, // Revenue transactions only
-      } as any,
+        where: {
+          orgId,
+          isDuplicate: false,
+          amount: { gt: 0 }, // Revenue transactions only
+        } as any,
         take: 1000,
       });
-      
+
       const uniqueCustomers = new Set<string>();
       for (const tx of transactions) {
         let customer = tx.description?.trim() || '';
@@ -210,19 +210,19 @@ export const investorDashboardService = {
     // Calculate unit economics - try summary first, then model assumptions, then calculate from data
     let ltv = Number(summary.ltv || summary.customerLTV || 0);
     let cac = Number(summary.cac || summary.customerCAC || 0);
-    
+
     // If not in summary, try to get from model assumptions
     if ((ltv === 0 || cac === 0) && latestModelRun.modelId) {
       const model = await prisma.model.findUnique({
         where: { id: latestModelRun.modelId },
       });
-      
+
       if (model && model.modelJson) {
-        const modelJson = typeof model.modelJson === 'string' 
-          ? JSON.parse(model.modelJson) 
+        const modelJson = typeof model.modelJson === 'string'
+          ? JSON.parse(model.modelJson)
           : model.modelJson;
         const assumptions = modelJson.assumptions || {};
-        
+
         if (ltv === 0) {
           ltv = Number(assumptions.ltv || assumptions.unitEconomics?.ltv || 0);
         }
@@ -231,7 +231,7 @@ export const investorDashboardService = {
         }
       }
     }
-    
+
     // If still 0, try to calculate from available data
     if (ltv === 0 && arr > 0 && activeCustomers > 0) {
       // LTV = (MRR * 12) / churnRate, or ARR / (activeCustomers * churnRate)
@@ -241,7 +241,7 @@ export const investorDashboardService = {
         ltv = (mrr / churnRate) * 12; // Simplified LTV calculation: LTV = MRR / churnRate
       }
     }
-    
+
     if (cac === 0 && arr > 0 && activeCustomers > 0) {
       // CAC = Marketing Spend / New Customers, or estimate from ARR
       // Estimate: CAC = (ARR * 0.1) / (activeCustomers * growthRate)
@@ -250,17 +250,17 @@ export const investorDashboardService = {
         cac = (arr * 0.1) / (activeCustomers * growthRate); // Rough estimate
       }
     }
-    
+
     const unitEconomics = {
       ltv: Math.round(ltv),
       cac: Math.round(cac),
       ltvCacRatio: 0,
       paybackPeriod: 0,
     };
-    unitEconomics.ltvCacRatio = unitEconomics.ltv > 0 && unitEconomics.cac > 0 
-      ? unitEconomics.ltv / unitEconomics.cac 
+    unitEconomics.ltvCacRatio = unitEconomics.ltv > 0 && unitEconomics.cac > 0
+      ? unitEconomics.ltv / unitEconomics.cac
       : 0;
-    
+
     unitEconomics.paybackPeriod = unitEconomics.ltv > 0 && unitEconomics.cac > 0 && arr > 0
       ? (unitEconomics.cac / (arr / (activeCustomers || 1))) * 12
       : 0;
@@ -349,7 +349,7 @@ function extractMonthlyMetrics(summary: any, activeCustomers: number = 0): Array
  * Calculate growth rate from monthly metrics
  */
 function calculateGrowthRate(
-  metrics: Array<{ month: string; revenue?: number; customers?: number; arr?: number; [key: string]: any }>,
+  metrics: Array<{ month: string; revenue?: number; customers?: number; arr?: number;[key: string]: any }>,
   field: 'revenue' | 'customers' | 'arr'
 ): number {
   if (metrics.length < 2) return 0;
@@ -513,7 +513,7 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
   const now = new Date();
   const startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
   const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  
+
   let transactions = await prisma.rawTransaction.findMany({
     where: {
       orgId,
@@ -527,7 +527,7 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
       date: 'desc',
     },
   });
-  
+
   // If no recent transactions, get all transactions
   if (transactions.length === 0) {
     transactions = await prisma.rawTransaction.findMany({
@@ -541,41 +541,41 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
       take: 1000,
     });
   }
-  
+
   // Calculate monthly revenue and expenses
   const monthlyRevenueMap = new Map<string, number>();
   const monthlyExpenseMap = new Map<string, number>();
-  
+
   for (const tx of transactions) {
     const month = String(tx.date.getMonth() + 1).padStart(2, '0');
     const period = `${tx.date.getFullYear()}-${month}`;
     const amount = Number(tx.amount);
-    
+
     if (amount > 0) {
       monthlyRevenueMap.set(period, (monthlyRevenueMap.get(period) || 0) + amount);
     } else {
       monthlyExpenseMap.set(period, (monthlyExpenseMap.get(period) || 0) + Math.abs(amount));
     }
   }
-  
+
   // Get all periods and sort
   const allPeriods = Array.from(new Set([
     ...monthlyRevenueMap.keys(),
     ...monthlyExpenseMap.keys()
   ])).sort();
-  
+
   // Calculate ARR from latest month revenue
   let arr = 0;
   let monthlyRevenue = 0;
   let monthlyBurnRate = 0;
   let arrGrowth = 0;
-  
+
   if (allPeriods.length > 0) {
     const latestPeriod = allPeriods[allPeriods.length - 1];
     monthlyRevenue = monthlyRevenueMap.get(latestPeriod) || 0;
     monthlyBurnRate = monthlyExpenseMap.get(latestPeriod) || 0;
     arr = monthlyRevenue * 12;
-    
+
     // Calculate growth from previous period
     if (allPeriods.length >= 2) {
       const prevPeriod = allPeriods[allPeriods.length - 2];
@@ -583,12 +583,12 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
       arrGrowth = prevRevenue > 0 ? ((monthlyRevenue - prevRevenue) / prevRevenue) * 100 : 0;
     }
   }
-  
+
   // Use standardized runway calculation
   const { runwayCalculationService } = await import('./runway-calculation.service');
   const runwayData = await runwayCalculationService.calculateRunway(orgId);
   const runwayMonths = runwayData.runwayMonths;
-  
+
   // Calculate health score
   const healthScore = calculateHealthScore({
     arr,
@@ -596,35 +596,69 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
     runwayMonths,
     arrGrowth,
   });
-  
+
   // Count unique customers from revenue transactions FIRST (before using in monthly metrics)
   let activeCustomers = 0;
-  const uniqueCustomers = new Set<string>();
-  for (const tx of transactions) {
-    const amount = Number(tx.amount);
-    if (amount > 0) { // Revenue transactions
-      // Extract customer name from description
-      let customer = tx.description?.trim() || '';
-      if (customer) {
-        // Remove common prefixes/suffixes
-        customer = customer.replace(/\b(REF|REF#|REFERENCE|TXN|ID|#)\s*:?\s*[A-Z0-9-]+\b/gi, '').trim();
-        customer = customer.replace(/\$[\d,]+\.?\d*/g, '').trim();
-        customer = customer.replace(/\d{1,2}\/\d{1,2}\/\d{2,4}/g, '').trim();
-        
-        // Take first meaningful words
-        const words = customer.split(/\s+/).filter(w => w.length > 2);
-        if (words.length > 0) {
-          customer = words.slice(0, 3).join(' ').substring(0, 50);
-          if (customer && customer !== 'Unknown') {
-            uniqueCustomers.add(customer);
+
+  // Priority 1: Check for user-provided customer count from data import batches
+  const importBatch = await (prisma as any).dataImportBatch.findFirst({
+    where: { orgId, sourceType: 'csv' },
+    orderBy: { createdAt: 'desc' },
+    select: { mappingJson: true },
+  });
+
+  if (importBatch && importBatch.mappingJson) {
+    const mapping = importBatch.mappingJson as any;
+    const batchCustomers = mapping.initialCustomers || mapping.startingCustomers;
+    if (batchCustomers && Number(batchCustomers) > 0) {
+      activeCustomers = Number(batchCustomers);
+      console.log(`[InvestorDashboard] Using initialCustomers from import batch (fallback): ${activeCustomers}`);
+    }
+  }
+
+  // Priority 2: Count unique customers from transactions
+  if (activeCustomers === 0) {
+    const uniqueCustomers = new Set<string>();
+    for (const tx of transactions) {
+      const amount = Number(tx.amount);
+      if (amount > 0) { // Revenue transactions
+        // Extract customer name - use smarter logic consistent with overview
+        let customer: string | null = null;
+
+        // Try rawPayload first (connectors stash metadata here)
+        const rawPayload = (tx as any).rawPayload;
+        if (rawPayload && typeof rawPayload === 'object') {
+          const vendorFields = ['vendor', 'merchant', 'payee', 'name', 'company', 'business', 'customer'];
+          for (const field of vendorFields) {
+            if (rawPayload[field] && typeof rawPayload[field] === 'string') {
+              customer = rawPayload[field].substring(0, 50);
+              break;
+            }
           }
+        }
+
+        if (!customer && tx.description) {
+          customer = tx.description.trim();
+          // Remove common prefixes/suffixes
+          customer = customer.replace(/\b(REF|REF#|REFERENCE|TXN|ID|#)\s*:?\s*[A-Z0-9-]+\b/gi, '').trim();
+          customer = customer.replace(/\$[\d,]+\.?\d*/g, '').trim();
+          customer = customer.replace(/\d{1,2}\/\d{1,2}\/\d{2,4}/g, '').trim();
+
+          const words = customer.split(/\s+/).filter(w => w.length > 2);
+          if (words.length > 0) {
+            customer = words.slice(0, 3).join(' ').substring(0, 50);
+          }
+        }
+
+        if (customer && customer !== 'Unknown') {
+          uniqueCustomers.add(customer);
         }
       }
     }
-  }
-  activeCustomers = uniqueCustomers.size;
-  if (activeCustomers > 0) {
-    console.log(`[InvestorDashboard] Calculated ${activeCustomers} unique customers from ${transactions.length} transactions`);
+    activeCustomers = uniqueCustomers.size;
+    if (activeCustomers > 0) {
+      console.log(`[InvestorDashboard] Calculated ${activeCustomers} unique customers from ${transactions.length} transactions`);
+    }
   }
 
   // Generate monthly metrics from transactions (after activeCustomers is calculated)
@@ -635,17 +669,17 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
     burn: number;
     arr: number;
   }> = [];
-  
+
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const last6Periods = allPeriods.slice(-6);
-  
+
   for (const period of last6Periods) {
     const [year, month] = period.split('-').map(Number);
     const monthIndex = month - 1;
     const monthName = monthNames[monthIndex];
     const revenue = monthlyRevenueMap.get(period) || 0;
     const burn = monthlyExpenseMap.get(period) || 0;
-    
+
     monthlyMetrics.push({
       month: monthName,
       revenue: Math.round(revenue),
@@ -654,7 +688,7 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
       arr: Math.round(revenue * 12),
     });
   }
-  
+
   // Get milestones and updates
   const milestones = getMilestones(arr, runwayMonths);
   const keyUpdates = await getKeyUpdates(orgId, new Date());

@@ -725,6 +725,80 @@ def handle_connector_sync(job_id: str, org_id: str, object_id: str, logs: dict):
         conn.commit()
         logger.info(f"✅ connector_sync completed for {connector_id} ({connector_type}), newTxns={new_txn_count}")
 
+        # Trigger auto-model after connector sync if new transactions were pulled
+        if new_txn_count > 0:
+            try:
+                logger.info(f"Auto-model: Triggering auto-model after connector sync ({new_txn_count} new transactions)")
+                
+                # Check for user-provided initial values from previous import batches (most reliable fallback)
+                initial_cash = 0
+                initial_customers = 0
+                
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT mapping_json FROM data_import_batches 
+                    WHERE "org_id" = %s AND source_type = 'csv' 
+                    ORDER BY created_at DESC LIMIT 1
+                """, (connector_org_id,))
+                batch_row = cursor.fetchone()
+                if batch_row and batch_row[0]:
+                    mapping = batch_row[0] if isinstance(batch_row[0], dict) else json.loads(batch_row[0])
+                    initial_cash = mapping.get('initialCash') or mapping.get('startingCash') or 0
+                    initial_customers = mapping.get('initialCustomers') or mapping.get('startingCustomers') or 0
+                
+                # Create auto-model trigger job
+                trigger_params = {
+                    'triggerType': 'connector_sync',
+                    'triggerSource': job_id,
+                    'newTransactionsPulled': new_txn_count,
+                    'cashOnHand': float(initial_cash or 0),
+                    'startingCustomers': int(initial_customers or 0)
+                }
+                
+                trigger_logs = [
+                    {
+                        'ts': datetime.now(timezone.utc).isoformat(),
+                        'level': 'info',
+                        'msg': 'Job created',
+                        'meta': {
+                            'jobType': 'auto_model_trigger',
+                            'queue': 'default',
+                            'priority': 45,
+                        }
+                    },
+                    {
+                        'ts': datetime.now(timezone.utc).isoformat(),
+                        'level': 'info',
+                        'msg': 'Job parameters set',
+                        'meta': {'params': trigger_params}
+                    }
+                ]
+                
+                cursor.execute("""
+                    INSERT INTO jobs (id, job_type, "orgId", object_id, status, priority, queue, logs, created_at, updated_at)
+                    VALUES (
+                        gen_random_uuid(),
+                        'auto_model_trigger',
+                        %s,
+                        %s,
+                        'queued',
+                        45,
+                        'default',
+                        %s::jsonb,
+                        NOW(),
+                        NOW()
+                    )
+                """, (
+                    connector_org_id,
+                    job_id,
+                    json.dumps(trigger_logs),
+                ))
+                conn.commit()
+                logger.info(f"Auto-model trigger job created after connector sync")
+            except Exception as e:
+                logger.warning(f"Failed to create auto-model trigger after connector sync: {str(e)}")
+                # Don't fail the sync if auto-model trigger fails
+        
     except Exception as e:
         # Best-effort: update connector error fields
         try:

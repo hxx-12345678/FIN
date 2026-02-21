@@ -231,6 +231,24 @@ export const overviewDashboardService = {
       }
     }
 
+    // Priority 2: Check for user-provided customer count from data import batches
+    if (activeCustomers === 0) {
+      const importBatch = await (prisma as any).dataImportBatch.findFirst({
+        where: { orgId, sourceType: 'csv' },
+        orderBy: { createdAt: 'desc' },
+        select: { mappingJson: true },
+      });
+
+      if (importBatch && importBatch.mappingJson) {
+        const mapping = importBatch.mappingJson as any;
+        const batchCustomers = mapping.initialCustomers || mapping.startingCustomers;
+        if (batchCustomers && Number(batchCustomers) > 0) {
+          activeCustomers = Number(batchCustomers);
+          console.log(`[Overview] Using initialCustomers from import batch: ${activeCustomers}`);
+        }
+      }
+    }
+
     if (investorData) {
       runwayMonths = investorData.executiveSummary.monthsRunway || 0;
       healthScore = investorData.executiveSummary.healthScore || 50;
