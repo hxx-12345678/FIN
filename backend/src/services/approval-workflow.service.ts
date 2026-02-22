@@ -9,6 +9,45 @@ export type ApprovalRequestStatus = 'pending' | 'approved' | 'rejected' | 'cance
 
 export const approvalWorkflowService = {
   /**
+   * Get a single approval request with full details.
+   */
+  getRequestById: async (requestId: string, userId: string) => {
+    const request = await prismaClient.approvalRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        requester: {
+          select: { id: true, name: true, email: true },
+        },
+        approver: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+    });
+
+    if (!request) {
+      throw new NotFoundError('Approval request not found');
+    }
+
+    // Allow requester to view their own request; otherwise require finance/admin org role.
+    if (request.requesterId !== userId) {
+      const viewerRole = await prisma.userOrgRole.findUnique({
+        where: {
+          userId_orgId: {
+            userId,
+            orgId: request.orgId,
+          },
+        },
+      });
+
+      if (!viewerRole || !['admin', 'finance'].includes(viewerRole.role)) {
+        throw new ForbiddenError('You do not have access to this approval request');
+      }
+    }
+
+    return request;
+  },
+
+  /**
    * Create a new approval request for a sensitive change.
    */
   createRequest: async (params: {
@@ -164,12 +203,25 @@ export const approvalWorkflowService = {
   /**
    * List pending requests for an org.
    */
-  listPendingRequests: async (orgId: string) => {
+  listPendingRequests: async (
+    orgId: string,
+    filters?: {
+      type?: string;
+      objectType?: string;
+      objectId?: string;
+    }
+  ) => {
+    const where: any = {
+      orgId,
+      status: 'pending',
+    };
+
+    if (filters?.type) where.type = filters.type;
+    if (filters?.objectType) where.objectType = filters.objectType;
+    if (filters?.objectId) where.objectId = filters.objectId;
+
     return await prismaClient.approvalRequest.findMany({
-      where: {
-        orgId,
-        status: 'pending',
-      },
+      where,
       include: {
         requester: {
           select: { id: true, name: true, email: true },
@@ -182,9 +234,23 @@ export const approvalWorkflowService = {
   /**
    * List all requests for an org (history).
    */
-  listAllRequests: async (orgId: string) => {
+  listAllRequests: async (
+    orgId: string,
+    filters?: {
+      type?: string;
+      objectType?: string;
+      objectId?: string;
+      status?: ApprovalRequestStatus;
+    }
+  ) => {
+    const where: any = { orgId };
+    if (filters?.type) where.type = filters.type;
+    if (filters?.objectType) where.objectType = filters.objectType;
+    if (filters?.objectId) where.objectId = filters.objectId;
+    if (filters?.status) where.status = filters.status;
+
     return await prismaClient.approvalRequest.findMany({
-      where: { orgId },
+      where,
       include: {
         requester: {
           select: { id: true, name: true, email: true },

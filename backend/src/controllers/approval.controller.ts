@@ -4,6 +4,18 @@ import { AuthRequest } from '../middlewares/auth';
 import { ValidationError } from '../utils/errors';
 
 export const approvalController = {
+  getById: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { requestId } = req.params;
+      if (!req.user) throw new ValidationError('User not authenticated');
+
+      const result = await approvalWorkflowService.getRequestById(requestId, req.user.id);
+      res.json({ ok: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   createRequest: async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const { orgId } = req.params;
@@ -59,7 +71,15 @@ export const approvalController = {
   listPending: async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const { orgId } = req.params;
-      const result = await approvalWorkflowService.listPendingRequests(orgId);
+      const type = typeof req.query.type === 'string' ? req.query.type : undefined;
+      const objectType = typeof req.query.objectType === 'string' ? req.query.objectType : undefined;
+      const objectId = typeof req.query.objectId === 'string' ? req.query.objectId : undefined;
+
+      const result = await approvalWorkflowService.listPendingRequests(orgId, {
+        type,
+        objectType,
+        objectId,
+      });
       res.json({ ok: true, data: result });
     } catch (error) {
       next(error);
@@ -69,7 +89,17 @@ export const approvalController = {
   listAll: async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const { orgId } = req.params;
-      const result = await approvalWorkflowService.listAllRequests(orgId);
+      const type = typeof req.query.type === 'string' ? req.query.type : undefined;
+      const objectType = typeof req.query.objectType === 'string' ? req.query.objectType : undefined;
+      const objectId = typeof req.query.objectId === 'string' ? req.query.objectId : undefined;
+      const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+
+      const result = await approvalWorkflowService.listAllRequests(orgId, {
+        type,
+        objectType,
+        objectId,
+        status: status as any,
+      });
       res.json({ ok: true, data: result });
     } catch (error) {
       next(error);

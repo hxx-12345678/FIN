@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from urllib.parse import urlparse, unquote, urlencode
+from urllib.parse import urlparse, urlencode, parse_qsl
 
 # Load environment variables from .env file
 load_dotenv()
@@ -23,6 +23,25 @@ def get_db_connection():
     # Render compatibility: ensure postgresql:// scheme
     if database_url.startswith('postgres://'):
         database_url = database_url.replace('postgres://', 'postgresql://', 1)
+
+    # psycopg2/libpq URI parsing does not accept Prisma-style query params like ?schema=public.
+    # If present, strip it from the URI and apply it via SET search_path after connect.
+    schema_name = None
+    try:
+        parsed_for_query = urlparse(database_url)
+        if parsed_for_query.query:
+            query_pairs = parse_qsl(parsed_for_query.query, keep_blank_values=True)
+            filtered_pairs = []
+            for k, v in query_pairs:
+                if k == 'schema' and v:
+                    schema_name = v
+                    continue
+                filtered_pairs.append((k, v))
+            if len(filtered_pairs) != len(query_pairs):
+                database_url = parsed_for_query._replace(query=urlencode(filtered_pairs)).geturl()
+    except Exception:
+        # If parsing fails, leave the URL unchanged and fall back to default search_path
+        schema_name = None
         
     # Parse for logging and specific checks
     try:
@@ -61,7 +80,10 @@ def get_db_connection():
             
             # Verify and set search path
             with conn.cursor() as cursor:
-                cursor.execute("SET search_path TO public;")
+                if schema_name:
+                    cursor.execute("SET search_path TO %s, public;", (schema_name,))
+                else:
+                    cursor.execute("SET search_path TO public;")
                 
                 # Verified connection - we can return now
                 if debug_mode:

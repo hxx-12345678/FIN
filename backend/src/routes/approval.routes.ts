@@ -29,6 +29,13 @@ router.get(
   approvalController.listPending
 );
 
+router.get(
+  '/approvals/:requestId',
+  authenticate,
+  validateUUIDParams(['requestId']),
+  approvalController.getById
+);
+
 router.post(
   '/approvals/:requestId/approve',
   authenticate,

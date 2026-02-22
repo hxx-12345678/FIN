@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Loader2, CheckCircle2, XCircle, AlertCircle, Info, ArrowRight } from "lucide-react"
+import { Loader2, AlertCircle, ArrowRight } from "lucide-react"
 import { API_BASE_URL } from "@/lib/api-config"
 import { toast } from "sonner"
 
@@ -25,7 +25,7 @@ interface StagedChange {
   newValue: any
   confidenceScore: number
   createdAt: string
-  status: "pending" | "approved" | "rejected"
+  status: "draft" | "pending_approval" | "approved" | "rejected" | "cancelled"
   aiExplanation?: string
   promptId?: string
   dataSources?: Array<{ type: string; id: string; snippet: string }>
@@ -35,19 +35,22 @@ interface StagedChange {
   action?: string
 }
 
+interface ApprovalRequest {
+  id: string
+  status: "pending" | "approved" | "rejected" | "cancelled"
+  payloadJson: any
+  createdAt: string
+}
+
 interface ApprovalModalProps {
   changeId: string | null
   open: boolean
   onClose: () => void
-  onApprove: (changeId: string) => Promise<void>
-  onReject: (changeId: string) => Promise<void>
 }
 
-export function ApprovalModal({ changeId, open, onClose, onApprove, onReject }: ApprovalModalProps) {
+export function ApprovalModal({ changeId, open, onClose }: ApprovalModalProps) {
   const [change, setChange] = useState<StagedChange | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [isApproving, setIsApproving] = useState(false)
-  const [isRejecting, setIsRejecting] = useState(false)
   const [isSubmittingForGovernance, setIsSubmittingForGovernance] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -103,7 +106,6 @@ export function ApprovalModal({ changeId, open, onClose, onApprove, onReject }: 
           const changeIndex = plan.planJson.stagedChanges.findIndex((_: any, idx: number) => `${plan.id}-${idx}` === changeId)
           if (changeIndex !== -1) {
             const change = plan.planJson.stagedChanges[changeIndex]
-            const storedStatus = localStorage.getItem(`staged-change-${changeId}`)
             foundChange = {
               id: changeId,
               description: change.action || change.explain || "",
@@ -112,7 +114,7 @@ export function ApprovalModal({ changeId, open, onClose, onApprove, onReject }: 
               newValue: change.impact?.newValue || change.impact || null,
               confidenceScore: typeof change.confidence === 'number' ? change.confidence : 0.7,
               createdAt: plan.createdAt || new Date().toISOString(),
-              status: (storedStatus as "pending" | "approved" | "rejected") || "pending",
+              status: "draft",
               aiExplanation: change.reasoning || change.explain || "",
               promptId: change.promptId || plan.planJson.metadata?.promptIds?.[0],
               dataSources: change.dataSources || (Array.isArray(change.evidence) ? change.evidence.map((e: any) => ({
@@ -129,6 +131,34 @@ export function ApprovalModal({ changeId, open, onClose, onApprove, onReject }: 
       }
       
       if (foundChange) {
+        // Determine governance status from persisted approval requests
+        try {
+          const approvalsRes = await fetch(
+            `${API_BASE_URL}/orgs/${orgId}/approvals?type=ai_cfo_staged_change&objectType=aicfo_plan&objectId=${foundChange.planId}`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+              credentials: "include",
+            }
+          )
+          if (approvalsRes.ok) {
+            const approvalsJson = await approvalsRes.json()
+            if (approvalsJson?.ok && Array.isArray(approvalsJson.data)) {
+              const approvals: ApprovalRequest[] = approvalsJson.data
+              const match = approvals
+                .filter((r) => r?.payloadJson?.changeId === foundChange?.id)
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
+
+              if (match) {
+                foundChange.status = match.status === "pending" ? "pending_approval" : match.status
+              }
+            }
+          }
+        } catch {
+          // Ignore approval lookup failures; keep draft status
+        }
         setChange(foundChange)
       } else {
         setError("Change not found")
@@ -211,174 +241,122 @@ export function ApprovalModal({ changeId, open, onClose, onApprove, onReject }: 
     }
   }
 
-  const handleApprove = async () => {
-    if (!changeId) return
-
-    setIsApproving(true)
-    setError(null)
-
-    try {
-      await onApprove(changeId)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to approve change")
-    } finally {
-      setIsApproving(false)
-    }
-  }
-
-  const handleReject = async () => {
-    if (!changeId) return
-
-    setIsRejecting(true)
-    setError(null)
-
-    try {
-      await onReject(changeId)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to reject change")
-    } finally {
-      setIsRejecting(false)
-    }
-  }
-
   if (!open) return null
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-4xl max-h-[90vh] overflow-hidden p-0">
         <DialogHeader>
-          <DialogTitle>Review Change</DialogTitle>
-          <DialogDescription>Review AI recommendation before approving or rejecting</DialogDescription>
+          <div className="px-6 pt-6">
+            <DialogTitle>Review Change</DialogTitle>
+            <DialogDescription>
+              Confirm the old/new values and evidence. Submitting sends this change to Governance for approval.
+            </DialogDescription>
+          </div>
         </DialogHeader>
 
-        {isLoading ? (
-          <div className="space-y-4">
-            <Skeleton className="h-32 w-full" />
-            <Skeleton className="h-64 w-full" />
-          </div>
-        ) : error ? (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        ) : change ? (
-          <div className="space-y-6">
-            {change.status !== "pending" && (
-              <Alert>
-                <AlertDescription>This change has already been processed.</AlertDescription>
-              </Alert>
-            )}
-
-            <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <h3 className="font-semibold">Old Value</h3>
-                <div className="p-4 border rounded-lg bg-muted/50">
-                  <pre className="text-sm overflow-auto">
-                    {typeof change.oldValue === "string"
-                      ? change.oldValue
-                      : JSON.stringify(change.oldValue, null, 2)}
-                  </pre>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <h3 className="font-semibold">New Value</h3>
-                <div className="p-4 border rounded-lg bg-primary/5">
-                  <pre className="text-sm overflow-auto">
-                    {typeof change.newValue === "string"
-                      ? change.newValue
-                      : JSON.stringify(change.newValue, null, 2)}
-                  </pre>
-                </div>
-              </div>
+        <div className="px-6 pb-4 overflow-y-auto max-h-[calc(90vh-140px)]">
+          {isLoading ? (
+            <div className="space-y-4 py-4">
+              <Skeleton className="h-10 w-2/3" />
+              <Skeleton className="h-56 w-full" />
+              <Skeleton className="h-56 w-full" />
             </div>
-
-            <div className="space-y-4">
-              <div>
-                <h3 className="font-semibold mb-2">Impact Summary</h3>
-                <p className="text-sm text-muted-foreground">{change.impactSummary}</p>
-              </div>
-
-              {change.aiExplanation && (
-                <div>
-                  <h3 className="font-semibold mb-2">AI Explanation</h3>
-                  <p className="text-sm text-muted-foreground">{change.aiExplanation}</p>
-                </div>
+          ) : error ? (
+            <Alert variant="destructive" className="mt-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : change ? (
+            <div className="space-y-6 py-4">
+              {(change.status === "pending_approval" || change.status === "approved" || change.status === "rejected" || change.status === "cancelled") && (
+                <Alert>
+                  <AlertDescription>
+                    This change has already been submitted to Governance. Approve/reject happens in the Governance tab.
+                  </AlertDescription>
+                </Alert>
               )}
 
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">Confidence Score:</span>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Badge variant="outline">
-                        {Math.round(change.confidenceScore * 100)}%
-                      </Badge>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>AI confidence in this recommendation</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <h3 className="font-semibold">Old Value</h3>
+                  <div className="p-4 border rounded-lg bg-muted/50">
+                    <pre className="text-sm overflow-auto max-h-64">
+                      {typeof change.oldValue === "string"
+                        ? change.oldValue
+                        : JSON.stringify(change.oldValue, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <h3 className="font-semibold">New Value</h3>
+                  <div className="p-4 border rounded-lg bg-primary/5">
+                    <pre className="text-sm overflow-auto max-h-64">
+                      {typeof change.newValue === "string"
+                        ? change.newValue
+                        : JSON.stringify(change.newValue, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <h3 className="font-semibold mb-2">Impact Summary</h3>
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{change.impactSummary}</p>
+                </div>
+
+                {change.aiExplanation && (
+                  <div>
+                    <h3 className="font-semibold mb-2">AI Explanation</h3>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{change.aiExplanation}</p>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">Confidence:</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant="outline">
+                          {Math.round(change.confidenceScore * 100)}%
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>AI confidence in this recommendation</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
               </div>
             </div>
+          ) : null}
+        </div>
 
-            {change.status === "pending" && (
-              <div className="flex items-center justify-end gap-2 pt-4 border-t">
-                <Button variant="outline" onClick={onClose} disabled={isApproving || isRejecting}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleSendToGovernance}
-                  disabled={isApproving || isRejecting || isSubmittingForGovernance}
-                >
-                  {isSubmittingForGovernance ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Submitting...
-                    </>
-                  ) : (
-                    <>
-                      <ArrowRight className="mr-2 h-4 w-4" />
-                      Send to Governance
-                    </>
-                  )}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleReject}
-                  disabled={isApproving || isRejecting}
-                  className="text-destructive"
-                >
-                  {isRejecting ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Rejecting...
-                    </>
-                  ) : (
-                    <>
-                      <XCircle className="mr-2 h-4 w-4" />
-                      Reject
-                    </>
-                  )}
-                </Button>
-                <Button onClick={handleApprove} disabled={isApproving || isRejecting}>
-                  {isApproving ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Approving...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="mr-2 h-4 w-4" />
-                      Approve
-                    </>
-                  )}
-                </Button>
-              </div>
-            )}
-          </div>
-        ) : null}
+        <div className="border-t bg-background px-6 py-4 flex items-center justify-between gap-2">
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+          {change && (change.status === "draft" || change.status === "pending_approval") && (
+            <Button
+              variant="outline"
+              onClick={handleSendToGovernance}
+              disabled={isSubmittingForGovernance || change.status === "pending_approval"}
+            >
+              {isSubmittingForGovernance ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <ArrowRight className="mr-2 h-4 w-4" />
+                  {change.status === "pending_approval" ? "Already submitted" : "Send to Governance"}
+                </>
+              )}
+            </Button>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   )

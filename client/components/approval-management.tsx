@@ -40,6 +40,11 @@ interface ApprovalRequest {
     name: string | null;
     email: string;
   };
+  approver?: {
+    id: string;
+    name: string | null;
+    email: string;
+  } | null;
 }
 
 export function ApprovalManagement() {
@@ -48,6 +53,7 @@ export function ApprovalManagement() {
   const [loading, setLoading] = useState(true)
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [processingId, setProcessingId] = useState<string | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
   const [orgId, setOrgId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("pending")
   const [searchQuery, setSearchQuery] = useState("")
@@ -114,6 +120,102 @@ export function ApprovalManagement() {
       fetchAllRequests()
     }
   }, [orgId, activeTab])
+
+  const fetchRequestDetails = async (requestId: string) => {
+    try {
+      setDetailLoading(true)
+      const res = await fetch(`${API_BASE_URL}/approvals/${requestId}`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
+      const data = await res.json()
+      if (data.ok && data.data) {
+        setSelectedRequest(data.data)
+      } else {
+        toast.error(data.error?.message || "Failed to load approval request details")
+      }
+    } catch (e) {
+      toast.error("Failed to load approval request details")
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  const openDetails = async (request: ApprovalRequest) => {
+    setShowDetailDialog(true)
+    setSelectedRequest(request)
+    await fetchRequestDetails(request.id)
+  }
+
+  const renderAICFOStagedChange = (payload: any) => {
+    const changeId = payload?.changeId
+    const changeIndex = payload?.changeIndex
+    const planId = payload?.planId
+    const oldValue = payload?.oldValue
+    const newValue = payload?.newValue
+    const promptId = payload?.promptId
+    const dataSources = Array.isArray(payload?.dataSources) ? payload.dataSources : []
+
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="rounded-md border bg-muted/20 p-3">
+            <p className="text-xs text-muted-foreground">Plan ID</p>
+            <p className="font-mono text-xs break-all">{planId || "—"}</p>
+          </div>
+          <div className="rounded-md border bg-muted/20 p-3">
+            <p className="text-xs text-muted-foreground">Change</p>
+            <p className="text-sm font-medium">{typeof changeIndex === "number" ? `#${changeIndex + 1}` : "—"}</p>
+            {changeId ? <p className="font-mono text-xs text-muted-foreground break-all">{changeId}</p> : null}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <div className="rounded-md border p-3">
+            <p className="text-sm font-medium mb-2">Old value</p>
+            <pre className="text-xs bg-muted p-3 rounded-md overflow-auto max-h-56 border max-w-full whitespace-pre-wrap break-words">
+              {oldValue === undefined ? "—" : JSON.stringify(oldValue, null, 2)}
+            </pre>
+          </div>
+          <div className="rounded-md border p-3">
+            <p className="text-sm font-medium mb-2">New value</p>
+            <pre className="text-xs bg-muted p-3 rounded-md overflow-auto max-h-56 border max-w-full whitespace-pre-wrap break-words">
+              {newValue === undefined ? "—" : JSON.stringify(newValue, null, 2)}
+            </pre>
+          </div>
+        </div>
+
+        {promptId ? (
+          <div className="rounded-md border p-3">
+            <p className="text-xs text-muted-foreground">Prompt ID</p>
+            <p className="font-mono text-xs break-all">{promptId}</p>
+          </div>
+        ) : null}
+
+        <div className="rounded-md border p-3">
+          <p className="text-sm font-medium mb-2">Evidence</p>
+          {dataSources.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No evidence attached.</p>
+          ) : (
+            <div className="space-y-2">
+              {dataSources.slice(0, 10).map((s: any, idx: number) => (
+                <div key={idx} className="rounded-md bg-muted/50 p-3 border">
+                  <div className="flex items-center justify-between gap-2 min-w-0">
+                    <Badge variant="outline" className="text-xs">{s?.type || "source"}</Badge>
+                    <span className="font-mono text-xs text-muted-foreground truncate min-w-0">{s?.id || ""}</span>
+                  </div>
+                  {s?.snippet ? <p className="text-sm mt-2 whitespace-pre-wrap break-words">{s.snippet}</p> : null}
+                </div>
+              ))}
+              {dataSources.length > 10 ? (
+                <p className="text-xs text-muted-foreground">Showing first 10 sources.</p>
+              ) : null}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   const handleApprove = async (requestId: string) => {
     try {
@@ -414,7 +516,7 @@ export function ApprovalManagement() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => { setSelectedRequest(request); setShowDetailDialog(true) }}
+                      onClick={() => openDetails(request)}
                     >
                       <FileText className="mr-2 h-4 w-4" />
                       Full Details
@@ -482,7 +584,7 @@ export function ApprovalManagement() {
                       request.status === 'pending' ? 'border-l-4 border-l-amber-400' :
                         'border-l-4 border-l-gray-300'
                   }`}
-                  onClick={() => { setSelectedRequest(request); setShowDetailDialog(true) }}
+                  onClick={() => openDetails(request)}
                 >
                   <CardContent className="py-3 px-4">
                     <div className="flex items-center justify-between">
@@ -510,7 +612,7 @@ export function ApprovalManagement() {
 
       {/* Reject Dialog */}
       <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
-        <DialogContent>
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Reject Approval Request</DialogTitle>
             <DialogDescription>
@@ -541,76 +643,103 @@ export function ApprovalManagement() {
 
       {/* Detail Dialog */}
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-4xl max-h-[90vh] overflow-hidden p-0">
           <DialogHeader>
-            <DialogTitle>Approval Request Details</DialogTitle>
-            <DialogDescription>
-              Full details and audit information for this request.
-            </DialogDescription>
-          </DialogHeader>
-          {selectedRequest && (
-            <div className="space-y-4 py-2">
-              <div className="flex items-center gap-2">
-                {getStatusBadge(selectedRequest.status)}
-                <Badge variant="outline" className={`capitalize ${getTypeBadgeColor(selectedRequest.type)}`}>
-                  {selectedRequest.type?.replace(/_/g, ' ')}
-                </Badge>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-muted-foreground">Requester</p>
-                  <p className="font-medium">{selectedRequest.requester?.name || selectedRequest.requester?.email}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Created</p>
-                  <p className="font-medium">{new Date(selectedRequest.createdAt).toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Target Object</p>
-                  <p className="font-medium">{selectedRequest.objectType}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Object ID</p>
-                  <p className="font-mono text-xs">{selectedRequest.objectId}</p>
-                </div>
-              </div>
-
-              {selectedRequest.comment && (
-                <div className="bg-muted/50 rounded-md p-3">
-                  <p className="text-xs font-medium text-muted-foreground mb-1">Comment</p>
-                  <p className="text-sm italic">"{selectedRequest.comment}"</p>
-                </div>
-              )}
-
-              {selectedRequest.reviewedAt && (
-                <div className="bg-muted/50 rounded-md p-3">
-                  <p className="text-xs font-medium text-muted-foreground mb-1">Reviewed At</p>
-                  <p className="text-sm">{new Date(selectedRequest.reviewedAt).toLocaleString()}</p>
-                </div>
-              )}
-
-              <div>
-                <p className="text-sm font-medium mb-2">Payload</p>
-                <pre className="text-xs bg-muted p-3 rounded-md overflow-x-auto max-h-48 border">
-                  {JSON.stringify(selectedRequest.payloadJson, null, 2)}
-                </pre>
-              </div>
+            <div className="px-6 pt-6">
+              <DialogTitle>Approval Request Details</DialogTitle>
+              <DialogDescription>
+                Review the change, verify evidence, then approve or reject with a comment.
+              </DialogDescription>
             </div>
-          )}
-          <DialogFooter>
+          </DialogHeader>
+          <div className="px-6 pb-4 overflow-y-auto max-h-[calc(90vh-140px)]">
+            {detailLoading ? (
+              <div className="space-y-3 py-4">
+                <Skeleton className="h-6 w-44" />
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-56 w-full" />
+              </div>
+            ) : selectedRequest ? (
+              <div className="space-y-5 py-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  {getStatusBadge(selectedRequest.status)}
+                  <Badge variant="outline" className={`capitalize ${getTypeBadgeColor(selectedRequest.type)}`}>
+                    {selectedRequest.type?.replace(/_/g, ' ')}
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                  <div className="rounded-md border p-3">
+                    <p className="text-muted-foreground">Requester</p>
+                    <p className="font-medium break-words">{selectedRequest.requester?.name || selectedRequest.requester?.email}</p>
+                  </div>
+                  <div className="rounded-md border p-3">
+                    <p className="text-muted-foreground">Created</p>
+                    <p className="font-medium">{new Date(selectedRequest.createdAt).toLocaleString()}</p>
+                  </div>
+                  <div className="rounded-md border p-3">
+                    <p className="text-muted-foreground">Target</p>
+                    <p className="font-medium">{selectedRequest.objectType}</p>
+                    <p className="font-mono text-xs text-muted-foreground break-all">{selectedRequest.objectId}</p>
+                  </div>
+                  <div className="rounded-md border p-3">
+                    <p className="text-muted-foreground">Reviewed</p>
+                    <p className="font-medium">{selectedRequest.reviewedAt ? new Date(selectedRequest.reviewedAt).toLocaleString() : "—"}</p>
+                    {selectedRequest.reviewedAt ? (
+                      <p className="text-xs text-muted-foreground mt-1 break-words">
+                        By {selectedRequest.approver?.name || selectedRequest.approver?.email || "—"}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+
+                {selectedRequest.comment ? (
+                  <div className="rounded-md border bg-muted/20 p-3">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Requester comment</p>
+                    <p className="text-sm whitespace-pre-wrap break-words">{selectedRequest.comment}</p>
+                  </div>
+                ) : null}
+
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Proposed change</p>
+                  {selectedRequest.type === "ai_cfo_staged_change" ? (
+                    renderAICFOStagedChange(selectedRequest.payloadJson)
+                  ) : (
+                    <pre className="text-xs bg-muted p-3 rounded-md overflow-auto max-h-80 border max-w-full whitespace-pre-wrap break-words">
+                      {JSON.stringify(selectedRequest.payloadJson, null, 2)}
+                    </pre>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Raw payload</p>
+                  <pre className="text-xs bg-muted p-3 rounded-md overflow-auto max-h-64 border max-w-full whitespace-pre-wrap break-words">
+                    {JSON.stringify(selectedRequest.payloadJson, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            ) : (
+              <Alert variant="destructive" className="mt-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>Failed to load request details.</AlertDescription>
+              </Alert>
+            )}
+          </div>
+
+          <div className="border-t bg-background px-6 py-4 flex items-center justify-between gap-2">
+            <Button variant="outline" onClick={() => setShowDetailDialog(false)}>
+              Close
+            </Button>
             {selectedRequest?.status === 'pending' && (
-              <div className="flex gap-2 w-full justify-end">
+              <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
-                  size="sm"
                   className="text-destructive"
                   onClick={() => { setShowDetailDialog(false); openRejectDialog(selectedRequest.id) }}
                 >
                   <X className="mr-2 h-4 w-4" /> Reject
                 </Button>
                 <Button
-                  size="sm"
                   onClick={() => handleApprove(selectedRequest.id)}
                   disabled={!!processingId}
                 >
@@ -619,10 +748,7 @@ export function ApprovalManagement() {
                 </Button>
               </div>
             )}
-            {selectedRequest?.status !== 'pending' && (
-              <Button variant="outline" onClick={() => setShowDetailDialog(false)}>Close</Button>
-            )}
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

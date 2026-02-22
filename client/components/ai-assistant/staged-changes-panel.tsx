@@ -4,78 +4,28 @@ import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Loader2, CheckCircle2, XCircle, Clock, AlertCircle, Info, FileText } from "lucide-react"
+import { CheckCircle2, XCircle, Clock, AlertCircle, Info, FileText } from "lucide-react"
 import { useStagedChanges } from "@/hooks/use-staged-changes"
 import { ApprovalModal } from "./approval-modal"
 import { AuditabilityModal } from "./auditability-modal"
 import { toast } from "sonner"
 
-type FilterStatus = "all" | "pending" | "approved" | "rejected"
+type FilterStatus = "all" | "draft" | "pending_approval" | "approved" | "rejected" | "cancelled"
 
 export function StagedChangesPanel() {
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all")
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showApprovalModal, setShowApprovalModal] = useState(false)
   const [selectedChangeId, setSelectedChangeId] = useState<string | null>(null)
-  const [showBulkApproveDialog, setShowBulkApproveDialog] = useState(false)
-  const [showBulkRejectDialog, setShowBulkRejectDialog] = useState(false)
   const [showAuditabilityModal, setShowAuditabilityModal] = useState(false)
   const [selectedChangeForAudit, setSelectedChangeForAudit] = useState<any>(null)
 
-  const { changes, approve, reject, bulkApprove, bulkReject, isLoading, error } = useStagedChanges(
+  const { changes, isLoading, error } = useStagedChanges(
     statusFilter === "all" ? undefined : statusFilter
   )
-
-  const handleSelectAll = () => {
-    const pendingChanges = changes.filter((c) => c.status === "pending")
-    if (selectedIds.size === pendingChanges.length) {
-      setSelectedIds(new Set())
-    } else {
-      setSelectedIds(new Set(pendingChanges.map((c) => c.id)))
-    }
-  }
-
-  const handleSelectChange = (changeId: string) => {
-    const newSelected = new Set(selectedIds)
-    if (newSelected.has(changeId)) {
-      newSelected.delete(changeId)
-    } else {
-      newSelected.add(changeId)
-    }
-    setSelectedIds(newSelected)
-  }
-
-  const handleBulkApprove = async () => {
-    if (selectedIds.size === 0) return
-
-    try {
-      await bulkApprove(Array.from(selectedIds))
-      toast.success(`${selectedIds.size} changes approved`)
-      setSelectedIds(new Set())
-      setShowBulkApproveDialog(false)
-    } catch (err) {
-      toast.error("Failed to approve changes")
-    }
-  }
-
-  const handleBulkReject = async () => {
-    if (selectedIds.size === 0) return
-
-    try {
-      await bulkReject(Array.from(selectedIds))
-      toast.success(`${selectedIds.size} changes rejected`)
-      setSelectedIds(new Set())
-      setShowBulkRejectDialog(false)
-    } catch (err) {
-      toast.error("Failed to reject changes")
-    }
-  }
 
   const handleViewDetails = (changeId: string) => {
     setSelectedChangeId(changeId)
@@ -84,11 +34,18 @@ export function StagedChangesPanel() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case "pending":
+      case "draft":
+        return (
+          <Badge variant="outline" className="flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            Not submitted
+          </Badge>
+        )
+      case "pending_approval":
         return (
           <Badge variant="secondary" className="flex items-center gap-1">
             <Clock className="h-3 w-3" />
-            Pending
+            Pending approval
           </Badge>
         )
       case "approved":
@@ -105,6 +62,13 @@ export function StagedChangesPanel() {
             Rejected
           </Badge>
         )
+      case "cancelled":
+        return (
+          <Badge variant="outline" className="flex items-center gap-1">
+            <XCircle className="h-3 w-3" />
+            Cancelled
+          </Badge>
+        )
       default:
         return <Badge>{status}</Badge>
     }
@@ -114,8 +78,7 @@ export function StagedChangesPanel() {
     return new Date(dateString).toLocaleString()
   }
 
-  const pendingChanges = changes.filter((c) => c.status === "pending")
-  const allSelected = pendingChanges.length > 0 && selectedIds.size === pendingChanges.length
+  const pendingChanges = changes.filter((c) => c.status === "pending_approval")
 
   return (
     <div className="space-y-6">
@@ -133,9 +96,11 @@ export function StagedChangesPanel() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="draft">Not submitted</SelectItem>
+                  <SelectItem value="pending_approval">Pending approval</SelectItem>
                   <SelectItem value="approved">Approved</SelectItem>
                   <SelectItem value="rejected">Rejected</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -150,36 +115,11 @@ export function StagedChangesPanel() {
           )}
 
           {pendingChanges.length > 0 && (
-            <div className="flex items-center justify-between mb-4 p-3 bg-muted rounded-lg">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  checked={allSelected}
-                  onCheckedChange={handleSelectAll}
-                  aria-label="Select all pending changes"
-                />
-                <span className="text-sm font-medium">{selectedIds.size} selected</span>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowBulkApproveDialog(true)}
-                  disabled={selectedIds.size === 0}
-                >
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                  Approve All
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowBulkRejectDialog(true)}
-                  disabled={selectedIds.size === 0}
-                >
-                  <XCircle className="mr-2 h-4 w-4" />
-                  Reject All
-                </Button>
-              </div>
-            </div>
+            <Alert className="mb-4">
+              <AlertDescription>
+                {pendingChanges.length} change{pendingChanges.length !== 1 ? "s" : ""} pending governance review. Approve or reject them in the Governance tab.
+              </AlertDescription>
+            </Alert>
           )}
 
           {isLoading ? (
@@ -214,14 +154,6 @@ export function StagedChangesPanel() {
                 <Card key={change.id} className="hover:bg-muted/50 transition-colors">
                   <CardContent className="p-4">
                     <div className="flex items-start gap-4">
-                      {change.status === "pending" && (
-                        <Checkbox
-                          checked={selectedIds.has(change.id)}
-                          onCheckedChange={() => handleSelectChange(change.id)}
-                          aria-label={`Select change ${change.id}`}
-                          className="mt-1"
-                        />
-                      )}
                       <div className="flex-1 space-y-2">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
@@ -275,14 +207,14 @@ export function StagedChangesPanel() {
 
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-muted-foreground">{formatDate(change.createdAt)}</span>
-                          {change.status === "pending" && (
+                          {(change.status === "draft" || change.status === "pending_approval") && (
                             <div className="flex gap-2">
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleViewDetails(change.id)}
                               >
-                                View Details
+                                Review
                               </Button>
                             </div>
                           )}
@@ -301,16 +233,6 @@ export function StagedChangesPanel() {
         changeId={selectedChangeId}
         open={showApprovalModal}
         onClose={() => {
-          setShowApprovalModal(false)
-          setSelectedChangeId(null)
-        }}
-        onApprove={async (id) => {
-          await approve(id)
-          setShowApprovalModal(false)
-          setSelectedChangeId(null)
-        }}
-        onReject={async (id) => {
-          await reject(id)
           setShowApprovalModal(false)
           setSelectedChangeId(null)
         }}
@@ -336,37 +258,6 @@ export function StagedChangesPanel() {
         }
       />
 
-      <AlertDialog open={showBulkApproveDialog} onOpenChange={setShowBulkApproveDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Approve {selectedIds.size} changes?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will approve all selected changes. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleBulkApprove}>Approve</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={showBulkRejectDialog} onOpenChange={setShowBulkRejectDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Reject {selectedIds.size} changes?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will reject all selected changes. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleBulkReject} className="bg-destructive">
-              Reject
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   )
 }

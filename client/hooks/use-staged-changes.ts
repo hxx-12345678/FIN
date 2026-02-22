@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
-import { toast } from "sonner"
 import { API_BASE_URL, getAuthToken, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface StagedChange {
@@ -12,7 +11,7 @@ interface StagedChange {
   newValue: any
   confidenceScore: number
   createdAt: string
-  status: "pending" | "approved" | "rejected"
+  status: "draft" | "pending_approval" | "approved" | "rejected" | "cancelled"
   aiExplanation?: string
   promptId?: string
   dataSources?: Array<{ type: string; id: string; snippet: string }>
@@ -23,12 +22,19 @@ interface StagedChange {
   reasoning?: string
 }
 
+interface ApprovalRequest {
+  id: string
+  status: "pending" | "approved" | "rejected" | "cancelled"
+  type: string
+  objectType: string
+  objectId: string
+  payloadJson: any
+  reviewedAt?: string | null
+  createdAt: string
+}
+
 interface UseStagedChangesReturn {
   changes: StagedChange[]
-  approve: (changeId: string) => Promise<void>
-  reject: (changeId: string) => Promise<void>
-  bulkApprove: (changeIds: string[]) => Promise<void>
-  bulkReject: (changeIds: string[]) => Promise<void>
   refresh: () => Promise<void>
   isLoading: boolean
   error: string | null
@@ -106,6 +112,40 @@ export function useStagedChanges(statusFilter?: string): UseStagedChangesReturn 
       }
 
       if (result.plans && Array.isArray(result.plans) && result.plans.length > 0) {
+        // Fetch persisted governance approvals for AI CFO staged changes
+        // Note: these are stored as ApprovalRequest rows (objectType=aicfo_plan, objectId=planId)
+        let approvals: ApprovalRequest[] = []
+        try {
+          const approvalsRes = await fetch(
+            `${API_BASE_URL}/orgs/${orgId}/approvals?type=ai_cfo_staged_change&objectType=aicfo_plan`,
+            {
+              headers: getAuthHeaders(),
+              credentials: "include",
+            }
+          )
+          if (approvalsRes.ok) {
+            const approvalsJson = await approvalsRes.json()
+            if (approvalsJson?.ok && Array.isArray(approvalsJson.data)) {
+              approvals = approvalsJson.data
+            }
+          }
+        } catch {
+          // If approvals endpoint fails, fall back to showing draft changes (still reviewable)
+          approvals = []
+        }
+
+        const approvalByChangeId = new Map<string, ApprovalRequest>()
+        approvals.forEach((req) => {
+          const changeId = req?.payloadJson?.changeId
+          if (typeof changeId === "string" && changeId.trim().length > 0) {
+            const existing = approvalByChangeId.get(changeId)
+            // Prefer the newest request if duplicates exist
+            if (!existing || new Date(req.createdAt).getTime() > new Date(existing.createdAt).getTime()) {
+              approvalByChangeId.set(changeId, req)
+            }
+          }
+        })
+
         // Extract staged changes from all plans with strict validation
         const allChanges: StagedChange[] = []
         
@@ -158,10 +198,15 @@ export function useStagedChanges(statusFilter?: string): UseStagedChangesReturn 
               return // Skip changes with invalid confidence
             }
 
-            // Check if this change has been approved/rejected (stored in localStorage for now)
             const changeId = `${plan.id}-${idx}`
-            const storedStatus = localStorage.getItem(`staged-change-${changeId}`)
-            const status = (storedStatus as "pending" | "approved" | "rejected") || "pending"
+
+            // Determine status from persisted approval requests (governance)
+            const approval = approvalByChangeId.get(changeId)
+            const status: StagedChange["status"] = approval
+              ? approval.status === "pending"
+                ? "pending_approval"
+                : approval.status
+              : "draft"
 
             // Apply status filter
             if (statusFilter && statusFilter !== "all" && status !== statusFilter) {
@@ -235,102 +280,8 @@ export function useStagedChanges(statusFilter?: string): UseStagedChangesReturn 
     fetchChanges()
   }, [fetchChanges])
 
-  const approve = useCallback(async (changeId: string) => {
-    const originalChanges = [...changes]
-    
-    // Update local state optimistically
-    setChanges((prev) => prev.map((c) => (c.id === changeId ? { ...c, status: "approved" as const } : c)))
-    
-    // Store status in localStorage (in production, this would update the database)
-    localStorage.setItem(`staged-change-${changeId}`, "approved")
-
-    try {
-      // In production, this would call a backend endpoint to update the plan
-      // For now, we just update localStorage
-      await fetchChanges()
-      toast?.success("Change approved successfully")
-    } catch (err) {
-      setChanges(originalChanges)
-      localStorage.removeItem(`staged-change-${changeId}`)
-      setError(err instanceof Error ? err.message : "Failed to approve change")
-      throw err
-    }
-  }, [changes, fetchChanges])
-
-  const reject = useCallback(async (changeId: string) => {
-    const originalChanges = [...changes]
-    
-    // Update local state optimistically
-    setChanges((prev) => prev.map((c) => (c.id === changeId ? { ...c, status: "rejected" as const } : c)))
-    
-    // Store status in localStorage
-    localStorage.setItem(`staged-change-${changeId}`, "rejected")
-
-    try {
-      await fetchChanges()
-      toast?.success("Change rejected")
-    } catch (err) {
-      setChanges(originalChanges)
-      localStorage.removeItem(`staged-change-${changeId}`)
-      setError(err instanceof Error ? err.message : "Failed to reject change")
-      throw err
-    }
-  }, [changes, fetchChanges])
-
-  const bulkApprove = useCallback(async (changeIds: string[]) => {
-    const originalChanges = [...changes]
-    
-    // Update local state optimistically
-    setChanges((prev) => prev.map((c) => (changeIds.includes(c.id) ? { ...c, status: "approved" as const } : c)))
-    
-    // Store statuses in localStorage
-    changeIds.forEach((id) => {
-      localStorage.setItem(`staged-change-${id}`, "approved")
-    })
-
-    try {
-      await fetchChanges()
-      toast?.success(`${changeIds.length} changes approved`)
-    } catch (err) {
-      setChanges(originalChanges)
-      changeIds.forEach((id) => {
-        localStorage.removeItem(`staged-change-${id}`)
-      })
-      setError(err instanceof Error ? err.message : "Failed to approve changes")
-      throw err
-    }
-  }, [changes, fetchChanges])
-
-  const bulkReject = useCallback(async (changeIds: string[]) => {
-    const originalChanges = [...changes]
-    
-    // Update local state optimistically
-    setChanges((prev) => prev.map((c) => (changeIds.includes(c.id) ? { ...c, status: "rejected" as const } : c)))
-    
-    // Store statuses in localStorage
-    changeIds.forEach((id) => {
-      localStorage.setItem(`staged-change-${id}`, "rejected")
-    })
-
-    try {
-      await fetchChanges()
-      toast?.success(`${changeIds.length} changes rejected`)
-    } catch (err) {
-      setChanges(originalChanges)
-      changeIds.forEach((id) => {
-        localStorage.removeItem(`staged-change-${id}`)
-      })
-      setError(err instanceof Error ? err.message : "Failed to reject changes")
-      throw err
-    }
-  }, [changes, fetchChanges])
-
   return {
     changes,
-    approve,
-    reject,
-    bulkApprove,
-    bulkReject,
     refresh: fetchChanges,
     isLoading,
     error,

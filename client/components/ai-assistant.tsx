@@ -234,8 +234,8 @@ export function AIAssistant() {
     priority: "medium" as Task["priority"],
     dueDate: "",
   })
-  const { changes: stagedChanges } = useStagedChanges("pending")
-  const pendingCount = stagedChanges.filter((c) => c.status === "pending").length
+  const { changes: stagedChanges } = useStagedChanges("pending_approval")
+  const pendingCount = stagedChanges.filter((c) => c.status === "pending_approval").length
 
   useEffect(() => {
     // Only fetch data if user is authenticated
