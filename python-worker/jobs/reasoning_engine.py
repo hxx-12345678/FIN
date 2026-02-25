@@ -259,7 +259,8 @@ class ModelReasoningEngine:
                 "derivation": "This value is provided as a direct input to the model."
             }
             
-        expr, deps = formula_info
+        # formula_info is (expr, dependencies, f, actual_deps)
+        expr, deps, f, actual_deps = formula_info
         dep_names = [self.engine.nodes_meta.get(d, {}).get('name', d) for d in deps]
         
         steps = [
@@ -267,9 +268,13 @@ class ModelReasoningEngine:
             f"This metric depends on {len(dep_names)} upstream driver(s): {', '.join(dep_names)}.",
         ]
         
-        # Add step for each dependency
+        # Add causal lineage step
+        causal_lin = list(nx.ancestors(self.engine.graph, node_id))
+        if causal_lin:
+            steps.append(f"Causal Lineage: This metric is part of a larger chain including {len(causal_lin)} nodes.")
+        
         for dep_name in dep_names:
-            steps.append(f"\u2192 {dep_name}: contributes to the final calculation.")
+            steps.append(f"\u2192 {dep_name}: directly contributes to the calculation.")
         
         steps.append(f"The engine evaluates this formula vectorized across all time periods.")
         
@@ -280,5 +285,56 @@ class ModelReasoningEngine:
             "formula": str(expr),
             "steps": steps,
             "inputs": dep_names,
+            "causal_graph": causal_lin,
             "derivation": f"Derived from {', '.join(dep_names)} using the logic: {expr}."
+        }
+
+    def explain_variance(self, target_node: str, period_a: int, period_b: int) -> Dict[str, Any]:
+        """
+        Explains why a metric changed between two periods (Variance Analysis / Waterfall).
+        Answers: 'Why did runway/cash drop?'
+        """
+        if target_node not in self.engine.data:
+            return {"error": "Node not found"}
+            
+        data = self.engine.data[target_node]
+        val_a = data[..., period_a].sum()
+        val_b = data[..., period_b].sum()
+        variance = val_b - val_a
+        
+        if abs(variance) < 1e-9:
+            return {"variance": 0, "explanation": "No change detected between periods."}
+            
+        # Decompose change by tracing direct dependencies
+        # Result = f(x, y, z). delta_R approx sum( df/di * delta_i )
+        explanations = []
+        if target_node in self.engine.formulas:
+            expr, deps, f, actual_deps = self.engine.formulas[target_node]
+            for dep in deps:
+                dep_data = self.engine.data[dep]
+                d_a = dep_data[..., period_a].sum()
+                d_b = dep_data[..., period_b].sum()
+                d_delta = d_b - d_a
+                
+                if abs(d_delta) > 1e-9:
+                    # Simple sensitivity: How much would target change if ONLY this dep changed?
+                    # This is a first-order approximation (Waterfall Analysis)
+                    contribution = d_delta # In a linear sum, it's 1:1. For complex, we'd need partial derivatives.
+                    
+                    explanations.append({
+                        "driver": self.engine.nodes_meta.get(dep, {}).get('name', dep),
+                        "delta": float(d_delta),
+                        "contribution_percent": float(d_delta / (variance + 1e-9))
+                    })
+        
+        explanations.sort(key=lambda x: abs(x['delta']), reverse=True)
+        
+        return {
+            "target": target_node,
+            "period_a": period_a,
+            "period_b": period_b,
+            "baseline": float(val_a),
+            "current": float(val_b),
+            "variance": float(variance),
+            "drivers": explanations
         }

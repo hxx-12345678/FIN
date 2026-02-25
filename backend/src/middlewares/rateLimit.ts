@@ -108,7 +108,7 @@ export const rateLimit = (maxRequests: number = RATE_LIMIT_MAX_REQUESTS) => {
  */
 export const orgRateLimit = (req: AuthRequest, res: Response, next: NextFunction) => {
   const orgId = req.params.orgId || (req.body?.orgId);
-  
+
   if (!orgId) {
     return next(); // Skip if no org ID
   }
@@ -124,6 +124,12 @@ export const orgRateLimit = (req: AuthRequest, res: Response, next: NextFunction
       retryAfter: Math.ceil((store[key].resetTime - Date.now()) / 1000),
     });
   }
+
+  // Add rate limit headers
+  const record = store[key];
+  res.setHeader('X-RateLimit-Limit', RATE_LIMIT_MAX_REQUESTS_PER_ORG.toString());
+  res.setHeader('X-RateLimit-Remaining', Math.max(0, RATE_LIMIT_MAX_REQUESTS_PER_ORG - record.count).toString());
+  res.setHeader('X-RateLimit-Reset', new Date(record.resetTime).toISOString());
 
   next();
 };

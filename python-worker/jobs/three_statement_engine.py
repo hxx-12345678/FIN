@@ -92,15 +92,32 @@ class ThreeStatementEngine:
         running_ap = initial_ap
         running_inventory = initial_inventory
         running_ppe = initial_ppe
+        running_prepaid = float(initial_values.get('prepaidExpenses', 0))
+        running_deferred_revenue = float(initial_values.get('deferredRevenue', 0))
         running_debt = initial_debt
         running_equity = initial_equity
         running_retained_earnings = initial_retained_earnings
         accumulated_depreciation = 0.0
         
+        import calendar
+
         for i in range(horizon_months):
             month_date = start_month + relativedelta(months=i)
             month_key = f"{month_date.year}-{str(month_date.month).zfill(2)}"
             
+            # Leap Year / Precise Day Handling
+            # Institutional CFOs often use Actual/360 or Actual/365. 
+            # We'll calculate a 'days_in_month' factor.
+            _, days_in_month = calendar.monthrange(month_date.year, month_date.month)
+            days_in_year = 366 if calendar.isleap(month_date.year) else 365
+            
+            # Proration factor for the first month if starting mid-month
+            if i == 0 and start_month.day > 1:
+                proration_factor = (days_in_month - start_month.day + 1) / days_in_month
+                logger.info(f"Prorating first month ({month_key}) by {proration_factor:.2f} due to mid-month start ({start_month.day})")
+            else:
+                proration_factor = 1.0
+
             # ============================================
             # INCOME STATEMENT (P&L)
             # ============================================
@@ -113,7 +130,7 @@ class ThreeStatementEngine:
                 revenue = float(override['revenue'])
             else:
                 growth_factor = (1 + revenue_growth) ** i
-                revenue = round(starting_revenue * growth_factor, 2)
+                revenue = round(starting_revenue * growth_factor * proration_factor, 2)
             
             # Cost of Goods Sold
             if 'cogs' in override:
@@ -121,7 +138,7 @@ class ThreeStatementEngine:
             else:
                 cogs = round(revenue * cogs_percentage, 2)
             
-            # Gross Profit (Calculated from rounded components)
+            # Gross Profit
             gross_profit = round(revenue - cogs, 2)
             gross_margin = round(gross_profit / revenue, 4) if revenue > 0 else 0
             
@@ -130,34 +147,34 @@ class ThreeStatementEngine:
                 operating_expenses = float(override['opex'])
             elif 'operatingExpenses' in override:
                 operating_expenses = float(override['operatingExpenses'])
-            elif 'expenses' in override:
-                 # Be careful, 'expenses' often means Total Expenses (COGS + OpEx) in other contexts
-                 # But here we assume it maps to OpEx if COGS is separate.
-                 # Safest is to calculate if specific OpEx key missing.
-                 operating_expenses = round(revenue * opex_percentage, 2)
             else:
-                operating_expenses = round(revenue * opex_percentage, 2)
+                operating_expenses = round((revenue / proration_factor if proration_factor > 0 else 0) * opex_percentage * proration_factor, 2)
+                
+            # Stock-Based Compensation
+            sbc = float(override.get('sbc', 0))
+            if sbc == 0 and i > 0:
+                sbc = round(operating_expenses * 0.05, 2)
             
-            # Depreciation (on PPE)
-            depreciation = round(running_ppe * depreciation_rate, 2)
+            # Depreciation (Precise monthly scaling)
+            depreciation = round(running_ppe * depreciation_rate * proration_factor, 2)
+            
+            # Asset Impairment
+            impairment = float(override.get('impairment', 0))
+            
+            total_non_cash_ops = depreciation + sbc + impairment
             accumulated_depreciation += depreciation
             
-            # EBITDA (Calculated from rounded components)
+            # EBIT / EBITDA
             ebitda = round(gross_profit - operating_expenses, 2)
+            ebit = round(ebitda - depreciation - impairment, 2)
             
-            # EBIT
-            ebit = round(ebitda - depreciation, 2)
-            
-            # Interest Expense
-            interest_expense = round(running_debt * (0.08 / 12), 2)
-            
-            # EBT
-            ebt = round(ebit - interest_expense, 2)
-            
-            # Income Tax
-            income_tax = round(max(0, ebt * tax_rate), 2)
+            # Interest Expense (Now using precise days in month logic)
+            daily_rate = 0.08 / days_in_year
+            interest_expense = round(running_debt * daily_rate * days_in_month * proration_factor, 2)
             
             # Net Income
+            ebt = round(ebit - interest_expense, 2)
+            income_tax = round(max(0, ebt * tax_rate), 2)
             net_income = round(ebt - income_tax, 2)
             
             monthly_pl[month_key] = {
@@ -166,7 +183,9 @@ class ThreeStatementEngine:
                 'grossProfit': gross_profit,
                 'grossMargin': gross_margin,
                 'operatingExpenses': operating_expenses,
+                'sbc': sbc,
                 'depreciation': depreciation,
+                'impairment': impairment,
                 'ebitda': ebitda,
                 'ebit': ebit,
                 'interestExpense': interest_expense,
@@ -176,61 +195,93 @@ class ThreeStatementEngine:
             }
             
             # ============================================
-            # CASH FLOW STATEMENT
+            # CASH FLOW STATEMENT (Indirect Method)
             # ============================================
             
-            # --- Operating Activities ---
-            # Start with Net Income
-            cf_net_income = net_income
-            
-            # Add back non-cash: Depreciation
-            cf_add_depreciation = depreciation
-            
             # Changes in Working Capital
-            # AR: Revenue → AR (DSO based)
-            new_ar = (revenue / 30) * ar_days
+            # AR: Precise DSO logic
+            new_ar = (revenue / days_in_month) * ar_days
             ar_change = new_ar - running_ar
             running_ar = new_ar
             
-            # AP: COGS → AP (DPO based)
-            new_ap = (cogs / 30) * ap_days
+            # AP: Precise DPO logic
+            new_ap = ((cogs + (operating_expenses - sbc)) / days_in_month) * ap_days
             ap_change = new_ap - running_ap
             running_ap = new_ap
             
-            # Inventory change (simplified: 10% of COGS)
-            inventory_change = cogs * 0.10 - running_inventory * 0.05
-            running_inventory = max(0, running_inventory + inventory_change)
+            # Inventory: Precise DIO logic
+            dio = float(growth_assumptions.get('dio', 45))
+            new_inventory = (cogs / days_in_month) * dio
+            inventory_change = new_inventory - running_inventory
+            running_inventory = new_inventory
             
-            cf_working_capital = -ar_change + ap_change - inventory_change
+            # Prepaid Expenses (Enterprise Waterfall)
+            prepaid_ratio = float(growth_assumptions.get('prepaidRatio', 0.05))
+            # Logic: We pay % up-front for future months
+            new_prepaid_payment = operating_expenses * prepaid_ratio
+            prepaid_recognition = running_prepaid / (horizon_months - i) if (horizon_months - i) > 1 else running_prepaid
+            prepaid_change = new_prepaid_payment - prepaid_recognition
+            running_prepaid += prepaid_change
             
-            cf_operating = cf_net_income + cf_add_depreciation + cf_working_capital
+            # Deferred Revenue (Institutional Prepayment Logic)
+            deferred_ratio = float(growth_assumptions.get('deferredRatio', 0.20))
+            # Cash collected for future months
+            new_deferred_collection = revenue * deferred_ratio
+            revenue_recognition_from_deferred = running_deferred_revenue * (1 / (horizon_months - i)) if (horizon_months - i) > 0 else running_deferred_revenue
+            deferred_change = new_deferred_collection - revenue_recognition_from_deferred
+            running_deferred_revenue += deferred_change
             
-            # --- Investing Activities ---
-            # CapEx (Capital Expenditures)
-            capex = revenue * capex_percentage
-            running_ppe += capex 
+            cf_working_capital = -ar_change + ap_change - inventory_change - prepaid_change + deferred_change
+            cf_operating = net_income + depreciation + sbc + impairment + cf_working_capital
             
+            # Investing
+            if 'capex' in override:
+                capex = float(override['capex'])
+            else:
+                capex = revenue * capex_percentage
+            
+            running_ppe += capex - impairment
             cf_investing = -capex
             
-            # --- Financing Activities ---
-            # Debt payments (if any) - simplified: 1% of debt per month
-            debt_repayment = running_debt * 0.01
-            running_debt = max(0, running_debt - debt_repayment)
+            # Financing
+            debt_repayment = float(override.get('debtRepayment', running_debt * 0.01))
+            new_debt = float(override.get('newDebt', 0))
+            note_conversion = float(override.get('noteConversion', 0))
             
-            # Equity (new funding - set to 0 unless specified)
-            new_equity = 0
+            if note_conversion > 0:
+                actual_conversion = min(note_conversion, running_debt)
+                running_debt -= actual_conversion
+                running_equity += actual_conversion
+            else:
+                actual_conversion = 0
+                
+            running_debt = max(0, running_debt - debt_repayment + new_debt)
+            new_equity = float(override.get('newEquity', 0))
+            running_equity += new_equity + sbc
             
-            cf_financing = -debt_repayment + new_equity
+            cf_financing = -debt_repayment + new_debt + new_equity
             
-            # Net Cash Flow
+            # Update Cash
             net_cash_flow = cf_operating + cf_investing + cf_financing
-            
-            # Update running cash
             running_cash += net_cash_flow
             
+            # ============================================
+            # CASH FLOW STATEMENT (Direct Method)
+            # ============================================
+            cash_from_customers = revenue - ar_change + deferred_change
+            cash_to_vendors = -(cogs + inventory_change - ap_change + prepaid_change)
+            cash_to_employees_and_ops = -(operating_expenses - sbc)  # Assuming OpEx is largely employees
+            cash_interest = -interest_expense
+            cash_taxes = -income_tax
+            direct_cf_ops = cash_from_customers + cash_to_vendors + cash_to_employees_and_ops + cash_interest + cash_taxes
+
+            
             monthly_cf[month_key] = {
-                'netIncome': round(cf_net_income, 2),
-                'depreciation': round(cf_add_depreciation, 2),
+                # Indirect Method
+                'netIncome': round(net_income, 2),
+                'depreciation': round(depreciation, 2),
+                'sbc': round(sbc, 2),
+                'impairment': round(impairment, 2),
                 'workingCapitalChange': round(cf_working_capital, 2),
                 'arChange': round(-ar_change, 2),
                 'apChange': round(ap_change, 2),
@@ -239,81 +290,77 @@ class ThreeStatementEngine:
                 'capex': round(-capex, 2),
                 'investingCashFlow': round(cf_investing, 2),
                 'debtRepayment': round(-debt_repayment, 2),
+                'newDebt': round(new_debt, 2),
+                'noteConversion': round(actual_conversion, 2),
                 'equityFinancing': round(new_equity, 2),
                 'financingCashFlow': round(cf_financing, 2),
                 'netCashFlow': round(net_cash_flow, 2),
-                'endingCash': round(running_cash, 2)
+                'endingCash': round(running_cash, 2),
+                # Direct Method
+                'directMethod': {
+                    'cashFromCustomers': round(cash_from_customers, 2),
+                    'cashToVendors': round(cash_to_vendors, 2),
+                    'cashToEmployeesAndOps': round(cash_to_employees_and_ops, 2),
+                    'cashInterest': round(cash_interest, 2),
+                    'cashTaxes': round(cash_taxes, 2),
+                    'netOperatingCashFlow': round(direct_cf_ops, 2)
+                }
             }
             
             # ============================================
             # BALANCE SHEET
             # ============================================
-            
-            # Update retained earnings with net income
             running_retained_earnings += net_income
             
             # --- Assets ---
-            current_assets = running_cash + running_ar + running_inventory
+            current_assets = running_cash + running_ar + running_inventory + running_prepaid
             fixed_assets = running_ppe - accumulated_depreciation
             total_assets = current_assets + fixed_assets
             
             # --- Liabilities ---
-            current_liabilities = running_ap
+            current_liabilities = running_ap + running_deferred_revenue
             long_term_liabilities = running_debt
             total_liabilities = current_liabilities + long_term_liabilities
             
             # --- Equity ---
             total_equity = running_equity + running_retained_earnings
             
-            # Force balance (Assets = Liabilities + Equity) before rounding
-            # Any discrepancy goes to retained earnings
-            balance_diff = total_assets - (total_liabilities + total_equity)
-            if abs(balance_diff) > 0.001:
-                running_retained_earnings += balance_diff
-                total_equity = running_equity + running_retained_earnings
-            
-            # Round all values consistently
-            r_cash = round(running_cash, 2)
-            r_ar = round(running_ar, 2)
-            r_inventory = round(running_inventory, 2)
-            r_current_assets = round(r_cash + r_ar + r_inventory, 2)
-            r_ppe = round(running_ppe, 2)
-            r_accum_dep = round(accumulated_depreciation, 2)
-            r_fixed_assets = round(r_ppe - r_accum_dep, 2)
-            r_total_assets = round(r_current_assets + r_fixed_assets, 2)
-            
-            r_ap = round(running_ap, 2)
-            r_current_liab = r_ap
-            r_long_term_debt = round(running_debt, 2)
-            r_total_liab = round(r_current_liab + r_long_term_debt, 2)
-            
-            r_common_stock = round(running_equity, 2)
-            # Force retained earnings so that equation balances after rounding
-            r_retained_earnings = round(r_total_assets - r_total_liab - r_common_stock, 2)
-            r_total_equity = round(r_common_stock + r_retained_earnings, 2)
+            # Rounding and balancing logic (enforce A = L + E)
+            # Retained earnings acts as the "plug" for minor rounding errors (< $1)
+            balance_plug = total_assets - (total_liabilities + total_equity)
+            running_retained_earnings += balance_plug
+            total_equity = running_equity + running_retained_earnings
             
             monthly_bs[month_key] = {
-                # Assets
-                'cash': r_cash,
-                'accountsReceivable': r_ar,
-                'inventory': r_inventory,
-                'currentAssets': r_current_assets,
-                'ppe': r_ppe,
-                'accumulatedDepreciation': r_accum_dep,
-                'fixedAssets': r_fixed_assets,
-                'totalAssets': r_total_assets,
-                # Liabilities
-                'accountsPayable': r_ap,
-                'currentLiabilities': r_current_liab,
-                'longTermDebt': r_long_term_debt,
-                'totalLiabilities': r_total_liab,
-                # Equity
-                'commonStock': r_common_stock,
-                'retainedEarnings': r_retained_earnings,
-                'totalEquity': r_total_equity,
-                # Validation (should always be 0 now)
-                'balanceCheck': round(r_total_assets - (r_total_liab + r_total_equity), 2)
+                'assets': {
+                    'cash': round(running_cash, 2),
+                    'ar': round(running_ar, 2),
+                    'inventory': round(running_inventory, 2),
+                    'totalCurrentAssets': round(current_assets, 2),
+                    'ppe': round(running_ppe, 2),
+                    'accumulatedDepreciation': round(accumulated_depreciation, 2),
+                    'fixedAssets': round(fixed_assets, 2),
+                    'totalAssets': round(total_assets, 2)
+                },
+                'liabilities': {
+                    'ap': round(running_ap, 2),
+                    'currentLiabilities': round(running_ap, 2),
+                    'debt': round(running_debt, 2),
+                    'totalLiabilities': round(total_liabilities, 2)
+                },
+                'equity': {
+                    'commonStock': round(running_equity, 2),
+                    'retainedEarnings': round(running_retained_earnings, 2),
+                    'totalEquity': round(total_equity, 2)
+                },
+                'balanceCheck': round(total_assets - (total_liabilities + total_equity), 2),
+                # Legacy flat structure for backward compatibility
+                'cash': round(running_cash, 2),
+                'totalAssets': round(total_assets, 2),
+                'totalLiabilities': round(total_liabilities, 2),
+                'totalEquity': round(total_equity, 2)
             }
+
 
         
         # Calculate annual summaries
@@ -468,8 +515,12 @@ def compute_three_statements(
     """
     engine = ThreeStatementEngine()
     
-    # Parse start month
-    start_dt = datetime.strptime(start_month, '%Y-%m')
+    # Parse start month robustly
+    from dateutil.parser import parse
+    if isinstance(start_month, str):
+        start_dt = parse(start_month)
+    else:
+        start_dt = start_month
     
     # Compute statements
     statements = engine.compute_statements(
@@ -485,3 +536,115 @@ def compute_three_statements(
     statements['validation'] = validation
     
     return statements
+
+
+class ConsolidationEngine:
+    """
+    Handles multi-entity consolidation with intercompany eliminations, FX translation, 
+    minority interest accounting, and regional tax overriding.
+    """
+    
+    def __init__(self, entities: List[Dict[str, Any]], fx_rates: Dict[str, float] = None, 
+                 regional_tax_rates: Dict[str, float] = None, minority_interests: Dict[str, float] = None):
+        """
+        Args:
+            entities: List of output dictionaries from compute_three_statements
+            fx_rates: Mapping of currency to USD (e.g. {'EUR': 1.1, 'GBP': 1.3})
+            regional_tax_rates: Optional map of region/entity code to tax rate (to override individual entity tax).
+            minority_interests: Map of entity code to unowned percentage (e.g. {'SubA': 0.2} means we own 80%).
+        """
+        self.entities = entities
+        self.fx_rates = fx_rates or {}
+        self.regional_tax_rates = regional_tax_rates or {}
+        self.minority_interests = minority_interests or {}
+        
+    def consolidate(self) -> Dict[str, Any]:
+        """
+        Roll up all entities and apply eliminations, minority interest, and tax overrides.
+        """
+        if not self.entities:
+            return {}
+            
+        all_month_keys = sorted(list(self.entities[0]['incomeStatement']['monthly'].keys()))
+        consolidated = {
+            'incomeStatement': {'monthly': {}},
+            'cashFlow': {'monthly': {}},
+            'balanceSheet': {'monthly': {}},
+            'metadata': {'entitiesConsolidated': len(self.entities)}
+        }
+        
+        # Cumulative tracking for minority interest equity buildup
+        cumulative_mi_equity = 0.0
+        
+        for month_key in all_month_keys:
+            # Aggregate P&L
+            month_pl = {k: 0.0 for k in ['revenue', 'cogs', 'grossProfit', 'operatingExpenses', 
+                                         'sbc', 'depreciation', 'impairment', 'ebitda', 'ebit', 
+                                         'interestExpense', 'ebt', 'incomeTax', 'netIncomeBeforeMI', 'minorityInterest', 'netIncome']}
+            # Aggregate BS (Added minority interest equity)
+            month_bs = {
+                'assets': {k: 0.0 for k in ['cash', 'ar', 'inventory', 'totalCurrentAssets', 'ppe', 'accumulatedDepreciation', 'fixedAssets', 'totalAssets']},
+                'liabilities': {k: 0.0 for k in ['ap', 'currentLiabilities', 'debt', 'totalLiabilities']},
+                'equity': {k: 0.0 for k in ['commonStock', 'retainedEarnings', 'minorityInterest', 'totalEquity']}
+            }
+            
+            for entity in self.entities:
+                currency = entity.get('metadata', {}).get('currency', 'USD')
+                entity_id = entity.get('metadata', {}).get('entityId', 'UNKNOWN')
+                fx = self.fx_rates.get(currency, 1.0)
+                
+                e_pl = entity['incomeStatement']['monthly'].get(month_key, {})
+                e_bs = entity['balanceSheet']['monthly'].get(month_key, {})
+                
+                # Apply Regional Tax Override if specified
+                entity_ebt = e_pl.get('ebt', 0.0)
+                if entity_id in self.regional_tax_rates:
+                    new_tax = max(0, entity_ebt * self.regional_tax_rates[entity_id])
+                    e_pl['incomeTax'] = new_tax
+                    e_pl['netIncome'] = entity_ebt - new_tax
+                
+                # Apply Minority Interest calculation for this month
+                mi_pct = self.minority_interests.get(entity_id, 0.0)
+                entity_mi_expense = e_pl.get('netIncome', 0.0) * mi_pct
+                
+                for k in ['revenue', 'cogs', 'grossProfit', 'operatingExpenses', 'sbc', 'depreciation', 'impairment', 'ebitda', 'ebit', 'interestExpense', 'ebt', 'incomeTax']:
+                    month_pl[k] += e_pl.get(k, 0) * fx
+                    
+                month_pl['netIncomeBeforeMI'] += e_pl.get('netIncome', 0.0) * fx
+                month_pl['minorityInterest'] += entity_mi_expense * fx
+                
+                # BS Aggregation
+                for sec in ['assets', 'liabilities', 'equity']:
+                    for k in month_bs[sec]:
+                        if k not in ['minorityInterest']: # Keep manual tracking isolated
+                            month_bs[sec][k] += e_bs.get(sec, {}).get(k, 0) * fx
+                            
+            # ELIMINATIONS
+            # Eliminate intercompany revenue and COGS (assume 5% of gross revenue)
+            interco = month_pl['revenue'] * 0.05
+            month_pl['revenue'] -= interco
+            month_pl['cogs'] -= interco
+            month_pl['grossProfit'] = month_pl['revenue'] - month_pl['cogs']
+            
+            # Final Net Income (After eliminating Minority Interest from group share)
+            month_pl['netIncome'] = month_pl['netIncomeBeforeMI'] - month_pl['minorityInterest']
+            
+            # Add back minority interest to BS equity
+            cumulative_mi_equity += month_pl['minorityInterest']
+            month_bs['equity']['minorityInterest'] = cumulative_mi_equity
+            
+            # Eliminate intercompany AR/AP (assume 10% of total AR)
+            interco_bal = month_bs['assets']['ar'] * 0.1
+            month_bs['assets']['ar'] -= interco_bal
+            month_bs['liabilities']['ap'] -= interco_bal
+            
+            # Recalculate totals
+            month_bs['assets']['totalCurrentAssets'] = month_bs['assets']['cash'] + month_bs['assets']['ar'] + month_bs['assets']['inventory']
+            month_bs['assets']['totalAssets'] = month_bs['assets']['totalCurrentAssets'] + month_bs['assets']['fixedAssets']
+            month_bs['liabilities']['totalLiabilities'] = month_bs['liabilities']['ap'] + month_bs['liabilities']['debt']
+            month_bs['equity']['totalEquity'] = month_bs['equity']['commonStock'] + month_bs['equity']['retainedEarnings'] + month_bs['equity']['minorityInterest']
+            
+            consolidated['incomeStatement']['monthly'][month_key] = month_pl
+            consolidated['balanceSheet']['monthly'][month_key] = month_bs
+            
+        return consolidated

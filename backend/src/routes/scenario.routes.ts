@@ -19,6 +19,9 @@ router.delete('/scenarios/:run_id', authenticate, scenarioController.deleteScena
 // Get scenario comparison
 router.get('/scenarios/:run_id/comparison', authenticate, scenarioController.getScenarioComparison);
 
+// Promote scenario
+router.post('/scenarios/:run_id/promote', authenticate, scenarioController.promoteScenario);
+
 export default router;
 
 

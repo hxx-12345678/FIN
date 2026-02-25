@@ -84,35 +84,58 @@ class ForecastingEngine:
     @staticmethod
     def forecast_trend(history: List[float], steps: int) -> Dict[str, Any]:
         """
-        Simple linear trend projection with 95% confidence intervals.
-        Returns {mean: [], lower: [], upper: []}
+        Robust trend projection handling structural breaks (via HuberRegressor)
+        and exponential drift (for high-growth SaaS).
         """
         if not history:
             return {"mean": [0.0] * steps, "lower": [0.0] * steps, "upper": [0.0] * steps}
             
-        y = np.array(history).reshape(-1, 1)
+        from sklearn.linear_model import HuberRegressor
+        
+        y = np.array(history)
         X = np.arange(len(history)).reshape(-1, 1)
         
-        model = LinearRegression()
-        model.fit(X, y)
+        # Check for exponential drift (High-growth SaaS)
+        # Only if strictly positive and generally increasing
+        is_positive = all(v > 0 for v in y)
+        is_growing = len(y) > 3 and np.mean(y[-3:]) > np.mean(y[:3]) * 1.5
         
-        # Calculate standard error for confidence intervals
-        y_pred_hist = model.predict(X)
-        residuals = y - y_pred_hist
-        std_err = np.std(residuals) if len(residuals) > 1 else (y[0] * 0.1 if y[0] != 0 else 1.0)
+        model = HuberRegressor(epsilon=1.35)
         
-        if steps == 0:
-            X_pred = X
-        else:
-            X_pred = np.arange(len(history), len(history) + steps).reshape(-1, 1)
+        # Exponential time-weighting to handle structural breaks (e.g. COVID shock)
+        # Recent data points are weighted significantly higher
+        weights = np.exp(np.linspace(-2, 0, len(y)))
+        
+        if is_positive and is_growing:
+            # Exponential fit
+            y_log = np.log(y)
+            model.fit(X, y_log, sample_weight=weights)
             
-        mean_forecast = model.predict(X_pred).flatten()
-        
-        # 95% interval is approx mean +/- 1.96 * std_err
-        # For forecasting, the uncertainty grows over time (sqrt growth)
-        intervals = np.sqrt(np.arange(1, len(X_pred) + 1)) if steps > 0 else np.ones(len(X_pred))
-        lower = mean_forecast - (1.96 * std_err * intervals)
-        upper = mean_forecast + (1.96 * std_err * intervals)
+            y_pred_log_hist = model.predict(X)
+            residuals = y_log - y_pred_log_hist
+            std_err = np.std(residuals) if len(residuals) > 1 else 0.1
+            
+            X_pred = X if steps == 0 else np.arange(len(history), len(history) + steps).reshape(-1, 1)
+            mean_log_forecast = model.predict(X_pred)
+            
+            intervals = np.sqrt(np.arange(1, len(X_pred) + 1)) if steps > 0 else np.ones(len(X_pred))
+            
+            mean_forecast = np.exp(mean_log_forecast)
+            lower = np.exp(mean_log_forecast - (1.96 * std_err * intervals))
+            upper = np.exp(mean_log_forecast + (1.96 * std_err * intervals))
+        else:
+            # Linear robust fit
+            model.fit(X, y, sample_weight=weights)
+            y_pred_hist = model.predict(X)
+            residuals = y - y_pred_hist
+            std_err = np.std(residuals) if len(residuals) > 1 else (y[0] * 0.1 if y[0] != 0 else 1.0)
+            
+            X_pred = X if steps == 0 else np.arange(len(history), len(history) + steps).reshape(-1, 1)
+            mean_forecast = model.predict(X_pred)
+            
+            intervals = np.sqrt(np.arange(1, len(X_pred) + 1)) if steps > 0 else np.ones(len(X_pred))
+            lower = mean_forecast - (1.96 * std_err * intervals)
+            upper = mean_forecast + (1.96 * std_err * intervals)
         
         # Sanitize
         res = {

@@ -16,9 +16,19 @@ import {
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Save, Copy, History, Tag, Loader2 } from "lucide-react"
+import { Save, Copy, History, Tag, Loader2, ArrowUpCircle, CheckCircle2 } from "lucide-react"
 import { toast } from "sonner"
 import { API_BASE_URL } from "@/lib/api-config"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface ScenarioSnapshot {
   id: string
@@ -39,57 +49,7 @@ interface ScenarioSnapshot {
 }
 
 const mockSnapshots: ScenarioSnapshot[] = [
-  {
-    id: "snap-1",
-    name: "Q3 Base Forecast",
-    description: "Conservative growth with current team size",
-    tag: "base-case",
-    createdAt: "2025-01-15T10:30:00Z",
-    author: "John Doe",
-    version: 1,
-    data: {
-      revenue: 804000,
-      expenses: 528000,
-      runway: 13,
-      cash: 6864000,
-      burnRate: 44000,
-      arr: 9648000,
-    },
-  },
-  {
-    id: "snap-2",
-    name: "Aggressive Hiring Plan",
-    description: "Hire 5 engineers in Q3, accelerate product development",
-    tag: "best-case",
-    createdAt: "2025-01-14T14:20:00Z",
-    author: "Jane Smith",
-    version: 2,
-    data: {
-      revenue: 950000,
-      expenses: 720000,
-      runway: 9,
-      cash: 6480000,
-      burnRate: 60000,
-      arr: 11400000,
-    },
-  },
-  {
-    id: "snap-3",
-    name: "Market Downturn Scenario",
-    description: "Economic recession, reduced sales velocity",
-    tag: "worst-case",
-    createdAt: "2025-01-13T09:15:00Z",
-    author: "John Doe",
-    version: 1,
-    data: {
-      revenue: 600000,
-      expenses: 450000,
-      runway: 11,
-      cash: 4950000,
-      burnRate: 37500,
-      arr: 7200000,
-    },
-  },
+  // ... (mock data removed for conciseness or kept if needed)
 ]
 
 interface ScenarioSnapshotManagerProps {
@@ -100,6 +60,8 @@ interface ScenarioSnapshotManagerProps {
 export function ScenarioSnapshotManager({ modelId, orgId }: ScenarioSnapshotManagerProps) {
   const [snapshots, setSnapshots] = useState<ScenarioSnapshot[]>([])
   const [loading, setLoading] = useState(false)
+  const [isPromoting, setIsPromoting] = useState(false)
+  const [promoteId, setPromoteId] = useState<string | null>(null)
   const [selectedSnapshots, setSelectedSnapshots] = useState<string[]>([])
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [newSnapshot, setNewSnapshot] = useState({
@@ -149,9 +111,9 @@ export function ScenarioSnapshotManager({ modelId, orgId }: ScenarioSnapshotMana
                 id: s.id,
                 name: s.scenarioName || s.name || "Unnamed Scenario",
                 description: `Type: ${s.scenarioType || "adhoc"}`,
-                tag: s.scenarioType === "optimistic" ? "best-case" : 
-                     s.scenarioType === "conservative" ? "worst-case" : 
-                     s.scenarioType === "baseline" ? "base-case" : "custom",
+                tag: s.scenarioType === "optimistic" ? "best-case" :
+                  s.scenarioType === "conservative" ? "worst-case" :
+                    s.scenarioType === "baseline" ? "base-case" : "custom",
                 createdAt: s.createdAt,
                 author: "System",
                 version: 1,
@@ -178,6 +140,35 @@ export function ScenarioSnapshotManager({ modelId, orgId }: ScenarioSnapshotMana
       console.error("Failed to fetch snapshots:", error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handlePromoteScenario = async () => {
+    if (!promoteId || !orgId) return
+
+    setIsPromoting(true)
+    try {
+      const token = localStorage.getItem("auth-token")
+      const response = await fetch(`${API_BASE_URL}/scenarios/${promoteId}/promote?org_id=${orgId}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        }
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        toast.success(`Success! Model promoted to v${result.newVersion}. A new baseline run has been scheduled.`)
+        setPromoteId(null)
+      } else {
+        throw new Error("Promotion failed")
+      }
+    } catch (error) {
+      console.error("Promotion error:", error)
+      toast.error("Failed to promote scenario to base model.")
+    } finally {
+      setIsPromoting(false)
     }
   }
 
@@ -261,6 +252,36 @@ export function ScenarioSnapshotManager({ modelId, orgId }: ScenarioSnapshotMana
 
   return (
     <div className="space-y-6">
+      {/* Promotion Confirmation Dialog */}
+      <AlertDialog open={promoteId !== null} onOpenChange={(open) => !open && setPromoteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <ArrowUpCircle className="h-5 w-5 text-blue-600" />
+              Promote to Base Model?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will update the <strong>Base Model Assumptions</strong> with the overrides from this scenario.
+              This action is permanent and will create a new model version in the audit trail.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPromoting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handlePromoteScenario();
+              }}
+              disabled={isPromoting}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {isPromoting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+              Confirm Promotion
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
@@ -355,87 +376,100 @@ export function ScenarioSnapshotManager({ modelId, orgId }: ScenarioSnapshotMana
               <p>No scenarios found. Create scenarios in the Scenarios tab.</p>
             </div>
           ) : (
-          <div className="space-y-3">
-            {snapshots.map((snapshot) => (
-              <div
-                key={snapshot.id}
-                className={`p-4 border rounded-lg transition-all cursor-pointer ${
-                  selectedSnapshots.includes(snapshot.id) ? "border-primary bg-primary/5" : "hover:bg-muted/50"
-                }`}
-                onClick={() => handleToggleSelection(snapshot.id)}
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-semibold">{snapshot.name}</h3>
-                      <Badge className={getTagColor(snapshot.tag)} variant="outline">
-                        <Tag className="mr-1 h-3 w-3" />
-                        {getTagLabel(snapshot.tag)}
-                      </Badge>
-                      <Badge variant="secondary">v{snapshot.version}</Badge>
+            <div className="space-y-3">
+              {snapshots.map((snapshot) => (
+                <div
+                  key={snapshot.id}
+                  className={`p-4 border rounded-lg transition-all cursor-pointer ${selectedSnapshots.includes(snapshot.id) ? "border-primary bg-primary/5" : "hover:bg-muted/50"
+                    }`}
+                  onClick={() => handleToggleSelection(snapshot.id)}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold">{snapshot.name}</h3>
+                        <Badge className={getTagColor(snapshot.tag)} variant="outline">
+                          <Tag className="mr-1 h-3 w-3" />
+                          {getTagLabel(snapshot.tag)}
+                        </Badge>
+                        <Badge variant="secondary">v{snapshot.version}</Badge>
+                        {snapshot.tag !== "base-case" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[10px] bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPromoteId(snapshot.id);
+                            }}
+                          >
+                            <ArrowUpCircle className="mr-1 h-3 w-3" />
+                            Promote
+                          </Button>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-2">{snapshot.description}</p>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                        <span>By {snapshot.author}</span>
+                        <span>•</span>
+                        <span>{new Date(snapshot.createdAt).toLocaleDateString()}</span>
+                        <span>•</span>
+                        <span>{new Date(snapshot.createdAt).toLocaleTimeString()}</span>
+                      </div>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-2">{snapshot.description}</p>
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                      <span>By {snapshot.author}</span>
-                      <span>•</span>
-                      <span>{new Date(snapshot.createdAt).toLocaleDateString()}</span>
-                      <span>•</span>
-                      <span>{new Date(snapshot.createdAt).toLocaleTimeString()}</span>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleCloneSnapshot(snapshot.id)
+                        }}
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toast.info("Version history coming soon")
+                        }}
+                      >
+                        <History className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleCloneSnapshot(snapshot.id)
-                      }}
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        toast.info("Version history coming soon")
-                      }}
-                    >
-                      <History className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mt-3 pt-3 border-t">
-                  <div>
-                    <div className="text-xs text-muted-foreground">Revenue</div>
-                    <div className="font-semibold">${(snapshot.data.revenue / 1000).toFixed(0)}K</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">Expenses</div>
-                    <div className="font-semibold">${(snapshot.data.expenses / 1000).toFixed(0)}K</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">Runway</div>
-                    <div className="font-semibold">{snapshot.data.runway} mo</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">Cash</div>
-                    <div className="font-semibold">${(snapshot.data.cash / 1000000).toFixed(2)}M</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">Burn Rate</div>
-                    <div className="font-semibold">${(snapshot.data.burnRate / 1000).toFixed(0)}K</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">ARR</div>
-                    <div className="font-semibold">${(snapshot.data.arr / 1000000).toFixed(2)}M</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mt-3 pt-3 border-t">
+                    <div>
+                      <div className="text-xs text-muted-foreground">Revenue</div>
+                      <div className="font-semibold">${(snapshot.data.revenue / 1000).toFixed(0)}K</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Expenses</div>
+                      <div className="font-semibold">${(snapshot.data.expenses / 1000).toFixed(0)}K</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Runway</div>
+                      <div className="font-semibold">{snapshot.data.runway} mo</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Cash</div>
+                      <div className="font-semibold">${(snapshot.data.cash / 1000000).toFixed(2)}M</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Burn Rate</div>
+                      <div className="font-semibold">${(snapshot.data.burnRate / 1000).toFixed(0)}K</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">ARR</div>
+                      <div className="font-semibold">${(snapshot.data.arr / 1000000).toFixed(2)}M</div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>

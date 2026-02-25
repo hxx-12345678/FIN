@@ -115,7 +115,7 @@ const formatMonthLabel = (date: Date) =>
   })
 
 export function BoardReporting() {
-  const { currencySymbol, formatCurrency } = useOrg()
+  const { currencySymbol, formatCurrency, boardReportAiContent, setBoardReportAiContent } = useOrg()
   const [selectedTemplate, setSelectedTemplate] = useState("board-deck")
   const [templates, setTemplates] = useState<BoardTemplate[]>(FALLBACK_TEMPLATES)
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>([])
@@ -127,17 +127,8 @@ export function BoardReporting() {
   const [kpiMetrics, setKpiMetrics] = useState<any[]>([])
   const [chartData, setChartData] = useState<any[]>([])
   const [recentReports, setRecentReports] = useState<any[]>([])
-  const [aiContent, setAiContent] = useState<{
-    executiveSummary: string
-    keyHighlights: any[]
-    areasOfFocus: string
-    summary?: string
-    risks?: string
-    dataSources?: any[]
-    metadata?: any
-  } | null>(null)
   const [loadingAiContent, setLoadingAiContent] = useState(false)
-  const aiContentFetchedRef = useRef(false) // Track if AI content has ever been fetched
+  const aiContentFetchedRef = useRef(!!boardReportAiContent) // Track if AI content has ever been fetched
   const [reportTitle, setReportTitle] = useState("Monthly Board Update")
   const [reportingPeriod, setReportingPeriod] = useState("current")
   const [reportFormat, setReportFormat] = useState("pptx")
@@ -469,7 +460,7 @@ export function BoardReporting() {
             recommendations.find((r: any) => r.type === "action" || r.priority === "high")?.summary ||
             "Continue monitoring key financial metrics and maintain focus on revenue growth and cost optimization.";
 
-          setAiContent({
+          setBoardReportAiContent({
             executiveSummary,
             keyHighlights: highlights.length > 0 ? highlights : ["Revenue performance", "Cost management", "Cash flow", "Growth metrics"],
             areasOfFocus,
@@ -509,7 +500,7 @@ export function BoardReporting() {
 
       // Check if it's a timeout/abort error
       if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('timeout'))) {
-        setAiContent({
+        setBoardReportAiContent({
           executiveSummary: "AI generation timed out. The request is too complex or the server is busy. Please try again with a simpler request.",
           keyHighlights: [],
           areasOfFocus: "Request timed out",
@@ -967,7 +958,7 @@ export function BoardReporting() {
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
-                ) : aiContent ? (
+                ) : boardReportAiContent ? (
                   <>
                     <div className="p-4 rounded-lg bg-blue-50 border border-blue-200">
                       <div className="flex items-center justify-between">
@@ -978,14 +969,14 @@ export function BoardReporting() {
                         </Button>
                       </div>
                       <p className="text-sm text-blue-700 mt-2 whitespace-pre-wrap">
-                        {aiContent.executiveSummary || aiContent.summary || "No summary available."}
+                        {boardReportAiContent.executiveSummary || boardReportAiContent.summary || "No summary available."}
                       </p>
                     </div>
                     <div className="p-4 rounded-lg bg-green-50 border border-green-200">
                       <h3 className="font-medium text-green-800 mb-2">Key Highlights</h3>
-                      {aiContent.keyHighlights?.length ? (
+                      {boardReportAiContent.keyHighlights?.length ? (
                         <ul className="text-sm text-green-700 space-y-1">
-                          {aiContent.keyHighlights.map((highlight: any, index: number) => (
+                          {boardReportAiContent.keyHighlights.map((highlight: any, index: number) => (
                             <li key={index}>• {highlight.title || highlight.summary || highlight.explain || highlight || "Highlight"}</li>
                           ))}
                         </ul>
@@ -996,18 +987,18 @@ export function BoardReporting() {
                     <div className="p-4 rounded-lg bg-yellow-50 border border-yellow-200">
                       <h3 className="font-medium text-yellow-800 mb-2">Areas of Focus</h3>
                       <p className="text-sm text-yellow-700 whitespace-pre-wrap">
-                        {aiContent.areasOfFocus || aiContent.risks || "No risk areas highlighted."}
+                        {boardReportAiContent.areasOfFocus || boardReportAiContent.risks || "No risk areas highlighted."}
                       </p>
                     </div>
 
-                    {aiContent.dataSources && aiContent.dataSources.length > 0 && (
+                    {boardReportAiContent.dataSources && boardReportAiContent.dataSources.length > 0 && (
                       <div className="pt-2">
                         <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                           <ShieldCheck className="h-3.5 w-3.5 text-green-600" />
                           Data Provenance & Trust
                         </div>
                         <div className="flex flex-wrap gap-1.5">
-                          {aiContent.dataSources.map((source: any, idx: number) => (
+                          {boardReportAiContent.dataSources.map((source: any, idx: number) => (
                             <Badge key={idx} variant="outline" className="text-[10px] font-normal py-0 px-2 bg-slate-50 border-slate-200">
                               {source.type === 'integration' && <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mr-1.5" />}
                               {source.type === 'grounding' && <div className="w-1.5 h-1.5 rounded-full bg-green-500 mr-1.5" />}

@@ -252,4 +252,49 @@ export const scenarioController = {
       next(error);
     }
   },
+
+  /**
+   * POST /api/v1/scenarios/:run_id/promote
+   * Promote scenario assumptions to base model
+   */
+  promoteScenario: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        throw new ValidationError('User not authenticated');
+      }
+
+      const { run_id: runId } = req.params;
+      const { org_id: queryOrgId } = req.query;
+
+      if (!runId) {
+        throw new ValidationError('run_id is required');
+      }
+
+      let orgId: string;
+      if (queryOrgId && typeof queryOrgId === 'string') {
+        orgId = queryOrgId;
+      } else {
+        const userRole = await prisma.userOrgRole.findFirst({
+          where: { userId: req.user.id },
+        });
+        if (!userRole) {
+          throw new ValidationError('orgId is required');
+        }
+        orgId = userRole.orgId;
+      }
+
+      const result = await scenarioService.promoteScenario(
+        req.user.id,
+        orgId,
+        runId
+      );
+
+      res.json({
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
 };

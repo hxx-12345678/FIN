@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import dotenv from 'dotenv';
 import { config } from './config/env';
 import { errorHandler } from './middlewares/errorHandler';
@@ -122,6 +123,45 @@ app.use(cors(corsOptions));
 
 // Explicit OPTIONS handler for preflight requests (additional safety)
 app.options('*', cors(corsOptions));
+
+// ===== SOC 2 TYPE II SECURITY HARDENING =====
+// Helmet sets critical HTTP security headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'https:'],
+      connectSrc: ["'self'", ...allowedOrigins],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Allow cross-origin API calls
+  hsts: {
+    maxAge: 31536000,        // 1 year
+    includeSubDomains: true,
+    preload: true,
+  },
+  frameguard: { action: 'deny' },           // Prevent clickjacking
+  noSniff: true,                            // Prevent MIME-type sniffing
+  xssFilter: true,                          // XSS protection
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+}));
+
+// Hide X-Powered-By to reduce attack surface
+app.disable('trust proxy');
+
+// Request ID for audit trail (SOC 2 CC3.1 - System Operations)
+app.use((req, res, next) => {
+  const requestId = req.headers['x-request-id'] as string ||
+    `req_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  req.headers['x-request-id'] = requestId;
+  res.setHeader('X-Request-Id', requestId);
+  next();
+});
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));

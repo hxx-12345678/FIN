@@ -757,6 +757,73 @@ export function AIAssistant() {
                   <CardContent className="flex-1 flex flex-col p-0 overflow-hidden min-h-0">
                     <ScrollArea className="flex-1 min-h-0">
                       <div className="space-y-4 p-4">
+                        {messages.length === 0 && (
+                          <div className="flex flex-col items-center justify-center min-h-[400px] py-8 text-center space-y-8 animate-in fade-in zoom-in duration-500">
+                            <div className="relative">
+                              <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-blue-600 to-primary blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
+                              <div className="relative bg-white dark:bg-slate-950 p-6 rounded-full border shadow-xl">
+                                <Brain className="h-16 w-16 text-primary" />
+                              </div>
+                              <div className="absolute -top-2 -right-2 bg-primary text-primary-foreground text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg flex items-center gap-1">
+                                <Zap className="h-2 w-2" />
+                                AGENTIC
+                              </div>
+                            </div>
+
+                            <div className="max-w-md space-y-2">
+                              <h2 className="text-3xl font-bold tracking-tight">Welcome to Your AI CFO</h2>
+                              <p className="text-muted-foreground">
+                                I'm your agentic financial assistant, powered by advanced reasoning and deep integration across your data architecture.
+                              </p>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full px-2 max-w-2xl">
+                              <div className="bg-muted/50 p-4 rounded-xl border border-dashed flex items-start gap-4 text-left hover:bg-muted/80 transition-colors">
+                                <Cpu className="h-8 w-8 text-blue-500 mt-1 flex-shrink-0" />
+                                <div>
+                                  <h4 className="font-semibold text-sm">Reasoning Engine</h4>
+                                  <p className="text-xs text-muted-foreground leading-relaxed">Multi-step chain-of-thought analysis for complex financial scenarios.</p>
+                                </div>
+                              </div>
+                              <div className="bg-muted/50 p-4 rounded-xl border border-dashed flex items-start gap-4 text-left hover:bg-muted/80 transition-colors">
+                                <Database className="h-8 w-8 text-green-500 mt-1 flex-shrink-0" />
+                                <div>
+                                  <h4 className="font-semibold text-sm">Deep Grounding</h4>
+                                  <p className="text-xs text-muted-foreground leading-relaxed">Direct read access to your ledger, budgets, and historical performance.</p>
+                                </div>
+                              </div>
+                              <div className="bg-muted/50 p-4 rounded-xl border border-dashed flex items-start gap-4 text-left hover:bg-muted/80 transition-colors">
+                                <Sparkles className="h-8 w-8 text-purple-500 mt-1 flex-shrink-0" />
+                                <div>
+                                  <h4 className="font-semibold text-sm">Staged Changes</h4>
+                                  <p className="text-xs text-muted-foreground leading-relaxed">Actionable insights move to a review loop before they impact your models.</p>
+                                </div>
+                              </div>
+                              <div className="bg-muted/50 p-4 rounded-xl border border-dashed flex items-start gap-4 text-left hover:bg-muted/80 transition-colors">
+                                <ShieldCheck className="h-8 w-8 text-amber-500 mt-1 flex-shrink-0" />
+                                <div>
+                                  <h4 className="font-semibold text-sm">Full Governance</h4>
+                                  <p className="text-xs text-muted-foreground leading-relaxed">Transparent audit trails for every AI-proposed ledger adjustment.</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="pt-4 space-y-3">
+                              <p className="text-sm font-medium text-muted-foreground">Try asking me:</p>
+                              <div className="flex flex-wrap justify-center gap-2">
+                                <Button variant="outline" size="sm" className="rounded-full text-xs shadow-sm hover:bg-primary hover:text-primary-foreground transition-all" onClick={() => handleSendMessage("What's my current cash runway?")}>
+                                  What's my current cash runway?
+                                </Button>
+                                <Button variant="outline" size="sm" className="rounded-full text-xs shadow-sm hover:bg-primary hover:text-primary-foreground transition-all" onClick={() => handleSendMessage("Why did we miss our budget last month?")}>
+                                  Why did we miss our budget last month?
+                                </Button>
+                                <Button variant="outline" size="sm" className="rounded-full text-xs shadow-sm hover:bg-primary hover:text-primary-foreground transition-all" onClick={() => handleSendMessage("Are there any anomalies in payments?")}>
+                                  Are there any anomalies in payments?
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         {messages.map((message) => (
                           <div
                             key={message.id}

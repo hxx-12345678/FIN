@@ -148,7 +148,8 @@ function HomePageContent() {
       // Determine the effective view from hash, tab param, or localStorage
       const effectiveView = (currentHash && validViews.includes(currentHash)) ? currentHash
         : (tabParam && validViews.includes(tabParam)) ? tabParam
-          : null
+          : (localStorage.getItem("finapilot_active_view") && validViews.includes(localStorage.getItem("finapilot_active_view")!)) ? localStorage.getItem("finapilot_active_view")
+            : null
 
       if (effectiveView) {
         // User is on a specific view - ALWAYS respect it, don't redirect
@@ -186,7 +187,8 @@ function HomePageContent() {
             setShowOnboarding(false)
             setDemoMode(false)
             // Respect hash if present, otherwise go to overview
-            setActiveView(currentHash || "overview")
+            // Respect recovered view or hash, otherwise go to overview
+            setActiveView(effectiveView || currentHash || "overview")
             return
           }
         }
@@ -240,7 +242,7 @@ function HomePageContent() {
             "approvals", "ledger"
           ]
           if (validViews.includes(currentHash)) {
-            setActiveView(currentHash)
+            setActiveView(currentHash || effectiveView || "overview")
           }
         }
       }

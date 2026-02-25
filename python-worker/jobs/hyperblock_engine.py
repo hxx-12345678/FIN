@@ -37,6 +37,7 @@ class HyperblockEngine:
         self.graph = nx.DiGraph()
         self.nodes_meta = {} # node_id -> metadata
         self.formulas = {}   # node_id -> (sympy_expr, variables)
+        self.validation_enabled = True # Toggle for bulk loading
         
         # Dimension management
         self.dimensions = {} # dim_name -> {members: [], member_to_idx: {}}
@@ -91,6 +92,7 @@ class HyperblockEngine:
             if self.months:
                 self._initialize_metric_data(node_id)
 
+
     def set_formula(self, node_id: str, expression: str):
         """Sets a formula for a node and updates graph edges."""
         try:
@@ -98,21 +100,34 @@ class HyperblockEngine:
             if node_id not in self.nodes_meta:
                 self.add_metric(node_id, node_id)
                 
-            # Sanitize expression for Sympy: UUIDs with hyphens cause issues (interpreted as subtraction)
-            # We replace node IDs in the expression with a safe version (hyphens to underscores)
-            safe_expression = expression
-            for node in self.graph.nodes():
-                if '-' in node:
-                    safe_expression = safe_expression.replace(node, node.replace('-', '_'))
+            # Optimized safe naming: Only replace if hyphens present
+            # We use a cache for node identity mappings to avoid O(N) lookups
+            if not hasattr(self, '_safe_to_orig_cache'):
+                self._safe_to_orig_cache = {n.replace('-', '_'): n for n in self.graph.nodes()}
             
-            # Map of safe_id -> original_id
-            safe_to_orig = {n.replace('-', '_'): n for n in self.graph.nodes()}
+            # Update cache for current node
+            safe_node_id = node_id.replace('-', '_')
+            self._safe_to_orig_cache[safe_node_id] = node_id
+            
+            # We only need to replace IDs that actually appear in the expression
+            # Use regex to find potential UUIDs/IDs in the expression
+            import re
+            tokens = re.findall(r'[a-zA-Z_][a-zA-Z0-9_\-]*', expression)
+            safe_expression = expression
+            for token in tokens:
+                if '-' in token:
+                    safe_expression = safe_expression.replace(token, token.replace('-', '_'))
             
             expr = sympy.sympify(safe_expression)
             safe_dependencies = [str(s) for s in expr.free_symbols]
-            dependencies = [safe_to_orig.get(sd, sd) for sd in safe_dependencies]
+            dependencies = [self._safe_to_orig_cache.get(sd, sd) for sd in safe_dependencies]
             
-            self.formulas[node_id] = (expr, dependencies)
+            # Pre-compile the numpy function to avoid O(N^2) recompilation during eval
+            symbols = list(expr.free_symbols)
+            actual_deps = [self._safe_to_orig_cache.get(str(s), str(s)) for s in symbols]
+            f = sympy.lambdify(symbols, expr, 'numpy')
+            
+            self.formulas[node_id] = (expr, dependencies, f, actual_deps)
             self.nodes_meta[node_id]['is_calculated'] = True
             
             # Update edges: dependency -> node
@@ -125,13 +140,44 @@ class HyperblockEngine:
                 if not self.graph.has_node(dep):
                     # Add as placeholder if not exists
                     self.add_metric(dep, dep)
+                    # Update cache for placeholder
+                    self._safe_to_orig_cache[dep.replace('-', '_')] = dep
                 self.graph.add_edge(dep, node_id)
                 
+            self.validate_graph()
             logger.info(f"Set formula for {node_id}: {expression} (deps: {dependencies})")
             
         except Exception as e:
             logger.error(f"Invalid formula for {node_id}: {expression} - {e}")
             raise ValueError(f"Invalid formula: {e}")
+
+    def detect_cycles(self) -> List[List[str]]:
+        """
+        Detects circular dependencies in the graph.
+        Returns a list of cycles (each cycle is a list of node IDs).
+        """
+        try:
+            cycles = list(nx.simple_cycles(self.graph))
+            return cycles
+        except Exception as e:
+            logger.error(f"Cycle detection failed: {e}")
+            return []
+
+    def validate_graph(self):
+        """
+        Validates that the graph is a Directed Acyclic Graph (DAG).
+        Throws an error if cycles are found with a suggested fix.
+        """
+        if not self.validation_enabled:
+            return
+            
+        cycles = self.detect_cycles()
+        if cycles:
+            cycle_str = " -> ".join(cycles[0] + [cycles[0][0]])
+            error_msg = f"Circular dependency detected: {cycle_str}. institutional CFOs cannot rely on unstable logic."
+            suggestion = f"Suggested Fix: Break the loop by changing one of the nodes (e.g., {cycles[0][-1]}) to be an input or use a lagged value (t-1) for {cycles[0][0]}."
+            logger.error(f"CRITICAL MODEL CORRUPTION: {error_msg}")
+            raise ValueError(f"{error_msg}\n{suggestion}")
 
     def update_input(self, node_id: str, values: List[Dict[str, Any]], user_id: str = "system"):
         """
@@ -246,63 +292,72 @@ class HyperblockEngine:
 
     def _evaluate_node(self, node_id: str):
         """Evaluates a single node's formula across all months vectorized."""
-        expr, deps = self.formulas[node_id]
+        expr, deps, f, actual_deps = self.formulas[node_id]
         
-        # Prepare data context: {symbol: numpy_array}
-        context = {}
-        for dep in deps:
-            context[dep] = self.data.get(dep, np.zeros(len(self.months)))
-            
-        # Use Sympy's lambdify with numpy for massive speedup (Vectorized Recalculation)
-        # This handles the "1M+ data points" requirement efficiently
         try:
-            # Use the actual symbols present in the expression
-            symbols = list(expr.free_symbols)
-            # Find the corresponding original node IDs for these symbols
-            safe_to_orig = {n.replace('-', '_'): n for n in self.graph.nodes()}
-            actual_deps = [safe_to_orig.get(str(s), str(s)) for s in symbols]
-            
-            f = sympy.lambdify(symbols, expr, 'numpy')
-            
-            # Execute vectorized across all months and all dimensions
-            # Correctly align axes for broadcasting
             target_dims = self.metric_dimensions.get(node_id, [])
+            target_shape = self.data[node_id].shape
             args = []
             
             for dep in actual_deps:
-                dep_data = self.data.get(dep, np.zeros(len(self.months)))
+                dep_data = self.data.get(dep)
                 dep_dims = self.metric_dimensions.get(dep, [])
                 
-                if dep_dims == target_dims:
+                if dep_data is None:
+                    # Missing dependency, provide zeros in correct shape
+                    dep_shape = []
+                    for td in target_dims:
+                        if td in dep_dims:
+                            dep_shape.append(len(self.dimensions[td]['members']) if td in self.dimensions else 1)
+                        else:
+                            dep_shape.append(1)
+                    dep_shape.append(len(self.months))
+                    dep_data = np.zeros(tuple(dep_shape))
+                
+                if list(dep_dims) == list(target_dims):
                     args.append(dep_data)
                     continue
                 
-                # Align dep_dims to target_dims
-                # example: target=[geo, prod, seg, time], dep=[prod, time]
-                # reshapre dep to (1, len(prod), 1, len(time))
+                # Align dep_dims to target_dims for broadcasting
                 new_shape = []
                 for td in target_dims:
                     if td in dep_dims:
                         new_shape.append(len(self.dimensions[td]['members']) if td in self.dimensions else 1)
                     else:
                         new_shape.append(1)
-                new_shape.append(len(self.months)) # Always last
+                new_shape.append(len(self.months))
                 
-                args.append(dep_data.reshape(tuple(new_shape)))
+                try:
+                    args.append(dep_data.reshape(tuple(new_shape)))
+                except ValueError as ve:
+                    # If direct reshape fails, it might be due to incompatible dimensions
+                    # Try to broadcast the first element or something safe
+                    logger.error(f"Broadcasting error for {node_id} dep {dep}: cannot reshape {dep_data.shape} to {new_shape}")
+                    # Fallback: if dep_data is just (months,), broadcast it
+                    if dep_data.shape == (len(self.months),):
+                        broad_data = np.broadcast_to(dep_data, target_shape)
+                        args.append(broad_data)
+                    else:
+                        raise ve
                 
             result_array = f(*args)
             
-            # Update target array
-            target_shape = self.data[node_id].shape
             if np.isscalar(result_array):
-                self.data[node_id] = np.full(target_shape, result_array)
+                self.data[node_id] = np.full(target_shape, float(result_array))
             else:
-                self.data[node_id] = result_array
+                # Validation: ensure result_array matches target_shape
+                if result_array.shape != target_shape:
+                    self.data[node_id] = np.broadcast_to(result_array, target_shape)
+                else:
+                    self.data[node_id] = result_array
                 
         except Exception as e:
-            logger.warning(f"Vectorized evaluation failed for {node_id}: {e}")
-            # Fallback to monthly if vectorization fails
-            self.data[node_id] = np.zeros(len(self.months))
+            logger.error(f"Vectorized evaluation failed for {node_id}: {e}")
+            # Do NOT reset self.data[node_id].shape, just fill with zeros if necessary
+            if node_id in self.data:
+                self.data[node_id].fill(0.0)
+            else:
+                self.data[node_id] = np.zeros((1,) * len(self.metric_dimensions.get(node_id, [])) + (len(self.months),))
 
     def get_results(self, filter_coords: Dict[str, str] = None) -> Any:
         """

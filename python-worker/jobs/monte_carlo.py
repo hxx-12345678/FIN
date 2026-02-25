@@ -10,6 +10,7 @@ from utils.s3 import upload_bytes_to_s3, download_from_s3
 from utils.logger import setup_logger
 from utils.timer import CPUTimer, get_cpu_time
 from jobs.runner import check_cancel_requested, mark_cancelled, update_progress, extend_visibility, queue_job
+from jobs.three_statement_engine import compute_three_statements
 
 logger = setup_logger()
 
@@ -805,91 +806,100 @@ def run_vectorized_simulations_enhanced(
             logger.warning(f"Error initializing RNG with seed {seed}, using default: {str(e)}")
             rng = np.random.default_rng()
         
+        # Prepare results array: we want to track Ending Cash as the primary output
+        results = np.zeros((num_simulations, months), dtype=np.float64)
+        
         # Prepare driver arrays (num_simulations × months) using enhanced distribution sampling
-        # Use dict comprehension for efficiency
         driver_arrays = {}
         try:
             for driver_name, driver_config in drivers.items():
-                try:
-                    dist_type = driver_config.get('dist', 'normal')
-                    driver_arrays[driver_name] = sample_distribution(
-                        dist_type, driver_config, (num_simulations, months), rng
-                    )
-                    # Validate array shape
-                    if driver_arrays[driver_name].shape != (num_simulations, months):
-                        raise ValueError(f"Driver {driver_name} has incorrect shape: {driver_arrays[driver_name].shape}")
-                except Exception as e:
-                    logger.warning(f"Error sampling driver {driver_name}: {str(e)}, using zeros")
-                    driver_arrays[driver_name] = np.zeros((num_simulations, months), dtype=np.float64)
+                dist_type = driver_config.get('dist', 'normal')
+                driver_arrays[driver_name] = sample_distribution(
+                    dist_type, driver_config, (num_simulations, months), rng
+                )
         except Exception as e:
             logger.error(f"Error preparing driver arrays: {str(e)}", exc_info=True)
             raise
         
-        # Apply model computation (vectorized) - DYNAMIC from model_data
+        # Apply model computation using ThreeStatementEngine for EACH path
+        # This ensures full 3-statement integrity for every simulation
         try:
-            # Get baseline values from model_data dynamically
+            # Get baseline values and assumptions
             baseline = model_data.get('baseline', {}) if model_data else {}
+            initial_values = {
+                'cash': float(baseline.get('cash', baseline.get('cashBalance', 1000000))),
+                'revenue': float(baseline.get('revenue', 100000)),
+                'accountsReceivable': float(baseline.get('accountsReceivable', 50000)),
+                'accountsPayable': float(baseline.get('accountsPayable', 30000)),
+                'inventory': float(baseline.get('inventory', 20000)),
+                'ppe': float(baseline.get('ppe', 500000)),
+                'debt': float(baseline.get('debt', 200000)),
+                'equity': float(baseline.get('equity', 1000000)),
+                'retainedEarnings': float(baseline.get('retainedEarnings', 0))
+            }
             
-            # Extract baseline values dynamically (support multiple formats)
-            baseline_revenue = np.float64(float(baseline.get('revenue', baseline.get('baselineRevenue', baseline.get('revenue', 100000.0)))))
-            baseline_expenses = np.float64(float(baseline.get('expenses', baseline.get('baselineExpenses', baseline.get('expenses', 80000.0)))))
+            base_growth = {
+                'revenueGrowth': 0.05,
+                'cogsPercentage': 0.40,
+                'opexPercentage': 0.30,
+                'taxRate': 0.25,
+                'depreciationRate': 0.01,
+                'arDays': 45,
+                'apDays': 30,
+                'capexPercentage': 0.05,
+                'dio': 45
+            }
             
-            # Get model formulas from model_data if available
-            model_json = model_data.get('baseline', {}) if model_data else {}
-            revenue_formula = model_json.get('revenue', {}) if isinstance(model_json.get('revenue'), dict) else {}
-            expense_formula = model_json.get('expenses', {}) if isinstance(model_json.get('expenses'), dict) else {}
+            # Map drivers to growth assumptions
+            # Driver keys from frontend might be like "revenue_growth" or "opex_percentage"
+            driver_mapping = {
+                'revenue_growth': 'revenueGrowth',
+                'cogs_percentage': 'cogsPercentage',
+                'opex_percentage': 'opexPercentage',
+                'ar_days': 'arDays',
+                'ap_days': 'apDays',
+                'dio': 'dio'
+            }
             
-            # Use driver arrays dynamically - support any driver names
-            # Default to revenue_growth and expense_growth if not specified
-            revenue_driver_name = revenue_formula.get('driver', 'revenue_growth')
-            expense_driver_name = expense_formula.get('driver', 'expense_growth')
+            start_month_str = datetime.now().strftime('%Y-%m')
             
-            revenue_driver = driver_arrays.get(revenue_driver_name, np.zeros((num_simulations, months), dtype=np.float64))
-            expense_driver = driver_arrays.get(expense_driver_name, np.zeros((num_simulations, months), dtype=np.float64))
-            
-            # Ensure arrays are float64 for numerical stability
-            if revenue_driver.dtype != np.float64:
-                revenue_driver = revenue_driver.astype(np.float64)
-            if expense_driver.dtype != np.float64:
-                expense_driver = expense_driver.astype(np.float64)
-            
-            # Dynamic computation based on formula type
-            # Support: 'growth' (multiply by 1+driver), 'additive' (add driver), 'multiplicative' (multiply by driver)
-            revenue_formula_type = revenue_formula.get('type', 'growth')
-            expense_formula_type = expense_formula.get('type', 'growth')
-            
-            if revenue_formula_type == 'additive':
-                revenue = np.add(baseline_revenue, revenue_driver, dtype=np.float64)
-            elif revenue_formula_type == 'multiplicative':
-                revenue = np.multiply(baseline_revenue, revenue_driver, dtype=np.float64)
-            else:  # default: growth
-                revenue = np.multiply(baseline_revenue, np.add(1.0, revenue_driver), dtype=np.float64)
-            
-            if expense_formula_type == 'additive':
-                expenses = np.add(baseline_expenses, expense_driver, dtype=np.float64)
-            elif expense_formula_type == 'multiplicative':
-                expenses = np.multiply(baseline_expenses, expense_driver, dtype=np.float64)
-            else:  # default: growth
-                expenses = np.multiply(baseline_expenses, np.add(1.0, expense_driver), dtype=np.float64)
-            
-            # Apply overrides if specified
-            if overrides:
-                if 'revenue' in overrides:
-                    revenue_override = np.float64(float(overrides['revenue']))
-                    revenue = np.full_like(revenue, revenue_override)
-                if 'expenses' in overrides:
-                    expense_override = np.float64(float(overrides['expenses']))
-                    expenses = np.full_like(expenses, expense_override)
-            
-            monthly_cash = np.subtract(revenue, expenses, dtype=np.float64)
+            for s in range(num_simulations):
+                # Build assumptions for THIS simulation path
+                sim_assumptions = base_growth.copy()
+                for d_name, d_array in driver_arrays.items():
+                    # Map driver name to assumption key
+                    mapped_key = driver_mapping.get(d_name, d_name)
+                    # Use the average value of the driver for this simulation path
+                    # or the value at the specific month if we wanted time-varying (simpler to use mean for now)
+                    sim_assumptions[mapped_key] = float(np.mean(d_array[s, :]))
+                
+                # Run the full 3-statement model
+                sim_res = compute_three_statements(
+                    start_month=start_month_str,
+                    horizon_months=months,
+                    initial_values=initial_values,
+                    growth_assumptions=sim_assumptions,
+                    monthly_overrides=overrides
+                )
+                
+                # Extract ending cash for each month
+                monthly_cf = sim_res['cashFlow']['monthly']
+                for m_idx, (m_key, cf_data) in enumerate(monthly_cf.items()):
+                    if m_idx < months:
+                        results[s, m_idx] = cf_data['endingCash']
+                
+                # Periodically update progress within simulation
+                if s % 500 == 0 and s > 0:
+                    prog_val = 10 + int((s / num_simulations) * 70)
+                    update_progress(job_id, prog_val, {'status': 'simulating', 'path': s})
             
             # Validate results (check for NaN or Inf)
-            if np.any(np.isnan(monthly_cash)) or np.any(np.isinf(monthly_cash)):
-                logger.warning("NaN or Inf values detected in monthly_cash, replacing with zeros")
-                monthly_cash = np.nan_to_num(monthly_cash, nan=0.0, posinf=0.0, neginf=0.0)
+            if np.any(np.isnan(results)) or np.any(np.isinf(results)):
+                logger.warning("NaN or Inf values detected in results, replacing with zeros")
+                results = np.nan_to_num(results, nan=0.0, posinf=0.0, neginf=0.0)
             
         except Exception as e:
-            logger.error(f"Error in vectorized computation: {str(e)}", exc_info=True)
+            logger.error(f"Error in ThreeStatementEngine Monte Carlo loop: {str(e)}", exc_info=True)
             raise
         
         # Update progress
@@ -898,7 +908,7 @@ def run_vectorized_simulations_enhanced(
         except Exception as e:
             logger.warning(f"Error updating progress: {str(e)}")
         
-        return monthly_cash, driver_arrays
+        return results, driver_arrays
         
     except Exception as e:
         logger.error(f"Error in vectorized simulations: {str(e)}", exc_info=True)

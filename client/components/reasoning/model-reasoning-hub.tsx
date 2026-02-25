@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Brain, Zap, AlertTriangle, Lightbulb, Search, ArrowRight, TrendingUp, DollarSign, Info, Loader2 } from "lucide-react"
+import { Brain, Zap, AlertTriangle, Lightbulb, Search, ArrowRight, TrendingUp, TrendingDown, DollarSign, Info, Loader2, ArrowDownCircle, ArrowUpCircle } from "lucide-react"
 import { API_BASE_URL } from "@/lib/api-config"
 import { toast } from "sonner"
 
@@ -44,7 +44,9 @@ export function ModelReasoningHub({ modelId, orgId }: ModelReasoningHubProps) {
                 body: JSON.stringify({
                     modelId,
                     target: targetMetric,
-                    goal: targetMetric.includes("burn") ? "decrease" : "increase"
+                    goal: targetMetric.includes("burn") ? "decrease" : "increase",
+                    period_a: 0,
+                    period_b: 1
                 }),
             })
 
@@ -108,6 +110,74 @@ export function ModelReasoningHub({ modelId, orgId }: ModelReasoningHubProps) {
 
             {reasoningData && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in duration-500">
+
+                    {/* Variance Waterfall - Why did it change? */}
+                    {reasoningData.varianceAnalysis && (
+                        <Card className="lg:col-span-2 border-blue-200 bg-blue-50/5">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-lg flex items-center gap-2">
+                                    <TrendingDown className="h-5 w-5 text-blue-600" />
+                                    Waterfall Variance Analysis
+                                </CardTitle>
+                                <CardDescription>
+                                    Decomposition of change in {targetMetric.replace(/_/g, ' ')} between Period 0 and Period 1
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                                    <div className="p-3 bg-white border rounded-lg shadow-sm">
+                                        <p className="text-xs text-muted-foreground uppercase font-semibold">Baseline</p>
+                                        <p className="text-xl font-bold text-slate-900">${reasoningData.varianceAnalysis.baseline?.toLocaleString()}</p>
+                                    </div>
+                                    <div className="p-3 bg-white border rounded-lg shadow-sm">
+                                        <p className="text-xs text-muted-foreground uppercase font-semibold">Current</p>
+                                        <p className="text-xl font-bold text-slate-900">${reasoningData.varianceAnalysis.current?.toLocaleString()}</p>
+                                    </div>
+                                    <div className="p-3 bg-white border rounded-lg shadow-sm">
+                                        <p className="text-xs text-muted-foreground uppercase font-semibold">Net Variance</p>
+                                        <p className={`text-xl font-bold ${reasoningData.varianceAnalysis.variance >= 0 ? 'text-green-600' : 'text-rose-600'}`}>
+                                            ${reasoningData.varianceAnalysis.variance?.toLocaleString()}
+                                            <span className="text-sm font-normal ml-1">
+                                                ({(reasoningData.varianceAnalysis.variance_percent * 100).toFixed(1)}%)
+                                            </span>
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                                        <ArrowRight className="h-4 w-4" />
+                                        Contribution Breakdown
+                                    </h4>
+                                    <div className="space-y-3">
+                                        {reasoningData.varianceAnalysis.drivers?.map((driver: any, idx: number) => (
+                                            <div key={idx} className="space-y-1">
+                                                <div className="flex items-center justify-between text-sm">
+                                                    <div className="flex items-center gap-2">
+                                                        {driver.contribution_percent > 0 ? <ArrowUpCircle className="h-4 w-4 text-green-500" /> : <ArrowDownCircle className="h-4 w-4 text-rose-500" />}
+                                                        <span className="font-medium text-slate-700">{driver.driver}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="font-mono text-slate-500">${driver.delta?.toLocaleString()}</span>
+                                                        <Badge variant="outline" className={driver.contribution_percent > 0 ? "bg-green-50 text-green-700 border-green-100" : "bg-rose-50 text-rose-700 border-rose-100"}>
+                                                            {(driver.contribution_percent * 100).toFixed(1)}%
+                                                        </Badge>
+                                                    </div>
+                                                </div>
+                                                <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                                    <div
+                                                        className={`h-full ${driver.contribution_percent > 0 ? 'bg-green-500' : 'bg-rose-500'}`}
+                                                        style={{ width: `${Math.abs(driver.contribution_percent) * 100}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+
                     {/* Driver Analysis */}
                     <Card>
                         <CardHeader>

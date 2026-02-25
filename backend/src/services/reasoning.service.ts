@@ -12,7 +12,7 @@ export const reasoningService = {
     /**
      * Get automated suggestions for improving a metric (e.g., 'burn_rate', 'cash_runway').
      */
-    analyzeMetric: async (modelId: string, metric: string, goal: 'increase' | 'decrease' | 'stabilize') => {
+    analyzeMetric: async (modelId: string, metric: string, goal: 'increase' | 'decrease' | 'stabilize', periodA?: number, periodB?: number) => {
         try {
             // Fetch model structure and latest data
             const model = await prisma.model.findUnique({
@@ -57,7 +57,9 @@ export const reasoningService = {
                 data: resultData?.metrics || {}, // Assuming metrics map in summary
                 goal,
                 num_months: 12,
-                months: months
+                months: months,
+                period_a: periodA,
+                period_b: periodB
             });
 
             return response.data;

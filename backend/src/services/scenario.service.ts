@@ -99,7 +99,7 @@ export const scenarioService = {
     });
 
     // Build scenario name
-    const scenarioName = request.name || 
+    const scenarioName = request.name ||
       `${request.scenarioType.charAt(0).toUpperCase() + request.scenarioType.slice(1)} Scenario - ${new Date().toLocaleDateString()}`;
 
     // Create model run for scenario
@@ -326,7 +326,7 @@ export const scenarioService = {
     return scenarios.map((s) => {
       const paramsJson = s.paramsJson as any;
       const overrides = paramsJson?.overrides || {};
-      
+
       // Extract changes in the expected format
       const changes = {
         revenueAdjustments: overrides.revenue?.growth ? [overrides.revenue.growth] : [],
@@ -539,5 +539,110 @@ export const scenarioService = {
         status: scenarioRun.status,
       },
     });
+  },
+
+  /**
+   * Promote a scenario to the base model
+   * This updates the base model's assumptions with the scenario's overrides
+   */
+  promoteScenario: async (
+    userId: string,
+    orgId: string,
+    runId: string
+  ): Promise<{ success: boolean; newVersion: number }> => {
+    // 1. Fetch scenario and model
+    const scenarioRun = await prisma.modelRun.findUnique({
+      where: { id: runId },
+      include: {
+        model: true,
+      },
+    });
+
+    if (!scenarioRun || scenarioRun.runType !== 'scenario') {
+      throw new NotFoundError('Scenario run not found');
+    }
+
+    if (scenarioRun.orgId !== orgId) {
+      throw new ForbiddenError('Scenario does not belong to this organization');
+    }
+
+    // 2. Auth check
+    const role = await prisma.userOrgRole.findUnique({
+      where: { userId_orgId: { userId, orgId } },
+    });
+
+    if (!role || !['admin', 'finance'].includes(role.role)) {
+      throw new ForbiddenError('Only admins and finance users can promote scenarios');
+    }
+
+    const model = scenarioRun.model;
+    const modelJson = model.modelJson as any;
+    const scenarioParams = scenarioRun.paramsJson as any;
+    const overrides = scenarioParams?.overrides || {};
+
+    if (Object.keys(overrides).length === 0) {
+      throw new ValidationError('Scenario has no overrides to promote');
+    }
+
+    // 3. Merge overrides into baseline assumptions
+    const oldAssumptions = { ...modelJson.assumptions };
+    const newAssumptions = {
+      ...oldAssumptions,
+      ...overrides,
+    };
+
+    const updatedModelJson = {
+      ...modelJson,
+      assumptions: newAssumptions,
+      lastPromotedFrom: runId,
+      updatedAtAt: new Date().toISOString(),
+    };
+
+    // 4. Update Model (Atomic Transaction)
+    const newVersion = model.version + 1;
+    await prisma.$transaction([
+      prisma.model.update({
+        where: { id: model.id },
+        data: {
+          modelJson: updatedModelJson,
+          version: newVersion,
+        },
+      }),
+      // Log sophisticated audit entry with diff
+      prisma.auditLog.create({
+        data: {
+          actorUserId: userId,
+          orgId,
+          action: 'scenario_promoted',
+          objectType: 'model',
+          objectId: model.id,
+          metaJson: {
+            scenarioId: runId,
+            scenarioName: scenarioParams?.scenarioName,
+            oldVersion: model.version,
+            newVersion,
+            diff: {
+              before: oldAssumptions,
+              after: newAssumptions,
+            }
+          }
+        }
+      })
+    ]);
+
+    // 5. Trigger a new baseline run to reflect the promoted changes
+    await jobService.createJob({
+      jobType: 'model_run',
+      orgId,
+      objectId: model.id,
+      createdByUserId: userId,
+      params: {
+        modelId: model.id,
+        runType: 'baseline',
+        reason: `Promoted from scenario ${scenarioParams?.scenarioName || runId}`
+      }
+    });
+
+    return { success: true, newVersion };
   },
 };

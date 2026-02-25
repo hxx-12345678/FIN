@@ -72,6 +72,7 @@ class StrategicAgentService {
     // Determine analysis type
     const isMAQuery = /acqui|merger|buy|target|valuation/i.test(query);
     const isCostQuery = /cost.*cut|reduce.*cost|optimize.*spend|redundant|ghost/i.test(query);
+    const isAllocationQuery = /marketing|hiring|product|debt|allocation|spend.*cash/i.test(query) && /should|which|how|npv|return/i.test(query);
 
     let answer = '';
     let recommendations: AgentRecommendation[] = [];
@@ -102,6 +103,16 @@ class StrategicAgentService {
       );
       recommendations = this.generateCostRecommendations(costOpportunities, financialData);
       answer = this.buildCostAnswer(costOpportunities, financialData, entities, calculations);
+    } else if (isAllocationQuery) {
+      thoughts.push({
+        step: 3,
+        thought: 'Comparing NPV and Risk-Adjusted Return for allocation options...',
+        action: 'allocation_analysis',
+      });
+
+      const allocationResults = await this.runAllocationAnalysis(financialData, entities, thoughts, dataSources, calculations);
+      recommendations = this.generateAllocationRecommendations(allocationResults);
+      answer = this.buildAllocationAnswer(allocationResults, financialData, calculations);
     } else {
       // General strategic analysis
       thoughts.push({
@@ -205,6 +216,42 @@ class StrategicAgentService {
           timestamp: new Date(),
           confidence: 0.85,
         });
+      }
+
+      // Fallback: Aggregate Raw Transactions if no model run
+      if (!hasRealData) {
+        const lastYear = new Date();
+        lastYear.setFullYear(lastYear.getFullYear() - 2);
+
+        const txs = await prisma.rawTransaction.findMany({
+          where: { orgId, date: { gte: lastYear } },
+        });
+
+        if (txs.length > 0) {
+          txs.forEach(t => {
+            const amt = Number(t.amount);
+            const desc = (t.description || '').toLowerCase();
+            if (amt > 0) {
+              revenue += amt;
+            } else {
+              opex += Math.abs(amt);
+              if (desc.includes('marketing') || desc.includes('ad') || desc.includes('fb')) saasSubscriptions += Math.abs(amt);
+              if (desc.includes('cloud') || desc.includes('aws') || desc.includes('github')) rdSpend += Math.abs(amt);
+            }
+          });
+
+          headcount = Math.max(5, Math.floor(opex / 15000));
+          hasRealData = true;
+
+          dataSources.push({
+            type: 'transaction',
+            id: 'ledger_aggregation',
+            name: 'Transactional Baseline',
+            timestamp: new Date(),
+            confidence: 0.8,
+            snippet: `Synthesized baseline from ${txs.length} transactions totaling $${revenue.toLocaleString()} Revenue.`,
+          });
+        }
       }
 
       if (!hasRealData) {
@@ -620,6 +667,86 @@ class StrategicAgentService {
     analysis.conditions.forEach((c, i) => {
       answer += `${i + 1}. ${c}\n`;
     });
+
+    return answer;
+  }
+
+  /**
+   * Run allocation analysis comparing Marketing, Product, Hiring, and Debt
+   */
+  private async runAllocationAnalysis(
+    data: any,
+    entities: any,
+    thoughts: AgentThought[],
+    dataSources: DataSource[],
+    calculations: Record<string, number>
+  ): Promise<any> {
+    const amount = entities.amount || 1000000;
+    const horizon = 24; // 24 months
+
+    // Option 1: Marketing (High Growth, High Risk)
+    const mktCac = 1500;
+    const mktLtv = 4500;
+    const mktProbability = 0.75;
+    const mktNpv = (amount / mktCac) * mktLtv - amount;
+
+    // Option 2: Product (Churn Reduction, Moderate Risk)
+    const productChurnImpact = 0.002; // 0.2% monthly churn reduction
+    const productRetentionValue = data.arr * productChurnImpact * horizon;
+    const productProbability = 0.85;
+    const productNpv = productRetentionValue - amount;
+
+    // Option 3: Hiring (Operational Efficiency, High Friction)
+    const hireRevPerEmp = 250000;
+    const hireCostPerEmp = 150000;
+    const totalHires = Math.floor(amount / hireCostPerEmp);
+    const hireNpv = (totalHires * (hireRevPerEmp - hireCostPerEmp)) * 2 - amount; // Over 2 years
+    const hireProbability = 0.65;
+
+    // Option 4: Debt Reduction (Guaranteed ROI, Low Risk)
+    const interestRate = 0.08;
+    const debtSavings = amount * interestRate * (horizon / 12);
+    const debtNpv = debtSavings; // Principal is returned to balance sheet
+    const debtProbability = 0.99;
+
+    const options = [
+      { name: 'Marketing Expansion', npv: mktNpv, riskAdjusted: mktNpv * mktProbability, confidence: mktProbability, priority: 'high' },
+      { name: 'Product Development', npv: productNpv, riskAdjusted: productNpv * productProbability, confidence: productProbability, priority: 'medium' },
+      { name: 'Sales/Dev Hiring', npv: hireNpv, riskAdjusted: hireNpv * hireProbability, confidence: hireProbability, priority: 'high' },
+      { name: 'Debt Reduction', npv: debtNpv, riskAdjusted: debtNpv * debtProbability, confidence: debtProbability, priority: 'low' },
+    ].sort((a, b) => b.riskAdjusted - a.riskAdjusted);
+
+    return { amount, options };
+  }
+
+  private generateAllocationRecommendations(results: any): AgentRecommendation[] {
+    const best = results.options[0];
+    return [{
+      id: uuidv4(),
+      title: `Prioritize ${best.name}`,
+      description: `Risk-adjusted NPV of $${best.riskAdjusted.toLocaleString()} makes this the optimal use of $${results.amount.toLocaleString()}.`,
+      impact: { type: 'positive', metric: 'roi', value: `${(best.riskAdjusted / results.amount * 100).toFixed(0)}%`, confidence: best.confidence },
+      priority: 'high',
+      category: 'capital_allocation',
+      actions: [`Allocate $${results.amount.toLocaleString()} to ${best.name.toLowerCase()}`],
+      dataSources: []
+    }];
+  }
+
+  private buildAllocationAnswer(results: any, data: any, calculations: Record<string, number>): string {
+    let answer = `**Strategic Capital Allocation Analysis ($${results.amount.toLocaleString()})**\n\n`;
+    answer += `I have evaluated four primary investment levers based on current financial baseline and market benchmarks:\n\n`;
+
+    answer += `| Investment Option | Projected NPV | Risk-Adjusted Return | Confidence |\n`;
+    answer += `|-------------------|---------------|----------------------|------------|\n`;
+
+    for (const opt of results.options) {
+      answer += `| ${opt.name} | $${opt.npv.toLocaleString()} | **$${opt.riskAdjusted.toLocaleString()}** | ${(opt.confidence * 100).toFixed(0)}% |\n`;
+    }
+
+    const best = results.options[0];
+    answer += `\n**Strategic Recommendation:**\n`;
+    answer += `Based on a 24-month horizon, **${best.name}** yields the highest risk-adjusted return. While debt reduction offers guaranteed savings, the growth delta from ${best.name.toLowerCase()} provides superior enterprise value accretion.\n`;
 
     return answer;
   }

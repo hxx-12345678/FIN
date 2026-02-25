@@ -83,6 +83,78 @@ export interface AgentResponse {
   escalationReason?: string;
   followUpQuestions?: string[];
   visualizations?: AgentVisualization[];
+
+  // Enterprise Strategic Sections
+  executiveSummary?: string;
+  causalExplanation?: string;
+  risks?: string[];
+  assumptions?: string[];
+  confidenceIntervals?: {
+    p10: number;
+    p50: number;
+    p90: number;
+    metric: string;
+    stdDev?: number;
+    skewness?: number;
+  };
+  auditMetadata?: {
+    modelVersion: string;
+    timestamp: Date;
+    inputVersions: Record<string, string>;
+    datasetHash?: string;
+    processingPlanId?: string;
+  };
+
+  // Institutional Grade Extensions
+  statisticalMetrics?: {
+    mape?: number;
+    rmse?: number;
+    forecastBias?: number;
+    calibrationError?: number;
+    driftStatus?: 'stable' | 'warning' | 'critical';
+  };
+  sensitivityAnalysis?: {
+    driver: string;
+    delta: number;
+    elasticity: number;
+    ranking: string[];
+  };
+  liquidityMetrics?: {
+    survivalProbability: number;
+    minCashMonth?: string;
+    capitalRequired?: number;
+    dilutionImpact?: number;
+  };
+  dataQuality?: {
+    score: number;
+    missingDataPct: number;
+    outlierPct: number;
+    reliabilityTier: 1 | 2 | 3;
+  };
+  reconciliationSummary?: string;
+  formulasUsed?: string[];
+
+  // Deterministic Integrity Logic
+  financialIntegrity?: {
+    incomeStatement: Record<string, number>;
+    cashFlow: Record<string, number>;
+    balanceSheet: Record<string, number>;
+    reconciliations: {
+      label: string;
+      difference: number;
+      derivation: string;
+    }[];
+  };
+
+  // Governance Traceability
+  governanceOverrides?: {
+    userId: string;
+    timestamp: Date;
+    originalValue: number;
+    newValue: number;
+    justification: string;
+    impactDelta: number;
+  }[];
 }
 
 // Recommendation from agent
@@ -151,7 +223,132 @@ export interface ApprovalRequest {
 
 // Query patterns for intent classification
 export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentType[]; complexity: IntentClassification['complexity'] }> = {
-  // Treasury queries
+  // Institutional Grade Validation (Global Priority)
+  'institutional_validation': {
+    patterns: [
+      /institutional.*validation/i,
+      /audit.*grade/i,
+      /regulator.*ready/i,
+      /mathematically.*defensible/i,
+      /full.*institutional/i,
+      /institutional.*ready/i,
+      /institutional.*grade/i,
+    ],
+    agents: ['analytics', 'forecasting', 'risk', 'capital', 'compliance', 'reporting', 'treasury'],
+    complexity: 'complex',
+  },
+  // SOC 2 Verification & Deep Analysis (Highest Priority)
+  'solvency_and_covenants': {
+    patterns: [
+      /debt.*covenant/i,
+      /dscr/i,
+      /solvency/i,
+      /breach.*probab/i,
+      /monte.*carlo/i,
+    ],
+    agents: ['treasury', 'risk', 'analytics'],
+    complexity: 'complex',
+  },
+  'liquidity_stress': {
+    patterns: [
+      /revolver/i,
+      /auto-draw/i,
+      /liquidity.*stress/i,
+      /cash.*threshold/i,
+      /interest.*burden/i,
+    ],
+    agents: ['forecasting', 'treasury', 'risk'],
+    complexity: 'complex',
+  },
+  'structural_break_detection': {
+    patterns: [
+      /structural.*break/i,
+      /regime.*shift/i,
+      /arima/i,
+      /model.*retrain/i,
+    ],
+    agents: ['analytics', 'forecasting'],
+    complexity: 'complex',
+  },
+  'governance_override': {
+    patterns: [
+      /override.*governance/i,
+      /analyst.*override/i,
+      /governance.*delta/i,
+      /log.*governance/i,
+    ],
+    agents: ['compliance', 'analytics'],
+    complexity: 'moderate',
+  },
+  'inflation_analysis': {
+    patterns: [
+      /inflation/i,
+      /pass-through/i,
+      /margin.*compression/i,
+      /pricing.*adjust/i,
+    ],
+    agents: ['forecasting', 'analytics'],
+    complexity: 'complex',
+  },
+  'consolidation_integrity': {
+    patterns: [
+      /consolidation.*integrity/i,
+      /intercompany/i,
+      /double.*counting/i,
+      /subsidiary/i,
+    ],
+    agents: ['reporting', 'analytics'],
+    complexity: 'complex',
+  },
+  'black_swan_resilience': {
+    patterns: [
+      /black.*swan/i,
+      /survival.*probab/i,
+      /resilience/i,
+      /simultaneous.*spike/i,
+    ],
+    agents: ['risk', 'forecasting', 'treasury'],
+    complexity: 'complex',
+  },
+  'governance_audit': {
+    patterns: [
+      /controls/i,
+      /governance/i,
+      /audit/i,
+      /policy/i,
+      /override/i,
+      /compliance/i,
+      /manual.*increase/i,
+    ],
+    agents: ['compliance'],
+    complexity: 'moderate',
+  },
+  'policy_compliance': {
+    patterns: [
+      /hiring.*plan/i,
+      /burn.*cap/i,
+      /policy.*conflict/i,
+      /violation/i,
+      /policy.*threshold/i,
+    ],
+    agents: ['compliance', 'reporting'],
+    complexity: 'moderate',
+  },
+  'forecast_calibration': {
+    patterns: [
+      /calibration/i,
+      /forecast.*vs.*actual/i,
+      /p90.*band/i,
+      /confidence.*interval.*captured/i,
+      /mape/i,
+      /bias/i,
+      /accurate/i,
+    ],
+    agents: ['analytics', 'forecasting'],
+    complexity: 'moderate',
+  },
+
+  // Standard Treasury & Analytics
   'cash_runway': {
     patterns: [
       /cash\s*runway/i,
@@ -159,9 +356,11 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /runway.*month/i,
       /when.*run\s*out/i,
       /cash.*last/i,
+      /base.*upside.*downside/i,
+      /p10.*p50.*p90/i,
     ],
-    agents: ['treasury'],
-    complexity: 'simple',
+    agents: ['treasury', 'forecasting'],
+    complexity: 'moderate',
   },
   'burn_rate': {
     patterns: [
@@ -173,8 +372,6 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
     agents: ['treasury'],
     complexity: 'simple',
   },
-
-  // Analytics queries
   'variance_analysis': {
     patterns: [
       /why.*miss/i,
@@ -186,31 +383,61 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
     agents: ['analytics', 'forecasting'],
     complexity: 'complex',
   },
-
-  // Forecasting queries
   'scenario_modeling': {
     patterns: [
       /model.*drop/i,
+      /revenue.*drop/i,
+      /revenue.*cut/i,
+      /sales.*fall/i,
+      /if.*drops/i,
       /what\s*if.*revenue/i,
       /scenario.*percent/i,
       /simulate.*change/i,
       /model.*increase/i,
+      /revenue.*increase/i,
+      /grow.*by/i,
+      /incident.*resolution.*time/i,
+      /interest.*rate.*rise/i,
+      /consistent.*logic/i,
+      /what\s*happens\s*if/i,
+      /customer\s*leaves/i,
+      /pay.*slower/i,
     ],
-    agents: ['forecasting', 'treasury'],
-    complexity: 'moderate',
+    agents: ['forecasting', 'treasury', 'risk'],
+    complexity: 'complex',
   },
-  'revenue_forecast': {
+  'anomaly_detection': {
     patterns: [
-      /revenue.*forecast/i,
-      /predict.*revenue/i,
-      /revenue.*next/i,
-      /growth.*projection/i,
+      /anomaly/i,
+      /unusual/i,
+      /strange/i,
+      /outlier/i,
+      /structural.*change/i,
+      /business.*model.*change/i,
     ],
-    agents: ['forecasting'],
+    agents: ['anomaly', 'analytics'],
+    complexity: 'complex',
+  },
+  'cost_structure': {
+    patterns: [
+      /fixed.*variable/i,
+      /cost.*classification/i,
+      /cut.*burn/i,
+      /burn.*reduction/i,
+    ],
+    agents: ['analytics', 'strategic'],
     complexity: 'moderate',
   },
-
-  // Anomaly detection queries
+  'pricing_power': {
+    patterns: [
+      /increase.*price/i,
+      /pricing.*power/i,
+      /elasticity/i,
+      /price.*churn/i,
+    ],
+    agents: ['analytics', 'strategic'],
+    complexity: 'moderate',
+  },
   'duplicate_detection': {
     patterns: [
       /duplicate.*payment/i,
@@ -222,8 +449,6 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
     agents: ['anomaly'],
     complexity: 'moderate',
   },
-
-  // Reporting queries
   'board_summary': {
     patterns: [
       /board.*summary/i,
@@ -235,23 +460,6 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
     agents: ['reporting', 'analytics', 'treasury'],
     complexity: 'complex',
   },
-
-  // Cost optimization
-  'cost_optimization': {
-    patterns: [
-      /reduce.*cost/i,
-      /cut.*expense/i,
-      /optimize.*spending/i,
-      /save.*money/i,
-      /lower.*burn/i,
-      /cut.*(\d+).*percent.*cost/i,
-      /(\d+)%.*cost.*cut/i,
-    ],
-    agents: ['procurement', 'treasury', 'analytics'],
-    complexity: 'moderate',
-  },
-
-  // Capital allocation & optimization
   'capital_allocation': {
     patterns: [
       /capital.*allocat/i,
@@ -266,12 +474,22 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
     agents: ['capital', 'treasury', 'risk'],
     complexity: 'complex',
   },
-
-  // Risk & stress testing
+  'treasury_strategy': {
+    patterns: [
+      /spend.*marketing/i,
+      /spend.*hiring/i,
+      /spend.*product/i,
+      /debt.*reduction/i,
+      /surplus.*cash/i,
+      /allocation.*options/i,
+      /npv.*return/i,
+    ],
+    agents: ['strategic', 'treasury', 'capital'],
+    complexity: 'complex',
+  },
   'stress_testing': {
     patterns: [
       /stress\s*test/i,
-      /black\s*swan/i,
       /tail\s*risk/i,
       /worst\s*case/i,
       /risk.*assess/i,
@@ -283,23 +501,6 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
     agents: ['risk', 'forecasting', 'analytics'],
     complexity: 'complex',
   },
-
-  // M&A & strategic analysis
-  'ma_analysis': {
-    patterns: [
-      /acqui(re|sition)/i,
-      /merger/i,
-      /should.*buy/i,
-      /target.*company/i,
-      /synergy/i,
-      /accretion.*dilution/i,
-      /valuation/i,
-    ],
-    agents: ['strategic', 'forecasting', 'analytics'],
-    complexity: 'complex',
-  },
-
-  // Tax & compliance
   'tax_compliance': {
     patterns: [
       /tax.*exposure/i,
@@ -314,45 +515,26 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
     agents: ['compliance', 'analytics'],
     complexity: 'complex',
   },
-
-  // Month-end close
-  'month_end_close': {
+  'revenue_forecast': {
     patterns: [
-      /month.*end.*close/i,
-      /closing.*books/i,
-      /reconcil/i,
-      /balance.*sheet/i,
-      /close.*period/i,
+      /revenue.*forecast/i,
+      /predict.*revenue/i,
+      /revenue.*next/i,
+      /growth.*projection/i,
     ],
-    agents: ['analytics', 'anomaly', 'compliance'],
-    complexity: 'complex',
+    agents: ['forecasting'],
+    complexity: 'moderate',
   },
-
-  // Strategic cost reduction (with R&D preservation)
-  'strategic_cost_reduction': {
+  'data_quality_assessment': {
     patterns: [
-      /cut.*cost.*without.*slow/i,
-      /reduce.*operat.*cost/i,
-      /identify.*redundant/i,
-      /ghost.*subscription/i,
-      /saas.*audit/i,
-      /software.*spend/i,
+      /data.*quality/i,
+      /modeling.*risk/i,
+      /missing.*data/i,
+      /temporal.*misalignment/i,
+      /inconsistent.*driver/i,
     ],
-    agents: ['strategic', 'procurement', 'analytics'],
-    complexity: 'complex',
-  },
-
-  // Solvency & debt analysis
-  'solvency_analysis': {
-    patterns: [
-      /solvency/i,
-      /debt.*covenant/i,
-      /debt.*capacity/i,
-      /leverage.*ratio/i,
-      /interest.*coverage/i,
-    ],
-    agents: ['treasury', 'risk', 'analytics'],
-    complexity: 'complex',
+    agents: ['analytics', 'compliance'],
+    complexity: 'moderate',
   },
 };
 

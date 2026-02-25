@@ -15,6 +15,9 @@ interface OrgContextType {
     currencySymbol: string
     formatCurrency: (value: number | string) => string
     refreshOrganization: () => Promise<void>
+    // Shared state for Board Reporting to prevent repeated AI calls
+    boardReportAiContent: any | null
+    setBoardReportAiContent: (content: any) => void
 }
 
 const OrgContext = createContext<OrgContextType | undefined>(undefined)
@@ -30,6 +33,7 @@ const currencySymbols: Record<string, string> = {
 export function OrgProvider({ children }: { children: React.ReactNode }) {
     const [organization, setOrganization] = useState<Organization | null>(null)
     const [loading, setLoading] = useState(true)
+    const [boardReportAiContent, setBoardReportAiContent] = useState<any | null>(null)
 
     const fetchOrganization = useCallback(async () => {
         const orgId = localStorage.getItem("orgId")
@@ -86,7 +90,9 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
             loading,
             currencySymbol,
             formatCurrency,
-            refreshOrganization: fetchOrganization
+            refreshOrganization: fetchOrganization,
+            boardReportAiContent,
+            setBoardReportAiContent
         }}>
             {children}
         </OrgContext.Provider>

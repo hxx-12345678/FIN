@@ -399,11 +399,13 @@ class ReasoningRequest(BaseModel):
     goal: str = "increase"
     num_months: int = 12
     months: Optional[List[str]] = None
+    period_a: Optional[int] = None
+    period_b: Optional[int] = None
 
 @app.post("/compute/reasoning")
 def compute_reasoning(req: ReasoningRequest):
     """
-    Suggests improvements and explains model logic.
+    Suggests improvements and explains model logic. Includes Waterfall Variance analysis.
     """
     try:
         engine = ModelReasoningEngine(req.modelId)
@@ -415,12 +417,18 @@ def compute_reasoning(req: ReasoningRequest):
         explanation = engine.explain_metric_logic(req.target)
         weak_assumptions = engine.detect_weak_assumptions()
         
+        # Variance Analysis (answering "Why did X change?")
+        variance_analysis = None
+        if req.period_a is not None and req.period_b is not None:
+            variance_analysis = engine.explain_variance(req.target, req.period_a, req.period_b)
+        
         return {
             "status": "success",
             "analysis": analysis,
             "suggestions": suggestions,
             "explanation": explanation,
-            "weakAssumptions": weak_assumptions
+            "weakAssumptions": weak_assumptions,
+            "varianceAnalysis": variance_analysis
         }
     except Exception as e:
         logger.error(f"Reasoning failed: {str(e)}")

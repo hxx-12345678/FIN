@@ -44,23 +44,59 @@ class RiskEngine:
         engine.initialize_horizon(self.months)
         
         # 2. Add nodes to engine
-        # Ensure all nodes that have formulas but also distributions are handled
+        # First pass: add all metrics with dimensions
         for node in nodes:
             dims = node.get('dims', [])
-            # Add _simulation to ALL nodes to vectorize everything
             dims_with_sim = ["_simulation"] + dims
             engine.add_metric(node['id'], node['name'], node.get('category', 'operational'), dims_with_sim)
+            
+        # Second pass: set formulas (now that all deps have correct dims)
+        for node in nodes:
             if node.get('formula'):
                 engine.set_formula(node['id'], node['formula'])
                 
-        # 3. Inject Stochastic Inputs
+        # 3. Inject Stochastic Inputs (Correlated Sampling & Advanced Distributions)
         rng = np.random.default_rng()
-        for node_id, config in proportions.items():
+        
+        # Check for correlated parameters (e.g., CAC inversely correlated to Conversion Rate)
+        corr_matrix = None
+        var_names = list(proportions.keys())
+        has_correlations = any('correlations' in config for config in proportions.values())
+        
+        if has_correlations and len(var_names) > 1:
+            # Build correlation matrix
+            n_vars = len(var_names)
+            corr_matrix = np.eye(n_vars)
+            for i, (_, config) in enumerate(proportions.items()):
+                if 'correlations' in config:
+                    for target, corr_val in config['correlations'].items():
+                        if target in var_names:
+                            j = var_names.index(target)
+                            corr_matrix[i, j] = corr_val
+                            corr_matrix[j, i] = corr_val # Ensure symmetry
+            
+            # Use Cholesky decomposition to generate correlated uniform samples (Gaussian Copula)
+            # Ensure positive semi-definite (add small ridge if needed)
+            try:
+                L = np.linalg.cholesky(corr_matrix)
+            except np.linalg.LinAlgError:
+                # Add small ridge to diagonal
+                corr_matrix += np.eye(n_vars) * 1e-6
+                L = np.linalg.cholesky(corr_matrix)
+                
+            standard_normals = rng.standard_normal((num_simulations, n_vars))
+            correlated_normals = standard_normals @ L.T
+            
+            from scipy.stats import norm
+            correlated_uniforms = norm.cdf(correlated_normals)
+        else:
+            correlated_uniforms = rng.uniform(0, 1, (num_simulations, len(var_names)))
+            
+        # Apply distributions
+        for i, (node_id, config) in enumerate(proportions.items()):
             actual_node_id = node_id
             
-            # Safety check: if node was not in the nodes list, try to find it by name
             if node_id not in engine.data:
-                # Search by name in nodes_meta
                 found = False
                 for nid, meta in engine.nodes_meta.items():
                     if meta.get('name') == node_id:
@@ -69,32 +105,51 @@ class RiskEngine:
                         break
                 
                 if not found:
-                    logger.warning(f"Node {node_id} found in distributions but not in nodes list. Adding dynamically.")
                     engine.add_metric(node_id, node_id, "operational", ["_simulation"])
                     actual_node_id = node_id
             
             dist = config.get('dist', 'normal')
             params = config.get('params', {})
             
-            # Target shape: (num_simulations, dimensions..., months)
-            # For simplicity, we sample for each simulation across all other dimensions/months
             target_shape = engine.data[actual_node_id].shape
             
+            # Use the correlated uniform variable for this driver
+            u = correlated_uniforms[:, i]
+            
+            # We must reshape u to broadcast across months/dimensions if needed
+            # Shape for broadcasting: (num_sims, 1, 1, ..., 1) for all extra dimensions
+            broadcast_dims = len(target_shape) - 1
+            u_reshaped = u.reshape((num_simulations,) + (1,) * broadcast_dims)
+            u_broadcasts = np.broadcast_to(u_reshaped, target_shape)
+            
+            # Inverse Transform Sampling using SciPy distributions
+            import scipy.stats as stats
+            
             if dist == 'normal':
-                mu = params.get('mu', params.get('mean', 0.0)) # Handle both mu and mean
-                sigma = params.get('sigma', params.get('std', 0.1)) # Handle both sigma and std
-                samples = rng.normal(mu, sigma, size=target_shape)
+                mu = params.get('mu', params.get('mean', 0.0))
+                sigma = params.get('sigma', params.get('std', 0.1))
+                samples = stats.norm.ppf(u_broadcasts, loc=mu, scale=sigma)
+            elif dist == 'lognormal':
+                mu = params.get('mu', params.get('mean', 0.0))
+                sigma = params.get('sigma', params.get('std', 0.1))
+                samples = stats.lognorm.ppf(u_broadcasts, s=sigma, scale=np.exp(mu))
             elif dist == 'uniform':
                 low = params.get('min', -0.1)
                 high = params.get('max', 0.1)
-                samples = rng.uniform(low, high, size=target_shape)
+                samples = stats.uniform.ppf(u_broadcasts, loc=low, scale=high-low)
             elif dist == 'triangular':
                 left = params.get('min', -0.1)
                 mode = params.get('mode', 0.0)
                 right = params.get('max', 0.1)
-                samples = rng.triangular(left, mode, right, size=target_shape)
+                # scale scipy triangular: loc=left, scale=right-left, c=(mode-left)/(right-left)
+                c = (mode - left) / (right - left) if right > left else 0.5
+                samples = stats.triang.ppf(u_broadcasts, c=c, loc=left, scale=right-left)
+            elif dist == 'pareto': # Fat-tail
+                b = params.get('b', 2.0) # shape parameter
+                scale = params.get('scale', 1.0)
+                samples = stats.pareto.ppf(u_broadcasts, b=b, scale=scale)
             else:
-                samples = np.full(target_shape, params.get('value', 0.0))
+                samples = np.full(target_shape, float(params.get('value', 0.0)))
                 
             engine.data[actual_node_id] = samples
             
@@ -178,6 +233,35 @@ class RiskEngine:
             name = meta.get('name', nid)
             keyed_by_name[name] = output_metrics.get(nid)
 
+        # 8. Sensitivity Matrix (Tornado/Sobol Variance Tracing)
+        sensitivity = []
+        if cash_node_id in engine.data and final_cash is not None:
+            # Calculate correlation/variance contribution for each injected stochastic driver
+            # against the final outcome metric (cash).
+            for nid, config in proportions.items():
+                if nid in engine.data:
+                    driver_data = engine.data[nid]
+                    if len(driver_data.shape) > 2:
+                        driver_data = np.mean(driver_data, axis=tuple(range(1, len(driver_data.shape)-1)))
+                    
+                    # Take driver data at month 0 (or mean across months) to correlate
+                    d_mean = np.mean(driver_data, axis=1) if len(driver_data.shape) > 1 else driver_data
+                    
+                    # Pearson correlation as basic sensitivity index
+                    if np.std(d_mean) > 0 and np.std(final_cash) > 0:
+                        corr = np.corrcoef(d_mean, final_cash)[0, 1]
+                    else:
+                        corr = 0.0
+                        
+                    sensitivity.append({
+                        "driver": nid,
+                        "correlation": float(corr),
+                        "impact_variance": float(corr ** 2) # Approximation of first-order Sobol index
+                    })
+            
+            # Sort sensitivity by absolute impact
+            sensitivity.sort(key=lambda x: abs(x["impact_variance"]), reverse=True)
+
         return {
             "metrics": output_metrics,
             "metricsByName": keyed_by_name,
@@ -185,6 +269,7 @@ class RiskEngine:
             "fatalRisk": fatal_risk_prob,
             "var95": var_95,
             "insights": risk_insights,
+            "sensitivity": sensitivity,
             "simulations": num_simulations,
             "months": self.months
         }
