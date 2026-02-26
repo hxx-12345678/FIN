@@ -155,6 +155,33 @@ export interface AgentResponse {
     justification: string;
     impactDelta: number;
   }[];
+
+  // Enterprise Governance & Compliance
+  policyMapping?: {
+    policyId: string;
+    policyName: string;
+    controlId: string;
+    framework: 'SOX' | 'SOC2' | 'Internal' | 'IFRS' | 'GAAP';
+    status: 'pass' | 'fail' | 'warning';
+    evidence: string;
+  }[];
+
+  // Advanced Analysis Extensions
+  varianceDrivers?: {
+    driver: string;
+    variance: number;
+    type: 'price' | 'volume' | 'mix' | 'fx' | 'cost' | 'one-time' | 'structural';
+    impact: number;
+    explanation: string;
+  }[];
+
+  scenarioTree?: {
+    nodeId: string;
+    label: string;
+    probability: number;
+    metrics: Record<string, number>;
+    children?: string[];
+  }[];
 }
 
 // Recommendation from agent
