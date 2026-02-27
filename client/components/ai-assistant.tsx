@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -51,16 +51,26 @@ import {
 } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { StagedChangesPanel } from "./ai-assistant/staged-changes-panel"
 import { useStagedChanges } from "@/hooks/use-staged-changes"
 import { toast } from "sonner"
 import { API_BASE_URL } from "@/lib/api-config"
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, XAxis, YAxis } from "recharts"
 
 interface AgentThought {
   step: number
   thought: string
   action?: string
   observation?: string
+}
+
+interface AgentVisualization {
+  type: 'chart' | 'table' | 'metric' | 'comparison'
+  title: string
+  data: any
+  config?: Record<string, any>
 }
 
 interface DataSource {
@@ -93,6 +103,7 @@ interface Message {
   type: "user" | "assistant"
   content: string
   timestamp: Date
+  sourceQuery?: string
   suggestions?: string[]
   actionable?: boolean
   recommendation?: string
@@ -102,6 +113,7 @@ interface Message {
   dataSources?: DataSource[]
   recommendations?: AgentRecommendation[]
   calculations?: Record<string, number>
+  visualizations?: AgentVisualization[]
   confidence?: number
   requiresApproval?: boolean
   escalationReason?: string
@@ -227,6 +239,11 @@ export function AIAssistant() {
   const [error, setError] = useState<string | null>(null)
   const [showTaskDialog, setShowTaskDialog] = useState(false)
   const [currentRecommendation, setCurrentRecommendation] = useState<string>("")
+  const [overviewData, setOverviewData] = useState<any | null>(null)
+  const [overviewLoading, setOverviewLoading] = useState(false)
+  const [activeVizKey, setActiveVizKey] = useState<string | null>(null)
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const [activeVizMode, setActiveVizMode] = useState<'primary' | 'alternate'>('primary')
   const [taskForm, setTaskForm] = useState({
     title: "",
     description: "",
@@ -236,6 +253,55 @@ export function AIAssistant() {
   })
   const { changes: stagedChanges } = useStagedChanges("pending_approval")
   const pendingCount = stagedChanges.filter((c) => c.status === "pending_approval").length
+
+  const getRecommendedVizKeys = useMemo(() => {
+    return (query: string | undefined): string[] => {
+      const q = (query || '').toLowerCase()
+      if (!q.trim()) return []
+
+      const wantsRunway = q.includes('runway') || q.includes('burn') || q.includes('cash')
+      const wantsRevenueTrend = q.includes('revenue') || q.includes('forecast') || q.includes('target')
+      const wantsExpenseBreakdown = q.includes('expense') || q.includes('opex') || q.includes('spend') || q.includes('vendor')
+      const wantsMonteCarlo = q.includes('monte carlo') || q.includes('distribution') || q.includes('probability') || q.includes('survival')
+
+      const keys: string[] = []
+      if (wantsRunway) keys.push('burn_runway')
+      if (wantsRevenueTrend) keys.push('revenue_forecast')
+      if (wantsExpenseBreakdown) keys.push('expense_breakdown')
+      if (wantsMonteCarlo) keys.push('montecarlo_placeholder')
+
+      return keys.slice(0, 3)
+    }
+  }, [])
+
+  const fetchOverviewData = async (orgIdToUse: string) => {
+    if (overviewLoading) return
+    setOverviewLoading(true)
+    try {
+      const token = localStorage.getItem("auth-token") || document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("auth-token="))
+        ?.split("=")[1]
+      if (!token) throw new Error('Authentication token not found')
+
+      const res = await fetch(`${API_BASE_URL}/orgs/${orgIdToUse}/overview`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        credentials: 'include',
+      })
+      if (!res.ok) throw new Error(`Failed to load overview data: ${res.statusText}`)
+      const json = await res.json()
+      if (json?.ok && json?.data) {
+        setOverviewData(json.data)
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setOverviewLoading(false)
+    }
+  }
 
   useEffect(() => {
     // Only fetch data if user is authenticated
@@ -456,6 +522,7 @@ export function AIAssistant() {
           type: "assistant",
           content: responseText,
           timestamp: new Date(),
+          sourceQuery: content,
           suggestions: followUpQuestions.length > 0
             ? followUpQuestions
             : [
@@ -471,6 +538,7 @@ export function AIAssistant() {
           dataSources,
           recommendations,
           calculations,
+          visualizations: agentResponse.visualizations || [],
           confidence,
           requiresApproval,
           escalationReason,
@@ -994,6 +1062,150 @@ export function AIAssistant() {
                                 </div>
                               )}
 
+                              {message.type === "assistant" && (
+                                (() => {
+                                  const keysFromBackend = (message.visualizations || [])
+                                    .map((v) => (v?.config as any)?.key || v.title)
+                                    .filter(Boolean)
+                                  const recommendedKeys = keysFromBackend.length > 0
+                                    ? keysFromBackend.slice(0, 3)
+                                    : getRecommendedVizKeys(message.sourceQuery)
+
+                                  if (recommendedKeys.length === 0) return null
+
+                                  const keyToLabel: Record<string, string> = {
+                                    burn_runway: 'Burn rate & runway',
+                                    revenue_forecast: 'Revenue vs forecast',
+                                    expense_breakdown: 'Expense breakdown',
+                                    montecarlo_placeholder: 'Monte Carlo distribution',
+                                  }
+
+                                  const isDataAvailableForKey = (key: string) => {
+                                    if (!overviewData) return true
+                                    if (key === 'revenue_forecast') return Array.isArray(overviewData.revenueData) && overviewData.revenueData.length > 0
+                                    if (key === 'burn_runway') return Array.isArray(overviewData.burnRateData) && overviewData.burnRateData.length > 0
+                                    if (key === 'expense_breakdown') return Array.isArray(overviewData.expenseBreakdown) && overviewData.expenseBreakdown.length > 0
+                                    return true
+                                  }
+
+                                  const gatedRecommendedKeys = recommendedKeys.filter(isDataAvailableForKey)
+
+                                  if (gatedRecommendedKeys.length === 0) return null
+
+                                  const renderPreview = (key: string) => {
+                                    if (!overviewData || overviewLoading) {
+                                      return (
+                                        <div className="w-[260px] h-[140px] flex items-center justify-center text-xs text-muted-foreground">
+                                          {overviewLoading ? 'Loading data…' : 'Preview unavailable'}
+                                        </div>
+                                      )
+                                    }
+
+                                    if (key === 'revenue_forecast') {
+                                      const data = (overviewData.revenueData || []).map((d: any) => ({
+                                        month: d.month,
+                                        revenue: d.revenue,
+                                        forecast: d.forecast,
+                                      }))
+                                      return (
+                                        <div className="w-[260px] h-[140px]">
+                                          <ResponsiveContainer width="100%" height="100%">
+                                            <LineChart data={data}>
+                                              <CartesianGrid strokeDasharray="3 3" />
+                                              <XAxis dataKey="month" tick={{ fontSize: 9 }} />
+                                              <YAxis tick={{ fontSize: 9 }} />
+                                              <Line type="monotone" dataKey="revenue" stroke="#6366f1" strokeWidth={1.5} dot={false} />
+                                              <Line type="monotone" dataKey="forecast" stroke="#22c55e" strokeWidth={1.5} dot={false} strokeDasharray="4 4" />
+                                            </LineChart>
+                                          </ResponsiveContainer>
+                                        </div>
+                                      )
+                                    }
+
+                                    if (key === 'burn_runway') {
+                                      const data = (overviewData.burnRateData || []).map((d: any) => ({
+                                        month: d.month,
+                                        burn: d.burn,
+                                        runway: d.runway,
+                                      }))
+                                      return (
+                                        <div className="w-[260px] h-[140px]">
+                                          <ResponsiveContainer width="100%" height="100%">
+                                            <AreaChart data={data}>
+                                              <CartesianGrid strokeDasharray="3 3" />
+                                              <XAxis dataKey="month" tick={{ fontSize: 9 }} />
+                                              <YAxis tick={{ fontSize: 9 }} />
+                                              <Area type="monotone" dataKey="burn" stroke="#f97316" fill="#fed7aa" fillOpacity={0.8} dot={false} />
+                                            </AreaChart>
+                                          </ResponsiveContainer>
+                                        </div>
+                                      )
+                                    }
+
+                                    if (key === 'expense_breakdown') {
+                                      const data = (overviewData.expenseBreakdown || []).map((d: any) => ({
+                                        name: d.name,
+                                        value: d.value,
+                                      }))
+                                      return (
+                                        <div className="w-[260px] h-[140px]">
+                                          <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={data}>
+                                              <CartesianGrid strokeDasharray="3 3" />
+                                              <XAxis dataKey="name" tick={{ fontSize: 9 }} />
+                                              <YAxis tick={{ fontSize: 9 }} />
+                                              <Bar dataKey="value" fill="#6366f1" />
+                                            </BarChart>
+                                          </ResponsiveContainer>
+                                        </div>
+                                      )
+                                    }
+
+                                    return (
+                                      <div className="w-[260px] h-[120px] flex items-center justify-center text-xs text-muted-foreground">
+                                        Preview unavailable
+                                      </div>
+                                    )
+                                  }
+
+                                  return (
+                                    <div className="mt-3 space-y-2">
+                                      <div className="flex items-center gap-2 text-sm font-semibold text-black">
+                                        <BarChart3 className="h-4 w-4" />
+                                        <span>Recommended visuals</span>
+                                      </div>
+                                      <div className="flex flex-wrap gap-2">
+                                        {gatedRecommendedKeys.map((key) => (
+                                          <Tooltip key={key}>
+                                            <TooltipTrigger asChild>
+                                              <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="text-xs h-7 bg-transparent"
+                                                onMouseEnter={() => {
+                                                  if (orgId && !overviewData) fetchOverviewData(orgId)
+                                                }}
+                                                onClick={() => {
+                                                  if (orgId && !overviewData) fetchOverviewData(orgId)
+                                                  setActiveVizKey(key)
+                                                  setActiveVizMode('primary')
+                                                  setSheetOpen(true)
+                                                }}
+                                              >
+                                                {keyToLabel[key] || key}
+                                              </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top" className="p-2">
+                                              {renderPreview(key)}
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )
+                                })()
+                              )}
+
                               {/* Weak Assumptions Section */}
                               {message.type === "assistant" && message.weakAssumptions && message.weakAssumptions.length > 0 && (
                                 <div className="mt-3 bg-red-50 border border-red-200 rounded-md p-2">
@@ -1380,6 +1592,244 @@ export function AIAssistant() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+          <SheetContent side="right" className="w-[95vw] sm:w-[520px] sm:max-w-none overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>
+                {activeVizKey === 'revenue_forecast' && 'Revenue insight'}
+                {activeVizKey === 'burn_runway' && 'Liquidity insight'}
+                {activeVizKey === 'expense_breakdown' && 'Expense insight'}
+                {activeVizKey === 'montecarlo_placeholder' && 'Risk insight'}
+                {!activeVizKey && 'Chart'}
+              </SheetTitle>
+              <SheetDescription>
+                Visual explanation of your AI CFO answer. Switch views using the controls below.
+              </SheetDescription>
+            </SheetHeader>
+
+            <div className="mt-4">
+              {!activeVizKey ? (
+                <div className="text-sm text-muted-foreground">Select a visualization from a chat response.</div>
+              ) : !overviewData ? (
+                <div className="text-sm text-muted-foreground">Loading data…</div>
+              ) : (
+                (() => {
+                  if (activeVizKey === 'revenue_forecast') {
+                    const data = (overviewData.revenueData || []).map((d: any) => ({
+                      month: d.month,
+                      revenue: d.revenue,
+                      forecast: d.forecast,
+                    }))
+                    return (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Revenue vs Forecast</CardTitle>
+                          <CardDescription>Actual revenue compared to forecast</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex justify-between items-center mb-3 text-xs text-muted-foreground">
+                            <span>View</span>
+                            <div className="inline-flex rounded-md border bg-background p-0.5">
+                              <button
+                                type="button"
+                                className={`px-2 py-1 rounded-sm ${activeVizMode === 'primary' ? 'bg-muted font-medium' : ''}`}
+                                onClick={() => setActiveVizMode('primary')}
+                              >
+                                Line
+                              </button>
+                              <button
+                                type="button"
+                                className={`px-2 py-1 rounded-sm ${activeVizMode === 'alternate' ? 'bg-muted font-medium' : ''}`}
+                                onClick={() => setActiveVizMode('alternate')}
+                              >
+                                Bar
+                              </button>
+                            </div>
+                          </div>
+                          <ChartContainer
+                            config={{
+                              revenue: { label: 'Actual', color: '#8884d8' },
+                              forecast: { label: 'Forecast', color: '#82ca9d' },
+                            }}
+                          >
+                            {activeVizMode === 'primary' ? (
+                              <LineChart data={data}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="month" />
+                                <YAxis />
+                                <ChartTooltip content={<ChartTooltipContent />} />
+                                <Legend />
+                                <Line type="monotone" dataKey="revenue" stroke="var(--color-revenue)" strokeWidth={2} dot={false} />
+                                <Line type="monotone" dataKey="forecast" stroke="var(--color-forecast)" strokeWidth={2} dot={false} strokeDasharray="5 5" />
+                              </LineChart>
+                            ) : (
+                              <BarChart data={data}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="month" />
+                                <YAxis />
+                                <ChartTooltip content={<ChartTooltipContent />} />
+                                <Legend />
+                                <Bar dataKey="revenue" fill="var(--color-revenue)" />
+                                <Bar dataKey="forecast" fill="var(--color-forecast)" />
+                              </BarChart>
+                            )}
+                          </ChartContainer>
+                        </CardContent>
+                      </Card>
+                    )
+                  }
+
+                  if (activeVizKey === 'burn_runway') {
+                    const data = (overviewData.burnRateData || []).map((d: any) => ({
+                      month: d.month,
+                      burn: d.burn,
+                      runway: d.runway,
+                    }))
+                    return (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Burn Rate & Runway</CardTitle>
+                          <CardDescription>Monthly burn and implied runway</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex justify-between items-center mb-3 text-xs text-muted-foreground">
+                            <span>View</span>
+                            <div className="inline-flex rounded-md border bg-background p-0.5">
+                              <button
+                                type="button"
+                                className={`px-2 py-1 rounded-sm ${activeVizMode === 'primary' ? 'bg-muted font-medium' : ''}`}
+                                onClick={() => setActiveVizMode('primary')}
+                              >
+                                Area
+                              </button>
+                              <button
+                                type="button"
+                                className={`px-2 py-1 rounded-sm ${activeVizMode === 'alternate' ? 'bg-muted font-medium' : ''}`}
+                                onClick={() => setActiveVizMode('alternate')}
+                              >
+                                Line
+                              </button>
+                            </div>
+                          </div>
+                          <ChartContainer
+                            config={{
+                              burn: { label: 'Burn', color: '#ff7300' },
+                            }}
+                          >
+                            {activeVizMode === 'primary' ? (
+                              <AreaChart data={data}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="month" />
+                                <YAxis />
+                                <ChartTooltip content={<ChartTooltipContent />} />
+                                <Area type="monotone" dataKey="burn" stroke="var(--color-burn)" fill="var(--color-burn)" fillOpacity={0.35} dot={false} />
+                              </AreaChart>
+                            ) : (
+                              <LineChart data={data}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="month" />
+                                <YAxis />
+                                <ChartTooltip content={<ChartTooltipContent />} />
+                                <Line type="monotone" dataKey="burn" stroke="var(--color-burn)" strokeWidth={2} dot={false} />
+                              </LineChart>
+                            )}
+                          </ChartContainer>
+                        </CardContent>
+                      </Card>
+                    )
+                  }
+
+                  if (activeVizKey === 'expense_breakdown') {
+                    const data = (overviewData.expenseBreakdown || []).map((d: any) => ({
+                      name: d.name,
+                      value: d.value,
+                    }))
+                    return (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Expense Breakdown</CardTitle>
+                          <CardDescription>Category distribution (current period)</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex justify-between items-center mb-3 text-xs text-muted-foreground">
+                            <span>View</span>
+                            <div className="inline-flex rounded-md border bg-background p-0.5">
+                              <button
+                                type="button"
+                                className={`px-2 py-1 rounded-sm ${activeVizMode === 'primary' ? 'bg-muted font-medium' : ''}`}
+                                onClick={() => setActiveVizMode('primary')}
+                              >
+                                Bar
+                              </button>
+                              <button
+                                type="button"
+                                className={`px-2 py-1 rounded-sm ${activeVizMode === 'alternate' ? 'bg-muted font-medium' : ''}`}
+                                onClick={() => setActiveVizMode('alternate')}
+                              >
+                                Table
+                              </button>
+                            </div>
+                          </div>
+                          <ChartContainer
+                            config={{
+                              value: { label: 'Spend', color: '#8884d8' },
+                            }}
+                          >
+                            {activeVizMode === 'primary' ? (
+                              <BarChart data={data}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="name" />
+                                <YAxis />
+                                <ChartTooltip content={<ChartTooltipContent />} />
+                                <Bar dataKey="value" fill="var(--color-value)" />
+                              </BarChart>
+                            ) : (
+                              <div className="text-xs">
+                                <div className="grid grid-cols-[2fr_1fr] gap-2 mb-1 font-medium text-muted-foreground">
+                                  <span>Category</span>
+                                  <span className="text-right">Amount</span>
+                                </div>
+                                <div className="space-y-1 max-h-64 overflow-y-auto">
+                                  {data.map((row: any) => (
+                                    <div key={row.name} className="grid grid-cols-[2fr_1fr] gap-2">
+                                      <span className="truncate" title={row.name}>{row.name}</span>
+                                      <span className="text-right">{row.value.toLocaleString()}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </ChartContainer>
+                        </CardContent>
+                      </Card>
+                    )
+                  }
+
+                  if (activeVizKey === 'montecarlo_placeholder') {
+                    return (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Monte Carlo Distribution</CardTitle>
+                          <CardDescription>Not yet wired in the chat panel</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-sm text-muted-foreground">
+                            This visualization requires a specific Monte Carlo job reference. Ask for Monte Carlo distribution and I will surface it once the UI is wired to a concrete jobId/paramsHash.
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  }
+
+                  return (
+                    <div className="text-sm text-muted-foreground">No visualization available.</div>
+                  )
+                })()
+              )}
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
     </TooltipProvider>
   )

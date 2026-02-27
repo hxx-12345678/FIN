@@ -593,6 +593,23 @@ class AgentOrchestratorService {
     const allCalculations = results.reduce((acc, r) => ({ ...acc, ...r.calculations }), {});
     const allVisualizations = results.flatMap(r => r.visualizations || []);
 
+    const q = query.toLowerCase();
+    const suggestedVizKeys: string[] = [];
+    if (q.includes('runway') || q.includes('burn') || q.includes('cash')) suggestedVizKeys.push('burn_runway');
+    if (q.includes('revenue') || q.includes('forecast') || q.includes('target')) suggestedVizKeys.push('revenue_forecast');
+    if (q.includes('expense') || q.includes('opex') || q.includes('spend') || q.includes('vendor')) suggestedVizKeys.push('expense_breakdown');
+    if (q.includes('monte carlo') || q.includes('distribution') || q.includes('probability') || q.includes('survival')) suggestedVizKeys.push('montecarlo_placeholder');
+
+    const deterministicVisualizations = (allVisualizations.length > 0
+      ? allVisualizations
+      : suggestedVizKeys.slice(0, 3).map((key) => ({
+        type: 'chart' as const,
+        title: key,
+        data: null,
+        config: { key },
+      }))
+    );
+
     // Calculate overall confidence (weighted average)
     const avgConfidence = results.length > 0
       ? results.reduce((sum, r) => sum + r.confidence, 0) / results.length
@@ -639,7 +656,7 @@ class AgentOrchestratorService {
       calculations: allCalculations,
       recommendations: allRecommendations,
       followUpQuestions,
-      visualizations: allVisualizations,
+      visualizations: deterministicVisualizations,
 
       // Aggregate Enterprise Meta-Data
       varianceDrivers: results.flatMap(r => r.varianceDrivers || []),
