@@ -509,12 +509,36 @@ def run_vectorized_simulations_enhanced(
         expense_driver = driver_arrays.get('expense_growth', np.zeros((num_simulations, months)))
         
         # Baseline values
-        baseline_revenue = 100000.0
-        baseline_expenses = 80000.0
+        baseline = {}
+        baseline_cash = None
+        try:
+            if isinstance(model_data, dict):
+                baseline_cash = model_data.get('cash', model_data.get('cashBalance', model_data.get('initialCash')))
+        except Exception:
+            baseline_cash = None
+
+        if baseline_cash is None:
+            try:
+                cursor.execute("""
+                    SELECT "summaryJson"->>'cashBalance'
+                    FROM model_runs
+                    WHERE id = %s
+                """, (model_run_id,))
+                row = cursor.fetchone()
+                if row and row[0] is not None:
+                    baseline_cash = float(row[0])
+            except Exception:
+                baseline_cash = None
+
+        base_values = {
+            'cash': float(baseline_cash if baseline_cash is not None else 1000000),
+            'revenue': float(baseline.get('revenue', 100000) if isinstance(baseline, dict) else 100000),
+            'opex': float(baseline.get('opex', 50000) if isinstance(baseline, dict) else 50000),
+        }
         
         # Vectorized computation
-        revenue = baseline_revenue * (1.0 + revenue_driver)
-        expenses = baseline_expenses * (1.0 + expense_driver)
+        revenue = base_values['revenue'] * (1.0 + revenue_driver)
+        expenses = base_values['opex'] * (1.0 + expense_driver)
         monthly_cash = revenue - expenses
         
         # Update progress
@@ -611,9 +635,26 @@ def compute_survival_probability(results: np.ndarray, month_keys: List[str], ini
         num_simulations = results.shape[0]
         months = results.shape[1]
         
-        # Compute cumulative cash for each simulation
-        # If results are already cumulative, use as-is; otherwise compute cumulative sum
-        cumulative_cash = np.cumsum(results, axis=1) + initial_cash
+        # IMPORTANT: results semantics
+        # The enhanced Monte Carlo simulation outputs *ending cash balances* per month.
+        # Applying cumsum() to ending balances will incorrectly inflate cash and can yield
+        # survival_probability ~= 1.0 even for near-zero runway.
+        #
+        # Backward-compatibility: detect whether results appears to be balances; otherwise
+        # treat as monthly deltas.
+
+        use_as_balances = False
+        try:
+            if months > 0:
+                first_col = results[:, 0]
+                use_as_balances = np.nanmedian(np.abs(first_col)) > 1000.0
+        except Exception:
+            use_as_balances = False
+
+        if use_as_balances:
+            cumulative_cash = results.astype(np.float64, copy=False)
+        else:
+            cumulative_cash = np.cumsum(results, axis=1) + initial_cash
         
         # For each month, calculate probability that cash > 0 (survival)
         survival_by_month = []

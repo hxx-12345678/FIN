@@ -826,9 +826,100 @@ def run_vectorized_simulations_enhanced(
         try:
             # Get baseline values and assumptions
             baseline = model_data.get('baseline', {}) if model_data else {}
+            # If baseline cash is missing, fall back to model_runs.summary_json cashBalance
+            baseline_cash = None
+            try:
+                if isinstance(baseline, dict):
+                    baseline_cash = baseline.get('cash', baseline.get('cashBalance', baseline.get('initialCash')))
+            except Exception:
+                baseline_cash = None
+
+            if baseline_cash is None:
+                try:
+                    cursor.execute("""
+                        SELECT summary_json->>'cashBalance'
+                        FROM model_runs
+                        WHERE id = %s
+                    """, (model_data.get('modelRunId') if isinstance(model_data, dict) else None,))
+                except Exception:
+                    pass
+
+            if baseline_cash is None:
+                try:
+                    cursor.execute("""
+                        SELECT summary_json->>'cashBalance'
+                        FROM model_runs
+                        WHERE id = %s
+                    """, (model_run_id,))
+                    row = cursor.fetchone()
+                    if row and row[0] is not None:
+                        baseline_cash = float(row[0])
+                except Exception:
+                    baseline_cash = None
+
+            # Anchor baseline revenue & burn from model_runs.summary_json when model_json baseline is missing.
+            baseline_revenue = None
+            baseline_monthly_burn = None
+            try:
+                if isinstance(baseline, dict):
+                    baseline_revenue = baseline.get('revenue')
+            except Exception:
+                baseline_revenue = None
+
+            try:
+                cursor.execute("""
+                    SELECT
+                        summary_json->>'mrr',
+                        summary_json->>'monthlyRevenue',
+                        summary_json->>'revenue',
+                        summary_json->>'monthlyBurn',
+                        summary_json->>'burnRate',
+                        summary_json->>'expenses',
+                        summary_json->>'opex'
+                    FROM model_runs
+                    WHERE id = %s
+                """, (model_run_id,))
+                srow = cursor.fetchone()
+                if srow:
+                    if baseline_revenue is None:
+                        for v in [srow[0], srow[1], srow[2]]:
+                            if v is not None:
+                                try:
+                                    baseline_revenue = float(v)
+                                    break
+                                except Exception:
+                                    pass
+                    for v in [srow[3], srow[4], srow[5], srow[6]]:
+                        if v is not None:
+                            try:
+                                baseline_monthly_burn = float(v)
+                                break
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+
+            if baseline_revenue is None:
+                baseline_revenue = 100000.0
+            if baseline_monthly_burn is None:
+                baseline_monthly_burn = 50000.0
+
+            # Convert burn into opexPercentage for 3-statement engine: opex ~= revenue * opexPercentage.
+            # Clamp to avoid extreme or invalid values.
+            opex_percentage_from_burn = 0.30
+            try:
+                if baseline_revenue > 0:
+                    opex_percentage_from_burn = float(baseline_monthly_burn / baseline_revenue)
+            except Exception:
+                opex_percentage_from_burn = 0.30
+            if opex_percentage_from_burn < 0:
+                opex_percentage_from_burn = 0.0
+            if opex_percentage_from_burn > 10:
+                opex_percentage_from_burn = 10.0
+
             initial_values = {
-                'cash': float(baseline.get('cash', baseline.get('cashBalance', 1000000))),
-                'revenue': float(baseline.get('revenue', 100000)),
+                'cash': float(baseline_cash if baseline_cash is not None else 1000000),
+                'revenue': float(baseline_revenue),
                 'accountsReceivable': float(baseline.get('accountsReceivable', 50000)),
                 'accountsPayable': float(baseline.get('accountsPayable', 30000)),
                 'inventory': float(baseline.get('inventory', 20000)),
@@ -841,7 +932,7 @@ def run_vectorized_simulations_enhanced(
             base_growth = {
                 'revenueGrowth': 0.05,
                 'cogsPercentage': 0.40,
-                'opexPercentage': 0.30,
+                'opexPercentage': opex_percentage_from_burn,
                 'taxRate': 0.25,
                 'depreciationRate': 0.01,
                 'arDays': 45,
@@ -1006,8 +1097,31 @@ def compute_survival_probability(results: np.ndarray, month_keys: List[str], ini
         num_simulations = results.shape[0]
         months = results.shape[1]
         
-        # Compute cumulative cash for each simulation
-        cumulative_cash = np.cumsum(results, axis=1) + initial_cash
+        # IMPORTANT: results semantics
+        # In this codebase, Monte Carlo simulation outputs are typically *ending cash balances*
+        # for each month (see run_vectorized_simulations_enhanced: results[s, m] = endingCash).
+        # Applying cumsum() to ending balances will incorrectly inflate cash and can produce
+        # survival_probability ~= 1.0 even when runway is near-zero.
+        #
+        # For safety/backward-compatibility, we detect whether `results` appears to already be
+        # an ending-cash series; if so, we use it directly. Otherwise, we treat it as monthly
+        # cash deltas and cumsum + initial_cash.
+
+        # Heuristic: treat as balances if magnitudes look balance-like (large relative to $0),
+        # regardless of proximity to initial_cash (month-1 ending cash can differ materially
+        # from initial cash when burn is large).
+        use_as_balances = False
+        try:
+            if months > 0:
+                first_col = results[:, 0]
+                use_as_balances = np.nanmedian(np.abs(first_col)) > 1000.0
+        except Exception:
+            use_as_balances = False
+
+        if use_as_balances:
+            cumulative_cash = results.astype(np.float64, copy=False)
+        else:
+            cumulative_cash = np.cumsum(results, axis=1) + initial_cash
         
         # For each month, calculate probability that cash > 0 (survival)
         survival_by_month = []

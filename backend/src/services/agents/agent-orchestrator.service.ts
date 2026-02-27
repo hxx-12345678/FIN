@@ -85,6 +85,10 @@ class AgentOrchestratorService {
       // Step 2: Create execution plan
       const plan = await this.createPlan(orgId, query, intent);
 
+      // Step 2.5: Build a single baseline snapshot for this run (enterprise consistency)
+      // This is passed to all agents to prevent cross-agent baseline drift.
+      const baselineSnapshot = await this.buildBaselineSnapshot(orgId);
+
       thoughts.push({
         step: 3,
         thought: `Created execution plan with ${plan.tasks.length} tasks`,
@@ -97,7 +101,7 @@ class AgentOrchestratorService {
       }
 
       // Step 4: Execute tasks through specialized agents
-      const results = await this.executePlan(orgId, userId, plan, thoughts, dataSources);
+      const results = await this.executePlan(orgId, userId, plan, thoughts, dataSources, baselineSnapshot);
 
       // Step 5: Synthesize final response
       const response = await this.synthesizeResponse(
@@ -371,7 +375,8 @@ class AgentOrchestratorService {
     userId: string,
     plan: OrchestratorPlan,
     thoughts: AgentThought[],
-    dataSources: DataSource[]
+    dataSources: DataSource[],
+    baselineSnapshot?: Record<string, any>
   ): Promise<AgentResponse[]> {
     const results: AgentResponse[] = [];
 
@@ -398,7 +403,11 @@ class AgentOrchestratorService {
       });
 
       try {
-        const result = await agent.execute(orgId, userId, task.params);
+        const mergedParams = {
+          ...(task.params || {}),
+          baselineSnapshot,
+        };
+        const result = await agent.execute(orgId, userId, mergedParams);
         results.push(result);
 
         // Collect data sources from agent
@@ -421,6 +430,124 @@ class AgentOrchestratorService {
     }
 
     return results;
+  }
+
+  private async buildBaselineSnapshot(orgId: string): Promise<Record<string, any>> {
+    try {
+      const latestRun = await prisma.modelRun.findFirst({
+        where: { orgId, status: { in: ['done', 'completed'] } },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const latestMonteCarlo = await prisma.monteCarloJob.findFirst({
+        where: {
+          orgId,
+          status: 'done',
+          percentilesJson: { not: null },
+        },
+        orderBy: { finishedAt: 'desc' },
+        select: {
+          id: true,
+          paramsHash: true,
+          percentilesJson: true,
+          finishedAt: true,
+          modelRunId: true,
+        },
+      });
+
+      let monteCarloSurvivalProbability: number | null = null;
+      const percentilesObj: any = (latestMonteCarlo?.percentilesJson && typeof latestMonteCarlo.percentilesJson === 'object')
+        ? latestMonteCarlo.percentilesJson
+        : null;
+      if (percentilesObj) {
+        const raw = percentilesObj.survival_probability ?? percentilesObj.survivalProbability;
+        if (typeof raw === 'number') {
+          monteCarloSurvivalProbability = raw;
+        } else if (raw && typeof raw === 'object') {
+          const overallProb = raw?.overall?.probabilitySurvivingFullPeriod;
+          const altOverallProb = raw?.overall?.probability_surviving_full_period;
+          if (typeof overallProb === 'number') {
+            monteCarloSurvivalProbability = overallProb;
+          } else if (typeof altOverallProb === 'number') {
+            monteCarloSurvivalProbability = altOverallProb;
+          } else if (typeof raw?.probabilitySurvivingFullPeriod === 'number') {
+            monteCarloSurvivalProbability = raw.probabilitySurvivingFullPeriod;
+          }
+        }
+      }
+
+      const summary = (latestRun?.summaryJson as any) || {};
+      const cashBalance = Number(summary.cashBalance ?? summary.initialCash ?? 0);
+      const monthlyRevenue = Number(summary.mrr ?? summary.monthlyRevenue ?? summary.revenue ?? 0);
+      const monthlyBurn = Number(summary.monthlyBurn ?? summary.burnRate ?? summary.expenses ?? summary.opex ?? 0);
+      const opex = Number(summary.opex ?? summary.expenses ?? summary.monthlyBurn ?? 0);
+
+      const netBurn = Math.max(monthlyBurn - monthlyRevenue, 0);
+      const runwayMonths = netBurn > 0 ? cashBalance / netBurn : 24;
+      const heuristicSurvivalProbability = runwayMonths > 12 ? 0.95 : 0.78;
+
+      const monteCarloUsable =
+        typeof monteCarloSurvivalProbability === 'number' &&
+        monteCarloSurvivalProbability >= 0 &&
+        monteCarloSurvivalProbability <= 1 &&
+        Math.abs(monteCarloSurvivalProbability - heuristicSurvivalProbability) <= 0.2;
+
+      const snapshot = {
+        modelRunId: latestRun?.id || null,
+        modelRunStatus: latestRun?.status || null,
+        modelRunCreatedAt: latestRun?.createdAt || null,
+        cashBalance,
+        monthlyRevenue,
+        monthlyBurn,
+        opex,
+        debt: Number(summary.debt ?? summary.totalDebt ?? 0),
+        churnRate: Number(summary.churnRate ?? 0.04),
+        monteCarlo: latestMonteCarlo
+          ? {
+            jobId: latestMonteCarlo.id,
+            paramsHash: latestMonteCarlo.paramsHash,
+            finishedAt: latestMonteCarlo.finishedAt,
+            modelRunId: latestMonteCarlo.modelRunId,
+            survivalProbability: monteCarloSurvivalProbability,
+            usable: monteCarloUsable,
+            heuristicSurvivalProbability,
+          }
+          : null,
+      };
+
+      const hasModelData = snapshot.cashBalance > 0 || snapshot.monthlyRevenue > 0 || snapshot.monthlyBurn > 0;
+
+      // If model run lacks cash, try a lightweight transaction-based estimate for burn (kept intentionally simple)
+      if (!hasModelData) {
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const transactions = await prisma.rawTransaction.aggregate({
+          where: { orgId, date: { gte: thirtyDaysAgo }, isDuplicate: false },
+          _sum: { amount: true },
+          _count: true,
+        });
+        const txnAmount = transactions._sum.amount ? Number(transactions._sum.amount) : 0;
+        const estimatedBurn = txnAmount < 0 ? Math.abs(txnAmount) : 0;
+        return {
+          ...snapshot,
+          monthlyBurn: snapshot.monthlyBurn || estimatedBurn,
+          hasRealData: transactions._count > 0,
+          source: 'transactions_fallback',
+        };
+      }
+
+      return {
+        ...snapshot,
+        hasRealData: hasModelData,
+        source: 'model_run',
+      };
+    } catch (e) {
+      return {
+        modelRunId: null,
+        hasRealData: false,
+        source: 'snapshot_error',
+      };
+    }
   }
 
   /**
@@ -746,7 +873,13 @@ class AgentOrchestratorService {
       forecastText += `• **Scenario Tree Architecture:** Weighted P10/P50/P90 distributions active.\n`;
       forecastText += `• Distribution: Log-normal | Skewness: ${ci.skewness || '0.45'} | StdDev: ${ci.stdDev?.toLocaleString() || '0.0448'}\n`;
       forecastText += `• P10 (Downside): $${ci.p10.toLocaleString()} | P50 (Base): $${ci.p50.toLocaleString()} | P90 (Upside): $${ci.p90.toLocaleString()}\n`;
-      forecastText += `• **Weighted Probability of Insolvency (12m):** <1.5%\n`;
+      const riskSurvival = (results.find(r => r.agentType === 'risk') as any)?.calculations?.survival_prob;
+      if (typeof riskSurvival === 'number') {
+        const insolvency = Math.max(0, Math.min(1, 1 - riskSurvival));
+        forecastText += `• **Implied Probability of Insolvency (scenario-derived):** ${(insolvency * 100).toFixed(1)}%\n`;
+      } else {
+        forecastText += `• **Probability of Insolvency:** Not computed (no survival probability provided by risk engine for this run)\n`;
+      }
       sections.push(`### SECTION 2 — Probabilistic Forecast Engine Validation\n${forecastText}`);
     } else {
       sections.push(`### SECTION 2 — Probabilistic Forecast Engine Validation\n12-month base, upside, and downside scenarios validated via 5,000 iteration Monte Carlo simulation. Weighted mean growth delta reconciled against pipeline confidence.`);
@@ -804,7 +937,8 @@ class AgentOrchestratorService {
     const allPolicies = results.flatMap(r => r.policyMapping || []);
     if (allPolicies.length > 0) {
       allPolicies.forEach(p => {
-        policyText += `| ${p.policyId} | **${p.framework}** | ${p.status === 'pass' ? '✅ PASS' : '⚠️ WARN'} | ${p.evidence} |\n`;
+        const statusLabel = p.status === 'pass' ? '✅ PASS' : (p.status === 'fail' ? '❌ FAIL' : '⚠️ WARN');
+        policyText += `| ${p.policyId} | **${p.framework}** | ${statusLabel} | ${p.evidence} |\n`;
       });
     } else {
       policyText += `| FIN-GOV-001 | SOX | ✅ PASS | Manual override threshold < 15%. |\n`;
@@ -823,7 +957,19 @@ class AgentOrchestratorService {
       liqText += `• **Emergency Capital Requirement:** $${liq.capitalRequired?.toLocaleString() || '0'}\n`;
       sections.push(`### SECTION 8 — Liquidity Crisis Simulation (Scenario Trees)\n${liqText}`);
     } else {
-      sections.push(`### SECTION 8 — Liquidity Crisis Simulation (Scenario Trees)\nScenario distribution modeling confirms survival probability > 80% under standard volatility envelopes.`);
+      if (!risk) {
+        sections.push(
+          `### SECTION 8 — Liquidity Crisis Simulation (Scenario Trees)\n` +
+          `Risk engine was **not executed** for this query, so no survival probability or liquidity scenario results are available.`
+        );
+      } else {
+        const riskSurvival = (risk as any)?.calculations?.survival_prob;
+        const riskScenarioId = (risk as any)?.calculations?.scenario?.id;
+        const survivalText = typeof riskSurvival === 'number'
+          ? `Survival probability (scenario ${riskScenarioId || 'unknown'}): **${(riskSurvival * 100).toFixed(0)}%**.`
+          : `Risk engine executed, but did not provide a survival probability for this run.`;
+        sections.push(`### SECTION 8 — Liquidity Crisis Simulation (Scenario Trees)\n${survivalText}`);
+      }
     }
 
     // 9. Data Quality & Reliability Scoring
@@ -842,11 +988,55 @@ class AgentOrchestratorService {
     const allExplanations = results.map(r => r.causalExplanation).filter(Boolean);
     const avgConfidence = results.reduce((sum, r) => sum + r.confidence, 0) / results.length;
 
+    const computePolicyAdherence = () => {
+      if (!allPolicies.length) return null;
+      const scoreByStatus: Record<string, number> = { pass: 1.0, warning: 0.7, fail: 0.0 };
+      const scores = allPolicies
+        .map(p => scoreByStatus[p.status] ?? 0.5)
+        .filter(s => typeof s === 'number');
+      if (!scores.length) return null;
+      return scores.reduce((a, b) => a + b, 0) / scores.length;
+    };
+
+    const adherence = computePolicyAdherence();
+    const hasPolicyFail = allPolicies.some(p => p.status === 'fail');
+    const hasPolicyWarn = allPolicies.some(p => p.status === 'warning');
+    const anyAgentFailed = results.some(r => r.status === 'failed');
+
+    const qualityScore = results.find(r => r.dataQuality)?.dataQuality?.score;
+    const reliabilityTier = results.find(r => r.dataQuality)?.dataQuality?.reliabilityTier;
+    const normalizedQuality = typeof qualityScore === 'number' ? Math.max(0, Math.min(1, qualityScore / 100)) : null;
+
+    // Deterministic certification logic:
+    // - Start from confidence + data quality
+    // - Penalize warnings/fails and any agent failures
+    const baseMaturity = 0.5 * avgConfidence + 0.5 * (normalizedQuality ?? 0.5);
+    const penalty =
+      (hasPolicyFail ? 0.35 : 0) +
+      (hasPolicyWarn ? 0.15 : 0) +
+      (anyAgentFailed ? 0.25 : 0);
+    const maturityScore = Math.max(0, Math.min(1, baseMaturity - penalty));
+    const policyAdherenceScore = adherence ?? 0.5;
+
+    const overallStatus =
+      hasPolicyFail || anyAgentFailed ? 'NOT INSTITUTIONAL' :
+      hasPolicyWarn ? 'CONDITIONAL' :
+      'INSTITUTIONAL GRADE';
+
     let auditOutput = `**Strategic Narrative:**\n${allExplanations.join('\n\n')}\n\n`;
     auditOutput += `**Institutional Certification:**\n`;
-    auditOutput += `• Enterprise Maturity: **9.8/10**\n`;
-    auditOutput += `• Policy Adherence: **100%**\n`;
-    auditOutput += `• Overall Status: **INSTITUTIONAL GRADE**\n\n`;
+    auditOutput += `• Enterprise Maturity: **${(maturityScore * 10).toFixed(1)}/10**\n`;
+    auditOutput += `• Policy Adherence: **${(policyAdherenceScore * 100).toFixed(0)}%**\n`;
+    auditOutput += `• Data Quality: **${typeof qualityScore === 'number' ? `${qualityScore}/100` : 'N/A'}**${reliabilityTier ? ` | Tier ${reliabilityTier}` : ''}\n`;
+    auditOutput += `• Overall Status: **${overallStatus}**\n\n`;
+
+    if (hasPolicyFail || hasPolicyWarn || anyAgentFailed) {
+      auditOutput += `**Certification Notes:**\n`;
+      if (hasPolicyFail) auditOutput += `• One or more controls are in **FAIL** status; certification cannot be marked institutional.\n`;
+      if (hasPolicyWarn) auditOutput += `• One or more controls are in **WARNING** status; certification is conditional pending remediation.\n`;
+      if (anyAgentFailed) auditOutput += `• One or more agents returned **FAILED** due to data integrity or execution issues.\n`;
+      auditOutput += `\n`;
+    }
 
     auditOutput += `**Recommendations (Priority Ranked):**\n${results.flatMap(r => r.recommendations || []).slice(0, 3).map(rec => `• **${rec.title}:** ${rec.description}`).join('\n')}\n`;
 

@@ -194,10 +194,20 @@ export const getMonteCarloResult = async (jobId: string) => {
   let survivalProbability = null;
   if (percentiles && typeof percentiles === 'object') {
     const percentilesObj = percentiles as any;
-    if (percentilesObj.survival_probability) {
-      survivalProbability = percentilesObj.survival_probability;
-    } else if (percentilesObj.survivalProbability) {
-      survivalProbability = percentilesObj.survivalProbability;
+    const raw = percentilesObj.survival_probability ?? percentilesObj.survivalProbability;
+    if (typeof raw === 'number') {
+      survivalProbability = raw;
+    } else if (raw && typeof raw === 'object') {
+      // python-worker shape: { overall: { probabilitySurvivingFullPeriod: 0.78, ... }, ... }
+      const overallProb = raw?.overall?.probabilitySurvivingFullPeriod;
+      const altOverallProb = raw?.overall?.probability_surviving_full_period;
+      if (typeof overallProb === 'number') {
+        survivalProbability = overallProb;
+      } else if (typeof altOverallProb === 'number') {
+        survivalProbability = altOverallProb;
+      } else if (typeof raw?.probabilitySurvivingFullPeriod === 'number') {
+        survivalProbability = raw.probabilitySurvivingFullPeriod;
+      }
     }
   }
 

@@ -33,7 +33,8 @@ class ReportingAgentService {
     });
 
     // Gather comprehensive financial data
-    const financialData = await this.gatherFinancialData(orgId, dataSources);
+    const baselineSnapshot = params?.baselineSnapshot;
+    const financialData = await this.gatherFinancialData(orgId, dataSources, baselineSnapshot);
 
     thoughts.push({
       step: 2,
@@ -126,7 +127,7 @@ class ReportingAgentService {
   /**
    * Gather comprehensive financial data
    */
-  private async gatherFinancialData(orgId: string, dataSources: DataSource[]): Promise<any> {
+  private async gatherFinancialData(orgId: string, dataSources: DataSource[], baselineSnapshot?: any): Promise<any> {
     let revenue = 0;
     let prevRevenue = 0;
     let expenses = 0;
@@ -135,6 +136,25 @@ class ReportingAgentService {
     let churnRate = 0.05;
     let arr = 0;
     let hasRealData = false;
+
+    if (baselineSnapshot?.cashBalance !== undefined) {
+      revenue = Number(baselineSnapshot.monthlyRevenue || 0);
+      expenses = Number(baselineSnapshot.monthlyBurn || 0);
+      cashBalance = Number(baselineSnapshot.cashBalance || 0);
+      churnRate = Number(baselineSnapshot.churnRate ?? churnRate);
+      arr = revenue * 12;
+      prevRevenue = revenue;
+      hasRealData = Boolean(baselineSnapshot.hasRealData) && (revenue > 0 || expenses > 0 || cashBalance > 0);
+
+      dataSources.push({
+        type: 'calculation',
+        id: String(baselineSnapshot.modelRunId || 'baseline_snapshot'),
+        name: 'Baseline Snapshot (Orchestrator)',
+        timestamp: new Date(),
+        confidence: hasRealData ? 0.95 : 0.6,
+        snippet: `revenue=${revenue}, expenses=${expenses}, cash=${cashBalance}`,
+      });
+    }
 
     try {
       // Get latest model run
@@ -196,7 +216,7 @@ class ReportingAgentService {
         });
       }
 
-      if (!hasRealData) {
+      if (!hasRealData && baselineSnapshot?.cashBalance === undefined) {
         // Use demo data
         revenue = 85000;
         prevRevenue = 78000;

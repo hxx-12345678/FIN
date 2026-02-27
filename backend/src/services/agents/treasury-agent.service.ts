@@ -28,8 +28,29 @@ class TreasuryAgentService {
       action: 'data_retrieval',
     });
 
+    const baselineSnapshot = params?.baselineSnapshot;
+
     // Fetch real data
-    const financialData = await this.getFinancialData(orgId, dataSources);
+    const financialData = baselineSnapshot?.cashBalance !== undefined
+      ? {
+        cashBalance: Number(baselineSnapshot.cashBalance || 0),
+        monthlyBurn: Number(baselineSnapshot.monthlyBurn || 0),
+        monthlyRevenue: Number(baselineSnapshot.monthlyRevenue || 0),
+        netBurn: Number(baselineSnapshot.monthlyBurn || 0) - Number(baselineSnapshot.monthlyRevenue || 0),
+        hasRealData: Boolean(baselineSnapshot.hasRealData),
+      }
+      : await this.getFinancialData(orgId, dataSources);
+
+    if (baselineSnapshot?.cashBalance !== undefined) {
+      dataSources.push({
+        type: 'calculation',
+        id: String(baselineSnapshot.modelRunId || 'baseline_snapshot'),
+        name: 'Baseline Snapshot (Orchestrator)',
+        timestamp: new Date(),
+        confidence: financialData.hasRealData ? 0.95 : 0.6,
+        snippet: `cash=${financialData.cashBalance}, burn=${financialData.monthlyBurn}, revenue=${financialData.monthlyRevenue}`,
+      });
+    }
 
     thoughts.push({
       step: 2,
@@ -65,6 +86,18 @@ class TreasuryAgentService {
     const shockPercent = entities.revenueChange || -10; // Default to 10% burn spike if not specified
     const targetMonths = entities.targetRunway || 12;
 
+    const monteCarloSurvivalProbability =
+      baselineSnapshot?.monteCarlo?.usable === true &&
+        typeof baselineSnapshot?.monteCarlo?.survivalProbability === 'number'
+        ? Number(baselineSnapshot.monteCarlo.survivalProbability)
+        : null;
+    const survivalProbability = monteCarloSurvivalProbability !== null
+      ? monteCarloSurvivalProbability
+      : (runway.months > 12 ? 0.95 : 0.78);
+    const survivalSource = monteCarloSurvivalProbability !== null
+      ? `python-worker Monte Carlo (paramsHash: ${String(baselineSnapshot?.monteCarlo?.paramsHash || 'unknown')})`
+      : 'treasury runway heuristic';
+
     return {
       agentType: 'treasury',
       taskId: uuidv4(),
@@ -75,7 +108,7 @@ class TreasuryAgentService {
       dataSources,
       calculations,
       recommendations,
-      executiveSummary: `Current cash runway is ${runway.months.toFixed(1)} months with a balance of $${financialData.cashBalance.toLocaleString()}. Survival probability under baseline burn is ${runway.months > 12 ? '95%' : '78%'}.`,
+      executiveSummary: `Current cash runway is ${runway.months.toFixed(1)} months with a balance of $${financialData.cashBalance.toLocaleString()}. Survival probability under baseline burn is ${(survivalProbability * 100).toFixed(0)}% (${survivalSource}).`,
       causalExplanation: `Our **baseline comparison** against the prior month's balance shows a net burn of $${financialData.netBurn.toLocaleString()}. **Impact sensitivity** analysis on the current $${financialData.cashBalance.toLocaleString()} balance indicates that a ${Math.abs(shockPercent)}% ${shockPercent < 0 ? 'revenue drop' : 'burn spike'} would create a **scenario delta** of ${Math.abs(runway.months * (shockPercent / 100)).toFixed(1)} months. Logic is **consistent** with the target ${targetMonths}-month survival lookback.`,
       risks: [
         runway.months < 6 ? 'Critical cash depletion within 6 months' : 'Market volatility affecting burn rate',
@@ -96,10 +129,9 @@ class TreasuryAgentService {
         skewness: 0.45
       },
       liquidityMetrics: {
-        survivalProbability: runway.months > 12 ? 0.95 : 0.78,
-        minCashMonth: runway.cashOutDate.toLocaleDateString(),
-        capitalRequired: runway.months < 6 ? financialData.monthlyBurn * 6 : 0,
-        dilutionImpact: 0.15
+        survivalProbability,
+        capitalRequired: runway.months < 6 ? Math.max(0, (6 - runway.months) * Math.max(0, financialData.netBurn || 0)) : 0,
+        dilutionImpact: 0.15,
       },
       formulasUsed: [
         'Runway = Total Cash / Monthly Net Burn',

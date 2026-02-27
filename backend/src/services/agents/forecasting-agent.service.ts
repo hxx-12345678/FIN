@@ -175,7 +175,7 @@ class ForecastingAgentService {
 
     try {
       const latestRun = await prisma.modelRun.findFirst({
-        where: { orgId, status: 'completed' },
+        where: { orgId, status: { in: ['completed', 'done'] } },
         orderBy: { createdAt: 'desc' },
       });
 

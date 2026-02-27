@@ -32,7 +32,27 @@ class RiskAgentService {
       action: 'risk_evaluation',
     });
 
-    const financialData = await this.getFinancialData(orgId, dataSources);
+    const baselineSnapshot = params?.baselineSnapshot;
+    const financialData = baselineSnapshot?.cashBalance !== undefined
+      ? {
+        revenue: Number(baselineSnapshot.monthlyRevenue || 0),
+        opex: Number(baselineSnapshot.opex ?? baselineSnapshot.monthlyBurn ?? 0),
+        cash: Number(baselineSnapshot.cashBalance || 0),
+        debt: Number(baselineSnapshot.debt || 0),
+        churn: Number(baselineSnapshot.churnRate ?? 0.04),
+      }
+      : await this.getFinancialData(orgId, dataSources);
+
+    if (baselineSnapshot?.cashBalance !== undefined) {
+      dataSources.push({
+        type: 'calculation',
+        id: String(baselineSnapshot.modelRunId || 'baseline_snapshot'),
+        name: 'Baseline Snapshot (Orchestrator)',
+        timestamp: new Date(),
+        confidence: baselineSnapshot.hasRealData ? 0.95 : 0.6,
+        snippet: `rev=${financialData.revenue}, opex=${financialData.opex}, debt=${financialData.debt}, churn=${financialData.churn}`,
+      });
+    }
 
     let answer = '';
 
@@ -46,7 +66,44 @@ class RiskAgentService {
     }
     // Default
     else {
-      answer = `**Risk Assessment Summary**\n\nAggregate risk score: 18/100 (Low). Survival probability: 98%. No immediate covenant risks detected.`;
+      const baselineNetBurn = Math.max((financialData.opex || 0) - (financialData.revenue || 0), (financialData.opex || 0) * 0.3);
+      const baselineRunwayMonths = baselineNetBurn > 0 ? (financialData.cash || 0) / baselineNetBurn : 24;
+
+      // Keep baseline survival logic consistent with Treasury agent's institutional mapping.
+      const monteCarloSurvivalProbability =
+        baselineSnapshot?.monteCarlo?.usable === true &&
+          typeof baselineSnapshot?.monteCarlo?.survivalProbability === 'number'
+          ? Number(baselineSnapshot.monteCarlo.survivalProbability)
+          : null;
+      const baselineSurvivalProb = monteCarloSurvivalProbability !== null
+        ? monteCarloSurvivalProbability
+        : (baselineRunwayMonths > 12 ? 0.95 : 0.78);
+
+      calculations.net_burn = baselineNetBurn;
+      calculations.runway_months = baselineRunwayMonths;
+      calculations.survival_prob = baselineSurvivalProb;
+      if (baselineSnapshot?.monteCarlo?.paramsHash) {
+        (calculations as any).monte_carlo_params_hash = baselineSnapshot.monteCarlo.paramsHash;
+      }
+      (calculations as any).scenario = {
+        id: 'baseline_risk_summary',
+        label: 'Baseline Risk Summary',
+        parameters: {
+          revenueShockPct: 0,
+          churnMultiplier: 1.0,
+          interestRateBpsShock: 0,
+        },
+        contingencies: {
+          creditFacilitiesIncluded: false,
+        },
+      };
+
+      answer =
+        `**Risk Assessment Summary**\n\n` +
+        `**Scenario ID:** baseline_risk_summary\n` +
+        `**Scenario Parameters:** No applied shocks (baseline)\n` +
+        `**Contingencies Modeled:** None\n\n` +
+        `Aggregate risk score: 18/100 (Low). Survival probability: ${(baselineSurvivalProb * 100).toFixed(0)}%. Baseline runway: ${baselineRunwayMonths.toFixed(1)} months. No immediate covenant risks detected.`;
     }
 
     return {
@@ -59,7 +116,7 @@ class RiskAgentService {
       dataSources,
       calculations,
       recommendations: [],
-      executiveSummary: `Stress testing confirms ${(calculations.survival_prob * 100 || 98).toFixed(1)}% survival probability under extreme volatility.`,
+      executiveSummary: `Stress testing confirms ${((calculations.survival_prob ?? 0.98) * 100).toFixed(1)}% survival probability for scenario ${(calculations as any).scenario?.id || 'unknown'}.`,
       policyMapping: (calculations as any).policyMapping || [
         { policyId: 'RISK-GEN-001', policyName: 'Standard Risk Monitoring', controlId: 'CTRL-040', framework: 'Internal', status: 'pass', evidence: 'Survival probability > 80%.' }
       ],
@@ -74,7 +131,9 @@ class RiskAgentService {
         timestamp: new Date(),
         inputVersions: {
           macro_params: 'v2026.02',
-          credit_policy: 'doc-id-991'
+          credit_policy: 'doc-id-991',
+          scenario_id: (calculations as any).scenario?.id || 'unknown',
+          scenario_label: (calculations as any).scenario?.label || 'unknown'
         }
       }
     };
@@ -90,6 +149,19 @@ class RiskAgentService {
     const shockRev = data.revenue * 0.5;
     const shockChurn = data.churn * 2.0;
     const shockInterest = 0.08 + 0.03; // 8% base + 300bps
+
+    (calculations as any).scenario = {
+      id: 'black_swan_rev50_churn2_ir300bps',
+      label: 'Black Swan: 50% Rev Drop + 2x Churn + 300bps IR',
+      parameters: {
+        revenueShockPct: -0.5,
+        churnMultiplier: 2.0,
+        interestRateBpsShock: 300,
+      },
+      contingencies: {
+        creditFacilitiesIncluded: false,
+      },
+    };
 
     // Covenant Math
     const ebitda = shockRev - data.opex;
@@ -128,7 +200,9 @@ class RiskAgentService {
     ];
 
     return `**Black Swan Stress Test: Institutional Solvency Report**\n\n` +
-      `**Scenario:** 50% Revenue Shock | 2x Churn Spike | +300bps Interest Rate\n\n` +
+      `**Scenario ID:** ${(calculations as any).scenario.id}\n` +
+      `**Scenario Parameters:** 50% Revenue Shock | 2x Churn Spike | +300bps Interest Rate\n` +
+      `**Contingencies Modeled:** Emergency credit facilities NOT included\n\n` +
       `| Metric | Value | Threshold | Status |\n` +
       `|--------|-------|-----------|--------|\n` +
       `| **DSCR** | **${dscr.toFixed(2)}x** | > 1.25x | ${breachDscr ? '❌ BREACH' : '✅ COMPLIANT'} |\n` +
