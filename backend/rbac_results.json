@@ -1,0 +1,37 @@
+[
+  {
+    "test": "Admin GET users",
+    "success": true,
+    "info": "Found 6 users"
+  },
+  {
+    "test": "Admin GET access requests",
+    "success": true,
+    "info": "Found 2 requests"
+  },
+  {
+    "test": "Finance GET users",
+    "success": true,
+    "info": "Found 6 users"
+  },
+  {
+    "test": "Finance GET access requests",
+    "success": true,
+    "info": "Correctly denied (403)"
+  },
+  {
+    "test": "Finance POST budget (write operation)",
+    "success": true,
+    "info": "Not forbidden (Status: 400)"
+  },
+  {
+    "test": "Viewer GET users",
+    "success": true,
+    "info": "Found 6 users"
+  },
+  {
+    "test": "Viewer POST budget (write operation)",
+    "success": true,
+    "info": "Correctly denied (403)"
+  }
+]

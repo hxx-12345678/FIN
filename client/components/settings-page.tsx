@@ -50,32 +50,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
-// Helper function to get auth token
-const getAuthToken = (): string | null => {
-  if (typeof window === "undefined") return null
-  const token = localStorage.getItem("auth-token")
-  if (token) return token
-  const cookies = document.cookie.split("; ")
-  const authCookie = cookies.find((row) => row.startsWith("auth-token="))
-  if (authCookie) {
-    return authCookie.split("=")[1]
-  }
-  return null
-}
-
-// Helper function to get auth headers
-const getAuthHeaders = (): HeadersInit => {
-  const token = getAuthToken()
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  }
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`
-  }
-  return headers
-}
+// All data is now fetched via cookies - no manual getAuthToken needed locally.
 
 function MFASetupButton() {
   const [open, setOpen] = useState(false)
@@ -185,7 +162,7 @@ export function SettingsPage() {
   useEffect(() => {
     const fetchOrgId = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/auth/me`, {
+        const response = await fetch(`${API_BASE_URL}/auth/me?org_id=${orgId}`, {
           headers: getAuthHeaders(),
           credentials: "include",
         })
@@ -231,7 +208,7 @@ export function SettingsPage() {
 
   const fetchProfile = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/users/profile`, {
+      const response = await fetch(`${API_BASE_URL}/users/profile?org_id=${orgId}`, {
         headers: getAuthHeaders(),
         credentials: "include",
       })
@@ -256,7 +233,7 @@ export function SettingsPage() {
   const fetchOrganization = async () => {
     if (!orgId) return
     try {
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/organization`, {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/organization?org_id=${orgId}`, {
         headers: getAuthHeaders(),
         credentials: "include",
       })
@@ -282,7 +259,7 @@ export function SettingsPage() {
 
   const fetchAppearance = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/users/appearance`, {
+      const response = await fetch(`${API_BASE_URL}/users/appearance?org_id=${orgId}`, {
         headers: getAuthHeaders(),
         credentials: "include",
       })
@@ -306,7 +283,7 @@ export function SettingsPage() {
   const fetchNotificationPreferences = async () => {
     if (!orgId) return
     try {
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/notifications/preferences`, {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/notifications/preferences?org_id=${orgId}`, {
         headers: getAuthHeaders(),
         credentials: "include",
       })
@@ -330,7 +307,7 @@ export function SettingsPage() {
   const fetchLocalization = async () => {
     if (!orgId) return
     try {
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/localization`, {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/localization?org_id=${orgId}`, {
         headers: getAuthHeaders(),
         credentials: "include",
       })
@@ -354,7 +331,7 @@ export function SettingsPage() {
   const fetchApiKey = async () => {
     if (!orgId) return
     try {
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/api-key`, {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/api-key?org_id=${orgId}`, {
         headers: getAuthHeaders(),
         credentials: "include",
       })
@@ -373,7 +350,7 @@ export function SettingsPage() {
     if (!orgId) return
     setLoadingSyncLog(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/sync-audit?limit=50`, {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/sync-audit?limit=50&org_id=${orgId}`, {
         headers: getAuthHeaders(),
         credentials: "include",
       })
@@ -399,7 +376,7 @@ export function SettingsPage() {
     try {
       // Save profile
       try {
-        const response = await fetch(`${API_BASE_URL}/users/profile`, {
+        const response = await fetch(`${API_BASE_URL}/users/profile?org_id=${orgId}`, {
           method: "PUT",
           headers: getAuthHeaders(),
           credentials: "include",
@@ -415,7 +392,7 @@ export function SettingsPage() {
 
       // Save organization (admin only)
       try {
-        const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/organization`, {
+        const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/organization?org_id=${orgId}`, {
           method: "PUT",
           headers: getAuthHeaders(),
           credentials: "include",
@@ -434,7 +411,7 @@ export function SettingsPage() {
 
       // Save appearance
       try {
-        const response = await fetch(`${API_BASE_URL}/users/appearance`, {
+        const response = await fetch(`${API_BASE_URL}/users/appearance?org_id=${orgId}`, {
           method: "PUT",
           headers: getAuthHeaders(),
           credentials: "include",
@@ -450,7 +427,7 @@ export function SettingsPage() {
 
       // Save notification preferences
       try {
-        const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/notifications/preferences`, {
+        const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/notifications/preferences?org_id=${orgId}`, {
           method: "PUT",
           headers: getAuthHeaders(),
           credentials: "include",
@@ -493,7 +470,7 @@ export function SettingsPage() {
   const handleExportData = async () => {
     if (!orgId) return
     try {
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/export-data`, {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/export-data?org_id=${orgId}`, {
         headers: getAuthHeaders(),
         credentials: "include",
       })
@@ -533,7 +510,7 @@ export function SettingsPage() {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/users/password/change`, {
+      const response = await fetch(`${API_BASE_URL}/users/password/change?org_id=${orgId}`, {
         method: "POST",
         headers: getAuthHeaders(),
         credentials: "include",
@@ -563,7 +540,7 @@ export function SettingsPage() {
   const handleRegenerateApiKey = async () => {
     if (!orgId) return
     try {
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/api-key/regenerate`, {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/api-key/regenerate?org_id=${orgId}`, {
         method: "POST",
         headers: getAuthHeaders(),
         credentials: "include",
@@ -589,7 +566,7 @@ export function SettingsPage() {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/users/profile`, {
+      const response = await fetch(`${API_BASE_URL}/users/profile?org_id=${orgId}`, {
         method: "DELETE",
         headers: getAuthHeaders(),
         credentials: "include",

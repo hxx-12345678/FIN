@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Header, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
@@ -8,6 +8,13 @@ import threading
 import time
 
 app = FastAPI(title="FinaPilot Worker API")
+
+# Security: Shared Secret Logic (SOC 2 CC7.1)
+def verify_worker_secret(x_worker_secret: Optional[str] = Header(None)):
+    secret = os.getenv("WORKER_SECRET")
+    if secret and x_worker_secret != secret:
+        raise HTTPException(status_code=403, detail="Invalid worker secret")
+    return x_worker_secret
 
 from jobs import runner as job_runner
 from utils.logger import setup_logger
@@ -48,12 +55,12 @@ class RunJobDirectRequest(BaseModel):
     params: Optional[Dict[str, Any]] = None
 
 
-@app.get("/health")
+@app.get("/health", dependencies=[Depends(verify_worker_secret)])
 def health():
     return {"status": "ok"}
 
 
-@app.get("/status")
+@app.get("/status", dependencies=[Depends(verify_worker_secret)])
 def status():
     """Check worker status including DB connection and polling"""
     try:
@@ -72,7 +79,7 @@ def status():
     }
 
 
-@app.post("/queue_job")
+@app.post("/queue_job", dependencies=[Depends(verify_worker_secret)])
 def queue_job(req: QueueJobRequest):
     logger = setup_logger()
     logger.info(f"📥 Queue job request: {req.jobType} for org {req.orgId}")
@@ -120,7 +127,7 @@ def _run_reserved_job_sync(queue: str = 'default'):
     return job
 
 
-@app.post("/run_next")
+@app.post("/run_next", dependencies=[Depends(verify_worker_secret)])
 def run_next(queue: Optional[str] = 'default', background: Optional[bool] = False, background_tasks: BackgroundTasks = None):
     """Reserve the next job from the given queue and process it.
     If `background=true` the job will be processed in background and the endpoint returns immediately.
@@ -141,7 +148,7 @@ def run_next(queue: Optional[str] = 'default', background: Optional[bool] = Fals
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/run_job_direct")
+@app.post("/run_job_direct", dependencies=[Depends(verify_worker_secret)])
 def run_job_direct(req: RunJobDirectRequest, background: Optional[bool] = False, background_tasks: BackgroundTasks = None):
     """Directly invoke a handler for immediate execution without inserting into DB.
     Note: Many handlers expect DB S3 etc. and may raise errors if environment not configured.
@@ -181,7 +188,7 @@ def run_job_direct(req: RunJobDirectRequest, background: Optional[bool] = False,
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/release_stuck_jobs")
+@app.get("/release_stuck_jobs", dependencies=[Depends(verify_worker_secret)])
 def release_stuck(queue: Optional[str] = 'default'):
     try:
         released = job_runner.release_stuck_jobs(queue)
@@ -221,7 +228,7 @@ class RiskRequest(BaseModel):
     distributions: Dict[str, Dict[str, Any]] # {nodeId: {dist, params}}
     numSimulations: int = 1000
 
-@app.post("/compute/hyperblock")
+@app.post("/compute/hyperblock", dependencies=[Depends(verify_worker_secret)])
 def compute_hyperblock(req: HyperblockComputeRequest):
     """
     High-performance real-time recompute using HyperblockEngine.
@@ -296,7 +303,7 @@ def compute_hyperblock(req: HyperblockComputeRequest):
         }
     }
 
-@app.post("/compute/forecast")
+@app.post("/compute/forecast", dependencies=[Depends(verify_worker_secret)])
 def compute_forecast(req: ForecastRequest):
     """
     Industrial scale forecasting endpoint.
@@ -360,7 +367,7 @@ def compute_forecast(req: ForecastRequest):
         logger.error(f"❌ Forecast failed: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/compute/forecast/backtest")
+@app.post("/compute/forecast/backtest", dependencies=[Depends(verify_worker_secret)])
 def compute_backtest(req: BacktestRequest):
     """
     Accuracy validation via backtesting.
@@ -374,7 +381,7 @@ def compute_backtest(req: BacktestRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/compute/risk")
+@app.post("/compute/risk", dependencies=[Depends(verify_worker_secret)])
 def compute_risk(req: RiskRequest):
     """
     Stochastic risk analysis using Monte Carlo simulations.
@@ -402,7 +409,7 @@ class ReasoningRequest(BaseModel):
     period_a: Optional[int] = None
     period_b: Optional[int] = None
 
-@app.post("/compute/reasoning")
+@app.post("/compute/reasoning", dependencies=[Depends(verify_worker_secret)])
 def compute_reasoning(req: ReasoningRequest):
     """
     Suggests improvements and explains model logic. Includes Waterfall Variance analysis.
@@ -439,7 +446,7 @@ class ScenarioRequest(BaseModel):
     target: str
     overrides: Dict[str, float]
 
-@app.post("/compute/scenario")
+@app.post("/compute/scenario", dependencies=[Depends(verify_worker_secret)])
 def compute_scenario(req: ScenarioRequest):
     """
     Quickly visualizes the impact of changes on a target metric.

@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Loader2 } from "lucide-react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import {
   LineChart,
   Line,
@@ -183,20 +183,15 @@ export function ReportsAnalytics() {
     }
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) return
-
       const response = await fetch(`${API_BASE_URL}/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const userData = await response.json()
@@ -216,16 +211,6 @@ export function ReportsAnalytics() {
 
     setLoading(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        setLoading(false)
-        return
-      }
-
       // Calculate date range based on selected period
       const now = new Date()
       let startDate: Date
@@ -247,12 +232,15 @@ export function ReportsAnalytics() {
       }
 
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/overview`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        setLoading(false)
+        return
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -354,21 +342,16 @@ export function ReportsAnalytics() {
     if (!orgId) return
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) return
-
       // Fetch exports for this org
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/exports`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -403,37 +386,9 @@ export function ReportsAnalytics() {
           setCustomReports(reports)
 
           // Separate scheduled reports (status is "scheduled" or "processing")
-          const scheduled = reports.filter(
-            (r: any) => r.status === "scheduled" || r.status === "processing"
+          setScheduledReports(
+            reports.filter((r: any) => r.status === "scheduled" || r.status === "processing")
           )
-          setScheduledReports(scheduled)
-        }
-      } else {
-        // Fallback to jobs endpoint if exports endpoint doesn't exist
-        const jobsResponse = await fetch(`${API_BASE_URL}/jobs?orgId=${orgId}&jobType=export_pdf,export_pptx,export_csv&limit=50`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-        })
-
-        if (jobsResponse.ok) {
-          const jobsResult = await jobsResponse.json()
-          if (jobsResult.ok && jobsResult.data) {
-            const reports = jobsResult.data
-              .filter((job: any) => job.jobType?.startsWith("export_"))
-              .map((job: any, index: number) => ({
-                id: job.id,
-                name: `Report ${index + 1}`,
-                type: "Custom",
-                createdBy: "System",
-                lastModified: job.createdAt ? new Date(job.createdAt).toLocaleString() : "Unknown",
-                views: 0,
-                status: job.status === "done" ? "published" : job.status === "pending" ? "draft" : "scheduled",
-              }))
-            setCustomReports(reports)
-          }
         }
       }
     } catch (error) {
@@ -448,22 +403,15 @@ export function ReportsAnalytics() {
     }
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        toast.error("Authentication required")
-        return
-      }
-
       const response = await fetch(`${API_BASE_URL}/exports/${exportId}/download`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const blob = await response.blob()
@@ -492,30 +440,22 @@ export function ReportsAnalytics() {
     }
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        toast.error("Authentication required")
-        return
-      }
-
       toast.info("Creating shareable link...")
 
       const response = await fetch(`${API_BASE_URL}/exports/${exportId}/shareable-link`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
           expiresInHours: 168, // 7 days default
           maxAccessCount: null, // Unlimited
         }),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -633,25 +573,16 @@ export function ReportsAnalytics() {
 
     setIsGenerating(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        toast.error("Authentication required")
-        setIsGenerating(false)
-        return
-      }
-
       // Get latest model run to generate report from
       const modelsResponse = await fetch(`${API_BASE_URL}/orgs/${orgId}/models`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (modelsResponse.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (modelsResponse.ok) {
         const modelsResult = await modelsResponse.json()
@@ -659,13 +590,15 @@ export function ReportsAnalytics() {
           const firstModel = modelsResult.models[0]
 
           // Get latest run for this model
-          const runsResponse = await fetch(`${API_BASE_URL}/models/${firstModel.id}/runs`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
+          const runsResponse = await fetch(`${API_BASE_URL}/models/${firstModel.id}/runs?org_id=${orgId}`, {
+            headers: getAuthHeaders(),
             credentials: "include",
           })
+
+          if (runsResponse.status === 401) {
+            handleUnauthorized()
+            throw new Error("Your session has expired. Please log in again.")
+          }
 
           if (runsResponse.ok) {
             const runsResult = await runsResponse.json()
@@ -678,16 +611,18 @@ export function ReportsAnalytics() {
               // Create export with template information
               const exportResponse = await fetch(`${API_BASE_URL}/model-runs/${latestRun.id}/export`, {
                 method: "POST",
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                  "Content-Type": "application/json",
-                },
+                headers: getAuthHeaders(),
                 credentials: "include",
                 body: JSON.stringify({
                   type: exportType,
                   template: selectedTemplate, // Pass template type for context-specific generation
                 }),
               })
+
+              if (exportResponse.status === 401) {
+                handleUnauthorized()
+                throw new Error("Your session has expired. Please log in again.")
+              }
 
               if (exportResponse.ok) {
                 const exportResult = await exportResponse.json()

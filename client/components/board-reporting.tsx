@@ -38,7 +38,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { ExportProgressModal } from "./exports/export-progress-modal"
 import { ReportApprovalManager } from "./reports/report-approval-manager"
 import { toast } from "sonner"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { useOrg } from "@/lib/org-context"
 
 interface BoardTemplate {
@@ -215,13 +215,15 @@ export function BoardReporting() {
     }
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie.split("; ").find((row) => row.startsWith("auth-token="))?.split("=")[1]
-      if (!token) return
-
       const response = await fetch(`${API_BASE_URL}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const userData = await response.json()
@@ -238,13 +240,17 @@ export function BoardReporting() {
 
   const fetchBoardTemplates = async () => {
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie.split("; ").find((row) => row.startsWith("auth-token="))?.split("=")[1]
-      if (!token || !orgId) return
+      if (!orgId) return
 
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/board-reports/templates`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -265,22 +271,28 @@ export function BoardReporting() {
 
     setLoading(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie.split("; ").find((row) => row.startsWith("auth-token="))?.split("=")[1]
-      if (!token) {
+      let response = await fetch(`${API_BASE_URL}/orgs/${orgId}/board-reports/metrics`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
+
+      if (response.status === 401) {
+        handleUnauthorized()
         setLoading(false)
         return
       }
 
-      let response = await fetch(`${API_BASE_URL}/orgs/${orgId}/board-reports/metrics`, {
-        headers: { Authorization: `Bearer ${token}` },
-        credentials: "include",
-      })
-
       if (!response.ok) {
         response = await fetch(`${API_BASE_URL}/orgs/${orgId}/investor-dashboard`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: getAuthHeaders(),
           credentials: "include",
         })
+      }
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        setLoading(false)
+        return
       }
 
       if (response.ok) {
@@ -307,9 +319,13 @@ export function BoardReporting() {
         }
 
         const chartResponse = await fetch(`${API_BASE_URL}/orgs/${orgId}/investor-dashboard`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: getAuthHeaders(),
           credentials: "include",
         })
+
+        if (chartResponse.status === 401) {
+          handleUnauthorized()
+        }
 
         if (chartResponse.ok) {
           const chartResult = await chartResponse.json()
@@ -337,13 +353,15 @@ export function BoardReporting() {
     if (!orgId) return
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie.split("; ").find((row) => row.startsWith("auth-token="))?.split("=")[1]
-      if (!token) return
-
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/exports?type=pptx,pdf&limit=10`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -370,13 +388,15 @@ export function BoardReporting() {
     if (!orgId) return
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie.split("; ").find((row) => row.startsWith("auth-token="))?.split("=")[1]
-      if (!token) return
-
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/board-reports/schedules`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -395,12 +415,6 @@ export function BoardReporting() {
 
     setLoadingAiContent(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie.split("; ").find((row) => row.startsWith("auth-token="))?.split("=")[1]
-      if (!token) {
-        setLoadingAiContent(false)
-        return
-      }
-
       // Build context with template-specific information
       const template = templates.find(t => t.id === selectedTemplate)
       const templateName = template?.name || selectedTemplate
@@ -415,10 +429,7 @@ export function BoardReporting() {
 
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/ai-plans`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
           goal: `Generate board report content for ${templateName}. Create an executive summary, key highlights, and areas of focus based on the selected metrics and reporting period.`,
@@ -427,6 +438,11 @@ export function BoardReporting() {
         // Add timeout signal to prevent hanging requests
         signal: AbortSignal.timeout(55000), // 55 second timeout (less than server's 60s)
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -525,20 +541,9 @@ export function BoardReporting() {
     setShowExportModal(true)
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie.split("; ").find((row) => row.startsWith("auth-token="))?.split("=")[1]
-      if (!token) {
-        toast.error("Authentication required")
-        setIsGenerating(false)
-        setShowExportModal(false)
-        return
-      }
-
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/board-reports`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
           template: selectedTemplate,
@@ -551,6 +556,11 @@ export function BoardReporting() {
           reportingPeriod,
         }),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -568,12 +578,16 @@ export function BoardReporting() {
             const pollForCompletion = async () => {
               try {
                 const statusResponse = await fetch(`${API_BASE_URL}/exports/${exportId}`, {
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                  },
+                  headers: getAuthHeaders(),
                   credentials: "include",
                 })
+
+                if (statusResponse.status === 401) {
+                  handleUnauthorized()
+                  setIsGenerating(false)
+                  setShowExportModal(false)
+                  return
+                }
 
                 if (statusResponse.ok) {
                   const statusData = await statusResponse.json()
@@ -636,15 +650,9 @@ export function BoardReporting() {
     if (!orgId) return
     setSavingSchedule(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie.split("; ").find((row) => row.startsWith("auth-token="))?.split("=")[1]
-      if (!token) return
-
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/board-reports/schedules`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
           name: scheduleName,
@@ -663,6 +671,11 @@ export function BoardReporting() {
           includeSections,
         }),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Unauthorized")
+      }
 
       if (response.ok) {
         toast.success("Schedule saved")
@@ -683,14 +696,16 @@ export function BoardReporting() {
   const handleScheduleDelete = async (scheduleId: string) => {
     if (!orgId) return
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie.split("; ").find((row) => row.startsWith("auth-token="))?.split("=")[1]
-      if (!token) return
-
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/board-reports/schedules/${scheduleId}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         toast.success("Schedule cancelled")
@@ -706,17 +721,16 @@ export function BoardReporting() {
   const handleShareReport = async (exportId: string) => {
     if (!orgId) return
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie.split("; ").find((row) => row.startsWith("auth-token="))?.split("=")[1]
-      if (!token) return
-
       const response = await fetch(`${API_BASE_URL}/exports/${exportId}/shareable-link`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -735,13 +749,15 @@ export function BoardReporting() {
   const handleDownloadReport = async (exportId: string, exportType: string) => {
     if (!orgId) return
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie.split("; ").find((row) => row.startsWith("auth-token="))?.split("=")[1]
-      if (!token) return
-
       const response = await fetch(`${API_BASE_URL}/exports/${exportId}/download`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const blob = await response.blob()

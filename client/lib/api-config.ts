@@ -13,66 +13,63 @@ export const getApiBaseUrl = (): string => {
   }
   // Always append /api/v1 if not present
   const apiUrl = `${cleanUrl}/api/v1`
-  // Debug log in development
-  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-    console.log('🔧 API Config:', { baseUrl, cleanUrl, apiUrl })
-  }
   return apiUrl
 }
 
 export const API_BASE_URL = getApiBaseUrl()
 
 /**
- * Get authentication token from localStorage or cookies
- * Returns null if no valid token is found
+ * Get authentication token - DEPRECATED for security.
+ * Modern approach uses HttpOnly cookies which are not accessible by JS.
+ * This is kept for backward compatibility with scripts that might use it,
+ * but the backend now prioritizes HttpOnly cookies.
  */
 export const getAuthToken = (): string | null => {
   if (typeof window === "undefined") return null
-  
-  // Try localStorage first
-  let token = localStorage.getItem("auth-token")
-  
-  // If token from localStorage is empty or null, try cookies
-  if (!token || token.trim().length === 0) {
-    const authCookie = document.cookie
-      .split("; ")
-      .find((row) => row.startsWith("auth-token="))
-    if (authCookie) {
-      token = authCookie.split("=")[1]
-    }
-  }
-
-  // Clean token (remove any whitespace) and return
-  return token?.trim() || null
+  return localStorage.getItem("auth-token")
 }
 
 /**
  * Get authentication headers for API requests
+ * Note: Authorization header is now optional as HttpOnly cookies 
+ * are automatically sent via credentials: "include"
  */
 export const getAuthHeaders = (): HeadersInit => {
   const token = getAuthToken()
   const headers: HeadersInit = {
     "Content-Type": "application/json",
   }
-  if (token) {
+
+  // Only add Bearer token if it exists in localStorage (legacy/transition)
+  if (token && token.trim().length > 0) {
     headers["Authorization"] = `Bearer ${token}`
   }
+
   return headers
 }
 
 /**
- * Handle 401 Unauthorized errors by clearing tokens and redirecting to login
+ * Handle 401 Unauthorized errors by clearing local state and cookies
  */
 export const handleUnauthorized = (): void => {
-  // Clear tokens
+  // Clear local markers
   localStorage.removeItem("auth-token")
   localStorage.removeItem("refresh-token")
   localStorage.removeItem("orgId")
-  
-  // Clear auth cookie
+  localStorage.removeItem("is-logged-in")
+
+  // Attempt to clear auth cookie (browser will only allow if not HttpOnly)
   document.cookie = "auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
-  
+
   // Dispatch event to trigger login modal or redirect
   window.dispatchEvent(new CustomEvent("auth-required", { detail: { reason: "Token expired or invalid" } }))
+
+  // Redirect to login if on protected route
+  if (typeof window !== "undefined" && !window.location.pathname.startsWith('/login')) {
+    // Small delay to allow toasts/feedback
+    setTimeout(() => {
+      window.location.href = '/login'
+    }, 500)
+  }
 }
 

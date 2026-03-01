@@ -6,6 +6,7 @@ import { ValidationError, UnauthorizedError, NotFoundError } from '../utils/erro
 import { validateEmail, validatePassword, validateOrgName, sanitizeString } from '../utils/validation';
 import { config } from '../config/env';
 import prisma from '../config/database';
+import { logger } from '../utils/logger';
 
 export const authService = {
   signup: async (email: string, password: string, orgName: string, name?: string) => {
@@ -17,7 +18,7 @@ export const authService = {
 
       // Normalize email (lowercase, trim)
       const normalizedEmail = email.trim().toLowerCase();
-      
+
       // Extract domain from email
       const emailParts = normalizedEmail.split('@');
       if (emailParts.length !== 2) {
@@ -36,7 +37,6 @@ export const authService = {
 
       // Check for existing orgs with users from same domain
       // Find all users with emails ending in the same domain
-      console.log(`[Signup] Checking for users with domain: ${domain}`);
       const usersWithSameDomain = await prisma.user.findMany({
         where: {
           email: { endsWith: `@${domain}` },
@@ -50,11 +50,11 @@ export const authService = {
         take: 100 // Limit to prevent performance issues
       });
 
-      console.log(`[Signup] Found ${usersWithSameDomain.length} users with domain ${domain}`);
-      
+      logger.debug('[Signup] Domain user lookup completed', { count: usersWithSameDomain.length });
+
       // Filter to only users that have at least one org role
       const usersWithRoles = usersWithSameDomain.filter(user => user.roles && user.roles.length > 0);
-      console.log(`[Signup] Found ${usersWithRoles.length} users with org roles`);
+      logger.debug('[Signup] Domain users with org roles filtered', { count: usersWithRoles.length });
 
       // Extract unique org IDs from users with same domain
       const orgIdsWithSameDomain = new Set<string>();
@@ -64,13 +64,12 @@ export const authService = {
         });
       });
 
-      console.log(`[Signup] Found ${orgIdsWithSameDomain.size} orgs with same domain`);
+      logger.debug('[Signup] Domain org aggregation completed', { count: orgIdsWithSameDomain.size });
 
       // If orgs with same domain exist, create access request instead of new org
       if (orgIdsWithSameDomain.size > 0) {
-        console.log(`[Signup] Same domain detected, creating access request instead of new org`);
         const targetOrgId = Array.from(orgIdsWithSameDomain)[0]; // Use first matching org
-        
+
         // Check if accessRequest model exists and table exists in database
         try {
           // Try to check if access request already exists
@@ -103,7 +102,7 @@ export const authService = {
               INSERT INTO access_requests (id, org_id, email, domain, status, requested_at)
               VALUES (gen_random_uuid(), ${targetOrgId}::uuid, ${normalizedEmail}, ${domain}, 'pending', NOW())
             `;
-            console.log(`[Signup] ✅ Access request created for ${normalizedEmail} to org ${targetOrgId}`);
+            logger.info('[Signup] Access request created');
 
             // Return special response indicating access request created
             return {
@@ -116,8 +115,8 @@ export const authService = {
           } catch (dbError: any) {
             // If access_requests table doesn't exist, log warning and continue with normal signup
             const errorMsg = dbError.message || String(dbError);
-            if (errorMsg.includes('access_requests') || errorMsg.includes('does not exist') || 
-                dbError.code === '42P01') { // PostgreSQL error code for table doesn't exist
+            if (errorMsg.includes('access_requests') || errorMsg.includes('does not exist') ||
+              dbError.code === '42P01') { // PostgreSQL error code for table doesn't exist
               console.warn(`[Signup] ⚠️ AccessRequest table not available: ${errorMsg}`);
               console.warn('[Signup] Falling back to normal signup (creating new org)');
               // Continue with normal signup flow (fall through)
@@ -131,7 +130,7 @@ export const authService = {
           // If access_requests table doesn't exist, log warning and continue with normal signup
           const errorMsg = error.message || String(error);
           if (errorMsg.includes('access_requests') || errorMsg.includes('does not exist') ||
-              error.code === '42P01') {
+            error.code === '42P01') {
             console.warn(`[Signup] ⚠️ AccessRequest table not available: ${errorMsg}`);
             console.warn('[Signup] Falling back to normal signup (creating new org)');
             // Continue with normal signup flow (fall through)
@@ -189,39 +188,39 @@ export const authService = {
         throw new Error('JWT_SECRET is not configured. Please set JWT_SECRET environment variable.');
       }
 
-      const token = generateToken({ 
-        userId: result.user.id, 
+      const token = generateToken({
+        userId: result.user.id,
         email: result.user.email,
         orgId: result.org.id,
       });
-      const refreshToken = generateRefreshToken({ 
-        userId: result.user.id, 
+      const refreshToken = generateRefreshToken({
+        userId: result.user.id,
         email: result.user.email,
         orgId: result.org.id,
       });
 
-      return { 
+      return {
         user: {
           id: result.user.id,
           email: result.user.email,
           name: result.user.name,
           isActive: result.user.isActive,
           createdAt: result.user.createdAt,
-        }, 
+        },
         org: {
           id: result.org.id,
           name: result.org.name,
           createdAt: result.org.createdAt,
         },
-        token, 
-        refreshToken 
+        token,
+        refreshToken
       };
     } catch (error: any) {
       // Re-throw ValidationError and other AppErrors as-is
       if (error instanceof ValidationError || error instanceof UnauthorizedError || error instanceof NotFoundError) {
         throw error;
       }
-      
+
       // Wrap unexpected errors with more context
       console.error('Unexpected error in signup:', error);
       throw new Error(`Signup failed: ${error.message || 'Unknown error'}`);
@@ -269,25 +268,28 @@ export const authService = {
     const orgId = userRole?.orgId;
 
     // Generate tokens
-    const token = generateToken({ 
-      userId: user.id, 
+    const token = generateToken({
+      userId: user.id,
       email: user.email,
       orgId: orgId,
     });
-    const refreshToken = generateRefreshToken({ 
-      userId: user.id, 
+    const refreshToken = generateRefreshToken({
+      userId: user.id,
       email: user.email,
       orgId: orgId,
     });
 
-    return { 
+    // Remove sensitive data before returning
+    const { passwordHash, ...safeUser } = user;
+
+    return {
       user: {
-        ...user,
+        ...safeUser,
         orgRoles: user.roles // Map for test script compatibility
-      }, 
-      token, 
-      refreshToken, 
-      orgId 
+      },
+      token,
+      refreshToken,
+      orgId
     };
   },
 
@@ -311,14 +313,28 @@ export const authService = {
         where: { userId: user.id },
       });
 
-      // Generate new access token
+      // Generate new tokens (rotation)
       const token = generateToken({
         userId: user.id,
         email: user.email,
         orgId: userRole?.orgId || payload.orgId,
       });
 
-      return { token };
+      const newRefreshToken = generateRefreshToken({
+        userId: user.id,
+        email: user.email,
+        orgId: userRole?.orgId || payload.orgId,
+      });
+
+      return {
+        token,
+        refreshToken: newRefreshToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+        }
+      };
     } catch (error) {
       throw new UnauthorizedError('Invalid or expired refresh token');
     }
@@ -349,7 +365,7 @@ export const authService = {
 
     // Check if user already exists
     let user = await userRepository.findByEmail(invitation.email);
-    
+
     if (!user) {
       // Create new user
       const passwordHash = await hashPassword(password);
@@ -405,8 +421,11 @@ export const authService = {
       orgId: invitation.orgId,
     });
 
+    // Remove sensitive data before returning
+    const { passwordHash: _ph, ...safeUser } = user;
+
     return {
-      user,
+      user: safeUser,
       org: invitation.org,
       token: accessToken,
       refreshToken,
@@ -422,7 +441,7 @@ export const authService = {
     // Get all user roles with orgs
     const roles = await prisma.userOrgRole.findMany({
       where: { userId },
-      include: { 
+      include: {
         org: {
           select: {
             id: true,

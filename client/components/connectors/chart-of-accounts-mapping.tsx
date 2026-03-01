@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Loader2, Save, Download, Upload, AlertCircle, ArrowRight } from "lucide-react"
 import { toast } from "sonner"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface SourceAccount {
   id: string
@@ -51,14 +51,17 @@ export function ChartOfAccountsMapping({ connectorId }: { connectorId: string })
       const [sourceRes, targetRes, templatesRes] = await Promise.all([
         fetch(`${API_BASE_URL}/connectors/${connectorId}/accounts`, {
           method: "GET",
+          headers: getAuthHeaders(),
           credentials: "include",
         }),
         fetch(`${API_BASE_URL}/chart-of-accounts?org_id=${localStorage.getItem("orgId") || ""}`, {
           method: "GET",
+          headers: getAuthHeaders(),
           credentials: "include",
         }),
         fetch(`${API_BASE_URL}/connectors/mapping-templates`, {
           method: "GET",
+          headers: getAuthHeaders(),
           credentials: "include",
         }),
       ])

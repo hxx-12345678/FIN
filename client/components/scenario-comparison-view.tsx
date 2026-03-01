@@ -9,7 +9,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { TrendingUp, TrendingDown, Minus, Download, ArrowUpRight, ArrowDownRight, Loader2 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface ComparisonData {
   id: string
@@ -122,23 +122,16 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
 
     setLoading(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
+      const response = await fetch(`${API_BASE_URL}/models/${modelId}/snapshots?org_id=${orgId}`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
 
-      if (!token) {
+      if (response.status === 401) {
+        handleUnauthorized()
         setLoading(false)
         return
       }
-
-      const response = await fetch(`${API_BASE_URL}/models/${modelId}/snapshots?org_id=${orgId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-      })
 
       if (response.ok) {
         const result = await response.json()
@@ -208,24 +201,15 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
     }
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        toast.error("Authentication required")
-        return
-      }
-
-      // Get comparison data
       const response = await fetch(`${API_BASE_URL}/scenarios/${baseScenario}/comparison?org_id=${orgId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const result = await response.json()

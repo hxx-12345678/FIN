@@ -1,10 +1,13 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import { config } from './config/env';
 import { errorHandler } from './middlewares/errorHandler';
 import { logger } from './utils/logger';
+import { redact } from './utils/redact';
 import prisma from './config/database';
 
 // Routes
@@ -84,8 +87,8 @@ const isOriginAllowed = (origin: string | undefined): boolean => {
     return true;
   }
 
-  // Allow all Vercel deployments (production and preview)
-  if (origin.endsWith('.vercel.app')) {
+  // Allow all Vercel deployments ONLY in development or for specific preview patterns
+  if (config.nodeEnv !== 'production' && origin.endsWith('.vercel.app')) {
     return true;
   }
 
@@ -130,10 +133,10 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-eval'", "'unsafe-inline'", "https://va.vercel-scripts.com"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", 'data:', 'https:'],
-      connectSrc: ["'self'", ...allowedOrigins],
+      connectSrc: ["'self'", ...allowedOrigins, "https://fin-plum.vercel.app", "https://finapilot-mvp.vercel.app"],
       fontSrc: ["'self'", 'https://fonts.gstatic.com'],
       objectSrc: ["'none'"],
       frameAncestors: ["'none'"],
@@ -165,13 +168,37 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(cookieParser());
+
+// Global Rate Limiter (SOC 2 CC7.1 - Cyber Threat Protection)
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1000, // limit each IP to 1000 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many requests from this IP, please try again after 15 minutes',
+  skip: (req) => config.nodeEnv === 'development', // Skip in development for easier testing
+});
+
+// Stricter Auth Rate Limiter
+const authLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20, // limit each IP to 20 login/signup attempts per hour
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many authentication attempts, please try again after an hour',
+});
+
+app.use('/api', globalLimiter);
+app.use('/api/v1/auth/login', authLimiter);
+app.use('/api/v1/auth/signup', authLimiter);
 
 // Request logging middleware (development only)
 if (config.nodeEnv === 'development') {
   app.use((req, res, next) => {
     logger.info(`${req.method} ${req.path}`, {
       query: Object.keys(req.query).length > 0 ? req.query : undefined,
-      body: req.method !== 'GET' && Object.keys(req.body || {}).length > 0 ? req.body : undefined,
+      body: req.method !== 'GET' && Object.keys(req.body || {}).length > 0 ? redact(req.body) : undefined,
     });
     next();
   });
@@ -182,7 +209,7 @@ app.get('/health', async (req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
 
-    // Check critical environment variables
+    // Check critical environment variables (do not expose actual values)
     const envCheck = {
       database: !!config.databaseUrl,
       jwtSecret: !!config.jwtSecret,
@@ -197,7 +224,9 @@ app.get('/health', async (req, res) => {
         database: 'connected',
         api: 'running',
       },
-      environment: envCheck,
+      environment: process.env.NODE_ENV === 'production'
+        ? { database: envCheck.database, jwtSecret: envCheck.jwtSecret }
+        : envCheck,
       version: '1.0.0',
     });
   } catch (error) {

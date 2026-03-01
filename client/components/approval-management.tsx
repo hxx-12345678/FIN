@@ -19,7 +19,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { getUserOrgId } from "@/lib/user-data-check"
-import { API_BASE_URL, getAuthToken, getAuthHeaders } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders } from "@/lib/api-config"
 
 interface ApprovalRequest {
   id: string;
@@ -76,7 +76,8 @@ export function ApprovalManagement() {
     try {
       setLoading(true)
       const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/approvals/pending`, {
-        headers: getAuthHeaders()
+        headers: getAuthHeaders(),
+        credentials: "include",
       })
       const data = await res.json()
       if (data.ok) {
@@ -94,7 +95,8 @@ export function ApprovalManagement() {
     try {
       setLoadingHistory(true)
       const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/approvals`, {
-        headers: getAuthHeaders()
+        headers: getAuthHeaders(),
+        credentials: "include",
       })
       const data = await res.json()
       if (data.ok) {

@@ -25,7 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { useOrg } from "@/lib/org-context"
 
 // Scenario templates - static list for quick creation
@@ -181,20 +181,15 @@ export function ScenarioPlanning() {
     }
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) return
-
       const response = await fetch(`${API_BASE_URL}/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const userData = await response.json()
@@ -214,23 +209,16 @@ export function ScenarioPlanning() {
 
     setLoading(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/models`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
 
-      if (!token) {
+      if (response.status === 401) {
+        handleUnauthorized()
         setLoading(false)
         return
       }
-
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/models`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-      })
 
       if (response.ok) {
         const result = await response.json()
@@ -254,23 +242,16 @@ export function ScenarioPlanning() {
 
     setLoadingScenarios(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
+      const response = await fetch(`${API_BASE_URL}/models/${selectedModelId}/scenarios?org_id=${orgId}`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
 
-      if (!token) {
+      if (response.status === 401) {
+        handleUnauthorized()
         setLoadingScenarios(false)
         return
       }
-
-      const response = await fetch(`${API_BASE_URL}/models/${selectedModelId}/scenarios?org_id=${orgId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-      })
 
       if (response.ok) {
         const result = await response.json()
@@ -307,30 +288,22 @@ export function ScenarioPlanning() {
 
     setIsCreating(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        toast.error("Authentication required")
-        setIsCreating(false)
-        return
-      }
-
       const response = await fetch(`${API_BASE_URL}/models/${selectedModelId}/scenarios?org_id=${orgId}`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
           name: scenarioName,
           scenarioType,
           overrides,
+          orgId, // Explicitly include in body
         }),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -379,24 +352,10 @@ export function ScenarioPlanning() {
     setAiResponse("")
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        toast.error("Authentication required")
-        setIsProcessing(false)
-        return
-      }
-
       // Use AI CFO to process the query
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/ai-plans`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
           goal: `Analyze this scenario: ${nlpQuery}. Provide detailed financial impact analysis including:
@@ -409,6 +368,11 @@ export function ScenarioPlanning() {
 Format the response in clear, professional English with specific numbers and percentages where applicable.`,
         }),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -506,23 +470,9 @@ Format the response in clear, professional English with specific numbers and per
     }
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        toast.error("Authentication required")
-        return
-      }
-
-      // Create a shareable snapshot/export
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/decision-snapshots`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
           name: `Scenario Planning - ${new Date().toLocaleDateString()}`,

@@ -22,7 +22,7 @@ import {
     RefreshCw
 } from "lucide-react"
 import { toast } from "sonner"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface Driver {
     id: string
@@ -67,16 +67,21 @@ export function DriverManagement({ orgId, modelId, onRecompute }: {
     const fetchData = async () => {
         setLoading(true)
         try {
-            const token = localStorage.getItem("auth-token")
-
             const [driversRes, scenariosRes] = await Promise.all([
-                fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/drivers`, {
-                    headers: { Authorization: `Bearer ${token}` }
+                fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/drivers?org_id=${orgId}`, {
+                    headers: getAuthHeaders(),
+                    credentials: "include",
                 }),
-                fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/scenarios`, {
-                    headers: { Authorization: `Bearer ${token}` }
+                fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/scenarios?org_id=${orgId}`, {
+                    headers: getAuthHeaders(),
+                    credentials: "include",
                 })
             ])
+
+            if (driversRes.status === 401 || scenariosRes.status === 401) {
+                handleUnauthorized()
+                return
+            }
 
             const driversData = await driversRes.json()
             const scenariosData = await scenariosRes.json()
@@ -104,15 +109,17 @@ export function DriverManagement({ orgId, modelId, onRecompute }: {
         }
 
         try {
-            const token = localStorage.getItem("auth-token")
-            const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/drivers`, {
+            const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/drivers?org_id=${orgId}`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
-                },
+                headers: getAuthHeaders(),
+                credentials: "include",
                 body: JSON.stringify(newDriver)
             })
+
+            if (res.status === 401) {
+                handleUnauthorized()
+                return
+            }
             const data = await res.json()
             if (data.ok) {
                 setDrivers([...drivers, data.driver])
@@ -132,13 +139,13 @@ export function DriverManagement({ orgId, modelId, onRecompute }: {
 
         setRecomputing(true)
         try {
-            const token = localStorage.getItem("auth-token")
-            const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/recompute`, {
+            const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/recompute?org_id=${orgId}`, {
                 method: 'POST',
                 headers: {
+                    ...getAuthHeaders(),
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
                 },
+                credentials: "include",
                 body: JSON.stringify({
                     update: {
                         nodeId: driverId,
@@ -147,6 +154,13 @@ export function DriverManagement({ orgId, modelId, onRecompute }: {
                     }
                 })
             })
+
+            if (res.status === 401) {
+                handleUnauthorized()
+                setRecomputing(false)
+                return
+            }
+
             const data = await res.json()
             if (data.ok && onRecompute) {
                 onRecompute({

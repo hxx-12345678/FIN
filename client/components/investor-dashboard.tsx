@@ -24,7 +24,7 @@ import { TrendingUp, TrendingDown, Target, Share, Download, Eye, MessageSquare, 
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { FinancialTermTooltip } from "./financial-term-tooltip"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { useOrg } from "@/lib/org-context"
 
 interface DashboardData {
@@ -84,20 +84,15 @@ export function InvestorDashboard() {
 
     // Fetch from /auth/me endpoint
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) return null
-
       const response = await fetch(`${API_BASE_URL}/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return null
+      }
 
       if (response.ok) {
         const userData = await response.json()
@@ -128,22 +123,15 @@ export function InvestorDashboard() {
       setOrgId(currentOrgId)
 
       // Fetch dashboard data
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found. Please log in.")
-      }
-
       const response = await fetch(`${API_BASE_URL}/orgs/${currentOrgId}/investor-dashboard`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))

@@ -14,7 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Loader2, AlertCircle, ArrowRight } from "lucide-react"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { toast } from "sonner"
 
 interface StagedChange {
@@ -72,23 +72,16 @@ export function ApprovalModal({ changeId, open, onClose }: ApprovalModalProps) {
         throw new Error("Organization ID not found")
       }
 
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found")
-      }
-
       // Use the same endpoint as use-staged-changes hook (with /api/v1 prefix)
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/ai-plans`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (!response.ok) {
         throw new Error("Failed to fetch change details")
@@ -136,13 +129,16 @@ export function ApprovalModal({ changeId, open, onClose }: ApprovalModalProps) {
           const approvalsRes = await fetch(
             `${API_BASE_URL}/orgs/${orgId}/approvals?type=ai_cfo_staged_change&objectType=aicfo_plan&objectId=${foundChange.planId}`,
             {
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-              },
+              headers: getAuthHeaders(),
               credentials: "include",
             }
           )
+
+          if (approvalsRes.status === 401) {
+            handleUnauthorized()
+            return
+          }
+
           if (approvalsRes.ok) {
             const approvalsJson = await approvalsRes.json()
             if (approvalsJson?.ok && Array.isArray(approvalsJson.data)) {
@@ -182,25 +178,13 @@ export function ApprovalModal({ changeId, open, onClose }: ApprovalModalProps) {
         throw new Error("Organization ID not found")
       }
 
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found")
-      }
-
       if (!change.planId) {
         throw new Error("Plan ID not found for this change")
       }
 
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/approvals`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
           type: "ai_cfo_staged_change",
@@ -221,6 +205,11 @@ export function ApprovalModal({ changeId, open, onClose }: ApprovalModalProps) {
           comment: "AI CFO staged change submitted for approval",
         }),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))

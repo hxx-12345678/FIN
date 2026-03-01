@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { redact } from '../utils/redact';
 
 export const auditService = {
   log: async (params: {
@@ -9,6 +10,9 @@ export const auditService = {
     objectId?: string;
     metaJson?: any;
   }) => {
+    // REDACT sensitive info before storing in audit logs (SOC 2 CC7.1)
+    const redactedMeta = params.metaJson ? redact(params.metaJson) : undefined;
+
     return await prisma.auditLog.create({
       data: {
         actorUserId: params.actorUserId,
@@ -16,7 +20,7 @@ export const auditService = {
         action: params.action,
         objectType: params.objectType,
         objectId: params.objectId,
-        metaJson: params.metaJson,
+        metaJson: redactedMeta,
       },
     });
   },

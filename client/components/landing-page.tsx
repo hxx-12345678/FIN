@@ -886,8 +886,7 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
         onOpenChange={setAuthModalOpen}
         defaultMode={authMode}
         onSuccess={() => {
-          const token = localStorage.getItem("auth-token")
-          if (token) onGetStarted()
+          onGetStarted()
         }}
       />
     </div>

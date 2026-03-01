@@ -14,7 +14,7 @@ import { FinancialTermTooltip } from "./financial-term-tooltip"
 import { useSearchParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
 import Link from "next/link"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { useOrg } from "@/lib/org-context"
 
 // All data is now fetched dynamically from backend - no static fallbacks
@@ -221,19 +221,9 @@ export function AIForecasting() {
     if (!selectedModelId || !orgId) return
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) return
-
       // Get all model runs to calculate metrics
-      const response = await fetch(`${API_BASE_URL}/models/${selectedModelId}/runs`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+      const response = await fetch(`${API_BASE_URL}/models/${selectedModelId}/runs?org_id=${orgId}`, {
+        headers: getAuthHeaders(),
         credentials: "include",
       })
 
@@ -394,20 +384,15 @@ export function AIForecasting() {
         return
       }
 
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) return
-
       const response = await fetch(`${API_BASE_URL}/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const userData = await response.json()
@@ -427,23 +412,16 @@ export function AIForecasting() {
 
     try {
       setLoading(true)
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/models`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
 
-      if (!token) {
+      if (response.status === 401) {
+        handleUnauthorized()
         setLoading(false)
         return
       }
-
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/models`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-      })
 
       if (response.ok) {
         const result = await response.json()
@@ -479,20 +457,15 @@ export function AIForecasting() {
     if (!selectedModelId || !orgId) return
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) return
-
-      const response = await fetch(`${API_BASE_URL}/models/${selectedModelId}/runs`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+      const response = await fetch(`${API_BASE_URL}/models/${selectedModelId}/runs?org_id=${orgId}`, {
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -593,20 +566,15 @@ export function AIForecasting() {
 
     try {
       setLoadingScenarios(true)
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) return
-
       const response = await fetch(`${API_BASE_URL}/models/${selectedModelId}/scenarios?org_id=${orgId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -644,12 +612,6 @@ export function AIForecasting() {
 
     try {
       setLoadingInsights(true)
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) return
 
       const summaryForInsightsRaw = latestRun?.summaryJson
       const summaryForInsights = latestRun
@@ -680,10 +642,7 @@ Use the model run data to provide specific, data-driven insights about the forec
         // Generate AI insights based on model run
         const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/ai-plans`, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+          headers: getAuthHeaders(),
           credentials: "include",
           body: JSON.stringify({
             goal: forecastGoal,
@@ -696,6 +655,11 @@ Use the model run data to provide specific, data-driven insights about the forec
             },
           }),
         })
+
+        if (response.status === 401) {
+          handleUnauthorized()
+          return
+        }
 
         if (response.ok) {
           const result = await response.json()
@@ -915,12 +879,14 @@ Use the model run data to provide specific, data-driven insights about the forec
         } else {
           // If API call fails, try to fetch existing plans
           const existingPlansResponse = await fetch(`${API_BASE_URL}/orgs/${orgId}/ai-plans`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
+            headers: getAuthHeaders(),
             credentials: "include",
           })
+
+          if (existingPlansResponse.status === 401) {
+            handleUnauthorized()
+            return
+          }
 
           if (existingPlansResponse.ok) {
             const plansResult = await existingPlansResponse.json()
@@ -970,61 +936,56 @@ Use the model run data to provide specific, data-driven insights about the forec
         }
       } else {
         // No latest run, try to fetch existing plans
-        const token = localStorage.getItem("auth-token") || document.cookie
-          .split("; ")
-          .find((row) => row.startsWith("auth-token="))
-          ?.split("=")[1]
+        const existingPlansResponse = await fetch(`${API_BASE_URL}/orgs/${orgId}/ai-plans`, {
+          headers: getAuthHeaders(),
+          credentials: "include",
+        })
 
-        if (token) {
-          const existingPlansResponse = await fetch(`${API_BASE_URL}/orgs/${orgId}/ai-plans`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            credentials: "include",
-          })
+        if (existingPlansResponse.status === 401) {
+          handleUnauthorized()
+          return
+        }
 
-          if (existingPlansResponse.ok) {
-            const plansResult = await existingPlansResponse.json()
-            if (plansResult.ok && plansResult.plans && plansResult.plans.length > 0) {
-              const latestPlan = plansResult.plans[0]
-              const planJson = latestPlan.planJson || {}
-              const structuredResponse = planJson.structuredResponse || {}
+        if (existingPlansResponse.ok) {
+          const plansResult = await existingPlansResponse.json()
+          if (plansResult.ok && plansResult.plans && plansResult.plans.length > 0) {
+            const latestPlan = plansResult.plans[0]
+            const planJson = latestPlan.planJson || {}
+            const structuredResponse = planJson.structuredResponse || {}
 
-              const extractedInsights: any[] = []
-              const extractedRecommendations: any[] = []
+            const extractedInsights: any[] = []
+            const extractedRecommendations: any[] = []
 
-              if (structuredResponse.recommendations && Array.isArray(structuredResponse.recommendations)) {
-                structuredResponse.recommendations.forEach((rec: any) => {
-                  extractedRecommendations.push({
-                    type: rec.type || "general",
-                    title: rec.action || rec.explain?.substring(0, 50) || "Recommendation",
-                    description: rec.explain || rec.reasoning || "No description available",
-                    impact: rec.priority === 'high' ? 'positive' : 'warning',
-                  })
+            if (structuredResponse.recommendations && Array.isArray(structuredResponse.recommendations)) {
+              structuredResponse.recommendations.forEach((rec: any) => {
+                extractedRecommendations.push({
+                  type: rec.type || "general",
+                  title: rec.action || rec.explain?.substring(0, 50) || "Recommendation",
+                  description: rec.explain || rec.reasoning || "No description available",
+                  impact: rec.priority === 'high' ? 'positive' : 'warning',
                 })
-              }
-
-              const naturalText = structuredResponse.natural_text || structuredResponse.naturalLanguage
-              if (naturalText) {
-                extractedInsights.push({
-                  type: "analysis",
-                  title: "AI Analysis",
-                  description: naturalText.substring(0, 500),
-                  confidence: 80,
-                  impact: "positive",
-                })
-              }
-
-              const insightsWithMeta: InsightCard[] = extractedInsights.map((insight: InsightCard) => ({
-                ...insight,
-                confidence: insight.confidence ?? summaryConfidence,
-                runId: activeRunId,
-                source: insight.source || "ai-plan",
-              }))
-              setAiInsights(mergeInsightsWithBaseline(baselineInsight, insightsWithMeta))
-              setAiRecommendations(extractedRecommendations)
+              })
             }
+
+            const naturalText = structuredResponse.natural_text || structuredResponse.naturalLanguage
+            if (naturalText) {
+              extractedInsights.push({
+                type: "analysis",
+                title: "AI Analysis",
+                description: naturalText.substring(0, 500),
+                confidence: 80,
+                impact: "positive",
+              })
+            }
+
+            const insightsWithMeta: InsightCard[] = extractedInsights.map((insight: InsightCard) => ({
+              ...insight,
+              confidence: insight.confidence ?? summaryConfidence,
+              runId: activeRunId,
+              source: insight.source || "ai-plan",
+            }))
+            setAiInsights(mergeInsightsWithBaseline(baselineInsight, insightsWithMeta))
+            setAiRecommendations(extractedRecommendations)
           }
         }
       }
@@ -1045,15 +1006,6 @@ Use the model run data to provide specific, data-driven insights about the forec
     }
 
     try {
-      // Use getAuthToken from api-config for consistency
-      const { getAuthToken } = await import("@/lib/api-config")
-      const token = getAuthToken()
-
-      if (!token) {
-        toast.error("Authentication token not found. Please log in again.")
-        return
-      }
-
       // Ensure API_BASE_URL includes /api/v1
       let baseUrl = API_BASE_URL
       if (!baseUrl.endsWith('/api/v1')) {
@@ -1062,15 +1014,17 @@ Use the model run data to provide specific, data-driven insights about the forec
 
       const response = await fetch(`${baseUrl}/model-runs/${latestRun.id}/export`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
           type: "csv", // Can be csv, pdf, pptx, excel
         }),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -1084,7 +1038,7 @@ Use the model run data to provide specific, data-driven insights about the forec
 
         // Poll for export completion
         if (result.jobId) {
-          await pollExportStatus(result.jobId, result.export.id, token)
+          await pollExportStatus(result.jobId, result.export.id)
         }
       } else {
         throw new Error(result.error?.message || "Invalid response from server")
@@ -1095,7 +1049,7 @@ Use the model run data to provide specific, data-driven insights about the forec
     }
   }
 
-  const pollExportStatus = async (jobId: string, exportId: string, token: string) => {
+  const pollExportStatus = async (jobId: string, exportId: string) => {
     const maxAttempts = 60
     let attempts = 0
 
@@ -1113,12 +1067,14 @@ Use the model run data to provide specific, data-driven insights about the forec
         }
 
         const response = await fetch(`${baseUrl}/jobs/${jobId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+          headers: getAuthHeaders(),
           credentials: "include",
         })
+
+        if (response.status === 401) {
+          handleUnauthorized()
+          return
+        }
 
         if (response.ok) {
           const result = await response.json()
@@ -1127,11 +1083,14 @@ Use the model run data to provide specific, data-driven insights about the forec
             if (status === "done" || status === "completed") {
               // Download export
               const downloadResponse = await fetch(`${baseUrl}/exports/${exportId}/download`, {
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                },
+                headers: getAuthHeaders(),
                 credentials: "include",
               })
+
+              if (downloadResponse.status === 401) {
+                handleUnauthorized()
+                return
+              }
 
               if (downloadResponse.ok) {
                 const blob = await downloadResponse.blob()
@@ -1174,22 +1133,10 @@ Use the model run data to provide specific, data-driven insights about the forec
 
     setIsGenerating(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found")
-      }
-
       // Trigger a new model run
       const response = await fetch(`${API_BASE_URL}/models/${selectedModelId}/run`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
           runType: "forecast",
@@ -1202,6 +1149,11 @@ Use the model run data to provide specific, data-driven insights about the forec
           },
         }),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -1242,20 +1194,15 @@ Use the model run data to provide specific, data-driven insights about the forec
       }
 
       try {
-        const token = localStorage.getItem("auth-token") || document.cookie
-          .split("; ")
-          .find((row) => row.startsWith("auth-token="))
-          ?.split("=")[1]
-
-        if (!token) return
-
         const response = await fetch(`${API_BASE_URL}/jobs/${jobId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+          headers: getAuthHeaders(),
           credentials: "include",
         })
+
+        if (response.status === 401) {
+          handleUnauthorized()
+          return
+        }
 
         if (response.ok) {
           const result = await response.json()

@@ -15,7 +15,7 @@ import { Loader2, RefreshCw, X, RotateCw, Eye, Filter, Calendar, BarChart3, Aler
 import { JobProgressIndicator } from "./job-progress-indicator"
 import { JobDetailsModal } from "./job-details-modal"
 import { toast } from "sonner"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface Job {
   id: string
@@ -105,19 +105,16 @@ export function JobQueue() {
         params.append("sort_order", sortOrder)
       }
 
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
       const response = await fetch(`${API_BASE_URL}/jobs?${params.toString()}`, {
         method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (!response.ok) {
         throw new Error("Failed to fetch jobs")
@@ -177,19 +174,16 @@ export function JobQueue() {
     if (!cancelJobId) return
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
       const response = await fetch(`${API_BASE_URL}/jobs/${cancelJobId}/cancel`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (!response.ok) {
         throw new Error("Failed to cancel job")
@@ -206,19 +200,16 @@ export function JobQueue() {
 
   const handleRetry = async (jobId: string) => {
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
       const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/retry`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (!response.ok) {
         throw new Error("Failed to retry job")

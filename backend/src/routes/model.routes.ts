@@ -6,7 +6,7 @@ import { multidimensionalController } from '../controllers/multidimensional.cont
 import { forecastingController } from '../controllers/forecasting.controller';
 import { riskController } from '../controllers/risk.controller';
 import { authenticate } from '../middlewares/auth';
-import { requireOrgAccess, requireFinanceOrAdmin } from '../middlewares/rbac';
+import { requireOrgAccess, requireFinanceOrAdmin, requireModelOwnership, requireRunOwnership } from '../middlewares/rbac';
 
 const router = Router();
 
@@ -15,21 +15,21 @@ router.get('/orgs/:org_id/models', authenticate, requireOrgAccess('org_id'), mod
 router.get('/orgs/:org_id/analysis', authenticate, requireOrgAccess('org_id'), modelController.analyzeData);
 router.delete('/orgs/:org_id/models/:model_id', authenticate, requireFinanceOrAdmin('org_id'), modelController.deleteModel);
 
-// Monte Carlo routes must come BEFORE /models/:model_id to prevent route conflicts
-router.get('/models/:model_id/montecarlo', authenticate, monteCarloController.listMonteCarlo);
-router.post('/models/:model_id/montecarlo', authenticate, monteCarloController.createMonteCarlo);
+// Monte Carlo routes - finance or admin required to create
+router.get('/models/:model_id/montecarlo', authenticate, requireModelOwnership('model_id'), monteCarloController.listMonteCarlo);
+router.post('/models/:model_id/montecarlo', authenticate, requireModelOwnership('model_id', 'finance'), monteCarloController.createMonteCarlo);
 
-router.get('/models/:model_id', authenticate, modelController.getModel);
-router.patch('/models/:model_id', authenticate, modelController.updateModel);
-router.get('/models/:model_id/runs', authenticate, modelController.getModelRuns);
-router.post('/models/:model_id/run', authenticate, modelController.createModelRun);
-router.get('/models/:model_id/runs/:run_id', authenticate, modelController.getModelRun);
+router.get('/models/:model_id', authenticate, requireModelOwnership('model_id'), modelController.getModel);
+router.patch('/models/:model_id', authenticate, requireModelOwnership('model_id', 'finance'), modelController.updateModel);
+router.get('/models/:model_id/runs', authenticate, requireModelOwnership('model_id'), modelController.getModelRuns);
+router.post('/models/:model_id/run', authenticate, requireModelOwnership('model_id', 'finance'), modelController.createModelRun);
+router.get('/models/:model_id/runs/:run_id', authenticate, requireModelOwnership('model_id'), requireRunOwnership('run_id'), modelController.getModelRun);
 
-// Snapshot & Compare routes
-router.post('/models/:model_id/snapshot', authenticate, modelController.createSnapshot);
-router.get('/models/:model_id/snapshots', authenticate, modelController.getSnapshots);
-router.delete('/models/:model_id/snapshots/:run_id', authenticate, modelController.deleteSnapshot);
-router.get('/models/:model_id/compare', authenticate, modelController.compareRuns);
+// Snapshot & Compare routes - finance or admin required for snapshots
+router.post('/models/:model_id/snapshot', authenticate, requireModelOwnership('model_id', 'finance'), modelController.createSnapshot);
+router.get('/models/:model_id/snapshots', authenticate, requireModelOwnership('model_id'), modelController.getSnapshots);
+router.delete('/models/:model_id/snapshots/:run_id', authenticate, requireModelOwnership('model_id', 'finance'), requireRunOwnership('run_id', 'finance'), modelController.deleteSnapshot);
+router.get('/models/:model_id/compare', authenticate, requireModelOwnership('model_id'), modelController.compareRuns);
 
 // Driver & Scenario routes
 router.get('/orgs/:org_id/models/:model_id/drivers', authenticate, requireOrgAccess('org_id'), modelController.getDrivers);
@@ -59,7 +59,7 @@ router.post('/orgs/:orgId/models/:modelId/backtest', authenticate, requireOrgAcc
 router.post('/orgs/:orgId/models/:modelId/risk', authenticate, requireOrgAccess('orgId'), riskController.analyzeRisk);
 
 // Provenance route (matches frontend expected path)
-router.get('/orgs/:org_id/models/:model_id/runs/:run_id/provenance/:cell', authenticate, async (req, res, next) => {
+router.get('/orgs/:org_id/models/:model_id/runs/:run_id/provenance/:cell', authenticate, requireOrgAccess('org_id'), requireModelOwnership('model_id'), requireRunOwnership('run_id'), async (req, res, next) => {
   try {
     const { run_id, cell } = req.params;
     req.query = {

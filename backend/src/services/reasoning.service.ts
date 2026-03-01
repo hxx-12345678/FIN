@@ -2,11 +2,9 @@
  * Financial Reasoning Service
  */
 
-import axios from 'axios';
 import prisma from '../config/database';
 import { ValidationError } from '../utils/errors';
-
-const PYTHON_WORKER_URL = process.env.PYTHON_WORKER_URL || 'http://localhost:5000';
+import { workerClient } from '../utils/worker-client';
 
 export const reasoningService = {
     /**
@@ -49,8 +47,8 @@ export const reasoningService = {
             const resultData = latestRun?.summaryJson as any;
             const months = resultData?.months || [];
 
-            console.log(`Calling reasoning engine with target: ${metric} and ${nodes.length} nodes`);
-            const response = await axios.post(`${PYTHON_WORKER_URL}/compute/reasoning`, {
+            console.log(`Calling reasoning engine via secure client with target: ${metric} and ${nodes.length} nodes`);
+            const response = await workerClient.post('/compute/reasoning', {
                 modelId,
                 target: metric,
                 nodes: nodes,
@@ -97,7 +95,7 @@ export const reasoningService = {
      */
     simulateScenario: async (modelId: string, target: string, overrides: Record<string, number>) => {
         try {
-            const response = await axios.post(`${PYTHON_WORKER_URL}/compute/scenario`, {
+            const response = await workerClient.post('/compute/scenario', {
                 modelId,
                 target,
                 overrides

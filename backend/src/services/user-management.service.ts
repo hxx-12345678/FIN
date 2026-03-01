@@ -145,8 +145,8 @@ export const userManagementService = {
       },
     });
 
-    if (!inviterRole || !['admin', 'finance'].includes(inviterRole.role)) {
-      throw new ForbiddenError('Only admins and finance users can invite members');
+    if (!inviterRole || inviterRole.role !== 'admin') {
+      throw new ForbiddenError('Only admins can invite members');
     }
 
     // Validate role
@@ -191,14 +191,14 @@ export const userManagementService = {
     try {
       const { emailService } = await import('./email.service');
       const org = await prisma.org.findUnique({ where: { id: orgId }, select: { name: true } });
-      const inviter = await prisma.user.findUnique({ 
-        where: { id: invitedBy }, 
-        select: { name: true, email: true } 
+      const inviter = await prisma.user.findUnique({
+        where: { id: invitedBy },
+        select: { name: true, email: true }
       });
-      
+
       const inviterName = inviter?.name || inviter?.email || 'A team member';
       const orgName = org?.name || 'the organization';
-      
+
       await emailService.sendInvitationEmail(
         email,
         inviterName,
@@ -207,7 +207,7 @@ export const userManagementService = {
         invitation.token,
         message // Include custom message if provided
       );
-      
+
       logger.info(`[UserManagement] Invitation email sent to ${email}`);
     } catch (emailError) {
       // Log error but don't fail invitation creation
@@ -306,8 +306,8 @@ export const userManagementService = {
       },
     });
 
-    if (!userRole || !['admin', 'finance'].includes(userRole.role)) {
-      throw new ForbiddenError('Only admins and finance users can resend invitations');
+    if (!userRole || userRole.role !== 'admin') {
+      throw new ForbiddenError('Only admins can resend invitations');
     }
 
     const invitation = await prisma.invitationToken.findUnique({
@@ -339,14 +339,14 @@ export const userManagementService = {
     try {
       const { emailService } = await import('./email.service');
       const org = await prisma.org.findUnique({ where: { id: orgId }, select: { name: true } });
-      const inviter = await prisma.user.findUnique({ 
-        where: { id: userId }, 
-        select: { name: true, email: true } 
+      const inviter = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true, email: true }
       });
-      
+
       const inviterName = inviter?.name || inviter?.email || invitation.createdBy?.name || 'A team member';
       const orgName = org?.name || 'the organization';
-      
+
       await emailService.sendInvitationEmail(
         invitation.email,
         inviterName,
@@ -355,7 +355,7 @@ export const userManagementService = {
         newInvitation.token,
         undefined // No custom message for resend
       );
-      
+
       logger.info(`[UserManagement] Resent invitation email to ${invitation.email}`);
     } catch (emailError) {
       // Log error but don't fail resend
@@ -397,8 +397,8 @@ export const userManagementService = {
       },
     });
 
-    if (!userRole || !['admin', 'finance'].includes(userRole.role)) {
-      throw new ForbiddenError('Only admins and finance users can cancel invitations');
+    if (!userRole || userRole.role !== 'admin') {
+      throw new ForbiddenError('Only admins can cancel invitations');
     }
 
     const invitation = await prisma.invitationToken.findUnique({
@@ -443,8 +443,8 @@ export const userManagementService = {
       },
     });
 
-    if (!actorRole || !['admin', 'finance'].includes(actorRole.role)) {
-      throw new ForbiddenError('Only admins and finance users can update roles');
+    if (!actorRole || actorRole.role !== 'admin') {
+      throw new ForbiddenError('Only admins can update roles');
     }
 
     // Validate role
@@ -525,8 +525,8 @@ export const userManagementService = {
       },
     });
 
-    if (!actorRole || !['admin', 'finance'].includes(actorRole.role)) {
-      throw new ForbiddenError('Only admins and finance users can remove members');
+    if (!actorRole || actorRole.role !== 'admin') {
+      throw new ForbiddenError('Only admins can remove members');
     }
 
     // Prevent self-removal if only admin
@@ -591,8 +591,8 @@ export const userManagementService = {
       },
     });
 
-    if (!actorRole || !['admin', 'finance'].includes(actorRole.role)) {
-      throw new ForbiddenError('Only admins and finance users can change user status');
+    if (!actorRole || actorRole.role !== 'admin') {
+      throw new ForbiddenError('Only admins can change user status');
     }
 
     // Update user status

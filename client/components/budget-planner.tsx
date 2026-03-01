@@ -14,7 +14,7 @@ import { Upload, Download, Save, X, Plus, Loader2, FileDown, CheckCircle, AlertT
 import { toast } from "sonner"
 import { generateBudgetTemplate, downloadCSV } from "@/utils/csv-template-generator"
 import { CSVImportWizard } from "./csv-import-wizard"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface BudgetEntry {
   category: string
@@ -70,22 +70,16 @@ export function BudgetPlanner({ orgId, onSave }: { orgId: string; onSave?: () =>
 
     setLoading(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found")
-      }
-
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/budgets`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        setLoading(false)
+        return
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -116,24 +110,17 @@ export function BudgetPlanner({ orgId, onSave }: { orgId: string; onSave?: () =>
 
     setSaving(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found")
-      }
-
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/budgets`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({ budgets: budgetsToSave }),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -173,23 +160,16 @@ export function BudgetPlanner({ orgId, onSave }: { orgId: string; onSave?: () =>
     if (!orgId) return
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found")
-      }
-
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/budgets/${budgetId}`, {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (!response.ok) {
         throw new Error("Failed to delete budget")

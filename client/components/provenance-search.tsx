@@ -14,7 +14,7 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import { format, subDays } from "date-fns"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface MetricSearchResult {
   id: string
@@ -187,31 +187,22 @@ export function ProvenanceSearch({ onSelectMetric, metricOverrides, orgId }: Pro
   const [allMetrics, setAllMetrics] = useState<MetricSearchResult[]>([])
   const [loadingMetrics, setLoadingMetrics] = useState(false)
 
-  const fetchMetricsFromAllModels = async () => {
+    const fetchMetricsFromAllModels = async () => {
     if (!orgId) return
 
     setLoadingMetrics(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
+      // Fetch all models for the organization
+      const modelsResponse = await fetch(`${API_BASE_URL}/orgs/${orgId}/models`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
 
-      if (!token) {
-        const isDemo = localStorage.getItem("finapilot_demo_mode") === "true"
-        setAllMetrics(isDemo ? getDefaultMetrics() : [])
+      if (modelsResponse.status === 401) {
+        handleUnauthorized()
         setLoadingMetrics(false)
         return
       }
-
-      // Fetch all models for the organization
-      const modelsResponse = await fetch(`${API_BASE_URL}/orgs/${orgId}/models`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-      })
 
       if (!modelsResponse.ok) {
         const isDemo = localStorage.getItem("finapilot_demo_mode") === "true"
@@ -232,13 +223,15 @@ export function ProvenanceSearch({ onSelectMetric, metricOverrides, orgId }: Pro
       const metricsPromises = modelsResult.models.map(async (model: any) => {
         try {
           // Fetch model runs for this model
-          const runsResponse = await fetch(`${API_BASE_URL}/models/${model.id}/runs`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
+          const runsResponse = await fetch(`${API_BASE_URL}/models/${model.id}/runs?org_id=${orgId}`, {
+            headers: getAuthHeaders(),
             credentials: "include",
           })
+
+          if (runsResponse.status === 401) {
+            handleUnauthorized()
+            return []
+          }
 
           if (!runsResponse.ok) return []
 

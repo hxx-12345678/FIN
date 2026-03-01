@@ -47,28 +47,14 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { API_BASE_URL } from "@/lib/api-config"
-
-// Helper function to get auth token
-const getAuthToken = (): string | null => {
-  if (typeof window === "undefined") return null
-  const token = localStorage.getItem("auth-token")
-  if (token) return token
-  const cookies = document.cookie.split("; ")
-  const authCookie = cookies.find((row) => row.startsWith("auth-token="))
-  if (authCookie) {
-    return authCookie.split("=")[1]
-  }
-  return null
-}
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 // Helper function to get auth headers
-const getAuthHeaders = (): HeadersInit => {
-  const token = getAuthToken()
-  return {
+const getAuthHeadersLocal = (): HeadersInit => {
+  const headers: HeadersInit = {
     "Content-Type": "application/json",
-    ...(token && { Authorization: `Bearer ${token}` }),
   }
+  return headers
 }
 
 interface Report {
@@ -158,6 +144,12 @@ export function ReportApprovalManager({ orgId }: { orgId: string }) {
         credentials: "include",
       })
 
+      if (response.status === 401) {
+        handleUnauthorized()
+        setLoading(false)
+        return
+      }
+
       if (response.ok) {
         const data = await response.json()
         if (data.ok && data.exports) {
@@ -179,6 +171,11 @@ export function ReportApprovalManager({ orgId }: { orgId: string }) {
         headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const data = await response.json()
@@ -210,6 +207,11 @@ export function ReportApprovalManager({ orgId }: { orgId: string }) {
         headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return null
+      }
 
       if (response.ok) {
         const data = await response.json()
@@ -256,6 +258,11 @@ export function ReportApprovalManager({ orgId }: { orgId: string }) {
           distributionMethod: distributionList.length > 0 ? distributionMethod : undefined,
         }),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const data = await response.json()

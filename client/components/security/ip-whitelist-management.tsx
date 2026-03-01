@@ -13,6 +13,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Loader2, Plus, Trash2, TestTube, AlertCircle, CheckCircle2 } from "lucide-react"
 import { toast } from "sonner"
 import { API_BASE_URL } from "@/lib/api-config"
+import { getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
+
 
 interface IPWhitelistEntry {
   id: string
@@ -55,7 +57,7 @@ export function IPWhitelistManagement() {
     setIsLoading(true)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/security/ip-whitelist`, {
+      const response = await fetch(`${API_BASE_URL}/security/ip-whitelist?org_id=${localStorage.getItem("orgId") || ""}`, {
         method: "GET",
         credentials: "include",
       })
@@ -89,9 +91,10 @@ export function IPWhitelistManagement() {
     setIsAdding(true)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/security/ip-whitelist`, {
+      const response = await fetch(`${API_BASE_URL}/security/ip-whitelist?org_id=${localStorage.getItem("orgId") || ""}`, {
         method: "POST",
         headers: {
+          ...getAuthHeaders(),
           "Content-Type": "application/json",
         },
         credentials: "include",
@@ -120,8 +123,9 @@ export function IPWhitelistManagement() {
     if (!deleteId) return
 
     try {
-      const response = await fetch(`${API_BASE_URL}/security/ip-whitelist/${deleteId}`, {
+      const response = await fetch(`${API_BASE_URL}/security/ip-whitelist/${deleteId}?org_id=${localStorage.getItem("orgId") || ""}`, {
         method: "DELETE",
+        headers: getAuthHeaders(),
         credentials: "include",
       })
 
@@ -154,9 +158,10 @@ export function IPWhitelistManagement() {
     setTestResult(null)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/security/ip-whitelist/test`, {
+      const response = await fetch(`${API_BASE_URL}/security/ip-whitelist/test?org_id=${localStorage.getItem("orgId") || ""}`, {
         method: "POST",
         headers: {
+          ...getAuthHeaders(),
           "Content-Type": "application/json",
         },
         credentials: "include",
@@ -179,9 +184,10 @@ export function IPWhitelistManagement() {
 
   const handleToggleEnabled = async (enabled: boolean) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/security/ip-whitelist`, {
+      const response = await fetch(`${API_BASE_URL}/security/ip-whitelist?org_id=${localStorage.getItem("orgId") || ""}`, {
         method: "PUT",
         headers: {
+          ...getAuthHeaders(),
           "Content-Type": "application/json",
         },
         credentials: "include",

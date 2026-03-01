@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Brain, Zap, AlertTriangle, Lightbulb, Search, ArrowRight, TrendingUp, TrendingDown, DollarSign, Info, Loader2, ArrowDownCircle, ArrowUpCircle } from "lucide-react"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { toast } from "sonner"
 
 interface ModelReasoningHubProps {
@@ -34,13 +34,10 @@ export function ModelReasoningHub({ modelId, orgId }: ModelReasoningHubProps) {
 
         setLoading(true)
         try {
-            const token = localStorage.getItem("auth-token")
             const response = await fetch(`${API_BASE_URL}/compute/reasoning`, {
                 method: "POST",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                },
+                headers: getAuthHeaders(),
+                credentials: "include",
                 body: JSON.stringify({
                     modelId,
                     target: targetMetric,
@@ -49,6 +46,11 @@ export function ModelReasoningHub({ modelId, orgId }: ModelReasoningHubProps) {
                     period_b: 1
                 }),
             })
+
+            if (response.status === 401) {
+                handleUnauthorized()
+                return
+            }
 
             if (response.ok) {
                 const result = await response.json()

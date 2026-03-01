@@ -1,7 +1,38 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction, CookieOptions } from 'express';
 import { authService } from '../services/auth.service';
 import { ValidationError } from '../utils/errors';
 import { AuthRequest } from '../middlewares/auth';
+import { config } from '../config/env';
+
+/**
+ * Helper to set authentication cookies
+ */
+const setAuthCookies = (res: Response, token: string, refreshToken?: string) => {
+  const cookieOptions: CookieOptions = {
+    httpOnly: true,
+    secure: config.nodeEnv === 'production',
+    sameSite: config.nodeEnv === 'production' ? 'strict' : 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    path: '/',
+  };
+
+  res.cookie('auth-token', token, cookieOptions);
+
+  if (refreshToken) {
+    res.cookie('refresh-token', refreshToken, {
+      ...cookieOptions,
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    });
+  }
+};
+
+/**
+ * Helper to clear authentication cookies
+ */
+const clearAuthCookies = (res: Response) => {
+  res.clearCookie('auth-token', { path: '/' });
+  res.clearCookie('refresh-token', { path: '/' });
+};
 
 export const authController = {
   signup: async (req: Request, res: Response, next: NextFunction) => {
@@ -13,7 +44,7 @@ export const authController = {
       }
 
       const result = await authService.signup(email, password, orgName, name);
-      
+
       // Check if signup resulted in access request instead of new org
       if ((result as any).requiresAccessRequest) {
         return res.status(202).json({
@@ -25,7 +56,10 @@ export const authController = {
           email: (result as any).email
         });
       }
-      
+
+      // Set secure HttpOnly cookies
+      setAuthCookies(res, result.token, result.refreshToken);
+
       res.status(201).json({
         ok: true,
         user: result.user,
@@ -34,7 +68,6 @@ export const authController = {
         refreshToken: result.refreshToken,
       });
     } catch (error) {
-      // Log error for debugging
       console.error('Signup error:', error);
       next(error);
     }
@@ -49,7 +82,10 @@ export const authController = {
       }
 
       const result = await authService.login(email, password);
-      // Return consistent response format with ok: true
+
+      // Set secure HttpOnly cookies
+      setAuthCookies(res, result.token, result.refreshToken);
+
       res.json({
         ok: true,
         ...result,
@@ -61,13 +97,19 @@ export const authController = {
 
   refresh: async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { refreshToken } = req.body;
+      // Prioritize refresh token from cookie
+      const refreshToken = req.cookies['refresh-token'] || req.body.refreshToken;
 
       if (!refreshToken) {
         throw new ValidationError('Refresh token is required');
       }
 
       const result = await authService.refresh(refreshToken);
+
+      // Update tokens in cookies
+      // @ts-ignore - refreshToken exists but typing might be inferred incorrectly
+      setAuthCookies(res, result.token, result.refreshToken);
+
       res.json(result);
     } catch (error) {
       next(error);
@@ -83,6 +125,10 @@ export const authController = {
       }
 
       const result = await authService.acceptInvite(token, password, name);
+
+      // Set secure HttpOnly cookies
+      setAuthCookies(res, result.token, result.refreshToken);
+
       res.status(201).json(result);
     } catch (error) {
       next(error);
@@ -109,7 +155,6 @@ export const authController = {
       }
 
       const me = await authService.getMe(req.user.id);
-      // Check permissions across any org
       // @ts-ignore
       const canEdit = me.orgs?.some((o: any) => o.role === 'admin' || o.role === 'finance') || false;
 
@@ -129,10 +174,16 @@ export const authController = {
   logout: async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.user) {
-        throw new ValidationError('User not authenticated');
+        // Still clear cookies even if req.user is missing
+        clearAuthCookies(res);
+        return res.json({ ok: true, message: 'Logged out' });
       }
 
       const result = await authService.logout(req.user.id);
+
+      // Clear all auth cookies
+      clearAuthCookies(res);
+
       res.json(result);
     } catch (error) {
       next(error);
@@ -152,6 +203,10 @@ export const authController = {
       }
 
       const result = await authService.switchOrg(req.user.id, orgId);
+
+      // Update cookies with new token/org context
+      setAuthCookies(res, result.token, result.refreshToken);
+
       res.json({
         ok: true,
         ...result,
@@ -168,9 +223,8 @@ export const authController = {
       }
 
       const me = await authService.getMe(req.user.id);
-      // Extract permissions from user's org roles
       const permissions: string[] = [];
-      
+
       // @ts-ignore
       if (me.orgs && Array.isArray(me.orgs)) {
         // @ts-ignore
@@ -206,9 +260,8 @@ export const authController = {
       }
 
       const me = await authService.getMe(req.user.id);
-      // Extract roles from user's org memberships
       const roles: Array<{ orgId: string; role: string; orgName?: string }> = [];
-      
+
       // @ts-ignore
       if (me.orgs && Array.isArray(me.orgs)) {
         // @ts-ignore
@@ -238,8 +291,6 @@ export const authController = {
         throw new ValidationError('User not authenticated');
       }
 
-      // For now, return a simple session list based on the current token
-      // In a production system, you would track sessions in a database
       const currentSession = {
         id: 'current',
         device: req.headers['user-agent'] || 'Unknown',
@@ -267,10 +318,8 @@ export const authController = {
 
       const { sessionId } = req.params;
 
-      // For now, if revoking current session, return success
-      // In a production system, you would invalidate the session token in the database
       if (sessionId === 'current') {
-        // Clear the token by returning a logout response
+        clearAuthCookies(res);
         res.json({
           ok: true,
           message: 'Session revoked successfully',
@@ -292,7 +341,7 @@ export const authController = {
         throw new ValidationError('User not authenticated');
       }
 
-      // In a production system, you would invalidate all session tokens for this user
+      clearAuthCookies(res);
       res.json({
         ok: true,
         message: 'All sessions revoked successfully',

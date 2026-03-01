@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Save, Copy, History, Tag, Loader2, ArrowUpCircle, CheckCircle2 } from "lucide-react"
 import { toast } from "sonner"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -81,23 +81,16 @@ export function ScenarioSnapshotManager({ modelId, orgId }: ScenarioSnapshotMana
 
     setLoading(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
+      const response = await fetch(`${API_BASE_URL}/models/${modelId}/scenarios?org_id=${orgId}`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
 
-      if (!token) {
+      if (response.status === 401) {
+        handleUnauthorized()
         setLoading(false)
         return
       }
-
-      const response = await fetch(`${API_BASE_URL}/models/${modelId}/scenarios?org_id=${orgId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-      })
 
       if (response.ok) {
         const result = await response.json()
@@ -148,14 +141,16 @@ export function ScenarioSnapshotManager({ modelId, orgId }: ScenarioSnapshotMana
 
     setIsPromoting(true)
     try {
-      const token = localStorage.getItem("auth-token")
       const response = await fetch(`${API_BASE_URL}/scenarios/${promoteId}/promote?org_id=${orgId}`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        }
+        headers: getAuthHeaders(),
+        credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const result = await response.json()

@@ -28,7 +28,7 @@ import {
 import { Play, Pause, RotateCcw, Zap, TrendingUp, Users, DollarSign, Activity, Loader2, AlertCircle, Share2, ShieldCheck, Calendar } from "lucide-react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { useOrg } from "@/lib/org-context"
 
 interface SimulationParams {
@@ -78,23 +78,21 @@ export function RealtimeSimulations() {
     const fetchImpact = async () => {
       setCalculatingImpact(true)
       try {
-        const token = localStorage.getItem("auth-token") || document.cookie
-          .split("; ")
-          .find((row) => row.startsWith("auth-token="))
-          ?.split("=")[1]
-
         const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/decision-impact`, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+          headers: getAuthHeaders(),
+          credentials: "include",
           body: JSON.stringify({
             headcountChange: params.teamSize - initialParams.teamSize,
             marketingSpendChange: params.marketingSpend - initialParams.marketingSpend,
             revenueChange: (params.pricingTier * params.monthlyGrowthRate) - (initialParams.pricingTier * initialParams.monthlyGrowthRate) // Simplified delta
           }),
         })
+
+        if (response.status === 401) {
+          handleUnauthorized()
+          return
+        }
 
         if (response.ok) {
           const result = await response.json()
@@ -115,23 +113,21 @@ export function RealtimeSimulations() {
     if (!orgId) return
     setCreatingSnapshot(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/decision-snapshots`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
+        credentials: "include",
         body: JSON.stringify({
           params,
           name: `Board Update - ${new Date().toLocaleDateString()}`,
           description: "Scenario snapshot for board meeting"
         }),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -150,23 +146,10 @@ export function RealtimeSimulations() {
     // ALWAYS try backend first if orgId is available - this is the primary path
     if (orgId && useBackend) {
       try {
-        const token = localStorage.getItem("auth-token") || document.cookie
-          .split("; ")
-          .find((row) => row.startsWith("auth-token="))
-          ?.split("=")[1]
-
-        if (!token) {
-          console.warn("No auth token, cannot use backend")
-          return generateSimulationDataClient(params)
-        }
-
         // Call backend to update simulation (which calculates results using model data)
         const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/realtime-simulations`, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+          headers: getAuthHeaders(),
           credentials: "include",
           body: JSON.stringify({
             simulationId: simulationId || undefined,
@@ -175,6 +158,11 @@ export function RealtimeSimulations() {
             isRunning,
           }),
         })
+
+        if (response.status === 401) {
+          handleUnauthorized()
+          return generateSimulationDataClient(params)
+        }
 
         if (response.ok) {
           const result = await response.json()
@@ -340,18 +328,8 @@ export function RealtimeSimulations() {
     if (storedOrgId) return storedOrgId
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) return null
-
       const response = await fetch(`${API_BASE_URL}/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
 
@@ -386,25 +364,18 @@ export function RealtimeSimulations() {
         setOrgId(currentOrgId)
       }
 
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found. Please log in.")
-      }
-
       // Fetch initial values from model run if available
       let initialValues = null
       try {
         const initialValuesResponse = await fetch(`${API_BASE_URL}/orgs/${currentOrgId}/realtime-simulations/initial-values`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+          headers: getAuthHeaders(),
           credentials: "include",
         })
+
+        if (initialValuesResponse.status === 401) {
+          handleUnauthorized()
+          throw new Error("Your session has expired. Please log in again.")
+        }
 
         if (initialValuesResponse.ok) {
           const initialData = await initialValuesResponse.json()
@@ -427,12 +398,14 @@ export function RealtimeSimulations() {
 
       // Fetch or create simulation
       const response = await fetch(`${API_BASE_URL}/orgs/${currentOrgId}/realtime-simulations`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!response.ok) {
         throw new Error(`Failed to fetch simulation: ${response.statusText}`)
@@ -609,22 +582,9 @@ export function RealtimeSimulations() {
     const maxRetries = 2
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        setSaving(false)
-        return
-      }
-
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/realtime-simulations`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
           simulationId: simulationId || undefined,
@@ -633,6 +593,11 @@ export function RealtimeSimulations() {
           isRunning,
         }),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -730,31 +695,23 @@ export function RealtimeSimulations() {
         // Save current state when pausing or starting
         await saveSimulation()
 
-        const token = localStorage.getItem("auth-token") || document.cookie
-          .split("; ")
-          .find((row) => row.startsWith("auth-token="))
-          ?.split("=")[1]
-
-        if (!token) {
-          toast.error("Authentication required. Please log in.")
-          setIsRunning(!newRunningState) // Revert state
-          return
-        }
-
         // If we have a simulationId, use the toggle endpoint, otherwise save via POST
         if (simulationId) {
           const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/realtime-simulations/${simulationId}/run`, {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
+            headers: getAuthHeaders(),
             credentials: "include",
             body: JSON.stringify({
               isRunning: newRunningState,
               currentMonth,
             }),
           })
+
+          if (response.status === 401) {
+            handleUnauthorized()
+            setIsRunning(!newRunningState)
+            return
+          }
 
           if (response.ok) {
             const result = await response.json()

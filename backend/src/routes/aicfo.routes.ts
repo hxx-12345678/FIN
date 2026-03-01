@@ -3,7 +3,7 @@ import { aicfoController } from '../controllers/aicfo.controller';
 import { authenticate } from '../middlewares/auth';
 import { rateLimit, orgRateLimit } from '../middlewares/rateLimit';
 import { auditLogger } from '../middlewares/audit-logger';
-import { requireOrgAccess, requireFinanceOrAdmin } from '../middlewares/rbac';
+import { requireOrgAccess, requireFinanceOrAdmin, requirePlanOwnership, requirePromptOwnership } from '../middlewares/rbac';
 
 const router = Router();
 
@@ -21,16 +21,16 @@ router.post('/orgs/:orgId/ai-plans/apply', authenticate, requireFinanceOrAdmin('
 router.get('/orgs/:orgId/ai-plans', authenticate, requireOrgAccess('orgId'), aicfoController.listPlans);
 
 // Get AI-CFO plan
-router.get('/ai-plans/:planId', authenticate, aicfoController.getPlan);
+router.get('/ai-plans/:planId', authenticate, requirePlanOwnership('planId'), aicfoController.getPlan);
 
 // Update AI-CFO plan
-router.put('/ai-plans/:planId', authenticate, aicfoController.updatePlan);
+router.put('/ai-plans/:planId', authenticate, requirePlanOwnership('planId'), aicfoController.updatePlan);
 
 // Delete AI-CFO plan
-router.delete('/ai-plans/:planId', authenticate, aicfoController.deletePlan);
+router.delete('/ai-plans/:planId', authenticate, requirePlanOwnership('planId'), aicfoController.deletePlan);
 
 // Get prompt details (AUDITABILITY)
-router.get('/prompts/:promptId', authenticate, aicfoController.getPrompt);
+router.get('/prompts/:promptId', authenticate, requirePromptOwnership('promptId'), aicfoController.getPrompt);
 
 export default router;
 

@@ -15,7 +15,7 @@ import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Download, FileText, Presentation, Link as LinkIcon, Loader2, CheckCircle2, XCircle, Copy } from "lucide-react"
 import { toast } from "sonner"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface OneClickExportButtonProps {
   orgId: string
@@ -46,22 +46,10 @@ export function OneClickExportButton({ orgId, modelRunId, className }: OneClickE
     })
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found")
-      }
-
       // Create export
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/investor-export`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
           format,
@@ -70,6 +58,11 @@ export function OneClickExportButton({ orgId, modelRunId, className }: OneClickE
           includeRecommendations: true,
         }),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -91,7 +84,7 @@ export function OneClickExportButton({ orgId, modelRunId, className }: OneClickE
       })
 
       // Poll for job completion
-      await pollExportStatus(exportId, jobId, format, token)
+      await pollExportStatus(exportId, jobId, format)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to export"
       toast.error(errorMessage)
@@ -108,7 +101,6 @@ export function OneClickExportButton({ orgId, modelRunId, className }: OneClickE
     exportId: string,
     jobId: string,
     format: 'pdf' | 'pptx' | 'memo',
-    token: string
   ) => {
     let attempts = 0
     const maxAttempts = 120 // 4 minutes max
@@ -122,12 +114,14 @@ export function OneClickExportButton({ orgId, modelRunId, className }: OneClickE
 
       try {
         const response = await fetch(`${API_BASE_URL}/exports/${exportId}/status`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+          headers: getAuthHeaders(),
           credentials: "include",
         })
+
+        if (response.status === 401) {
+          handleUnauthorized()
+          return
+        }
 
         if (response.ok) {
           const result = await response.json()
@@ -148,11 +142,14 @@ export function OneClickExportButton({ orgId, modelRunId, className }: OneClickE
           if (status === 'completed') {
             // Get download URL
             const downloadResponse = await fetch(`${API_BASE_URL}/exports/${exportId}/download`, {
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
+              headers: getAuthHeaders(),
               credentials: "include",
             })
+
+            if (downloadResponse.status === 401) {
+              handleUnauthorized()
+              return
+            }
 
             if (downloadResponse.ok) {
               const blob = await downloadResponse.blob()
@@ -169,12 +166,14 @@ export function OneClickExportButton({ orgId, modelRunId, className }: OneClickE
               try {
                 const linkResponse = await fetch(`${API_BASE_URL}/exports/${exportId}/shareable-link`, {
                   method: "POST",
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                  },
+                  headers: getAuthHeaders(),
                   credentials: "include",
                 })
+
+                if (linkResponse.status === 401) {
+                  handleUnauthorized()
+                  return
+                }
 
                 if (linkResponse.ok) {
                   const linkResult = await linkResponse.json()

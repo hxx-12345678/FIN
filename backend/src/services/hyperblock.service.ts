@@ -3,11 +3,9 @@
  * Communicates with Python worker's real-time engine
  */
 
-import axios from 'axios';
 import { ValidationError } from '../utils/errors';
 import prisma from '../config/database';
-
-const PYTHON_WORKER_URL = process.env.PYTHON_WORKER_URL || 'http://localhost:5000';
+import { workerClient } from '../utils/worker-client';
 
 export interface HyperblockUpdate {
     nodeId: string;
@@ -53,8 +51,8 @@ export const hyperblockService = {
                 months.push(d.toISOString().slice(0, 7));
             }
 
-            // 4. Call Python Hyperblock API
-            const response = await axios.post(`${PYTHON_WORKER_URL}/compute/hyperblock`, {
+            // 4. Call Python Hyperblock API via secure client
+            const response = await workerClient.post('/compute/hyperblock', {
                 modelId,
                 orgId,
                 months,

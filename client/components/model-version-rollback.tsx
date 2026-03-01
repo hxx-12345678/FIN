@@ -15,7 +15,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { History, RotateCcw, Eye, Download, AlertTriangle, CheckCircle2 } from "lucide-react"
 import { toast } from "sonner"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface ModelVersion {
   id: string
@@ -130,39 +130,30 @@ export function ModelVersionRollback({ currentVersion, onVersionRollback, modelI
     }
   }, [isOpen, modelId, orgId])
   
-  const fetchVersions = async () => {
+    const fetchVersions = async () => {
     if (!modelId || !orgId) return
     
     setLoading(true)
     setError(null)
     
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found")
-      }
-
       // Fetch model details and all model runs (versions)
       const [modelResponse, runsResponse] = await Promise.all([
         fetch(`${API_BASE_URL}/models/${modelId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+          headers: getAuthHeaders(),
           credentials: "include",
         }),
-        fetch(`${API_BASE_URL}/models/${modelId}/runs`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+        fetch(`${API_BASE_URL}/models/${modelId}/runs?org_id=${orgId}`, {
+          headers: getAuthHeaders(),
           credentials: "include",
         }),
       ])
+
+      if (modelResponse.status === 401 || runsResponse.status === 401) {
+        handleUnauthorized()
+        setLoading(false)
+        return
+      }
 
       if (!modelResponse.ok) {
         const errorText = await modelResponse.text()

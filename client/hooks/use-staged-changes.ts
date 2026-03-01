@@ -69,15 +69,6 @@ export function useStagedChanges(statusFilter?: string): UseStagedChangesReturn 
         return
       }
 
-      const token = getAuthToken()
-
-      if (!token) {
-        // For unauthenticated users, return empty array
-        setChanges([])
-        setIsLoading(false)
-        return
-      }
-
       // Fetch AI plans and extract staged changes
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/ai-plans`, {
         headers: getAuthHeaders(),

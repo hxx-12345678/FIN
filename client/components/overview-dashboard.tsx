@@ -34,7 +34,7 @@ import {
   Loader2,
 } from "lucide-react"
 import { toast } from "sonner"
-import { API_BASE_URL, getAuthToken, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { FinancialTermTooltip } from "./financial-term-tooltip"
 import { DataDrivenTooltip } from "./data-driven-tooltip"
 import { useModel } from "@/lib/model-context"
@@ -115,24 +115,11 @@ export function OverviewDashboard() {
     }
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        console.warn("[Overview] No token found for fetchOrgId")
-        return null
-      }
-
       const url = `${API_BASE_URL}/auth/me`
       console.log("[Overview] Fetching orgId from:", url)
 
       const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
 
@@ -184,13 +171,10 @@ export function OverviewDashboard() {
     return null
   }
 
-  const fetchModels = async (orgId: string, token: string) => {
+  const fetchModels = async (orgId: string) => {
     try {
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/models`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
 
@@ -237,26 +221,6 @@ export function OverviewDashboard() {
       }
 
       console.log("[Overview] Fetching data for orgId:", currentOrgId)
-
-      const token = getAuthToken()
-
-      if (!token) {
-        const errorMsg = "Authentication token not found. Please log in again."
-        console.error("[Overview] No token found")
-        setError(errorMsg)
-        setLoading(false)
-        return
-      }
-
-      if (!token) {
-        const errorMsg = "Authentication token not found. Please log in."
-        console.error("[Overview] No token found:", errorMsg)
-        setError(errorMsg)
-        toast.error(errorMsg)
-        handleUnauthorized()
-        setLoading(false)
-        return
-      }
 
       const url = new URL(`${API_BASE_URL}/orgs/${currentOrgId}/overview`)
       if (selectedModelId) {
@@ -329,10 +293,7 @@ export function OverviewDashboard() {
     const initialize = async () => {
       const currentOrgId = await fetchOrgId()
       if (currentOrgId) {
-        const token = getAuthToken()
-        if (token) {
-          await fetchModels(currentOrgId, token)
-        }
+        await fetchModels(currentOrgId)
         await fetchOverviewData()
       }
     }

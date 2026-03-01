@@ -56,7 +56,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { StagedChangesPanel } from "./ai-assistant/staged-changes-panel"
 import { useStagedChanges } from "@/hooks/use-staged-changes"
 import { toast } from "sonner"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, XAxis, YAxis } from "recharts"
 
 interface AgentThought {
@@ -278,19 +278,15 @@ export function AIAssistant() {
     if (overviewLoading) return
     setOverviewLoading(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-      if (!token) throw new Error('Authentication token not found')
-
       const res = await fetch(`${API_BASE_URL}/orgs/${orgIdToUse}/overview`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: 'include',
       })
+
+      if (res.status === 401) {
+        handleUnauthorized()
+        return
+      }
       if (!res.ok) throw new Error(`Failed to load overview data: ${res.statusText}`)
       const json = await res.json()
       if (json?.ok && json?.data) {
@@ -304,20 +300,12 @@ export function AIAssistant() {
   }
 
   useEffect(() => {
-    // Only fetch data if user is authenticated
-    const token = localStorage.getItem("auth-token") || document.cookie
-      .split("; ")
-      .find((row) => row.startsWith("auth-token="))
-      ?.split("=")[1]
-
-    if (token) {
-      fetchOrgId().then((fetchedOrgId) => {
-        // Only fetch plans after orgId is confirmed
-        if (fetchedOrgId) {
-          fetchPlans()
-        }
-      })
-    }
+    fetchOrgId().then((fetchedOrgId) => {
+      // Only fetch plans after orgId is confirmed
+      if (fetchedOrgId) {
+        fetchPlans()
+      }
+    })
   }, [])
 
   // Refetch when orgId changes
@@ -339,20 +327,15 @@ export function AIAssistant() {
     }
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) return null
-
       const response = await fetch(`${API_BASE_URL}/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return null
+      }
 
       if (response.ok) {
         const userData = await response.json()
@@ -375,22 +358,15 @@ export function AIAssistant() {
 
     setLoadingPlans(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found")
-      }
-
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/ai-plans`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -452,15 +428,6 @@ export function AIAssistant() {
     setError(null)
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found")
-      }
-
       const currentOrgId = orgId || (await fetchOrgId())
       if (!currentOrgId) {
         throw new Error("Organization ID not found")
@@ -469,15 +436,17 @@ export function AIAssistant() {
       // Call AI CFO Agentic API (new multi-agent orchestration)
       const response = await fetch(`${API_BASE_URL}/orgs/${currentOrgId}/ai-cfo/query`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
           query: content,
         }),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))

@@ -42,7 +42,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface CSVRow {
   [key: string]: string
@@ -530,31 +530,19 @@ export function CSVImportWizard({ orgId: propOrgId, token: propToken, onImportCo
     console.log("📤 Starting import process...")
 
     try {
-      // Get orgId and token
-      const token = propToken || localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        console.error("❌ No auth token found")
-        toast.error("Authentication token not found. Please log in again.")
-        setIsImporting(false)
-        return
-      }
-
-      console.log("✅ Auth token found")
-
       // Get orgId
       let orgId = propOrgId || localStorage.getItem("orgId")
       if (!orgId) {
         const meResponse = await fetch(`${API_BASE_URL}/auth/me`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+          headers: getAuthHeaders(),
           credentials: "include",
         })
+
+        if (meResponse.status === 401) {
+          handleUnauthorized()
+          setIsImporting(false)
+          return
+        }
 
         if (meResponse.ok) {
           const userData = await meResponse.json()
@@ -588,12 +576,16 @@ export function CSVImportWizard({ orgId: propOrgId, token: propToken, onImportCo
 
       const uploadResponse = await fetch(uploadUrl, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: formData,
       })
+
+      if (uploadResponse.status === 401) {
+        handleUnauthorized()
+        setIsImporting(false)
+        return
+      }
 
       console.log("📥 Upload response received:", {
         status: uploadResponse.status,
@@ -684,10 +676,7 @@ export function CSVImportWizard({ orgId: propOrgId, token: propToken, onImportCo
 
       const mapResponse = await fetch(`${API_BASE_URL}/orgs/${orgId}/import/csv/map`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
           uploadKey,
@@ -768,8 +757,22 @@ export function CSVImportWizard({ orgId: propOrgId, token: propToken, onImportCo
           toast.warning("Import is taking longer than expected. It will continue processing in the background.")
           setImportedRows(totalRows)
           setTimeout(() => {
-            setIsOpen(false)
-            resetWizard()
+            const fetchJobStatus = async () => {
+              try {
+                const response = await fetch(`${API_BASE_URL}/jobs/${jobId}`, {
+                  headers: getAuthHeaders(),
+                  credentials: "include",
+                })
+
+                if (response.status === 401) {
+                  handleUnauthorized()
+                  return
+                }
+              } catch (error) {
+                console.error("❌ Error polling job status:", error)
+              }
+            }
+            fetchJobStatus()
           }, 2000)
           return
         }
@@ -779,12 +782,14 @@ export function CSVImportWizard({ orgId: propOrgId, token: propToken, onImportCo
           console.log(`📡 Polling attempt ${attempts}/${maxAttempts} for job ${jobId}`)
 
           const jobResponse = await fetch(`${API_BASE_URL}/jobs/${jobId}`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
+            headers: getAuthHeaders(),
             credentials: "include",
           })
+
+          if (jobResponse.status === 401) {
+            handleUnauthorized()
+            return
+          }
 
           if (jobResponse.ok) {
             const jobResult = await jobResponse.json()

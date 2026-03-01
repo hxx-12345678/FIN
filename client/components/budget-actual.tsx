@@ -31,7 +31,7 @@ import { useSearchParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { generateBudgetActualTemplate, generateBudgetTemplate, downloadCSV } from "@/utils/csv-template-generator"
 import { DataDrivenTooltip } from "./data-driven-tooltip"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { useModel } from "@/lib/model-context"
 import { useOrg } from "@/lib/org-context"
 
@@ -106,18 +106,8 @@ export function BudgetActual() {
     }
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) return null
-
       const response = await fetch(`${API_BASE_URL}/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
 
@@ -137,13 +127,10 @@ export function BudgetActual() {
     return null
   }
 
-  const fetchModels = async (orgId: string, token: string) => {
+  const fetchModels = async (orgId: string) => {
     try {
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/models`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
 
@@ -170,25 +157,18 @@ export function BudgetActual() {
     setError(null)
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found. Please log in.")
-      }
-
       const response = await fetch(
         `${API_BASE_URL}/orgs/${orgId}/models/${selectedModelId}/budget-actual?period=${selectedPeriod}&view=${selectedView}`,
         {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+          headers: getAuthHeaders(),
           credentials: "include",
         }
       )
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -222,18 +202,9 @@ export function BudgetActual() {
     const initialize = async () => {
       const currentOrgId = await fetchOrgId()
       if (currentOrgId) {
-        const token = localStorage.getItem("auth-token") || document.cookie
-          .split("; ")
-          .find((row) => row.startsWith("auth-token="))
-          ?.split("=")[1]
-
-        if (token) {
-          const modelId = await fetchModels(currentOrgId, token)
-          if (modelId && !selectedModelId) {
-            setSelectedModelId(modelId)
-          }
-        } else {
-          setLoading(false)
+        const modelId = await fetchModels(currentOrgId)
+        if (modelId && !selectedModelId) {
+          setSelectedModelId(modelId)
         }
       } else {
         setLoading(false)
@@ -277,20 +248,15 @@ export function BudgetActual() {
       if (!orgId) return
 
       try {
-        const token = localStorage.getItem("auth-token") || document.cookie
-          .split("; ")
-          .find((row) => row.startsWith("auth-token="))
-          ?.split("=")[1]
-
-        if (!token) return
-
         const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/transactions?limit=1`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+          headers: getAuthHeaders(),
           credentials: "include",
         })
+
+        if (response.status === 401) {
+          handleUnauthorized()
+          return
+        }
 
         if (response.ok) {
           const result = await response.json()
@@ -338,23 +304,16 @@ export function BudgetActual() {
     }
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found")
-      }
-
       if (format === 'xlsx') {
-        const runsResponse = await fetch(`${API_BASE_URL}/models/${selectedModelId}/runs`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+        const runsResponse = await fetch(`${API_BASE_URL}/models/${selectedModelId}/runs?org_id=${orgId}`, {
+          headers: getAuthHeaders(),
           credentials: "include",
         })
+
+        if (runsResponse.status === 401) {
+          handleUnauthorized()
+          throw new Error("Your session has expired. Please log in again.")
+        }
 
         if (!runsResponse.ok) throw new Error("Failed to fetch model runs")
         const runsResult = await runsResponse.json()
@@ -362,13 +321,15 @@ export function BudgetActual() {
           const latestRun = runsResult.runs.find((r: any) => r.status === "done") || runsResult.runs[0]
           const excelResponse = await fetch(`${API_BASE_URL}/orgs/${orgId}/excel/export`, {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
+            headers: getAuthHeaders(),
             credentials: "include",
             body: JSON.stringify({ modelRunId: latestRun.id }),
           })
+
+          if (excelResponse.status === 401) {
+            handleUnauthorized()
+            throw new Error("Your session has expired. Please log in again.")
+          }
 
           if (excelResponse.ok) {
             const excelResult = await excelResponse.json()
@@ -381,21 +342,29 @@ export function BudgetActual() {
           }
         }
       } else {
-        const runsResponse = await fetch(`${API_BASE_URL}/models/${selectedModelId}/runs`, {
-          headers: { Authorization: `Bearer ${token}` }
+        const runsResponse = await fetch(`${API_BASE_URL}/models/${selectedModelId}/runs?org_id=${orgId}`, {
+          headers: getAuthHeaders(),
+          credentials: "include",
         })
+
+        if (runsResponse.status === 401) {
+          handleUnauthorized()
+          throw new Error("Your session has expired. Please log in again.")
+        }
+
         const runsResult = await runsResponse.json()
         if (runsResult.ok && runsResult.runs && runsResult.runs.length > 0) {
           const latestRun = runsResult.runs.find((r: any) => r.status === "done") || runsResult.runs[0]
           const exportResponse = await fetch(`${API_BASE_URL}/models/${latestRun.id}/export`, {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
+            headers: getAuthHeaders(),
             credentials: "include",
             body: JSON.stringify({ type: "pdf" }),
           })
+          if (exportResponse.status === 401) {
+            handleUnauthorized()
+            throw new Error("Your session has expired. Please log in again.")
+          }
           if (exportResponse.ok) toast.success("PDF export job created.")
         }
       }

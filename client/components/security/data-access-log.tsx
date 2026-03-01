@@ -11,7 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Badge } from "@/components/ui/badge"
 import { Loader2, Download, ChevronDown, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface DataAccessEvent {
   id: string
@@ -52,6 +52,7 @@ export function DataAccessLog() {
 
       const response = await fetch(`${API_BASE_URL}/security/data-access?${params.toString()}`, {
         method: "GET",
+        headers: getAuthHeaders(),
         credentials: "include",
       })
 
@@ -83,6 +84,7 @@ export function DataAccessLog() {
 
       const response = await fetch(`${API_BASE_URL}/security/data-access/export?${params.toString()}`, {
         method: "GET",
+        headers: getAuthHeaders(),
         credentials: "include",
       })
 

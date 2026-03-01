@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { History, Eye, RotateCcw, Loader2 } from "lucide-react"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface VersionHistory {
   version: number
@@ -63,23 +63,16 @@ export function ScenarioVersionHistory({ modelId, orgId }: ScenarioVersionHistor
 
     setLoading(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
+      const response = await fetch(`${API_BASE_URL}/models/${modelId}/scenarios?org_id=${orgId}`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
 
-      if (!token) {
+      if (response.status === 401) {
+        handleUnauthorized()
         setLoading(false)
         return
       }
-
-      const response = await fetch(`${API_BASE_URL}/models/${modelId}/scenarios?org_id=${orgId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-      })
 
       if (response.ok) {
         const result = await response.json()

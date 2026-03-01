@@ -13,15 +13,18 @@ export const authenticate = async (
   next: NextFunction
 ) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new UnauthorizedError('No token provided');
+    // Priority: 1. HttpOnly Cookie, 2. Authorization Header
+    let token = req.cookies['auth-token'];
+
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+      }
     }
 
-    const token = authHeader.substring(7);
-
     if (!token || token.trim().length === 0) {
-      throw new UnauthorizedError('Token is empty');
+      throw new UnauthorizedError('Authentication token missing');
     }
 
     // Check if JWT_SECRET is configured

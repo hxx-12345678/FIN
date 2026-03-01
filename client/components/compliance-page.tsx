@@ -39,32 +39,9 @@ import {
   X,
 } from "lucide-react"
 import { toast } from "sonner"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
-// Helper function to get auth token
-const getAuthToken = (): string | null => {
-  if (typeof window === "undefined") return null
-  const token = localStorage.getItem("auth-token")
-  if (token) return token
-  const cookies = document.cookie.split("; ")
-  const authCookie = cookies.find((row) => row.startsWith("auth-token="))
-  if (authCookie) {
-    return authCookie.split("=")[1]
-  }
-  return null
-}
-
-// Helper function to get auth headers
-const getAuthHeaders = (): HeadersInit => {
-  const token = getAuthToken()
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  }
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`
-  }
-  return headers
-}
+// All data is now fetched via cookies - no manual getAuthToken needed locally.
 
 interface ComplianceFramework {
   name: string

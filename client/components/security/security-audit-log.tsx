@@ -12,7 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Loader2, Download, AlertCircle, ChevronDown, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface SecurityEvent {
   id: string
@@ -52,6 +52,7 @@ export function SecurityAuditLog() {
 
       const response = await fetch(`${API_BASE_URL}/security/audit-log?${params.toString()}`, {
         method: "GET",
+        headers: getAuthHeaders(),
         credentials: "include",
       })
 
@@ -120,6 +121,7 @@ export function SecurityAuditLog() {
 
       const response = await fetch(`${API_BASE_URL}/security/audit-log/export?${params.toString()}`, {
         method: "GET",
+        headers: getAuthHeaders(),
         credentials: "include",
       })
 

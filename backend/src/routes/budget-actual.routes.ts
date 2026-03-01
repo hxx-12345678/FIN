@@ -26,35 +26,35 @@ router.get(
 router.post(
   '/orgs/:orgId/budgets',
   authenticate,
-  requireOrgAccess,
+  requireOrgAccess('orgId', 'finance'),
   budgetController.upsertBudgets
 );
 
 router.get(
   '/orgs/:orgId/budgets',
   authenticate,
-  requireOrgAccess,
+  requireOrgAccess('orgId'),
   budgetController.getBudgets
 );
 
 router.get(
   '/orgs/:orgId/budgets/summary',
   authenticate,
-  requireOrgAccess,
+  requireOrgAccess('orgId'),
   budgetController.getBudgetSummary
 );
 
 router.delete(
   '/orgs/:orgId/budgets/:budgetId',
   authenticate,
-  requireOrgAccess,
+  requireOrgAccess('orgId', 'finance'),
   budgetController.deleteBudget
 );
 
 router.delete(
   '/orgs/:orgId/budgets',
   authenticate,
-  requireOrgAccess,
+  requireOrgAccess('orgId', 'finance'),
   budgetController.deleteBudgets
 );
 

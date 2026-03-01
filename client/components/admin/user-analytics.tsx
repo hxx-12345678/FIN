@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import { Download } from "lucide-react"
 import { useAdminAccess } from "@/hooks/use-admin-access"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 export function UserAnalytics() {
   const { isAdmin, loading: accessLoading } = useAdminAccess()
@@ -27,9 +27,18 @@ export function UserAnalytics() {
     setIsLoading(true)
     try {
       const [analyticsRes, funnelRes, retentionRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/admin/users/analytics`, { credentials: "include" }),
-        fetch(`${API_BASE_URL}/admin/users/conversion-funnel`, { credentials: "include" }),
-        fetch(`${API_BASE_URL}/admin/users/retention`, { credentials: "include" }),
+        fetch(`${API_BASE_URL}/admin/users/analytics`, { 
+          headers: getAuthHeaders(),
+          credentials: "include" 
+        }),
+        fetch(`${API_BASE_URL}/admin/users/conversion-funnel`, { 
+          headers: getAuthHeaders(),
+          credentials: "include" 
+        }),
+        fetch(`${API_BASE_URL}/admin/users/retention`, { 
+          headers: getAuthHeaders(),
+          credentials: "include" 
+        }),
       ])
 
       const [analyticsData, funnelData, retentionData] = await Promise.all([

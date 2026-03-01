@@ -3,73 +3,65 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Slider } from "@/components/ui/slider"
 import {
     ShieldAlert,
-    TrendingDown,
-    Activity,
     RefreshCw,
     Play,
-    Info,
+    TrendingDown,
     AlertCircle,
     ChevronRight,
     Gauge
 } from "lucide-react"
 import {
-    LineChart,
-    Line,
+    AreaChart,
+    Area,
     XAxis,
     YAxis,
     CartesianGrid,
     Tooltip as RechartsTooltip,
-    Legend,
     ResponsiveContainer,
-    AreaChart,
-    Area,
-    BarChart,
-    Bar
+    Line
 } from "recharts"
 import { toast } from "sonner"
-import { Badge } from "@/components/ui/badge"
-import { Slider } from "@/components/ui/slider"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 export function RiskAnalysisHub({ orgId, modelId }: { orgId: string | null, modelId: string | null }) {
     const [loading, setLoading] = useState(false)
-    const [numSimulations, setNumSimulations] = useState(1000)
     const [riskData, setRiskData] = useState<any>(null)
-    const [selectedMetric, setSelectedMetric] = useState<string>("revenue")
-
-    // Driver distributions
-    const [distributions, setDistributions] = useState<any>({})
-    const [availableDrivers, setAvailableDrivers] = useState<any[]>([])
-
-    useEffect(() => {
-        if (orgId && modelId) {
-            fetchDrivers()
-        }
-    }, [orgId, modelId])
+    const [selectedMetric, setSelectedMetric] = useState("revenue")
+    const [numSimulations, setNumSimulations] = useState(1000)
+    const [distributions, setDistributions] = useState<any>({
+        revenue_growth: { name: "Revenue Growth", dist: "normal", mean: 0.15, std: 0.05 },
+        churn_rate: { name: "Churn Rate", dist: "uniform", min: 0.02, max: 0.08 },
+        opex_variance: { name: "OpEx Variance", dist: "normal", mean: 0, std: 0.1 }
+    })
 
     const fetchDrivers = async () => {
+        if (!orgId || !modelId) return
         try {
-            const token = localStorage.getItem("auth-token")
             const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/drivers`, {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: getAuthHeaders(),
+                credentials: "include"
             })
+            if (res.status === 401) {
+                handleUnauthorized()
+                return
+            }
             const data = await res.json()
             if (data.ok && data.drivers) {
-                setAvailableDrivers(data.drivers)
-                // Initialize distributions with some defaults for the drivers found
-                const initialDist: any = {}
-                data.drivers.slice(0, 3).forEach((d: any) => {
-                    initialDist[d.id] = {
-                        dist: "normal",
+                const newDist: any = {}
+                data.drivers.slice(0, 5).forEach((d: any) => {
+                    newDist[d.id] = {
                         name: d.name,
-                        params: { mu: 0, sigma: 0.05 }
+                        dist: "normal",
+                        mean: d.value,
+                        std: Math.abs(d.value * 0.1)
                     }
                 })
-                setDistributions(initialDist)
+                setDistributions(newDist)
             }
         } catch (error) {
             console.error("Failed to fetch drivers", error)
@@ -80,18 +72,22 @@ export function RiskAnalysisHub({ orgId, modelId }: { orgId: string | null, mode
         if (!orgId || !modelId) return
         setLoading(true)
         try {
-            const token = localStorage.getItem("auth-token")
             const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/risk`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
-                },
+                headers: getAuthHeaders(),
+                credentials: "include",
                 body: JSON.stringify({
                     distributions,
                     numSimulations
                 })
             })
+
+            if (res.status === 401) {
+                handleUnauthorized()
+                setLoading(false)
+                return
+            }
+
             const data = await res.json()
             if (data.ok) {
                 setRiskData(data.results)
@@ -107,13 +103,10 @@ export function RiskAnalysisHub({ orgId, modelId }: { orgId: string | null, mode
     const getChartData = () => {
         if (!riskData) return []
 
-        // Try to find the metric by ID first, then by name in metricsByName
         let metric = riskData.metrics?.[selectedMetric]
         if (!metric && riskData.metricsByName) {
-            // Try exact match
             metric = riskData.metricsByName[selectedMetric]
             if (!metric) {
-                // Try case-insensitive match
                 const lowerSelected = selectedMetric.toLowerCase()
                 for (const [key, val] of Object.entries(riskData.metricsByName)) {
                     if (key.toLowerCase() === lowerSelected || key.toLowerCase().includes(lowerSelected)) {
@@ -123,9 +116,6 @@ export function RiskAnalysisHub({ orgId, modelId }: { orgId: string | null, mode
                 }
             }
         }
-
-        if (!metric || !metric.p50) return []
-
         return riskData.months.map((m: string, i: number) => ({
             name: m,
             p5: metric.p5?.[i] ?? 0,
@@ -155,6 +145,12 @@ export function RiskAnalysisHub({ orgId, modelId }: { orgId: string | null, mode
         return metric as any
     }
 
+    useEffect(() => {
+        if (orgId && modelId) {
+            fetchDrivers()
+        }
+    }, [orgId, modelId])
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
@@ -180,7 +176,6 @@ export function RiskAnalysisHub({ orgId, modelId }: { orgId: string | null, mode
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-                {/* Left Controls - Distributions */}
                 <Card className="xl:col-span-1 border-none shadow-lg">
                     <CardHeader>
                         <CardTitle className="text-sm font-bold flex items-center gap-2 text-rose-500">
@@ -235,7 +230,6 @@ export function RiskAnalysisHub({ orgId, modelId }: { orgId: string | null, mode
                     </CardContent>
                 </Card>
 
-                {/* Main Fan Chart */}
                 <Card className="xl:col-span-3 border-none shadow-xl bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-950 overflow-hidden">
                     <CardHeader className="pb-0">
                         <div className="flex justify-between items-center">
@@ -273,32 +267,28 @@ export function RiskAnalysisHub({ orgId, modelId }: { orgId: string | null, mode
                                 <p>Run simulation to view probability distribution</p>
                             </div>
                         ) : (
-                            <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={getChartData()}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
-                                    <RechartsTooltip
-                                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
-                                    />
-                                    {/* 95% Confidence Band */}
-                                    <Area type="monotone" dataKey="p95" stroke="none" fill="#fecaca" fillOpacity={0.3} name="95% CI (Upper)" />
-                                    <Area type="monotone" dataKey="p5" stroke="none" fill="#fecaca" fillOpacity={0.3} name="95% CI (Lower)" />
-
-                                    {/* 50% Confidence Band */}
-                                    <Area type="monotone" dataKey="p75" stroke="none" fill="#fda4af" fillOpacity={0.4} name="50% CI (Upper)" />
-                                    <Area type="monotone" dataKey="p25" stroke="none" fill="#fda4af" fillOpacity={0.4} name="50% CI (Lower)" />
-
-                                    {/* Median/Mean Line */}
-                                    <Line type="monotone" dataKey="p50" stroke="#e11d48" strokeWidth={3} dot={false} name="Median (P50)" />
-                                </AreaChart>
-                            </ResponsiveContainer>
+                            <div className="h-full w-full min-h-[400px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={getChartData()}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                                        <RechartsTooltip
+                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
+                                        />
+                                        <Area type="monotone" dataKey="p95" stroke="none" fill="#fecaca" fillOpacity={0.3} name="95% CI (Upper)" />
+                                        <Area type="monotone" dataKey="p5" stroke="none" fill="#fecaca" fillOpacity={0.3} name="95% CI (Lower)" />
+                                        <Area type="monotone" dataKey="p75" stroke="none" fill="#fda4af" fillOpacity={0.4} name="50% CI (Upper)" />
+                                        <Area type="monotone" dataKey="p25" stroke="none" fill="#fda4af" fillOpacity={0.4} name="50% CI (Lower)" />
+                                        <Line type="monotone" dataKey="p50" stroke="#e11d48" strokeWidth={3} dot={false} name="Median (P50)" />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </div>
                         )}
                     </CardContent>
                 </Card>
             </div>
 
-            {/* Bottom Section - Risk Metrics */}
             {riskData && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <Card className="border-none shadow-lg bg-rose-600 text-white">

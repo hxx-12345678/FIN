@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { toast } from "sonner"
 
-import { API_BASE_URL, getAuthToken } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { useOrg } from "@/lib/org-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -356,9 +356,8 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
 
   // Fetch existing Monte Carlo jobs when component loads or modelId changes
   useEffect(() => {
-    // Only fetch if we have both modelId and orgId, and a valid token
-    const token = getAuthToken()
-    if (modelId && orgId && token) {
+    // Cookie-based auth: only require identifiers
+    if (modelId && orgId) {
       fetchExistingMonteCarloJobs()
     }
   }, [modelId, orgId])
@@ -368,14 +367,6 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
 
     setLoadingJobs(true)
     try {
-      const token = getAuthToken()
-
-      if (!token) {
-        console.error('No auth token found')
-        setLoadingJobs(false)
-        return
-      }
-
       // Ensure API_BASE_URL includes /api/v1
       let baseUrl = API_BASE_URL
       if (!baseUrl.endsWith('/api/v1')) {
@@ -383,17 +374,14 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
       }
 
       const response = await fetch(`${baseUrl}/models/${modelId}/montecarlo`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
 
       if (!response.ok) {
         if (response.status === 401) {
-          console.error('Authentication failed - token may be expired')
           toast.error("Your session has expired. Please log in again.")
+          handleUnauthorized()
           return
         }
         const errorText = await response.text()
@@ -409,7 +397,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
         const completedJobs = result.monteCarloJobs.filter((job: any) => job.status === 'done' && job.hasResults)
         if (completedJobs.length > 0 && !selectedJobId) {
           const latestJob = completedJobs[0] // Already sorted by createdAt desc
-          loadMonteCarloJobResults(latestJob.jobId || latestJob.id, token)
+          loadMonteCarloJobResults(latestJob.jobId || latestJob.id)
           setSelectedJobId(latestJob.jobId || latestJob.id)
         }
       } else {
@@ -423,8 +411,8 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
     }
   }
 
-  const loadMonteCarloJobResults = async (jobId: string, token: string) => {
-    if (!jobId || !token) return;
+  const loadMonteCarloJobResults = async (jobId: string) => {
+    if (!jobId) return;
 
     try {
       let baseUrl = API_BASE_URL
@@ -433,17 +421,14 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
       }
 
       const response = await fetch(`${baseUrl}/montecarlo/${jobId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
 
       if (!response.ok) {
         if (response.status === 401) {
-          console.error('Authentication failed when loading job results')
           toast.error("Your session has expired. Please log in again.")
+          handleUnauthorized()
           return
         }
         console.error('Failed to load Monte Carlo job results:', response.status, await response.text().catch(() => 'Unknown error'))
@@ -510,14 +495,6 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
     setSurvivalProbability(null)
 
     try {
-      const token = getAuthToken()
-
-      if (!token) {
-        toast.error("Authentication token not found. Please log in again.")
-        setIsSimulating(false)
-        return
-      }
-
       // Simulate progress while waiting for job - this will be cleared when API polling starts
       // Keep progress very low to avoid confusion
       const progressInterval = setInterval(() => {
@@ -544,10 +521,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
           console.log("📤 Full Monte Carlo URL:", monteCarloUrl)
           const response = await fetch(monteCarloUrl, {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
+            headers: getAuthHeaders(),
             credentials: "include",
             body: JSON.stringify({
               numSimulations,
@@ -568,7 +542,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
               // Store monteCarloJobId if provided for direct polling
               const mcJobId = result.monteCarloJobId || result.jobId
               // Poll for completion - use jobId for polling
-              pollMonteCarloJob(result.jobId, token, progressInterval)
+              pollMonteCarloJob(result.jobId, progressInterval)
               return
             }
           } else {
@@ -580,6 +554,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
             if (response.status === 403) {
               throw new Error(errorMsg + " Please upgrade your plan or wait for your quota to reset.")
             } else if (response.status === 401) {
+              handleUnauthorized()
               throw new Error("Your session has expired. Please log in again.")
             } else {
               throw new Error(errorMsg)
@@ -645,7 +620,7 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
     }
   }
 
-  const pollMonteCarloJob = async (jobId: string, token: string, progressInterval: NodeJS.Timeout) => {
+  const pollMonteCarloJob = async (jobId: string, progressInterval: NodeJS.Timeout) => {
     const maxAttempts = 120 // 4 minutes max
     let attempts = 0
 
@@ -666,20 +641,19 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
         }
         const [jobResponse, mcResponse] = await Promise.all([
           fetch(`${baseUrl}/jobs/${jobId}`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
+            headers: getAuthHeaders(),
             credentials: "include",
           }),
           fetch(`${baseUrl}/montecarlo/${jobId}`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
+            headers: getAuthHeaders(),
             credentials: "include",
           })
         ])
+
+        if (jobResponse.status === 401 || mcResponse.status === 401) {
+          handleUnauthorized()
+          throw new Error("Unauthorized")
+        }
 
         // Get job status from jobs endpoint
         let jobStatus = null
@@ -933,12 +907,6 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
             }
 
             try {
-              const token = getAuthToken()
-              if (!token) {
-                toast.error("Authentication token not found. Please log in again.")
-                return
-              }
-
               // Export as JSON
               const exportData = {
                 jobId: jobIdForExport,

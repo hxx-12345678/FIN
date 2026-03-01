@@ -27,7 +27,6 @@ import { SemanticLedger } from "@/components/semantic-ledger"
 import { DemoModeOnboarding } from "@/components/demo-mode-onboarding"
 import { DemoModeBanner } from "@/components/demo-mode-banner"
 import { UpgradeToRealModal } from "@/components/upgrade-to-real-modal"
-import { PostLoginOptions } from "@/components/post-login-options"
 import { isDemoMode, resetDemoDataIfNeeded } from "@/lib/demo-data-generator"
 import { JobQueue } from "@/components/jobs/job-queue"
 import { ExportJobQueue } from "@/components/exports/export-job-queue"
@@ -58,7 +57,6 @@ function HomePageContent() {
     try { localStorage.setItem("finapilot_active_view", view) } catch (_e) { /* ignore */ }
   }
   const [showOnboarding, setShowOnboarding] = useState(false)
-  const [showPostLoginOptions, setShowPostLoginOptions] = useState(false)
   const [demoMode, setDemoMode] = useState(false)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
 
@@ -154,7 +152,6 @@ function HomePageContent() {
       if (effectiveView) {
         // User is on a specific view - ALWAYS respect it, don't redirect
         setShowLanding(false)
-        setShowPostLoginOptions(false)
         setShowOnboarding(false)
         setDemoMode(false)
         setActiveView(effectiveView)
@@ -166,7 +163,6 @@ function HomePageContent() {
       if (!authToken) {
         setShowLanding(true)
         setShowOnboarding(false)
-        setShowPostLoginOptions(false)
         setDemoMode(false)
         return
       }
@@ -183,7 +179,6 @@ function HomePageContent() {
             localStorage.setItem("finapilot_mode_selected", "true")
             localStorage.removeItem("finapilot_demo_mode")
             setShowLanding(false)
-            setShowPostLoginOptions(false)
             setShowOnboarding(false)
             setDemoMode(false)
             // Respect hash if present, otherwise go to overview
@@ -197,7 +192,6 @@ function HomePageContent() {
         // BUT ONLY if there's no hash (user not on a specific page)
         if (hasSelectedMode === "pending_integration" && !currentHash) {
           setShowLanding(false)
-          setShowPostLoginOptions(false)
           setShowOnboarding(false)
           setDemoMode(false)
           setActiveView("integrations")
@@ -205,17 +199,18 @@ function HomePageContent() {
           return
         }
 
-        // User doesn't have data and hasn't selected mode - show post-login options
+        // No mode selected and no data - default to integrations
         if (!hasSelectedMode) {
           setShowLanding(false)
           setShowOnboarding(false)
-          setShowPostLoginOptions(true)
+          setDemoMode(false)
+          setActiveView("integrations")
+          window.location.hash = "#integrations"
           return
         }
 
         // If pending_integration but we got here, default to integrations (shouldn't happen, but fallback)
         setShowLanding(false)
-        setShowPostLoginOptions(false)
         setShowOnboarding(false)
         setDemoMode(false)
         setActiveView("integrations")
@@ -225,8 +220,8 @@ function HomePageContent() {
       // If mode is already selected (and not pending integration), go directly to dashboard
       if (hasSelectedMode && hasSelectedMode !== "pending_integration") {
         setShowLanding(false)
-        setShowPostLoginOptions(false)
         setShowOnboarding(false)
+        setDemoMode(false)
         const isDemo = isDemoMode()
         setDemoMode(isDemo)
         if (isDemo) {
@@ -254,7 +249,6 @@ function HomePageContent() {
     const handleSignOut = () => {
       setShowLanding(true)
       setShowOnboarding(false)
-      setShowPostLoginOptions(false)
       setDemoMode(false)
       setActiveView("overview")
       localStorage.removeItem("finapilot_mode_selected")
@@ -262,30 +256,32 @@ function HomePageContent() {
       localStorage.removeItem("finapilot_onboarding_complete")
     }
 
-    // Listen for login success event
     const handleLoginSuccess = async () => {
-      const hasSelectedMode = localStorage.getItem("finapilot_mode_selected")
-      if (!hasSelectedMode || hasSelectedMode === "pending_integration") {
-        // Check if user has data
-        const orgId = await getUserOrgId()
-        if (orgId) {
-          const hasData = await checkUserHasData(orgId)
-          if (hasData) {
-            // User has data - mark integration complete and skip post-login options
-            localStorage.setItem("finapilot_mode_selected", "true")
-            localStorage.removeItem("finapilot_demo_mode")
-            setShowLanding(false)
-            setShowPostLoginOptions(false)
-            setShowOnboarding(false)
-            setDemoMode(false)
-            setActiveView("overview")
-            return
-          }
+      // Check if user has data
+      const orgId = await getUserOrgId()
+      if (orgId) {
+        const hasData = await checkUserHasData(orgId)
+        if (hasData) {
+          // User has data - mark integration complete and go to overview
+          localStorage.setItem("finapilot_mode_selected", "true")
+          localStorage.removeItem("finapilot_demo_mode")
+          setShowLanding(false)
+          setShowOnboarding(false)
+          setDemoMode(false)
+          setActiveView("overview")
+          window.location.hash = "#overview"
+          return
         }
-        // User doesn't have data - show post-login options
-        setShowLanding(false)
-        setShowPostLoginOptions(true)
       }
+      
+      // No data - redirect to integrations
+      localStorage.setItem("finapilot_mode_selected", "pending_integration")
+      localStorage.removeItem("finapilot_demo_mode")
+      setShowLanding(false)
+      setShowOnboarding(false)
+      setDemoMode(false)
+      setActiveView("integrations")
+      window.location.hash = "#integrations"
     }
 
     // Handle hash-based navigation
@@ -334,9 +330,10 @@ function HomePageContent() {
     const hasSelectedMode = localStorage.getItem("finapilot_mode_selected")
 
     if (authToken && !hasSelectedMode) {
-      // If logged in but hasn't selected mode, show post-login options
+      // If logged in but hasn't selected mode, show integrations
       setShowLanding(false)
-      setShowPostLoginOptions(true)
+      setActiveView("integrations")
+      window.location.hash = "#integrations"
     } else if (authToken && hasSelectedMode) {
       // If logged in and mode selected, go to dashboard
       setShowLanding(false)
@@ -346,29 +343,6 @@ function HomePageContent() {
       // If not logged in, show landing page (they need to login first)
       setShowLanding(true)
     }
-  }
-
-  const handlePostLoginDemo = () => {
-    localStorage.setItem("finapilot_mode_selected", "true")
-    localStorage.setItem("finapilot_demo_mode", "true")
-    localStorage.setItem("finapilot_onboarding_complete", "true")
-    setShowPostLoginOptions(false)
-    setDemoMode(true)
-    resetDemoDataIfNeeded()
-    setActiveView("overview")
-  }
-
-  const handlePostLoginRealData = () => {
-    // Don't set finapilot_mode_selected yet - wait until integration is complete
-    localStorage.removeItem("finapilot_demo_mode")
-    localStorage.setItem("finapilot_mode_selected", "pending_integration")
-    setShowPostLoginOptions(false)
-    setShowLanding(false)
-    setShowOnboarding(false)
-    setDemoMode(false)
-    setActiveView("integrations")
-    // Update URL hash to match the view
-    window.location.hash = "#integrations"
   }
 
   const handleOnboardingComplete = (mode: "demo" | "real") => {
@@ -459,16 +433,6 @@ function HomePageContent() {
 
   if (showLanding) {
     return <LandingPage onGetStarted={handleGetStarted} />
-  }
-
-  // Show post-login options after successful login
-  if (showPostLoginOptions) {
-    return (
-      <PostLoginOptions
-        onSelectDemo={handlePostLoginDemo}
-        onSelectRealData={handlePostLoginRealData}
-      />
-    )
   }
 
   // Show onboarding for users who clicked "Get Started"

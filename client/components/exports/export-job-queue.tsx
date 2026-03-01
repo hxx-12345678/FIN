@@ -29,7 +29,7 @@ interface ExportJob {
   partialExport?: boolean
 }
 
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 const POLL_INTERVAL = 2000
 
 export function ExportJobQueue() {
@@ -53,14 +53,6 @@ export function ExportJobQueue() {
 
     try {
       const orgId = localStorage.getItem("orgId") || ""
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found")
-      }
 
       // Use jobs endpoint and filter by export job types
       const params = new URLSearchParams()
@@ -73,12 +65,14 @@ export function ExportJobQueue() {
 
       const response = await fetch(`${API_BASE_URL}/jobs?${params.toString()}`, {
         method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!response.ok) {
         throw new Error("Failed to fetch export jobs")
@@ -123,19 +117,17 @@ export function ExportJobQueue() {
 
     const interval = setInterval(async () => {
       try {
-        const token = localStorage.getItem("auth-token") || document.cookie
-          .split("; ")
-          .find((row) => row.startsWith("auth-token="))
-          ?.split("=")[1]
-
         const response = await fetch(`${API_BASE_URL}/jobs/${jobId}`, {
           method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+          headers: getAuthHeaders(),
           credentials: "include",
         })
+
+        if (response.status === 401) {
+          handleUnauthorized()
+          stopPolling(jobId)
+          return
+        }
 
         if (!response.ok) {
           stopPolling(jobId)
@@ -208,19 +200,16 @@ export function ExportJobQueue() {
     if (!cancelJobId) return
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
       const response = await fetch(`${API_BASE_URL}/jobs/${cancelJobId}/cancel`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Unauthorized")
+      }
 
       if (!response.ok) {
         throw new Error("Failed to cancel export")
@@ -239,19 +228,16 @@ export function ExportJobQueue() {
     setRetryJobId(jobId)
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
       const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/retry`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Unauthorized")
+      }
 
       if (!response.ok) {
         throw new Error("Failed to retry export")
@@ -275,19 +261,16 @@ export function ExportJobQueue() {
     setDownloadingJobId(job.id)
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
       const response = await fetch(`${API_BASE_URL}/exports/${job.exportId}/download`, {
         method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (!response.ok) {
         if (response.status === 404 || response.status === 403) {

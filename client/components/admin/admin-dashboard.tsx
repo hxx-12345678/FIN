@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import { Users, Building2, Activity, AlertCircle, TrendingUp, Settings } from "lucide-react"
 import { useAdminAccess } from "@/hooks/use-admin-access"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface SystemMetrics {
   totalUsers: number
@@ -37,9 +37,18 @@ export function AdminDashboard() {
 
     try {
       const [metricsRes, activityRes, growthRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/admin/metrics`, { credentials: "include" }),
-        fetch(`${API_BASE_URL}/admin/users/activity`, { credentials: "include" }),
-        fetch(`${API_BASE_URL}/admin/orgs/growth`, { credentials: "include" }),
+        fetch(`${API_BASE_URL}/admin/metrics`, { 
+          headers: getAuthHeaders(),
+          credentials: "include" 
+        }),
+        fetch(`${API_BASE_URL}/admin/users/activity`, { 
+          headers: getAuthHeaders(),
+          credentials: "include" 
+        }),
+        fetch(`${API_BASE_URL}/admin/orgs/growth`, { 
+          headers: getAuthHeaders(),
+          credentials: "include" 
+        }),
       ])
 
       if (!metricsRes.ok) {

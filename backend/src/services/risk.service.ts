@@ -2,11 +2,9 @@
  * Risk Analysis Service
  */
 
-import axios from 'axios';
 import prisma from '../config/database';
 import { ValidationError } from '../utils/errors';
-
-const PYTHON_WORKER_URL = process.env.PYTHON_WORKER_URL || 'http://localhost:5000';
+import { workerClient } from '../utils/worker-client';
 
 export interface RiskDistribution {
   dist: 'normal' | 'uniform' | 'triangular';
@@ -64,8 +62,8 @@ export const riskService = {
         months.push(d.toISOString().slice(0, 7));
       }
 
-      // 5. Call Python Risk Engine
-      const response = await axios.post(`${PYTHON_WORKER_URL}/compute/risk`, {
+      // 5. Call Python Risk Engine via secure client
+      const response = await workerClient.post('/compute/risk', {
         modelId,
         months,
         dimensions: dimensionPayload,

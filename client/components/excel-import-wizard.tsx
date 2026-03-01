@@ -39,7 +39,7 @@ import {
   AlertTriangle,
 } from "lucide-react"
 import { toast } from "sonner"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface MappingTemplate {
   id: string
@@ -120,10 +120,9 @@ export function ExcelImportWizard({ orgId: propOrgId, token: propToken, onImport
     setStep("analyzing")
 
     try {
-      const token = propToken || localStorage.getItem("auth-token")
       const orgId = propOrgId || localStorage.getItem("orgId")
 
-      if (!token || !orgId) {
+      if (!orgId) {
         toast.error("Authentication error or Organization not selected")
         return
       }
@@ -134,9 +133,15 @@ export function ExcelImportWizard({ orgId: propOrgId, token: propToken, onImport
       // Upload file
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/import/xlsx`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: getAuthHeaders(),
+        credentials: "include",
         body: formData,
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -146,7 +151,7 @@ export function ExcelImportWizard({ orgId: propOrgId, token: propToken, onImport
       const result = await response.json()
       if (result.ok) {
         setUploadKey(result.data.uploadKey)
-        pollPreviewJob(result.data.jobId, token)
+        pollPreviewJob(result.data.jobId)
       }
     } catch (error) {
       console.error(error)
@@ -155,12 +160,18 @@ export function ExcelImportWizard({ orgId: propOrgId, token: propToken, onImport
     }
   }
 
-  const pollPreviewJob = async (jobId: string, token: string) => {
+  const pollPreviewJob = async (jobId: string) => {
     const poll = async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/jobs/${jobId}`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: getAuthHeaders(),
+          credentials: "include",
         })
+
+        if (response.status === 401) {
+          handleUnauthorized()
+          return
+        }
         const result = await response.json()
 
         if (result.ok) {
@@ -205,9 +216,8 @@ export function ExcelImportWizard({ orgId: propOrgId, token: propToken, onImport
 
     setStep("importing")
     const orgId = propOrgId || localStorage.getItem("orgId")
-    const token = propToken || localStorage.getItem("auth-token")
 
-    if (!orgId || !token) {
+    if (!orgId) {
       toast.error("Authentication error")
       return
     }
@@ -224,18 +234,24 @@ export function ExcelImportWizard({ orgId: propOrgId, token: propToken, onImport
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/import/xlsx/map`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...getAuthHeaders(),
           "Content-Type": "application/json"
         },
+        credentials: "include",
         body: JSON.stringify({
           uploadKey,
           mappingJson
         })
       })
 
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
+
       const result = await response.json()
       if (result.ok) {
-        pollImportJob(result.data.jobId, token)
+        pollImportJob(result.data.jobId)
       } else {
         throw new Error(result.error?.message || "Import failed to start")
       }
@@ -245,12 +261,18 @@ export function ExcelImportWizard({ orgId: propOrgId, token: propToken, onImport
     }
   }
 
-  const pollImportJob = async (jobId: string, token: string) => {
+  const pollImportJob = async (jobId: string) => {
     const poll = async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/jobs/${jobId}`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: getAuthHeaders(),
+          credentials: "include",
         })
+
+        if (response.status === 401) {
+          handleUnauthorized()
+          return
+        }
         const result = await response.json()
 
         if (result.ok) {

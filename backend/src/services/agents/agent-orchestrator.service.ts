@@ -1036,9 +1036,14 @@ class AgentOrchestratorService {
     const policyAdherenceScore = adherence ?? 0.5;
 
     const overallStatus =
-      hasPolicyFail || anyAgentFailed ? 'NOT INSTITUTIONAL' :
-      hasPolicyWarn ? 'CONDITIONAL' :
-      'INSTITUTIONAL GRADE';
+      hasPolicyFail || anyAgentFailed || (maturityScore < 0.7) ? 'ADVISORY' :
+        hasPolicyWarn || (maturityScore < 0.85) ? 'CONDITIONAL' :
+          'INSTITUTIONAL GRADE';
+
+    const header =
+      overallStatus === 'INSTITUTIONAL GRADE' ? '# 🏆 ENTERPRISE AI CFO INSTITUTIONAL REPORT' :
+        overallStatus === 'CONDITIONAL' ? '# 📊 AI CFO ADVISORY REPORT (CONDITIONAL)' :
+          '# ⚠️ AI CFO RISK-SENSITIVE ADVISORY';
 
     let auditOutput = `**Strategic Narrative:**\n${allExplanations.join('\n\n')}\n\n`;
     auditOutput += `**Institutional Certification:**\n`;
@@ -1059,7 +1064,7 @@ class AgentOrchestratorService {
 
     sections.push(`### SECTION 10 — Audit Appendix & Final Certification\n${auditOutput}`);
 
-    return `# 🏆 ENTERPRISE AI CFO INSTITUTIONAL REPORT\n\n` + sections.join('\n\n---\n\n') +
+    return `${header}\n\n` + sections.join('\n\n---\n\n') +
       `\n\n*Electronic Signature: AI-CFO-SYSTEM-VERIFIED | Hash: ${Buffer.from(query).toString('hex').slice(0, 12)}*`;
   }
 

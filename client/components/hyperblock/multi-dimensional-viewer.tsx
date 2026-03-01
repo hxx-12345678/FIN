@@ -31,7 +31,7 @@ import {
     Line
 } from "recharts"
 import { toast } from "sonner"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface Dimension {
     id: string
@@ -80,11 +80,17 @@ export function MultiDimensionalViewer({ orgId, modelId }: { orgId: string | nul
 
     const fetchDimensions = async () => {
         try {
-            const token = localStorage.getItem("auth-token")
-            const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/dimensions`, {
-                headers: { Authorization: `Bearer ${token}` }
+            const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/dimensions`, {
+                headers: getAuthHeaders(),
+                credentials: "include",
             })
-            const data = await res.json()
+
+            if (response.status === 401) {
+                handleUnauthorized()
+                return
+            }
+
+            const data = await response.json()
             if (data.ok) {
                 setDimensions(data.dimensions)
                 if (data.dimensions.length === 0) {
@@ -99,12 +105,21 @@ export function MultiDimensionalViewer({ orgId, modelId }: { orgId: string | nul
     const fetchPivotData = async () => {
         setLoading(true)
         try {
-            const token = localStorage.getItem("auth-token")
-            const res = await fetch(
-                `${API_BASE_URL}/orgs/${orgId}/models/${modelId}/cube/pivot?metricName=${selectedMetric}&rowDimension=${rowDimension}&colDimension=${colDimension}`,
-                { headers: { Authorization: `Bearer ${token}` } }
+            const response = await fetch(
+                `${API_BASE_URL}/orgs/${orgId}/models/${modelId}/cube/pivot?metricName=${selectedMetric}&rowDimension=${rowDimension}&colDimension=${colDimension}&org_id=${orgId}`,
+                { 
+                    headers: getAuthHeaders(),
+                    credentials: "include",
+                }
             )
-            const data = await res.json()
+
+            if (response.status === 401) {
+                handleUnauthorized()
+                setLoading(false)
+                return
+            }
+
+            const data = await response.json()
             if (data.ok) {
                 setPivotData(data.pivot)
             }
@@ -119,12 +134,19 @@ export function MultiDimensionalViewer({ orgId, modelId }: { orgId: string | nul
     const handleInitialize = async () => {
         setInitializing(true)
         try {
-            const token = localStorage.getItem("auth-token")
-            const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/dimensions/init`, {
+            const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/dimensions/init?org_id=${orgId}`, {
                 method: 'POST',
-                headers: { Authorization: `Bearer ${token}` }
+                headers: getAuthHeaders(),
+                credentials: "include",
             })
-            const data = await res.json()
+
+            if (response.status === 401) {
+                handleUnauthorized()
+                setInitializing(false)
+                return
+            }
+
+            const data = await response.json()
             if (data.ok) {
                 toast.success("Multi-dimensional system initialized")
                 fetchDimensions()

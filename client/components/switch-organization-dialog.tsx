@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Building2, Check, Loader2 } from "lucide-react"
 import { toast } from "sonner"
-import { API_BASE_URL, getAuthToken } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders } from "@/lib/api-config"
 
 interface Organization {
   id: string
@@ -55,18 +55,9 @@ export function SwitchOrganizationDialog({
 
     setSwitching(true)
     try {
-      const token = getAuthToken()
-      if (!token) {
-        toast.error("Authentication required")
-        return
-      }
-
       // Verify the user belongs to the selected organization
-      const verifyResponse = await fetch(`${API_BASE_URL}/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+      const verifyResponse = await fetch(`${API_BASE_URL}/auth/me?org_id=${selectedOrgId}`, {
+        headers: getAuthHeaders(),
         credentials: "include",
       })
 
@@ -86,33 +77,29 @@ export function SwitchOrganizationDialog({
       localStorage.setItem("orgId", selectedOrgId)
 
       // Refresh the token with new orgId (backend will generate new token)
-      const switchResponse = await fetch(`${API_BASE_URL}/auth/switch-org`, {
+      const switchResponse = await fetch(`${API_BASE_URL}/auth/switch-org?org_id=${selectedOrgId}`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({ orgId: selectedOrgId }),
       })
 
       if (!switchResponse.ok) {
-        // If switch-org endpoint doesn't exist, just update localStorage
-        // The token will be refreshed on next API call
-        console.warn("Switch org endpoint not available, using localStorage only")
+        // If switch-org endpoint doesn't exist, just update localStorage for non-sensitive data
+        // The cookie won't be updated, but subsequent requests will still work with old token
+        // if it hasn't expired.
       } else {
         const result = await switchResponse.json()
-        if (result.token) {
-          localStorage.setItem("auth-token", result.token)
-          if (result.refreshToken) {
-            localStorage.setItem("refresh-token", result.refreshToken)
-          }
+        // The backend setAuthCookies already updated the HttpOnly cookies
+        // We only need to update non-sensitive markers if they change
+        if (result.user?.id) {
+          localStorage.setItem("userId", result.user.id)
         }
       }
 
       toast.success("Organization switched successfully")
       onOpenChange(false)
-      
+
       // Reload the page to refresh all data
       setTimeout(() => {
         window.location.reload()
@@ -154,11 +141,10 @@ export function SwitchOrganizationDialog({
                 <button
                   key={org.id}
                   onClick={() => setSelectedOrgId(org.id)}
-                  className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                    isSelected
+                  className={`w-full text-left p-4 rounded-lg border-2 transition-all ${isSelected
                       ? "border-primary bg-primary/5"
                       : "border-border hover:border-primary/50"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">

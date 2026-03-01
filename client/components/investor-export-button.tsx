@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Download, FileText, Presentation, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { API_BASE_URL, getAuthToken, getAuthHeaders } from '@/lib/api-config';
+import { API_BASE_URL, getAuthHeaders } from '@/lib/api-config';
 
 interface InvestorExportButtonProps {
   orgId: string;
@@ -34,15 +34,10 @@ export function InvestorExportButton({ orgId, modelRunId, className }: InvestorE
     setExportId(null);
 
     try {
-      const token = getAuthToken();
-      if (!token) {
-        toast.error('Please log in to generate exports');
-        return;
-      }
-
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/investor-export`, {
         method: 'POST',
         headers: getAuthHeaders(),
+        credentials: 'include',
         body: JSON.stringify({
           format,
           modelRunId,
@@ -83,9 +78,9 @@ export function InvestorExportButton({ orgId, modelRunId, className }: InvestorE
 
     const poll = async () => {
       try {
-        const token = getAuthToken();
         const response = await fetch(`${API_BASE_URL}/exports/${id}`, {
           headers: getAuthHeaders(),
+          credentials: 'include',
         });
 
         const data = await response.json();
@@ -135,9 +130,9 @@ export function InvestorExportButton({ orgId, modelRunId, className }: InvestorE
 
   const downloadExport = async (id: string, format: string) => {
     try {
-      const token = getAuthToken();
       const response = await fetch(`${API_BASE_URL}/exports/${id}/download`, {
         headers: getAuthHeaders(),
+        credentials: 'include',
       });
 
       if (!response.ok) {

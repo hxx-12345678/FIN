@@ -18,7 +18,7 @@ import { Loader2, Download, AlertCircle, FileText, BarChart3, X } from "lucide-r
 import { toast } from "sonner"
 import { useJobStatus } from "@/hooks/use-job-status"
 import { JobProgressIndicator } from "./job-progress-indicator"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import {
   LineChart,
   Line,
@@ -74,19 +74,16 @@ export function JobDetailsModal({ jobId, open, onClose }: JobDetailsModalProps) 
 
     setLogsLoading(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
       const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/logs`, {
         method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (!response.ok) {
         throw new Error("Failed to fetch logs")
@@ -139,19 +136,16 @@ export function JobDetailsModal({ jobId, open, onClose }: JobDetailsModalProps) 
 
     setResultsLoading(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
       const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/results`, {
         method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (!response.ok) {
         throw new Error("Failed to fetch results")
@@ -170,19 +164,16 @@ export function JobDetailsModal({ jobId, open, onClose }: JobDetailsModalProps) 
     if (!jobId) return
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
       const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/results`, {
         method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!response.ok) {
         throw new Error("Failed to download results")

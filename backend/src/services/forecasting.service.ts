@@ -3,11 +3,9 @@
  * Orchestrates predictive modeling requests to the Python worker
  */
 
-import axios from 'axios';
 import prisma from '../config/database';
 import { ValidationError } from '../utils/errors';
-
-const PYTHON_WORKER_URL = process.env.PYTHON_WORKER_URL || 'http://localhost:5000';
+import { workerClient } from '../utils/worker-client';
 
 export interface ForecastParams {
     history: number[];
@@ -30,8 +28,8 @@ export const forecastingService = {
             // 1. Get history
             const history = await forecastingService.getHistoricalMetricData(orgId, modelId, params.metricName);
 
-            // 2. Call Python worker
-            const response = await axios.post(`${PYTHON_WORKER_URL}/compute/forecast`, {
+            // 2. Call Python worker via secure client
+            const response = await workerClient.post('/compute/forecast', {
                 history,
                 steps: params.steps,
                 method: params.method || 'auto',
@@ -78,7 +76,7 @@ export const forecastingService = {
      */
     runBacktest: async (history: number[], window: number = 12) => {
         try {
-            const response = await axios.post(`${PYTHON_WORKER_URL}/compute/forecast/backtest`, {
+            const response = await workerClient.post('/compute/forecast/backtest', {
                 history,
                 window
             });

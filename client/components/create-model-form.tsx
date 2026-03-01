@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "sonner"
 import { Loader2, Plus, FileText, Database, Sparkles as SparkleIcon, TrendingUp, ShieldCheck, Target, Zap, ArrowRight, CheckCircle2, Brain } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface CreateModelFormProps {
   orgId?: string | null
@@ -280,14 +280,16 @@ export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false, co
     setStep("analyzing");
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1];
-
       const res = await fetch(`${API_BASE_URL}/orgs/${effectiveOrgId}/analysis`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: getAuthHeaders(),
+        credentials: "include",
       });
+
+      if (res.status === 401) {
+        handleUnauthorized()
+        return
+      }
+
       const data = await res.json();
       if (data.ok) {
         setAnalysisData(data.analysis);
@@ -417,13 +419,14 @@ export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false, co
 
       const response = await fetch(`${API_BASE_URL}/orgs/${effectiveOrgId}/models`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
         credentials: "include",
         body: JSON.stringify(payload),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))

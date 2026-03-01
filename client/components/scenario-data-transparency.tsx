@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { AlertCircle, CheckCircle, Info, Database, TrendingUp, TrendingDown } from "lucide-react"
 import { Loader2 } from "lucide-react"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface DataTransparencyProps {
   modelId?: string
@@ -14,7 +14,7 @@ interface DataTransparencyProps {
   scenarioId?: string
 }
 
-export function ScenarioDataTransparency({ modelId, orgId, scenarioId }: DataTransparencyProps) {
+export function ScenarioDataTransparency({ modelId, orgId, scenarioId }: DataTransparencyProps): JSX.Element {
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
@@ -32,50 +32,21 @@ export function ScenarioDataTransparency({ modelId, orgId, scenarioId }: DataTra
     setError(null)
     
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        setError("Authentication required")
-        setLoading(false)
-        return
-      }
-
-      // Fetch transactions
-      const transactionsResponse = await fetch(`${API_BASE_URL}/orgs/${orgId}/transactions?limit=1000`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-      })
-
-      // Fetch model
-      const modelResponse = await fetch(`${API_BASE_URL}/models/${modelId}?org_id=${orgId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-      })
-
-      // Fetch scenario if provided
-      let scenarioData = null
-      if (scenarioId) {
-        const scenarioResponse = await fetch(`${API_BASE_URL}/scenarios/${scenarioId}/comparison?org_id=${orgId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+      // Fetch model and transactions
+      const [modelResponse, transactionsResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/models/${modelId}`, {
+          headers: getAuthHeaders(),
+          credentials: "include",
+        }),
+        fetch(`${API_BASE_URL}/orgs/${orgId}/transactions?limit=1000`, {
+          headers: getAuthHeaders(),
           credentials: "include",
         })
-        
-        if (scenarioResponse.ok) {
-          const scenarioResult = await scenarioResponse.json()
-          scenarioData = scenarioResult.scenario
-        }
+      ])
+
+      if (transactionsResponse.status === 401 || modelResponse.status === 401) {
+        handleUnauthorized()
+        return
       }
 
       if (transactionsResponse.ok && modelResponse.ok) {
@@ -142,6 +113,28 @@ export function ScenarioDataTransparency({ modelId, orgId, scenarioId }: DataTra
         const latestExpenseMonth = expenseMonths.length > 0 ? expenseMonths[expenseMonths.length - 1] : null
         const latestRevenue = latestRevenueMonth ? monthlyRevenue[latestRevenueMonth] : avgMonthlyRevenue
         const latestExpenses = latestExpenseMonth ? monthlyExpenses[latestExpenseMonth] : avgMonthlyExpenses
+
+        // Fetch scenario if provided
+        let scenarioData = null;
+        if (scenarioId) {
+          try {
+            const scenarioResponse = await fetch(`${API_BASE_URL}/scenarios/${scenarioId}/comparison?org_id=${orgId}`, {
+              headers: getAuthHeaders(),
+              credentials: "include",
+            })
+
+            if (scenarioResponse.status === 401) {
+              handleUnauthorized()
+              return
+            }
+
+            if (scenarioResponse.ok) {
+              scenarioData = await scenarioResponse.json()
+            }
+          } catch (err) {
+            console.warn("Failed to fetch scenario data for transparency", err)
+          }
+        }
 
         setData({
           transactions: {

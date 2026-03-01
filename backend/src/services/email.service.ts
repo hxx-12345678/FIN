@@ -29,21 +29,19 @@ export const emailService = {
       let smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
       const smtpUser = process.env.SMTP_USER;
       const smtpPass = process.env.SMTP_PASS;
-      
+
       logger.info(`[EMAIL] Sending email to ${options.to}`);
       logger.info(`[EMAIL] Subject: ${options.subject}`);
       logger.info(`[EMAIL] From: ${fromEmail}`);
-      
+
       // Try Brevo API first if API key is configured (highest priority)
       if (brevoApiKey) {
         try {
           const brevo = await import('@getbrevo/brevo');
           const apiInstance = new brevo.TransactionalEmailsApi();
-          // Set API key - Brevo SDK uses authentications.apiKey.apiKey
-          (apiInstance as any).authentications = {
-            apiKey: { apiKey: brevoApiKey }
-          };
-          
+          // Use standard method to set API key to avoid overwriting internal methods like applyToRequest
+          apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, brevoApiKey);
+
           const sendSmtpEmail: any = {
             sender: { email: fromEmail, name: 'FinaPilot' },
             to: [{ email: options.to }],
@@ -51,7 +49,7 @@ export const emailService = {
             htmlContent: options.html,
             textContent: options.text || options.html.replace(/<[^>]*>/g, '').trim(),
           };
-          
+
           const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
           logger.info(`[EMAIL] ✅ Email sent successfully via Brevo to ${options.to} - Message ID: ${result.body.messageId}`);
           logger.info(`[EMAIL] Email accepted by Brevo. Recipient should receive email shortly.`);
@@ -61,7 +59,7 @@ export const emailService = {
           if (brevoError.response?.body) {
             const errorBody = brevoError.response.body;
             logger.error(`[EMAIL] Brevo Error Details:`, errorBody);
-            
+
             // Provide specific guidance for common errors
             if (errorBody.code === 'unauthorized' || errorBody.message?.includes('API Key is not enabled')) {
               logger.error(`[EMAIL] ❌ Brevo API Key is not enabled or invalid.`);
@@ -75,14 +73,14 @@ export const emailService = {
           // Fall through to SendGrid or SMTP
         }
       }
-      
+
       // Try SendGrid if API key is configured
       if (sendgridApiKey) {
         try {
           // @ts-ignore - dynamic import may not be resolved by tsc during noEmit
           const sgMail = await import('@sendgrid/mail') as any;
           sgMail.setApiKey(sendgridApiKey);
-          
+
           const msg = {
             to: options.to,
             from: fromEmail,
@@ -90,7 +88,7 @@ export const emailService = {
             text: options.text || '',
             html: options.html,
           };
-          
+
           await sgMail.send(msg);
           logger.info(`[EMAIL] Email sent successfully via SendGrid to ${options.to}`);
           return true;
@@ -99,14 +97,14 @@ export const emailService = {
           // Fall through to SMTP or console logging
         }
       }
-      
+
       // Try SMTP via nodemailer if SMTP config is provided
       if (smtpHost && smtpUser && smtpPass) {
         try {
           const nodemailer = await import('nodemailer');
-          
+
           logger.info(`[EMAIL] Attempting to send via SMTP (${smtpHost}:${smtpPort})`);
-          
+
           const transporter = nodemailer.createTransport({
             host: smtpHost,
             port: smtpPort,
@@ -120,11 +118,11 @@ export const emailService = {
             greetingTimeout: 5000, // 5 seconds
             socketTimeout: 10000, // 10 seconds
           });
-          
+
           // Verify SMTP connection before sending
           await transporter.verify();
           logger.info(`[EMAIL] SMTP connection verified successfully`);
-          
+
           const mailOptions = {
             from: fromEmail,
             to: options.to,
@@ -132,7 +130,7 @@ export const emailService = {
             text: options.text || '',
             html: options.html,
           };
-          
+
           const info = await transporter.sendMail(mailOptions);
           logger.info(`[EMAIL] ✅ Email sent successfully via SMTP to ${options.to} - Message ID: ${info.messageId}`);
           logger.info(`[EMAIL] Email accepted by SMTP server. Recipient should receive email shortly.`);
@@ -150,7 +148,7 @@ export const emailService = {
           // Don't silently fail - we want to know if SMTP is misconfigured
         }
       }
-      
+
       // Fallback: Log to console for development/testing
       console.log('\n' + '='.repeat(80));
       console.log('[EMAIL] SENDING EMAIL (CONSOLE LOG - NO BREVO/SENDGRID/SMTP CONFIGURED)');
@@ -170,10 +168,10 @@ export const emailService = {
       console.log('   2. SENDGRID_API_KEY environment variable (for SendGrid)');
       console.log('   3. SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS (for SMTP)');
       console.log('='.repeat(80) + '\n');
-      
+
       logger.warn(`[EMAIL] Email logged to console (no email service configured). To: ${options.to}`);
       return true;
-      
+
     } catch (error) {
       logger.error(`[EMAIL] Error sending email to ${options.to}:`, error);
       return false;
@@ -193,9 +191,9 @@ export const emailService = {
     baseUrl: string = config.frontendUrl || 'http://localhost:3000'
   ): Promise<boolean> => {
     const invitationUrl = `${baseUrl}/auth/accept-invite?token=${token}`;
-    
+
     const subject = `You've been invited to join ${orgName} on FinaPilot`;
-    
+
     const html = `
 <!DOCTYPE html>
 <html>
@@ -244,7 +242,7 @@ export const emailService = {
 </body>
 </html>
     `;
-    
+
     const text = `
 You've been invited!
 
@@ -260,7 +258,7 @@ If you didn't expect this invitation, you can safely ignore this email.
 
 © ${new Date().getFullYear()} FinaPilot. All rights reserved.
     `;
-    
+
     return await emailService.sendEmail({
       to: email,
       subject,

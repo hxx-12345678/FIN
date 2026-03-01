@@ -24,7 +24,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { getUserOrgId } from "@/lib/user-data-check"
-import { API_BASE_URL, getAuthHeaders } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface LedgerEntry {
   id: string
@@ -61,57 +61,73 @@ export function SemanticLedger() {
     fetchOrgId()
   }, [])
 
-  const fetchData = async () => {
-    if (!orgId) return
-    try {
-      setLoading(true)
-      const [ledgerRes, batchRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/orgs/${orgId}/semantic-layer/ledger`, {
-          headers: getAuthHeaders()
-        }),
-        fetch(`${API_BASE_URL}/orgs/${orgId}/data/import-batches`, {
-          headers: getAuthHeaders()
-        })
-      ])
-      
-      const ledgerData = await ledgerRes.json()
-      const batchData = await batchRes.json()
-      
-      if (ledgerData.ok) setLedger(ledgerData.data)
-      if (batchData.ok) setBatches(batchData.data.filter((b: any) => b.status === 'completed'))
-    } catch (error) {
-      console.error("Failed to fetch ledger data:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
+    const fetchData = async () => {
+        if (!orgId) return
+        try {
+            const [ledgerRes, batchRes] = await Promise.all([
+                fetch(`${API_BASE_URL}/orgs/${orgId}/semantic-layer/ledger?org_id=${orgId}`, {
+                    headers: getAuthHeaders(),
+                    credentials: "include",
+                }),
+                fetch(`${API_BASE_URL}/orgs/${orgId}/data/import-batches?org_id=${orgId}`, {
+                    headers: getAuthHeaders(),
+                    credentials: "include",
+                })
+            ])
 
-  useEffect(() => {
-    if (orgId) {
-      fetchData()
+            if (ledgerRes.status === 401 || batchRes.status === 401) {
+                handleUnauthorized()
+                setLoading(false)
+                return
+            }
+            
+            const ledgerData = await ledgerRes.json()
+            const batchData = await batchRes.json()
+            
+            if (ledgerData.ok) setLedger(ledgerData.data)
+            if (batchData.ok) setBatches(batchData.data.filter((b: any) => b.status === 'completed'))
+        } catch (error) {
+            console.error("Failed to fetch ledger data:", error)
+        } finally {
+            setLoading(false)
+        }
     }
-  }, [orgId])
 
-  const handlePromote = async (batchId: string) => {
-    try {
-      setPromotingId(batchId)
-      const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/semantic-layer/promote/${batchId}`, {
-        method: 'POST',
-        headers: getAuthHeaders()
-      })
-      const data = await res.json()
-      if (data.ok) {
-        toast.success(`Successfully promoted ${data.data.count} transactions to the ledger`)
-        fetchData()
-      } else {
-        toast.error(data.error?.message || "Failed to promote transactions")
-      }
-    } catch (error) {
-      toast.error("An error occurred during promotion")
-    } finally {
-      setPromotingId(null)
+    useEffect(() => {
+        if (orgId) {
+            fetchData()
+        }
+    }, [orgId])
+
+    const handlePromote = async (batchId: string) => {
+        if (!orgId) return
+        try {
+            setPromotingId(batchId)
+            const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/semantic-layer/promote/${batchId}?org_id=${orgId}`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                credentials: "include",
+            })
+
+            if (res.status === 401) {
+                handleUnauthorized()
+                setPromotingId(null)
+                return
+            }
+
+            const data = await res.json()
+            if (data.ok) {
+                toast.success(`Successfully promoted ${data.data.count} transactions to the ledger`)
+                fetchData()
+            } else {
+                toast.error(data.error?.message || "Failed to promote transactions")
+            }
+        } catch (error) {
+            toast.error("An error occurred during promotion")
+        } finally {
+            setPromotingId(null)
+        }
     }
-  }
 
   return (
     <div className="space-y-6">

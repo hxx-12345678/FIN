@@ -37,7 +37,7 @@ import { RiskAnalysisHub } from "./risk/risk-analysis-hub"
 import { DependencyGraph } from "./hyperblock/dependency-graph"
 import { MultiDimensionalViewer } from "./hyperblock/multi-dimensional-viewer"
 import { ModelReasoningHub } from "./reasoning/model-reasoning-hub"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { useModel } from "@/lib/model-context"
 import { useOrg } from "@/lib/org-context"
 
@@ -238,10 +238,16 @@ export function FinancialModeling() {
 
   const fetchTraces = async (modelId: string) => {
     try {
-      const token = localStorage.getItem("auth-token")
       const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/traces`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: getAuthHeaders(),
+        credentials: "include",
       })
+
+      if (res.status === 401) {
+        handleUnauthorized()
+        return
+      }
+
       const data = await res.json()
       if (data.ok) {
         setComputationTraces(data.traces)
@@ -262,22 +268,8 @@ export function FinancialModeling() {
         // Refresh transactions
         await fetchTransactions()
 
-        // Refresh models and runs
-        const token = localStorage.getItem("auth-token") || document.cookie
-          .split("; ")
-          .find((row) => row.startsWith("auth-token="))
-          ?.split("=")[1]
-
-        if (token && orgId) {
-          // Refresh models list
-          await fetchOrgIdAndModels()
-
-          // If a model is selected, refresh its runs
-          if (selectedModel) {
-            await fetchModelRuns(orgId, selectedModel, token)
-            await fetchModelDetails(orgId, selectedModel, token)
-          }
-        }
+        // Refresh models and runs (cookie-based auth)
+        await fetchOrgIdAndModels()
       }
     }
 
@@ -298,17 +290,10 @@ export function FinancialModeling() {
   useEffect(() => {
     if (selectedModel && orgId) {
       const regenerateSensitivity = async () => {
-        const token = localStorage.getItem("auth-token") || document.cookie
-          .split("; ")
-          .find((row) => row.startsWith("auth-token="))
-          ?.split("=")[1]
-
-        if (!token) return
-
         // Only regenerate if we don't have valid sensitivity data
         if (!sensitivityData || !sensitivityData.revenueGrowth || !sensitivityData.churnRate) {
           console.log("Regenerating sensitivity data - currentRun:", currentRun?.id)
-          await fetchModelDetails(orgId, selectedModel, token)
+          await fetchModelDetails(orgId, selectedModel)
         }
       }
 
@@ -326,20 +311,15 @@ export function FinancialModeling() {
     if (storedOrgId) return storedOrgId
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) return null
-
       const response = await fetch(`${API_BASE_URL}/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return null
+      }
 
       if (response.ok) {
         const userData = await response.json()
@@ -359,20 +339,15 @@ export function FinancialModeling() {
   const fetchConnectors = async (currentOrgId: string) => {
     setLoadingConnectors(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) return
-
       const response = await fetch(`${API_BASE_URL}/orgs/${currentOrgId}/connectors`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -392,20 +367,15 @@ export function FinancialModeling() {
 
     setLoadingTransactions(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) return
-
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/transactions?limit=10000`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -432,23 +402,16 @@ export function FinancialModeling() {
 
       setOrgId(currentOrgId)
 
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found. Please log in.")
-      }
-
       // Fetch models
       const modelsResponse = await fetch(`${API_BASE_URL}/orgs/${currentOrgId}/models`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (modelsResponse.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!modelsResponse.ok) {
         throw new Error(`Failed to fetch models: ${modelsResponse.statusText}`)
@@ -463,13 +426,15 @@ export function FinancialModeling() {
 
           // Check if any model has completed runs
           for (const model of modelsResult.models) {
-            const runsResponse = await fetch(`${API_BASE_URL}/models/${model.id}/runs`, {
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-              },
+            const runsResponse = await fetch(`${API_BASE_URL}/models/${model.id}/runs?org_id=${orgId}`, {
+              headers: getAuthHeaders(),
               credentials: "include",
             })
+
+            if (runsResponse.status === 401) {
+              handleUnauthorized()
+              throw new Error("Your session has expired. Please log in again.")
+            }
 
             if (runsResponse.ok) {
               const runsResult = await runsResponse.json()
@@ -485,8 +450,8 @@ export function FinancialModeling() {
 
           setSelectedModel(selectedModelObj.id)
           setCurrentModel(selectedModelObj)
-          await fetchModelRuns(currentOrgId, selectedModelObj.id, token)
-          await fetchModelDetails(currentOrgId, selectedModelObj.id, token)
+          await fetchModelRuns(currentOrgId, selectedModelObj.id)
+          await fetchModelDetails(currentOrgId, selectedModelObj.id)
         }
       } else {
         // No models yet, clear data
@@ -503,16 +468,18 @@ export function FinancialModeling() {
     }
   }
 
-  const fetchModelRuns = async (orgId: string, modelId: string, token: string) => {
+  const fetchModelRuns = async (orgId: string, modelId: string) => {
     try {
       // Get model runs for this model
-      const response = await fetch(`${API_BASE_URL}/models/${modelId}/runs`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+      const response = await fetch(`${API_BASE_URL}/models/${modelId}/runs?org_id=${orgId}`, {
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -526,22 +493,22 @@ export function FinancialModeling() {
             // Set currentRun first
             setCurrentRun(latestRun)
             // Fetch run details to get financial data
-            const runDetails = await fetchModelRunDetails(orgId, modelId, latestRun.id, token)
+            const runDetails = await fetchModelRunDetails(orgId, modelId, latestRun.id)
             // IMPORTANT: Pass latestRun directly to fetchModelDetails to avoid stale closure
-            await fetchModelDetails(orgId, modelId, token, true, latestRun) // Force regenerate sensitivity with run
+            await fetchModelDetails(orgId, modelId, true, latestRun) // Force regenerate sensitivity with run
           } else {
             // No completed runs yet for this model
             setCurrentRun(null)
             setFinancialData([])
             // Still fetch model details for assumptions (sensitivity will use assumptions)
-            await fetchModelDetails(orgId, modelId, token, true, null)
+            await fetchModelDetails(orgId, modelId, true, null)
           }
         } else {
           // No runs yet for this model; clear run-specific state so UI shows correct "no data" message
           setModelRuns([])
           setCurrentRun(null)
           setFinancialData([])
-          await fetchModelDetails(orgId, modelId, token)
+          await fetchModelDetails(orgId, modelId)
         }
       } else {
         // Request failed; do not overwrite existing data
@@ -552,15 +519,17 @@ export function FinancialModeling() {
     }
   }
 
-  const fetchModelRunDetails = async (orgId: string, modelId: string, runId: string, token: string) => {
+  const fetchModelRunDetails = async (orgId: string, modelId: string, runId: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/models/${modelId}/runs/${runId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+      const response = await fetch(`${API_BASE_URL}/models/${modelId}/runs/${runId}?org_id=${orgId}`, {
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -639,25 +608,18 @@ export function FinancialModeling() {
 
     setSavingModelName(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        toast.error("Authentication required")
-        return false
-      }
-
       const response = await fetch(`${API_BASE_URL}/models/${modelId}`, {
         method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({ name: newName.trim() }),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        toast.error("Your session has expired. Please log in again.")
+        return false
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -706,15 +668,17 @@ export function FinancialModeling() {
     }
   }
 
-  const fetchModelDetails = async (orgId: string, modelId: string, token: string, forceRegenerateSensitivity: boolean = false, runToUseOverride?: ModelRun | null) => {
+  const fetchModelDetails = async (orgId: string, modelId: string, forceRegenerateSensitivity: boolean = false, runToUseOverride?: ModelRun | null) => {
     try {
       const response = await fetch(`${API_BASE_URL}/models/${modelId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
 
       if (response.ok) {
         const result = await response.json()
@@ -897,16 +861,6 @@ export function FinancialModeling() {
     }
     if (savingAssumptions) return
 
-    const token = localStorage.getItem("auth-token") || document.cookie
-      .split("; ")
-      .find((row) => row.startsWith("auth-token="))
-      ?.split("=")[1]
-
-    if (!token) {
-      toast.error("Authentication token not found")
-      return
-    }
-
     const parseNum = (key: string, fallback: number) => {
       const raw = assumptionEdits[key]
       const n = raw === undefined ? NaN : Number(String(raw).replace(/[%$, ]/g, ""))
@@ -950,13 +904,15 @@ export function FinancialModeling() {
     try {
       const resp = await fetch(`${API_BASE_URL}/models/${selectedModel}`, {
         method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({ assumptions: assumptionsPayload }),
       })
+
+      if (resp.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}))
@@ -969,7 +925,7 @@ export function FinancialModeling() {
       }
 
       toast.success("Assumptions saved. Re-running model to apply changes...")
-      await fetchModelDetails(orgId, selectedModel, token)
+      await fetchModelDetails(orgId, selectedModel)
       await handleRunModel()
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to save assumptions"
@@ -1010,23 +966,16 @@ export function FinancialModeling() {
 
     setRunningModel(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found")
-      }
-
       // Get current model details to ensure we have the right model
       const modelResponse = await fetch(`${API_BASE_URL}/models/${selectedModel}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (modelResponse.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!modelResponse.ok) {
         throw new Error("Failed to fetch model details")
@@ -1042,15 +991,17 @@ export function FinancialModeling() {
       // Create model run
       const response = await fetch(`${API_BASE_URL}/models/${selectedModel}/run`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
           runType: "baseline",
         }),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -1067,12 +1018,12 @@ export function FinancialModeling() {
         if (jobId && currentOrgId && selectedModel) {
           toast.success("Model run started. Processing...")
           // Poll for completion
-          await pollModelRunStatus(currentOrgId, selectedModel, jobId, token, modelRunId)
+          await pollModelRunStatus(currentOrgId, selectedModel, jobId, modelRunId)
         } else if (result.modelRun && currentOrgId && selectedModel) {
           // If modelRun is created but no jobId, refresh runs
           toast.success("Model run created. Refreshing...")
-          await fetchModelRuns(currentOrgId, selectedModel, token)
-          await fetchModelDetails(currentOrgId, selectedModel, token)
+          await fetchModelRuns(currentOrgId, selectedModel)
+          await fetchModelDetails(currentOrgId, selectedModel)
         } else {
           throw new Error("Invalid response: no jobId or modelRun")
         }
@@ -1087,7 +1038,7 @@ export function FinancialModeling() {
     }
   }
 
-  const pollModelRunStatus = async (orgId: string, modelId: string, jobId: string, token: string, modelRunId?: string) => {
+  const pollModelRunStatus = async (orgId: string, modelId: string, jobId: string, modelRunId?: string) => {
     const maxAttempts = 120 // 4 minutes max (120 * 2 seconds)
     let attempts = 0
 
@@ -1095,20 +1046,22 @@ export function FinancialModeling() {
       if (attempts >= maxAttempts) {
         toast.warning("Model run is taking longer than expected. It will continue processing in the background.")
         // Still refresh to show current status
-        await fetchModelRuns(orgId, modelId, token)
-        await fetchModelDetails(orgId, modelId, token)
+        await fetchModelRuns(orgId, modelId)
+        await fetchModelDetails(orgId, modelId)
         return
       }
 
       try {
         // Check job status
         const jobResponse = await fetch(`${API_BASE_URL}/jobs/${jobId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+          headers: getAuthHeaders(),
           credentials: "include",
         })
+
+        if (jobResponse.status === 401) {
+          handleUnauthorized()
+          return
+        }
 
         if (jobResponse.ok) {
           const jobResult = await jobResponse.json()
@@ -1119,24 +1072,26 @@ export function FinancialModeling() {
             if (jobStatus === "done" || jobStatus === "completed") {
               toast.success("Model run completed successfully!")
               // Refresh all data - get the latest run and fetch its details
-              await fetchModelRuns(orgId, modelId, token)
+              await fetchModelRuns(orgId, modelId)
               // Wait a bit for the run to be fully saved
               await new Promise(resolve => setTimeout(resolve, 1000))
               // Fetch runs again to get the latest one
-              const runsResponse = await fetch(`${API_BASE_URL}/models/${modelId}/runs`, {
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                  "Content-Type": "application/json",
-                },
+              const runsResponse = await fetch(`${API_BASE_URL}/models/${modelId}/runs?org_id=${orgId}`, {
+                headers: getAuthHeaders(),
                 credentials: "include",
               })
+
+              if (runsResponse.status === 401) {
+                handleUnauthorized()
+                return
+              }
               let runsResult: any = null
               if (runsResponse.ok) {
                 runsResult = await runsResponse.json()
                 if (runsResult.ok && runsResult.runs && runsResult.runs.length > 0) {
                   const latestRun = runsResult.runs.find((r: ModelRun) => r.status === "done") || runsResult.runs[0]
                   if (latestRun) {
-                    await fetchModelRunDetails(orgId, modelId, latestRun.id, token)
+                    await fetchModelRunDetails(orgId, modelId, latestRun.id)
                   }
                 }
               }
@@ -1146,16 +1101,16 @@ export function FinancialModeling() {
               // Get the latest run again to pass it directly
               if (runsResult && runsResult.ok && runsResult.runs && runsResult.runs.length > 0) {
                 const latestRunForDetails = runsResult.runs.find((r: ModelRun) => r.status === "done") || runsResult.runs[0]
-                await fetchModelDetails(orgId, modelId, token, true, latestRunForDetails) // Force regenerate sensitivity
+                await fetchModelDetails(orgId, modelId, true, latestRunForDetails) // Force regenerate sensitivity
               }
               return
             } else if (jobStatus === "failed") {
               toast.error("Model run failed. Please check the logs and try again.")
-              await fetchModelRuns(orgId, modelId, token)
+              await fetchModelRuns(orgId, modelId)
               return
             } else if (jobStatus === "cancelled") {
               toast.warning("Model run was cancelled.")
-              await fetchModelRuns(orgId, modelId, token)
+              await fetchModelRuns(orgId, modelId)
               return
             }
 
@@ -1169,13 +1124,15 @@ export function FinancialModeling() {
         // Also check model run status directly if we have the ID
         if (modelRunId && attempts % 5 === 0) {
           try {
-            const runResponse = await fetch(`${API_BASE_URL}/models/${modelId}/runs/${modelRunId}`, {
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-              },
+            const runResponse = await fetch(`${API_BASE_URL}/models/${modelId}/runs/${modelRunId}?org_id=${orgId}`, {
+              headers: getAuthHeaders(),
               credentials: "include",
             })
+
+            if (runResponse.status === 401) {
+              handleUnauthorized()
+              return
+            }
 
             if (runResponse.ok) {
               const runResult = await runResponse.json()
@@ -1185,19 +1142,21 @@ export function FinancialModeling() {
                 const runStatus = runObj.status
                 if (runStatus === "done") {
                   toast.success("Model run completed!")
-                  await fetchModelRuns(orgId, modelId, token)
+                  await fetchModelRuns(orgId, modelId)
                   // Fetch the run details to update financial data
                   let runObjForDetails = runObj
                   if (modelRunId) {
-                    await fetchModelRunDetails(orgId, modelId, modelRunId, token)
+                    await fetchModelRunDetails(orgId, modelId, modelRunId)
                     // Get the run again to ensure we have the latest
-                    const runDetailsResponse = await fetch(`${API_BASE_URL}/models/${modelId}/runs/${modelRunId}`, {
-                      headers: {
-                        Authorization: `Bearer ${token}`,
-                        "Content-Type": "application/json",
-                      },
+                    const runDetailsResponse = await fetch(`${API_BASE_URL}/models/${modelId}/runs/${modelRunId}?org_id=${orgId}`, {
+                      headers: getAuthHeaders(),
                       credentials: "include",
                     })
+
+                    if (runDetailsResponse.status === 401) {
+                      handleUnauthorized()
+                      return
+                    }
                     if (runDetailsResponse.ok) {
                       const runDetailsResult = await runDetailsResponse.json()
                       if (runDetailsResult.ok && runDetailsResult.run) {
@@ -1207,11 +1166,11 @@ export function FinancialModeling() {
                   }
                   // Wait a bit for state to update
                   await new Promise(resolve => setTimeout(resolve, 300))
-                  await fetchModelDetails(orgId, modelId, token, true, runObjForDetails) // Force regenerate sensitivity
+                  await fetchModelDetails(orgId, modelId, true, runObjForDetails) // Force regenerate sensitivity
                   return
                 } else if (runStatus === "failed") {
                   toast.error("Model run failed.")
-                  await fetchModelRuns(orgId, modelId, token)
+                  await fetchModelRuns(orgId, modelId)
                   return
                 }
               }
@@ -1243,16 +1202,6 @@ export function FinancialModeling() {
 
     setCreatingModel(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found")
-      }
-      const authToken: string = token
-
       // Prepare request body with comprehensive industrial standard fields
       const requestBody = {
         model_name: newModelName.trim(),
@@ -1267,13 +1216,15 @@ export function FinancialModeling() {
 
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/models`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify(requestBody),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -1296,10 +1247,9 @@ export function FinancialModeling() {
         if (result.model.id) {
           setSelectedModel(result.model.id)
           setCurrentModel(result.model)
-          // Use the already-validated token from this request scope
           if (orgId) {
-            await fetchModelRuns(orgId, result.model.id, authToken)
-            await fetchModelDetails(orgId, result.model.id, authToken)
+            await fetchModelRuns(orgId, result.model.id)
+            await fetchModelDetails(orgId, result.model.id)
           }
 
           // IMPORTANT: A brand-new blank model has no runs, so the UI will appear empty.
@@ -1308,22 +1258,24 @@ export function FinancialModeling() {
             toast.info("Initializing model (running baseline)...")
             const runResponse = await fetch(`${API_BASE_URL}/models/${result.model.id}/run`, {
               method: "POST",
-              headers: {
-                Authorization: `Bearer ${authToken}`,
-                "Content-Type": "application/json",
-              },
+              headers: getAuthHeaders(),
               credentials: "include",
               body: JSON.stringify({ runType: "baseline" }),
             })
+
+            if (runResponse.status === 401) {
+              handleUnauthorized()
+              throw new Error("Your session has expired. Please log in again.")
+            }
             if (runResponse.ok) {
               const runResult = await runResponse.json()
               const jobId = runResult.jobId || runResult.modelRun?.jobId || runResult.job?.id
               const modelRunId = runResult.modelRun?.id
               if (jobId && orgId) {
-                await pollModelRunStatus(orgId, result.model.id, jobId, authToken, modelRunId)
+                await pollModelRunStatus(orgId, result.model.id, jobId, modelRunId)
               } else if (orgId) {
                 // Fallback: refresh runs to show queued/done state
-                await fetchModelRuns(orgId, result.model.id, authToken)
+                await fetchModelRuns(orgId, result.model.id)
               }
             } else {
               // If worker isn't running, this may fail; keep the model created but warn.
@@ -1361,27 +1313,20 @@ export function FinancialModeling() {
 
     setGeneratingAI(true)
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found")
-      }
-
       // Use AI CFO to generate model recommendations
       const response = await fetch(`${API_BASE_URL}/orgs/${currentOrgId}/ai-plans`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
           goal: "Generate a comprehensive financial model with assumptions, projections, and sensitivity analysis based on our current financial data",
         }),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -1395,10 +1340,10 @@ export function FinancialModeling() {
         if (result.plan.planJson?.structuredResponse) {
           const structuredResponse = result.plan.planJson.structuredResponse
           // Create model from AI recommendations
-          await handleCreateModelFromAI(structuredResponse, currentOrgId, token)
+          await handleCreateModelFromAI(structuredResponse, currentOrgId)
         } else {
           // Fallback: create a basic model
-          await handleCreateModelFromAI({ calculations: {} }, currentOrgId, token)
+          await handleCreateModelFromAI({ calculations: {} }, currentOrgId)
         }
       } else {
         throw new Error(result.error?.message || result.message || "Invalid response from server")
@@ -1411,7 +1356,7 @@ export function FinancialModeling() {
     }
   }
 
-  const handleCreateModelFromAI = async (aiData: any, currentOrgId?: string, token?: string, onSuccess?: (modelId: string) => void) => {
+  const handleCreateModelFromAI = async (aiData: any, currentOrgId?: string, onSuccess?: (modelId: string) => void) => {
     const targetOrgId = currentOrgId || orgId
     if (!targetOrgId) {
       toast.error("Organization ID not found")
@@ -1419,16 +1364,6 @@ export function FinancialModeling() {
     }
 
     try {
-      const authToken = token || localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!authToken) {
-        toast.error("Authentication token not found")
-        return
-      }
-
       const modelName = `AI Generated Model - ${new Date().toLocaleDateString()}`
 
       // Check if user has transaction data - if yes, use CSV data source to pull real data
@@ -1437,12 +1372,14 @@ export function FinancialModeling() {
       try {
         // Check if there are transactions available
         const txResponse = await fetch(`${API_BASE_URL}/orgs/${targetOrgId}/transactions?limit=1`, {
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-            "Content-Type": "application/json",
-          },
+          headers: getAuthHeaders(),
           credentials: "include",
         })
+
+        if (txResponse.status === 401) {
+          handleUnauthorized()
+          return
+        }
         if (txResponse.ok) {
           const txResult = await txResponse.json()
           if (txResult.ok && txResult.transactions && txResult.transactions.length > 0) {
@@ -1509,13 +1446,15 @@ export function FinancialModeling() {
 
       const response = await fetch(`${API_BASE_URL}/orgs/${targetOrgId}/models`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify(requestBody),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -1537,15 +1476,17 @@ export function FinancialModeling() {
         try {
           const runResponse = await fetch(`${API_BASE_URL}/models/${result.model.id}/run`, {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${authToken}`,
-              "Content-Type": "application/json",
-            },
+            headers: getAuthHeaders(),
             credentials: "include",
             body: JSON.stringify({
               runType: "baseline",
             }),
           })
+
+          if (runResponse.status === 401) {
+            handleUnauthorized()
+            return
+          }
 
           if (runResponse.ok) {
             const runResult = await runResponse.json()
@@ -1553,10 +1494,10 @@ export function FinancialModeling() {
             if (jobId && targetOrgId) {
               toast.info("Processing financial data for AI model...")
               const modelRunId = runResult.modelRun?.id
-              await pollModelRunStatus(targetOrgId, result.model.id, jobId, authToken, modelRunId)
+              await pollModelRunStatus(targetOrgId, result.model.id, jobId, modelRunId)
             } else if (targetOrgId) {
               // Fallback: refresh runs to show queued/done state
-              await fetchModelRuns(targetOrgId, result.model.id, authToken)
+              await fetchModelRuns(targetOrgId, result.model.id)
             }
           }
         } catch (runError) {
@@ -1591,25 +1532,12 @@ export function FinancialModeling() {
     }
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        toast.error("Authentication token not found. Please log in.")
-        return
-      }
-
       toast.info("Generating financial model report...")
 
       // Create investor export (PDF format for model report)
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/investor-export`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
           format: "pdf",
@@ -1618,6 +1546,11 @@ export function FinancialModeling() {
           includeRecommendations: true,
         }),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -1650,19 +1583,15 @@ export function FinancialModeling() {
             }
 
             try {
-              // Re-fetch token on each poll attempt to handle token refresh
-              const currentToken = localStorage.getItem("auth-token") || document.cookie
-                .split("; ")
-                .find((row) => row.startsWith("auth-token="))
-                ?.split("=")[1] || token
-
               const statusResponse = await fetch(`${API_BASE_URL}/exports/${exportId}/status`, {
-                headers: {
-                  Authorization: `Bearer ${currentToken}`,
-                  "Content-Type": "application/json",
-                },
+                headers: getAuthHeaders(),
                 credentials: "include",
               })
+
+              if (statusResponse.status === 401) {
+                handleUnauthorized()
+                return
+              }
 
               if (statusResponse.ok) {
                 const statusData = await statusResponse.json()
@@ -1693,19 +1622,16 @@ export function FinancialModeling() {
                     fullUrl = `${API_BASE_URL}/${downloadUrl}`
                   }
 
-                  // Use the exports download endpoint directly
-                  const token = localStorage.getItem("auth-token") || document.cookie
-                    .split("; ")
-                    .find((row) => row.startsWith("auth-token="))
-                    ?.split("=")[1] || currentToken
-
                   try {
                     const downloadResponse = await fetch(`${API_BASE_URL}/exports/${exportId}/download`, {
-                      headers: {
-                        Authorization: `Bearer ${token}`,
-                      },
+                      headers: getAuthHeaders(),
                       credentials: "include",
                     })
+
+                    if (downloadResponse.status === 401) {
+                      handleUnauthorized()
+                      return
+                    }
 
                     if (downloadResponse.ok) {
                       const blob = await downloadResponse.blob()
@@ -1747,8 +1673,7 @@ export function FinancialModeling() {
                   return
                 }
               } else if (statusResponse.status === 401) {
-                // Token expired or invalid - stop polling
-                toast.error("Authentication expired. Please log in again.")
+                handleUnauthorized()
                 return
               }
 
@@ -1797,30 +1722,23 @@ export function FinancialModeling() {
     }
 
     try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found")
-      }
-
       // Export as CSV for now (can add PDF/JSON options later)
       const exportType = "csv"
 
       // Create export using the correct endpoint
       const response = await fetch(`${API_BASE_URL}/model-runs/${currentRun.id}/export`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
           type: exportType,
         }),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -1842,12 +1760,12 @@ export function FinancialModeling() {
 
         // Poll for export completion
         if (jobId) {
-          await pollExportStatus(jobId, exportId, token)
+          await pollExportStatus(jobId, exportId)
         } else {
           // If no job, try direct download after a short delay
           setTimeout(async () => {
             try {
-              await downloadExport(exportId, token)
+              await downloadExport(exportId)
               toast.success("Model export downloaded successfully!", {
                 description: "You can also find this export in Reports & Analytics → Custom Reports tab or Export Queue",
                 duration: 7000,
@@ -1868,17 +1786,20 @@ export function FinancialModeling() {
     }
   }
 
-  const downloadExport = async (exportId: string, token: string) => {
+  const downloadExport = async (exportId: string) => {
     try {
       // Ensure we use the correct API endpoint without double /api/v1
       const downloadUrl = `${API_BASE_URL}/exports/${exportId}/download`
 
       const response = await fetch(downloadUrl, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Unauthorized")
+      }
 
       if (response.ok) {
         const blob = await response.blob()
@@ -1902,7 +1823,7 @@ export function FinancialModeling() {
     }
   }
 
-  const pollExportStatus = async (jobId: string, exportId: string, token: string) => {
+  const pollExportStatus = async (jobId: string, exportId: string) => {
     const maxAttempts = 60 // 2 minutes max
     let attempts = 0
 
@@ -1915,12 +1836,14 @@ export function FinancialModeling() {
       try {
         // Check job status
         const jobResponse = await fetch(`${API_BASE_URL}/jobs/${jobId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+          headers: getAuthHeaders(),
           credentials: "include",
         })
+
+        if (jobResponse.status === 401) {
+          handleUnauthorized()
+          return
+        }
 
         if (jobResponse.ok) {
           const jobResult = await jobResponse.json()
@@ -1929,7 +1852,7 @@ export function FinancialModeling() {
             if (jobStatus === "done" || jobStatus === "completed") {
               // Try to download the export
               try {
-                await downloadExport(exportId, token)
+                await downloadExport(exportId)
                 toast.success("Model export completed successfully!", {
                   description: "You can also find this export in Reports & Analytics → Custom Reports tab or Export Queue",
                   duration: 7000,
@@ -1949,12 +1872,14 @@ export function FinancialModeling() {
 
         // Also check export status directly
         const exportResponse = await fetch(`${API_BASE_URL}/exports/${exportId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+          headers: getAuthHeaders(),
           credentials: "include",
         })
+
+        if (exportResponse.status === 401) {
+          handleUnauthorized()
+          return
+        }
 
         if (exportResponse.ok) {
           const exportResult = await exportResponse.json()
@@ -1962,7 +1887,7 @@ export function FinancialModeling() {
           const exportStatus = exportResultData.status || exportResult.status
           if (exportStatus === "completed" || exportStatus === "done") {
             try {
-              await downloadExport(exportId, token)
+              await downloadExport(exportId)
               toast.success("Model export completed successfully!", {
                 description: "You can also find this export in Reports & Analytics → Custom Reports tab or Export Queue",
                 duration: 7000,
@@ -2135,117 +2060,112 @@ export function FinancialModeling() {
     let provenanceData: any = null
     if (currentRun && orgId) {
       try {
-        const token = localStorage.getItem("auth-token") || document.cookie
-          .split("; ")
-          .find((row) => row.startsWith("auth-token="))
-          ?.split("=")[1]
+        // Try the actual cell key first, then fallback to the simple cellId
+        const cellKeysToTry = [actualCellKey, cellId]
+        let result: any = null
 
-        if (token) {
-          // Try the actual cell key first, then fallback to the simple cellId
-          const cellKeysToTry = [actualCellKey, cellId]
-          let result: any = null
+        for (const keyToTry of cellKeysToTry) {
+          const response = await fetch(
+            `${API_BASE_URL}/orgs/${orgId}/models/${selectedModel}/runs/${currentRun.id}/provenance/${encodeURIComponent(keyToTry)}`,
+            {
+              headers: getAuthHeaders(),
+              credentials: "include",
+            }
+          )
 
-          for (const keyToTry of cellKeysToTry) {
-            const response = await fetch(
-              `${API_BASE_URL}/orgs/${orgId}/models/${selectedModel}/runs/${currentRun.id}/provenance/${encodeURIComponent(keyToTry)}`,
-              {
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                  "Content-Type": "application/json",
-                },
-                credentials: "include",
+          if (response.status === 401) {
+            handleUnauthorized()
+            return
+          }
+
+          if (response.ok) {
+            const responseData = await response.json()
+            if (responseData.ok && responseData.entries && responseData.entries.length > 0) {
+              result = responseData
+              break // Found data, stop trying other keys
+            }
+          }
+        }
+
+        if (result && result.entries && result.entries.length > 0) {
+          // CRITICAL: Use the value from the table (passed as parameter) as it's the actual cell value
+          // The API summary.totalAmount might be an aggregate, not the specific cell value
+          // Only use API value as fallback if no value was passed
+          let actualValue = value // Always prefer the passed value (from table cell)
+
+          // If no value was passed, try to extract from API response
+          if (!actualValue || actualValue === 'N/A' || actualValue === `${currencySymbol}0`) {
+            const firstEntry = result.entries[0]
+
+            // Try to get value from summary (for transaction-based) - but this might be aggregate
+            if (firstEntry.summary && firstEntry.summary.totalAmount !== undefined) {
+              actualValue = `${currencySymbol}${Number(firstEntry.summary.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            }
+            // Try to get value from assumptionRef (for assumption-based)
+            else if (firstEntry.assumptionRef && firstEntry.assumptionRef.value !== undefined) {
+              const val = firstEntry.assumptionRef.value
+              if (typeof val === 'number') {
+                actualValue = `${currencySymbol}${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              } else {
+                actualValue = String(val)
               }
-            )
-
-            if (response.ok) {
-              const responseData = await response.json()
-              if (responseData.ok && responseData.entries && responseData.entries.length > 0) {
-                result = responseData
-                break // Found data, stop trying other keys
+            }
+            // Try to get value from sourceRef
+            else if (firstEntry.sourceRef && typeof firstEntry.sourceRef === 'object' && firstEntry.sourceRef.value !== undefined) {
+              const val = firstEntry.sourceRef.value
+              if (typeof val === 'number') {
+                actualValue = `${currencySymbol}${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              } else {
+                actualValue = String(val)
               }
             }
           }
 
-          if (result && result.entries && result.entries.length > 0) {
-            // CRITICAL: Use the value from the table (passed as parameter) as it's the actual cell value
-            // The API summary.totalAmount might be an aggregate, not the specific cell value
-            // Only use API value as fallback if no value was passed
-            let actualValue = value // Always prefer the passed value (from table cell)
-
-            // If no value was passed, try to extract from API response
-            if (!actualValue || actualValue === 'N/A' || actualValue === `${currencySymbol}0`) {
-              const firstEntry = result.entries[0]
-
-              // Try to get value from summary (for transaction-based) - but this might be aggregate
-              if (firstEntry.summary && firstEntry.summary.totalAmount !== undefined) {
-                actualValue = `${currencySymbol}${Number(firstEntry.summary.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-              }
-              // Try to get value from assumptionRef (for assumption-based)
-              else if (firstEntry.assumptionRef && firstEntry.assumptionRef.value !== undefined) {
-                const val = firstEntry.assumptionRef.value
-                if (typeof val === 'number') {
-                  actualValue = `${currencySymbol}${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                } else {
-                  actualValue = String(val)
+          // Use real provenance data
+          provenanceData = {
+            cellId: actualCellKey,
+            metricName,
+            value: actualValue, // Use table value (preferred) or API fallback
+            sourceTransactions: result.entries
+              .filter((e: any) => e.sourceType === 'txn' && e.sampleTransactions)
+              .flatMap((e: any) => e.sampleTransactions.map((txn: any) => ({
+                id: txn.id,
+                date: new Date(txn.date).toISOString().split('T')[0],
+                description: txn.description || 'Transaction',
+                amount: txn.amount,
+                category: txn.category || 'Uncategorized',
+              }))),
+            assumptionRefs: result.entries
+              .filter((e: any) => e.sourceType === 'assumption' && (e.sourceRef || e.assumptionRef))
+              .map((e: any) => {
+                const ref = e.assumptionRef || e.sourceRef || {}
+                // Extract assumption name properly
+                const assumptionName = ref.name || ref.assumption_id || 'Assumption'
+                // Extract assumption value properly
+                const assumptionValue = ref.value !== undefined
+                  ? (typeof ref.value === 'number'
+                    ? `${currencySymbol}${ref.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : String(ref.value))
+                  : (ref.assumption_value !== undefined
+                    ? (typeof ref.assumption_value === 'number'
+                      ? `${currencySymbol}${ref.assumption_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : String(ref.assumption_value))
+                    : 'N/A')
+                return {
+                  id: e.id,
+                  name: assumptionName,
+                  value: assumptionValue,
+                  lastModified: new Date(e.createdAt).toLocaleDateString(),
                 }
-              }
-              // Try to get value from sourceRef
-              else if (firstEntry.sourceRef && typeof firstEntry.sourceRef === 'object' && firstEntry.sourceRef.value !== undefined) {
-                const val = firstEntry.sourceRef.value
-                if (typeof val === 'number') {
-                  actualValue = `${currencySymbol}${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                } else {
-                  actualValue = String(val)
-                }
-              }
-            }
-
-            // Use real provenance data
-            provenanceData = {
-              cellId: actualCellKey,
-              metricName,
-              value: actualValue, // Use table value (preferred) or API fallback
-              sourceTransactions: result.entries
-                .filter((e: any) => e.sourceType === 'txn' && e.sampleTransactions)
-                .flatMap((e: any) => e.sampleTransactions.map((txn: any) => ({
-                  id: txn.id,
-                  date: new Date(txn.date).toISOString().split('T')[0],
-                  description: txn.description || 'Transaction',
-                  amount: txn.amount,
-                  category: txn.category || 'Uncategorized',
-                }))),
-              assumptionRefs: result.entries
-                .filter((e: any) => e.sourceType === 'assumption' && (e.sourceRef || e.assumptionRef))
-                .map((e: any) => {
-                  const ref = e.assumptionRef || e.sourceRef || {}
-                  // Extract assumption name properly
-                  const assumptionName = ref.name || ref.assumption_id || 'Assumption'
-                  // Extract assumption value properly
-                  const assumptionValue = ref.value !== undefined
-                    ? (typeof ref.value === 'number'
-                      ? `${currencySymbol}${ref.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                      : String(ref.value))
-                    : (ref.assumption_value !== undefined
-                      ? (typeof ref.assumption_value === 'number'
-                        ? `${currencySymbol}${ref.assumption_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                        : String(ref.assumption_value))
-                      : 'N/A')
-                  return {
-                    id: e.id,
-                    name: assumptionName,
-                    value: assumptionValue,
-                    lastModified: new Date(e.createdAt).toLocaleDateString(),
-                  }
-                }),
-              generatedBy: result.entries.some((e: any) => e.promptPreview) ? "ai" : "user",
-              confidenceScore: confidenceScore, // Use calculated confidence
-              aiExplanation: aiExplanation || result.entries.find((e: any) => e.promptPreview)?.promptPreview?.responseText,
-              auditTrail: result.entries.map((e: any) => ({
-                timestamp: new Date(e.createdAt).toLocaleString(),
-                action: `Provenance entry (${e.sourceType})`,
-                user: 'System',
-              })),
-            }
+              }),
+            generatedBy: result.entries.some((e: any) => e.promptPreview) ? "ai" : "user",
+            confidenceScore: confidenceScore, // Use calculated confidence
+            aiExplanation: aiExplanation || result.entries.find((e: any) => e.promptPreview)?.promptPreview?.responseText,
+            auditTrail: result.entries.map((e: any) => ({
+              timestamp: new Date(e.createdAt).toLocaleString(),
+              action: `Provenance entry (${e.sourceType})`,
+              user: 'System',
+            })),
           }
         }
       } catch (error) {
@@ -2572,12 +2492,8 @@ export function FinancialModeling() {
                   onClick={async () => {
                     if (editingModelId === model.id) return // Don't select if editing
                     setSelectedModel(model.id)
-                    const token = localStorage.getItem("auth-token") || document.cookie
-                      .split("; ")
-                      .find((row) => row.startsWith("auth-token="))
-                      ?.split("=")[1]
-                    if (token && orgId) {
-                      await fetchModelRuns(orgId, model.id, token)
+                    if (orgId) {
+                      await fetchModelRuns(orgId, model.id)
                     }
                   }}
                 >

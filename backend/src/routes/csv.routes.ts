@@ -41,7 +41,7 @@ router.post(
 router.post(
   '/orgs/:orgId/import/csv/save-mapping-template',
   authenticate,
-  requireOrgAccess,
+  requireOrgAccess('orgId'),
   csvController.saveMappingTemplate
 );
 

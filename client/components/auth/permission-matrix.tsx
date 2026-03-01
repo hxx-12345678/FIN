@@ -55,11 +55,11 @@ export function PermissionMatrix({ roleId, readOnly = false }: PermissionMatrixP
 
     try {
       const [permissionsRes, rolesRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/auth/permissions`, { 
+        fetch(`${API_BASE_URL}/system/permissions`, {
           credentials: "include",
           headers: getAuthHeaders(),
         }),
-        fetch(`${API_BASE_URL}/auth/roles`, { 
+        fetch(`${API_BASE_URL}/system/roles`, {
           credentials: "include",
           headers: getAuthHeaders(),
         }),
@@ -76,49 +76,54 @@ export function PermissionMatrix({ roleId, readOnly = false }: PermissionMatrixP
 
       // Backend returns { ok: true, data: { permissions: [...] } } where permissions is array of strings
       const permsStrings = permissionsData.data?.permissions || permissionsData.permissions || []
-      
+
       // Backend returns { ok: true, data: { roles: [...] } } where roles is array of { orgId, role, orgName }
       const rolesDataList = rolesData.data?.roles || rolesData.roles || []
 
       // Create default permission structure from available permissions
       const defaultPerms: Permission[] = [
-        { id: "admin:*", name: "Admin Access", description: "Full administrative access", category: "Administration" },
-        { id: "finance:*", name: "Finance Access", description: "Full finance and accounting access", category: "Finance" },
-        { id: "viewer:*", name: "Viewer Access", description: "Read-only access to all data", category: "Viewer" },
-        { id: "org:read", name: "View Organization", description: "View organization details", category: "Organization" },
-        { id: "org:write", name: "Edit Organization", description: "Edit organization settings", category: "Organization" },
-        { id: "users:read", name: "View Users", description: "View user list", category: "Users" },
-        { id: "users:write", name: "Manage Users", description: "Add, edit, or remove users", category: "Users" },
-        { id: "reports:read", name: "View Reports", description: "View financial reports", category: "Reports" },
-        { id: "reports:write", name: "Create Reports", description: "Create and export reports", category: "Reports" },
+        { id: "read", name: "Read Access", description: "View dashboards, reports, and data", category: "Access" },
+        { id: "write", name: "Write Access", description: "Create and edit financial models and reports", category: "Access" },
+        { id: "export", name: "Export Access", description: "Export data and reports", category: "Access" },
+        { id: "user_management", name: "User Management", description: "Manage team members and roles", category: "Administration" },
+        { id: "billing", name: "Billing", description: "Manage billing and subscriptions", category: "Administration" },
+        { id: "settings", name: "Settings", description: "Modify organization settings", category: "Administration" },
       ]
-      
+
       // Filter to only show permissions that exist in backend response
       const perms = defaultPerms.filter(p => permsStrings.length === 0 || permsStrings.includes(p.id))
       setPermissions(perms)
 
       // Transform backend roles format to frontend format
-      // Backend returns: [{ orgId, role, orgName }]
-      // Frontend expects: [{ id, name, permissions: string[], isDefault? }]
-      const roleMap: Record<string, string[]> = {
-        admin: ["admin:*", "finance:*", "viewer:*", "org:read", "org:write", "users:read", "users:write", "reports:read", "reports:write"],
-        finance: ["finance:*", "viewer:*", "org:read", "reports:read", "reports:write"],
-        viewer: ["viewer:*", "org:read", "reports:read"],
-      }
-
+      // Backend returns roles with permissions like ['read', 'write', ...]
       const rolesList: Role[] = rolesDataList.map((r: any) => ({
-        id: r.role || r.id,
-        name: r.role ? r.role.charAt(0).toUpperCase() + r.role.slice(1) : r.name,
-        permissions: roleMap[r.role] || [],
-        isDefault: true,
+        id: r.id,
+        name: r.name,
+        permissions: r.permissions || [],
+        isDefault: r.isDefault,
       }))
 
       // If no roles from backend, create default roles
       if (rolesList.length === 0) {
         const defaultRoles: Role[] = [
-          { id: "admin", name: "Admin", permissions: roleMap.admin, isDefault: true },
-          { id: "finance", name: "Finance", permissions: roleMap.finance, isDefault: true },
-          { id: "viewer", name: "Viewer", permissions: roleMap.viewer, isDefault: true },
+          {
+            id: "admin",
+            name: "Admin",
+            permissions: ["read", "write", "export", "user_management", "billing", "settings"],
+            isDefault: true
+          },
+          {
+            id: "finance",
+            name: "Finance",
+            permissions: ["read", "write", "export"],
+            isDefault: true
+          },
+          {
+            id: "viewer",
+            name: "Viewer",
+            permissions: ["read"],
+            isDefault: true
+          },
         ]
         setRoles(defaultRoles)
         if (!roleId) {
@@ -169,7 +174,7 @@ export function PermissionMatrix({ roleId, readOnly = false }: PermissionMatrixP
 
     setState("editing")
     const newPermissions = new Set(editedPermissions)
-    
+
     if (newPermissions.has(permissionId)) {
       newPermissions.delete(permissionId)
     } else {

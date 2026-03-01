@@ -46,7 +46,7 @@ import { Input } from "@/components/ui/input"
 import { useStagedChanges } from "@/hooks/use-staged-changes"
 import { toast } from "sonner"
 import { SwitchOrganizationDialog } from "@/components/switch-organization-dialog"
-import { API_BASE_URL, getAuthToken } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders } from "@/lib/api-config"
 import { useModel } from "@/lib/model-context"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
@@ -215,17 +215,8 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const token = getAuthToken()
-        if (!token) {
-          setLoadingUser(false)
-          return
-        }
-
         const response = await fetch(`${API_BASE_URL}/auth/me`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+          headers: getAuthHeaders(),
           credentials: "include",
         })
 
@@ -263,13 +254,10 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
     fetchUserData()
   }, [])
 
-  const fetchModels = async (orgId: string, token: string) => {
+  const fetchModels = async (orgId: string) => {
     try {
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/models`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
 
@@ -290,11 +278,8 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
 
   useEffect(() => {
     if (currentOrgId) {
-      const token = getAuthToken()
-      if (token) {
-        fetchModels(currentOrgId, token)
-        setContextOrgId(currentOrgId)
-      }
+      fetchModels(currentOrgId)
+      setContextOrgId(currentOrgId)
     }
   }, [currentOrgId])
 
@@ -340,22 +325,15 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
     setIsSigningOut(true)
     try {
       // Call backend logout endpoint
-      const token = getAuthToken()
-
-      if (token) {
-        try {
-          await fetch(`${API_BASE_URL}/auth/logout`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            credentials: "include",
-          })
-        } catch (error) {
-          // Continue with logout even if backend call fails
-          console.error("Logout API call failed:", error)
-        }
+      try {
+        await fetch(`${API_BASE_URL}/auth/logout`, {
+          method: "POST",
+          headers: getAuthHeaders(),
+          credentials: "include",
+        })
+      } catch (error) {
+        // Continue with logout even if backend call fails
+        console.error("Logout API call failed:", error)
       }
 
       // Clear all auth data

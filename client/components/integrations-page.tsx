@@ -36,7 +36,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface Connector {
   id: string
@@ -204,15 +204,10 @@ export function IntegrationsPage() {
     console.log("[Integrations] Fetching import history for org:", id)
     
     setLoadingHistory(true)
-    const token = getAuthToken()
-    if (!token) {
-      setLoadingHistory(false)
-      return
-    }
 
     try {
       const response = await fetch(`${API_BASE_URL}/jobs?orgId=${id}&jobType=csv_import&limit=10`, {
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
 
@@ -230,28 +225,20 @@ export function IntegrationsPage() {
     } finally {
       setLoadingHistory(false)
     }
-  }, [getAuthToken])
+  }, [])
 
   const fetchAllData = useCallback(async (id: string) => {
-    if (!id) return
-    console.log("[Integrations] Fetching all data for org:", id)
-    
     setLoading(true)
-    const token = getAuthToken()
-    if (!token) {
-      setLoading(false)
-      return
-    }
 
     try {
       // Parallel fetches for efficiency
       const [connRes, histRes] = await Promise.allSettled([
-        fetch(`${API_BASE_URL}/connectors/orgs/${id}/connectors`, {
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        fetch(`${API_BASE_URL}/orgs/${id}/connectors`, {
+          headers: getAuthHeaders(),
           credentials: "include",
         }),
         fetch(`${API_BASE_URL}/jobs?orgId=${id}&jobType=csv_import&limit=10`, {
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          headers: getAuthHeaders(),
           credentials: "include",
         })
       ])
@@ -295,7 +282,7 @@ export function IntegrationsPage() {
     } finally {
       setLoading(false)
     }
-  }, [getAuthToken, checkCompletion])
+  }, [checkCompletion])
 
   // 3. EFFECTS
   // Initial mount: get Org ID and check for OAuth callback results
@@ -324,12 +311,12 @@ export function IntegrationsPage() {
         setTimeout(() => fetchAllData(stored), 1000)
       }
     } else {
-      const token = getAuthToken()
-      if (token) {
-        fetch(`${API_BASE_URL}/auth/me`, {
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          credentials: "include",
-        }).then(res => res.json()).then(data => {
+      fetch(`${API_BASE_URL}/auth/me`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
+        .then(res => res.json())
+        .then(data => {
           if (data.orgs?.length > 0) {
             localStorage.setItem("orgId", data.orgs[0].id)
             setOrgId(data.orgs[0].id)
@@ -340,12 +327,10 @@ export function IntegrationsPage() {
           } else {
             setLoading(false)
           }
-        }).catch(() => setLoading(false))
-      } else {
-        setLoading(false)
-      }
+        })
+        .catch(() => setLoading(false))
     }
-  }, [getAuthToken, fetchAllData])
+  }, [fetchAllData])
 
   // When orgId is set, fetch data
   useEffect(() => {
@@ -410,17 +395,19 @@ export function IntegrationsPage() {
     setShowConnectDialog(true)
 
     try {
-      const token = getAuthToken()
-      if (!token) throw new Error("Authentication token not found")
-
       const response = await fetch(
-        `${API_BASE_URL}/connectors/orgs/${orgId}/connectors/${integration.id}/start-oauth`,
+        `${API_BASE_URL}/orgs/${orgId}/connectors/${integration.id}/start-oauth`,
         {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          headers: getAuthHeaders(),
           credentials: "include",
         }
       )
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new Error("Your session has expired. Please log in again.")
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
@@ -445,8 +432,6 @@ export function IntegrationsPage() {
 
   const handleSyncNow = async (connectorId: string) => {
     if (syncing.has(connectorId)) return
-    const token = getAuthToken()
-    if (!token) return
 
     setSyncing(prev => new Set(prev).add(connectorId))
     setSyncProgress(prev => ({ ...prev, [connectorId]: 0 }))
@@ -454,9 +439,13 @@ export function IntegrationsPage() {
     try {
       const res = await fetch(`${API_BASE_URL}/connectors/${connectorId}/sync`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         credentials: "include",
       })
+      if (res.status === 401) {
+        handleUnauthorized()
+        throw new Error("Unauthorized")
+      }
       if (!res.ok) throw new Error("Sync request failed")
 
       // Mock progress for UI
@@ -481,15 +470,17 @@ export function IntegrationsPage() {
   }
 
   const handleToggleAutoSync = async (connectorId: string, enabled: boolean) => {
-    const token = getAuthToken()
-    if (!token) return
     try {
       const res = await fetch(`${API_BASE_URL}/connectors/${connectorId}/sync-settings`, {
         method: "PATCH",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({ autoSyncEnabled: enabled }),
       })
+      if (res.status === 401) {
+        handleUnauthorized()
+        throw new Error("Unauthorized")
+      }
       if (!res.ok) throw new Error("Update failed")
       toast.success(`Auto-sync ${enabled ? "enabled" : "disabled"}`)
       if (orgId) fetchAllData(orgId)

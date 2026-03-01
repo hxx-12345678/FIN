@@ -48,34 +48,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { API_BASE_URL } from "@/lib/api-config"
-
-// Helper function to get auth token
-const getAuthToken = (): string | null => {
-  if (typeof window === "undefined") return null
-  // Try localStorage first
-  const token = localStorage.getItem("auth-token")
-  if (token) return token
-  // Try cookies
-  const cookies = document.cookie.split("; ")
-  const authCookie = cookies.find((row) => row.startsWith("auth-token="))
-  if (authCookie) {
-    return authCookie.split("=")[1]
-  }
-  return null
-}
-
-// Helper function to get auth headers
-const getAuthHeaders = (): HeadersInit => {
-  const token = getAuthToken()
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  }
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`
-  }
-  return headers
-}
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
 interface TeamMember {
   id: string
@@ -148,7 +121,7 @@ function formatTimeAgo(date: Date | string | null): string {
   try {
     const dateObj = date instanceof Date ? date : new Date(date)
     if (isNaN(dateObj.getTime())) return "Never"
-    
+
     const now = new Date()
     const diffMs = now.getTime() - dateObj.getTime()
     const diffMins = Math.floor(diffMs / 60000)
@@ -199,15 +172,18 @@ export function UserManagement() {
           return
         }
 
-        // Fetch from API
-        const token = getAuthToken()
-        const response = await fetch(`${API_BASE_URL}/auth/me`, { 
+        const response = await fetch(`${API_BASE_URL}/auth/me?org_id=${orgId || ''}`, {
           credentials: "include",
           headers: {
+            ...getAuthHeaders(),
             "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
         })
+        if (response.status === 401) {
+          handleUnauthorized()
+          if (mounted) setLoading(false)
+          return
+        }
         if (response.ok) {
           const data = await response.json()
           if (data.orgs && data.orgs.length > 0) {
@@ -276,10 +252,16 @@ export function UserManagement() {
   const fetchTeamMembers = async () => {
     if (!orgId) return
     try {
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/users`, {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/users?org_id=${orgId}`, {
         credentials: "include",
         headers: getAuthHeaders(),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
+
       if (response.ok) {
         const data = await response.json()
         const members = (data.data || []).map((member: any) => {
@@ -314,10 +296,16 @@ export function UserManagement() {
   const fetchInvitations = async () => {
     if (!orgId) return
     try {
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/invitations`, {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/invitations?org_id=${orgId}`, {
         credentials: "include",
         headers: getAuthHeaders(),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
+
       if (response.ok) {
         const data = await response.json()
         const invs = (data.data || []).map((inv: any) => {
@@ -352,10 +340,16 @@ export function UserManagement() {
   const fetchAccessRequests = async () => {
     if (!orgId) return
     try {
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/access-requests`, {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/access-requests?org_id=${orgId}`, {
         credentials: "include",
         headers: getAuthHeaders(),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
+
       if (response.ok) {
         const data = await response.json()
         const requests = (data.requests || []).map((req: any) => {
@@ -378,7 +372,9 @@ export function UserManagement() {
         const errorData = await response.json().catch(() => ({}))
         const errorMessage = errorData.error?.message || errorData.message || response.statusText
         console.error("Failed to fetch access requests:", errorMessage)
-        if (response.status === 401) {
+        if (response.status === 403) {
+          setError("You do not have permission to view access requests. Admin access required.")
+        } else if (response.status === 401) {
           toast.error("Authentication failed. Please log in again.")
         }
       }
@@ -391,7 +387,7 @@ export function UserManagement() {
     if (!orgId) return
     setApprovingRequestId(requestId)
     try {
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/access-requests/${requestId}/approve`, {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/access-requests/${requestId}/approve?org_id=${orgId}`, {
         method: "POST",
         headers: getAuthHeaders(),
         credentials: "include",
@@ -416,7 +412,7 @@ export function UserManagement() {
     if (!orgId) return
     setRejectingRequestId(requestId)
     try {
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/access-requests/${requestId}/reject`, {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/access-requests/${requestId}/reject?org_id=${orgId}`, {
         method: "POST",
         headers: getAuthHeaders(),
         credentials: "include",
@@ -443,6 +439,12 @@ export function UserManagement() {
         credentials: "include",
         headers: getAuthHeaders(),
       })
+
+      if (response.status === 401) {
+        handleUnauthorized()
+        return
+      }
+
       if (response.ok) {
         const data = await response.json()
         const acts = (data.data || []).map((act: any) => {
@@ -474,13 +476,13 @@ export function UserManagement() {
 
   const fetchRoles = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/roles`, {
+      const response = await fetch(`${API_BASE_URL}/system/roles?org_id=${orgId || ''}`, {
         credentials: "include",
         headers: getAuthHeaders(),
       })
       if (response.ok) {
         const data = await response.json()
-        setRoles(data.roles || [])
+        setRoles(data.roles || data.data?.roles || [])
       } else {
         const errorData = await response.json().catch(() => ({}))
         const errorMessage = errorData.error?.message || errorData.message || response.statusText
@@ -498,7 +500,7 @@ export function UserManagement() {
     if (!orgId || !inviteEmail) return
 
     try {
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/users/invite`, {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/users/invite?org_id=${orgId}`, {
         method: "POST",
         headers: getAuthHeaders(),
         credentials: "include",
@@ -529,7 +531,7 @@ export function UserManagement() {
     if (!orgId) return
 
     try {
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/users/${userId}/role`, {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/users/${userId}/role?org_id=${orgId}`, {
         method: "PUT",
         headers: getAuthHeaders(),
         credentials: "include",
@@ -561,7 +563,7 @@ export function UserManagement() {
     if (!confirm("Are you sure you want to remove this user?")) return
 
     try {
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/users/${userId}`, {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/users/${userId}?org_id=${orgId}`, {
         method: "DELETE",
         headers: getAuthHeaders(),
         credentials: "include",
@@ -584,7 +586,7 @@ export function UserManagement() {
     if (!orgId) return
 
     try {
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/users/${userId}/status`, {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/users/${userId}/status?org_id=${orgId}`, {
         method: "PUT",
         headers: getAuthHeaders(),
         credentials: "include",
@@ -634,7 +636,7 @@ export function UserManagement() {
     if (!confirm("Are you sure you want to cancel this invitation?")) return
 
     try {
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/invitations/${invitationId}`, {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/invitations/${invitationId}?org_id=${orgId}`, {
         method: "DELETE",
         headers: getAuthHeaders(),
         credentials: "include",
@@ -814,7 +816,7 @@ export function UserManagement() {
               )}
             </TabsTrigger>
             <TabsTrigger value="activity" className="text-xs sm:text-sm">Activity Log</TabsTrigger>
-        </TabsList>
+          </TabsList>
         </div>
 
         <TabsContent value="members" className="space-y-4 overflow-x-auto overflow-y-visible">
@@ -1069,10 +1071,10 @@ export function UserManagement() {
                               <div className="font-medium">{invitation.email}</div>
                               <div className="text-sm text-muted-foreground">
                                 {invitation.invitedBy && `Invited by ${invitation.invitedBy} • `}
-                                {invitation.invitedAt 
-                                  ? (invitation.invitedAt instanceof Date 
-                                      ? invitation.invitedAt.toLocaleDateString()
-                                      : new Date(invitation.invitedAt).toLocaleDateString())
+                                {invitation.invitedAt
+                                  ? (invitation.invitedAt instanceof Date
+                                    ? invitation.invitedAt.toLocaleDateString()
+                                    : new Date(invitation.invitedAt).toLocaleDateString())
                                   : "Unknown date"}
                               </div>
                             </div>
@@ -1200,7 +1202,7 @@ export function UserManagement() {
                                 defaultValue="viewer"
                                 onValueChange={(role) => {
                                   // Store role for approval
-                                  ;(request as any).selectedRole = role
+                                  ; (request as any).selectedRole = role
                                 }}
                               >
                                 <SelectTrigger className="w-32">
