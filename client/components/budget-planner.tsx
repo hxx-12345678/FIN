@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -18,6 +19,7 @@ import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-conf
 
 interface BudgetEntry {
   category: string
+  department?: string
   month: string
   amount: number
   currency: string
@@ -26,10 +28,12 @@ interface BudgetEntry {
 interface BudgetRecord {
   id: string
   category: string
+  department?: string
   month: string
   amount: number
   currency: string
   source: string
+  status?: string
   createdAt: string
   updatedAt: string
 }
@@ -39,13 +43,15 @@ export function BudgetPlanner({ orgId, onSave }: { orgId: string; onSave?: () =>
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [showCSVImport, setShowCSVImport] = useState(false)
-  const [editingBudget, setEditingBudget] = useState<Partial<BudgetEntry> | null>(null)
   const [newBudget, setNewBudget] = useState<BudgetEntry>({
     category: "",
+    department: "G&A",
     month: "",
     amount: 0,
     currency: "USD",
   })
+
+  const departments = ["G&A", "Sales", "Marketing", "Engineering", "Product", "Operations"]
 
   // Generate months for the next 12 months
   const generateMonths = () => {
@@ -60,9 +66,6 @@ export function BudgetPlanner({ orgId, onSave }: { orgId: string; onSave?: () =>
   }
 
   const months = generateMonths()
-
-  // Get unique categories from budgets
-  const categories = Array.from(new Set(budgets.map(b => b.category))).sort()
 
   // Fetch existing budgets
   const fetchBudgets = async () => {
@@ -101,35 +104,48 @@ export function BudgetPlanner({ orgId, onSave }: { orgId: string; onSave?: () =>
     fetchBudgets()
   }, [orgId])
 
-  // Save budgets
-  const handleSave = async (budgetsToSave: BudgetEntry[]) => {
+  // Submit budgets for approval (Institutional Workflow)
+  const handleSubmitForApproval = async (budgetsToSave: BudgetEntry[]) => {
     if (!orgId || budgetsToSave.length === 0) {
-      toast.error("No budgets to save")
+      toast.error("No budgets to submit")
       return
     }
 
     setSaving(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/budgets`, {
+      // For enterprise users, we create an approval request instead of writing directly to the budget table
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/approvals`, {
         method: "POST",
         headers: getAuthHeaders(),
         credentials: "include",
-        body: JSON.stringify({ budgets: budgetsToSave }),
+        body: JSON.stringify({
+          type: "budget_change",
+          objectType: "budget",
+          objectId: orgId, // Using orgId as a placeholder for the entire budget set
+          payloadJson: { budgets: budgetsToSave },
+          comment: `Submitted budget change for ${budgetsToSave.length} items including ${[...new Set(budgetsToSave.map(b => b.department || "General"))].join(", ")}`,
+        }),
       })
 
-      if (response.status === 401) {
-        handleUnauthorized()
-        throw new Error("Your session has expired. Please log in again.")
-      }
+      if (response.ok) {
+        toast.success(`Successfully submitted ${budgetsToSave.length} budget(s) for approval`)
+        if (onSave) onSave()
+      } else {
+        // Fallback to direct save if approvals aren't enabled for this org or endpoint fails
+        const directResponse = await fetch(`${API_BASE_URL}/orgs/${orgId}/budgets`, {
+          method: "POST",
+          headers: getAuthHeaders(),
+          credentials: "include",
+          body: JSON.stringify({ budgets: budgetsToSave }),
+        })
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error?.message || "Failed to save budgets")
+        if (directResponse.ok) {
+          toast.success(`Saved ${budgetsToSave.length} budget(s) directly`)
+          await fetchBudgets()
+        } else {
+          throw new Error("Failed to submit budget")
+        }
       }
-
-      toast.success(`Successfully saved ${budgetsToSave.length} budget(s)`)
-      await fetchBudgets()
-      if (onSave) onSave()
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to save budgets"
       toast.error(errorMessage)
@@ -146,9 +162,10 @@ export function BudgetPlanner({ orgId, onSave }: { orgId: string; onSave?: () =>
     }
 
     const budgetsToSave = [newBudget]
-    handleSave(budgetsToSave)
+    handleSubmitForApproval(budgetsToSave)
     setNewBudget({
       category: "",
+      department: "G&A",
       month: "",
       amount: 0,
       currency: "USD",
@@ -186,7 +203,7 @@ export function BudgetPlanner({ orgId, onSave }: { orgId: string; onSave?: () =>
   // Handle CSV import completion
   const handleCSVImportComplete = async (importedBudgets: BudgetEntry[]) => {
     if (importedBudgets.length > 0) {
-      await handleSave(importedBudgets)
+      await handleSubmitForApproval(importedBudgets)
       setShowCSVImport(false)
     }
   }
@@ -256,15 +273,28 @@ export function BudgetPlanner({ orgId, onSave }: { orgId: string; onSave?: () =>
             </TabsList>
 
             <TabsContent value="manual" className="space-y-4 overflow-x-auto overflow-y-visible">
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-5 gap-4">
                 <div>
                   <Label htmlFor="category">Category</Label>
                   <Input
                     id="category"
-                    placeholder="e.g., Revenue, Marketing"
+                    placeholder="e.g., Marketing"
                     value={newBudget.category}
                     onChange={(e) => setNewBudget({ ...newBudget, category: e.target.value })}
                   />
+                </div>
+                <div>
+                  <Label htmlFor="department">Department</Label>
+                  <select
+                    id="department"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={newBudget.department}
+                    onChange={(e) => setNewBudget({ ...newBudget, department: e.target.value })}
+                  >
+                    {departments.map(dept => (
+                      <option key={dept} value={dept}>{dept}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <Label htmlFor="month">Month (YYYY-MM)</Label>
@@ -287,9 +317,9 @@ export function BudgetPlanner({ orgId, onSave }: { orgId: string; onSave?: () =>
                   />
                 </div>
                 <div className="flex items-end">
-                  <Button onClick={handleAddBudget} className="w-full">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Budget
+                  <Button onClick={handleAddBudget} className="w-full" disabled={saving}>
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                    Submit Change
                   </Button>
                 </div>
               </div>
@@ -299,10 +329,10 @@ export function BudgetPlanner({ orgId, onSave }: { orgId: string; onSave?: () =>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Category</TableHead>
+                      <TableHead>Department</TableHead>
                       <TableHead>Month</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
-                      <TableHead>Currency</TableHead>
-                      <TableHead>Source</TableHead>
+                      <TableHead>Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -317,6 +347,9 @@ export function BudgetPlanner({ orgId, onSave }: { orgId: string; onSave?: () =>
                       budgets.map((budget) => (
                         <TableRow key={budget.id}>
                           <TableCell className="font-medium">{budget.category}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{budget.department || "General"}</Badge>
+                          </TableCell>
                           <TableCell>{budget.month}</TableCell>
                           <TableCell className="text-right">
                             {new Intl.NumberFormat('en-US', {
@@ -324,9 +357,10 @@ export function BudgetPlanner({ orgId, onSave }: { orgId: string; onSave?: () =>
                               currency: budget.currency,
                             }).format(Number(budget.amount))}
                           </TableCell>
-                          <TableCell>{budget.currency}</TableCell>
                           <TableCell>
-                            <span className="text-xs text-muted-foreground">{budget.source}</span>
+                            <Badge variant={budget.status === 'pending' ? "secondary" : "default"}>
+                              {budget.status || "Approved"}
+                            </Badge>
                           </TableCell>
                           <TableCell className="text-right">
                             <Button
@@ -390,12 +424,12 @@ export function BudgetPlanner({ orgId, onSave }: { orgId: string; onSave?: () =>
 }
 
 // Budget CSV Importer Component
-function BudgetCSVImporter({ 
-  orgId, 
-  onImportComplete 
-}: { 
+function BudgetCSVImporter({
+  orgId,
+  onImportComplete
+}: {
   orgId: string
-  onImportComplete: (budgets: BudgetEntry[]) => void 
+  onImportComplete: (budgets: BudgetEntry[]) => void
 }) {
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<BudgetEntry[]>([])
@@ -416,10 +450,10 @@ function BudgetCSVImporter({
         const text = event.target?.result as string
         const lines = text.split('\n').filter(line => line.trim())
         const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''))
-        
+
         // Validate headers
         const requiredHeaders = ['category', 'month', 'amount']
-        const hasRequiredHeaders = requiredHeaders.every(h => 
+        const hasRequiredHeaders = requiredHeaders.every(h =>
           headers.some(header => header.toLowerCase() === h)
         )
 

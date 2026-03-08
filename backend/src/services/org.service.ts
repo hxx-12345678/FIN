@@ -308,6 +308,166 @@ export const orgService = {
       },
     });
   },
+
+  /**
+   * Get organization data status — Enterprise Data Profile
+   * Returns comprehensive data availability, domain-level source detection,
+   * source authority suggestions, and audit readiness metrics.
+   * Called BEFORE model creation to gate intelligence options.
+   */
+  getDataStatus: async (orgId: string) => {
+    // Parallel fetch all data dimensions
+    const [connectors, uploads, transactionCount, coa, latestTx, oldestTx, revenueSum] = await Promise.all([
+      prisma.connector.findMany({ where: { orgId } }),
+      prisma.dataImportBatch.findMany({ where: { orgId }, take: 20, orderBy: { createdAt: 'desc' } }),
+      prisma.rawTransaction.count({ where: { orgId, isDuplicate: false } }),
+      prisma.chartOfAccount.count({ where: { orgId } }),
+      prisma.rawTransaction.findFirst({ where: { orgId, isDuplicate: false }, orderBy: { date: 'desc' }, select: { date: true } }),
+      prisma.rawTransaction.findFirst({ where: { orgId, isDuplicate: false }, orderBy: { date: 'asc' }, select: { date: true } }),
+      prisma.$queryRaw`
+        SELECT COALESCE(SUM(amount), 0) as total
+        FROM raw_transactions
+        WHERE "orgId" = ${orgId}::uuid AND "is_duplicate" = false AND amount > 0
+      `.catch(() => [{ total: 0 }]) as Promise<Array<{ total: number }>>,
+    ]);
+
+    // Classify connector types
+    const hasERP = connectors.some(c => ['quickbooks', 'xero', 'netsuite', 'sap', 'sage'].includes(c.type.toLowerCase()));
+    const hasCRM = connectors.some(c => ['salesforce', 'hubspot'].includes(c.type.toLowerCase()));
+    const hasPayroll = connectors.some(c => ['gusto', 'adp', 'rippling'].includes(c.type.toLowerCase()));
+    const hasBanking = connectors.some(c => ['plaid', 'stripe', 'mercury'].includes(c.type.toLowerCase()));
+
+    const hasTransactions = transactionCount > 0;
+    const hasUploads = uploads.length > 0;
+    const hasConnectors = connectors.length > 0;
+
+    // Domain-level source detection
+    const domainSources: Record<string, { available: boolean; sources: string[]; suggestedAuthority: string }> = {
+      revenue: {
+        available: hasERP || hasTransactions || hasUploads,
+        sources: [
+          ...(hasERP ? ['ERP'] : []),
+          ...(hasTransactions ? ['GL Transactions'] : []),
+          ...(hasUploads ? ['CSV Upload'] : []),
+          ...(hasCRM ? ['CRM (echo)'] : []),
+        ],
+        suggestedAuthority: hasERP ? 'ERP' : (hasTransactions ? 'GL Transactions' : (hasUploads ? 'CSV Upload' : 'none')),
+      },
+      expenses: {
+        available: hasERP || hasTransactions || hasUploads,
+        sources: [
+          ...(hasERP ? ['ERP'] : []),
+          ...(hasTransactions ? ['GL Transactions'] : []),
+          ...(hasUploads ? ['CSV Upload'] : []),
+        ],
+        suggestedAuthority: hasERP ? 'ERP' : (hasTransactions ? 'GL Transactions' : (hasUploads ? 'CSV Upload' : 'none')),
+      },
+      payroll: {
+        available: hasPayroll || hasERP || hasUploads,
+        sources: [
+          ...(hasPayroll ? ['Payroll API'] : []),
+          ...(hasERP ? ['ERP'] : []),
+          ...(hasUploads ? ['CSV Upload'] : []),
+        ],
+        suggestedAuthority: hasPayroll ? 'Payroll API' : (hasERP ? 'ERP' : (hasUploads ? 'CSV Upload' : 'none')),
+      },
+      cash: {
+        available: hasBanking || hasERP || hasTransactions,
+        sources: [
+          ...(hasBanking ? ['Banking API'] : []),
+          ...(hasERP ? ['ERP'] : []),
+          ...(hasTransactions ? ['GL Transactions'] : []),
+        ],
+        suggestedAuthority: hasBanking ? 'Banking API' : (hasERP ? 'ERP' : (hasTransactions ? 'GL Transactions' : 'none')),
+      },
+      customers: {
+        available: hasCRM || hasUploads,
+        sources: [
+          ...(hasCRM ? ['CRM'] : []),
+          ...(hasUploads ? ['CSV Upload'] : []),
+        ],
+        suggestedAuthority: hasCRM ? 'CRM' : (hasUploads ? 'CSV Upload' : 'none'),
+      },
+    };
+
+    // Determine org stage
+    const totalRevenue = Number((revenueSum as any)?.[0]?.total || 0);
+    let orgStage: 'pre-revenue' | 'early-revenue' | 'revenue-generating' | 'established' = 'pre-revenue';
+    if (totalRevenue > 1000000) orgStage = 'established';
+    else if (totalRevenue > 100000) orgStage = 'revenue-generating';
+    else if (totalRevenue > 0) orgStage = 'early-revenue';
+
+    // Compute data age
+    const lastTransactionDate = latestTx?.date ? latestTx.date.toISOString() : null;
+    const firstTransactionDate = oldestTx?.date ? oldestTx.date.toISOString() : null;
+    const dataAgeDays = latestTx?.date
+      ? Math.floor((new Date().getTime() - latestTx.date.getTime()) / (1000 * 60 * 60 * 24))
+      : null;
+
+    // Intelligence gating flags
+    const canUseDataDrivenAI = hasTransactions || (hasERP && hasConnectors);
+    const canUseAIPrecision = hasTransactions && transactionCount > 50;
+
+    return {
+      ok: true,
+      orgId,
+      // Top-level flags for frontend gating
+      hasRealData: hasTransactions || hasUploads,
+      hasConnectors,
+      hasTransactions,
+      hasUploads,
+      orgStage,
+      // Intelligence option gating
+      intelligenceGating: {
+        dataDrivenAI: canUseDataDrivenAI,
+        dataDrivenAIReason: !canUseDataDrivenAI ? 'No transaction data or ERP connector found. Connect a data source first.' : null,
+        aiPrecisionBuild: canUseAIPrecision,
+        aiPrecisionBuildReason: !canUseAIPrecision ? 'Requires 50+ transactions for reliable AI precision modeling.' : null,
+        syntheticAI: true, // Always available
+        manualLogic: true, // Always available
+      },
+      // Granular stats
+      stats: {
+        connectorsCount: connectors.length,
+        uploadsCount: uploads.length,
+        transactionCount,
+        coaCount: coa,
+        totalRevenue,
+        lastTransactionDate,
+        firstTransactionDate,
+        dataAgeDays,
+      },
+      // Per-connector detail
+      sources: {
+        erp: hasERP,
+        crm: hasCRM,
+        payroll: hasPayroll,
+        banking: hasBanking,
+        connectors: connectors.map(c => ({
+          id: c.id,
+          type: c.type,
+          status: c.status,
+          lastSync: c.lastSyncedAt,
+        })),
+        latestUploads: uploads.map(u => ({
+          id: u.id,
+          type: u.sourceType,
+          createdAt: u.createdAt,
+          status: u.status,
+        })),
+      },
+      // Domain-level source authority
+      domainSources,
+      // Audit readiness
+      auditReadiness: {
+        hasCOAMapping: coa > 0,
+        hasFinancialBaseline: hasTransactions,
+        hasSourceAuthority: hasERP || hasBanking || hasPayroll,
+        isEnterpriseReady: transactionCount > 100 && coa > 0 && hasERP,
+        dataFreshness: dataAgeDays !== null ? (dataAgeDays <= 30 ? 'current' : dataAgeDays <= 90 ? 'stale' : 'outdated') : 'no-data',
+      },
+    };
+  },
 };
 
 

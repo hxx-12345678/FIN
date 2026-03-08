@@ -68,23 +68,30 @@ interface ProvenanceDrawerProps {
   provenanceData?: ProvenanceData | null
 }
 
-export function ProvenanceDrawer({ 
-  open, 
-  onOpenChange, 
+export function ProvenanceDrawer({
+  open,
+  onOpenChange,
   modelRunId,
   cellKey,
-  provenanceData: initialProvenanceData 
+  provenanceData: initialProvenanceData
 }: ProvenanceDrawerProps) {
   const [provenanceData, setProvenanceData] = useState<ProvenanceData | null>(initialProvenanceData || null)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (open && modelRunId && cellKey && !initialProvenanceData) {
-      fetchProvenance()
+    // Fetch detailed provenance if we have keys but no detailed data yet
+    const needsFetch = open && modelRunId && cellKey && (!initialProvenanceData || (!initialProvenanceData.sourceTransactions && !initialProvenanceData.assumptionRefs));
+
+    if (needsFetch) {
+      // If we have initial data (summary), seed the state with it while loading details
+      if (initialProvenanceData && !provenanceData) {
+        setProvenanceData(initialProvenanceData);
+      }
+      fetchProvenance();
     } else if (open && initialProvenanceData) {
-      setProvenanceData(initialProvenanceData)
+      setProvenanceData(initialProvenanceData);
     } else if (!open) {
-      setProvenanceData(null)
+      setProvenanceData(null);
     }
   }, [open, modelRunId, cellKey, initialProvenanceData])
 
@@ -112,7 +119,7 @@ export function ProvenanceDrawer({
       }
 
       const data = await response.json()
-      
+
       if (data.ok && data.entries) {
         const transformed = transformProvenanceResponse(data, cellKey)
         setProvenanceData(transformed)
@@ -141,7 +148,7 @@ export function ProvenanceDrawer({
 
     // Calculate confidence from entries
     const confidenceScores: number[] = []
-    
+
     apiData.entries.forEach((entry: any) => {
       if (entry.sourceType === 'txn' && entry.sampleTransactions) {
         entry.sampleTransactions.forEach((txn: any) => {
@@ -199,11 +206,11 @@ export function ProvenanceDrawer({
     if (apiData.entries && apiData.entries.length > 0) {
       // Try to get value from summary or sourceRef
       const firstEntry = apiData.entries[0]
-      
+
       // Priority 1: Check summary.totalAmount (for transaction-based entries)
       if (firstEntry.summary && firstEntry.summary.totalAmount !== undefined) {
         cellValue = `$${Number(firstEntry.summary.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-      } 
+      }
       // Priority 2: Check assumptionRef.value (for assumption-based entries)
       else if (firstEntry.assumptionRef && firstEntry.assumptionRef.value !== undefined) {
         const val = firstEntry.assumptionRef.value
@@ -232,7 +239,7 @@ export function ProvenanceDrawer({
     return {
       cellId: cellKey,
       metricName,
-      value: cellValue, 
+      value: cellValue,
       sourceTransactions: transactions,
       assumptionRefs: assumptions,
       generatedBy,
@@ -245,7 +252,7 @@ export function ProvenanceDrawer({
 
   const handleExportProvenance = () => {
     if (!provenanceData) return
-    
+
     const exportData = {
       metric: provenanceData.metricName,
       value: provenanceData.value,
@@ -313,7 +320,7 @@ export function ProvenanceDrawer({
                           <div className="text-sm font-medium text-muted-foreground mb-1">Current Value</div>
                           <div className="text-4xl font-bold tracking-tight">{provenanceData.value}</div>
                         </div>
-                        
+
                         {provenanceData.formula && (
                           <div className="flex items-center gap-2 text-sm bg-muted/50 px-3 py-2 rounded-md border">
                             <Calculator className="h-4 w-4 text-muted-foreground" />
@@ -327,7 +334,7 @@ export function ProvenanceDrawer({
 
                       <div className="flex flex-col justify-between gap-4 text-right">
                         <div className="flex justify-end">
-                           <Badge variant={provenanceData.generatedBy === "ai" ? "default" : "secondary"} className="px-3 py-1 text-sm">
+                          <Badge variant={provenanceData.generatedBy === "ai" ? "default" : "secondary"} className="px-3 py-1 text-sm">
                             {provenanceData.generatedBy === "ai" ? (
                               <span className="flex items-center gap-1.5"><Bot className="h-3.5 w-3.5" /> AI Generated</span>
                             ) : (
@@ -380,12 +387,12 @@ export function ProvenanceDrawer({
                       <CardHeader className="pb-3">
                         <CardTitle className="text-base font-medium flex items-center gap-2">
                           <Database className="h-4 w-4" />
-                          Source Transactions ({provenanceData.sourceTransactions.length})
+                          Source Transactions ({provenanceData.sourceTransactions?.length || 0})
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="p-0">
-                         <div className="max-h-[400px] overflow-y-auto">
-                          {provenanceData.sourceTransactions.length === 0 ? (
+                        <div className="max-h-[400px] overflow-y-auto">
+                          {(provenanceData.sourceTransactions?.length || 0) === 0 ? (
                             <div className="p-8 text-center text-muted-foreground text-sm">No transactions linked</div>
                           ) : (
                             <table className="w-full text-sm">
@@ -397,7 +404,7 @@ export function ProvenanceDrawer({
                                 </tr>
                               </thead>
                               <tbody className="divide-y">
-                                {provenanceData.sourceTransactions.map((txn) => (
+                                {provenanceData.sourceTransactions?.map((txn) => (
                                   <tr key={txn.id} className="hover:bg-muted/50">
                                     <td className="p-3 whitespace-nowrap">{txn.date}</td>
                                     <td className="p-3">{txn.description}</td>
@@ -413,20 +420,20 @@ export function ProvenanceDrawer({
                   </TabsContent>
 
                   <TabsContent value="assumptions" className="space-y-4 mt-0">
-                     <Card>
+                    <Card>
                       <CardHeader className="pb-3">
                         <CardTitle className="text-base font-medium flex items-center gap-2">
                           <TrendingUp className="h-4 w-4" />
-                          Assumptions ({provenanceData.assumptionRefs.length})
+                          Assumptions ({provenanceData.assumptionRefs?.length || 0})
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="p-0">
                         <div className="max-h-[400px] overflow-y-auto">
-                          {provenanceData.assumptionRefs.length === 0 ? (
+                          {(provenanceData.assumptionRefs?.length || 0) === 0 ? (
                             <div className="p-8 text-center text-muted-foreground text-sm">No assumptions linked</div>
                           ) : (
                             <div className="divide-y">
-                              {provenanceData.assumptionRefs.map((assumption) => (
+                              {provenanceData.assumptionRefs?.map((assumption) => (
                                 <div key={assumption.id} className="p-3 flex items-center justify-between hover:bg-muted/50">
                                   <div>
                                     <div className="font-medium">{assumption.name}</div>
@@ -452,31 +459,35 @@ export function ProvenanceDrawer({
                       </CardHeader>
                       <CardContent className="p-0">
                         <div className="divide-y max-h-[400px] overflow-y-auto">
-                           {provenanceData.auditTrail.map((entry, i) => (
-                             <div key={i} className="p-4 flex gap-3 text-sm">
-                               <div className="mt-1.5 h-2 w-2 rounded-full bg-primary shrink-0" />
-                               <div>
-                                 <div className="font-medium">{entry.action}</div>
-                                 <div className="text-muted-foreground text-xs">{entry.timestamp} • {entry.user}</div>
-                                 {entry.oldValue && entry.newValue && (
+                          {(provenanceData.auditTrail?.length || 0) === 0 ? (
+                            <div className="p-8 text-center text-muted-foreground text-sm">No audit trail available</div>
+                          ) : (
+                            provenanceData.auditTrail?.map((entry, i) => (
+                              <div key={i} className="p-4 flex gap-3 text-sm">
+                                <div className="mt-1.5 h-2 w-2 rounded-full bg-primary shrink-0" />
+                                <div>
+                                  <div className="font-medium">{entry.action}</div>
+                                  <div className="text-muted-foreground text-xs">{entry.timestamp} • {entry.user}</div>
+                                  {entry.oldValue && entry.newValue && (
                                     <div className="mt-2 flex items-center gap-2 text-xs bg-muted/30 p-2 rounded">
                                       <span className="line-through text-muted-foreground">{entry.oldValue}</span>
                                       <span>→</span>
                                       <span className="font-medium">{entry.newValue}</span>
                                     </div>
                                   )}
-                               </div>
-                             </div>
-                           ))}
+                                </div>
+                              </div>
+                            ))
+                          )}
                         </div>
                       </CardContent>
                     </Card>
                   </TabsContent>
 
                   <TabsContent value="integrations" className="mt-0">
-                     <Card>
+                    <Card>
                       <CardHeader className="pb-3">
-                         <CardTitle className="text-base font-medium flex items-center gap-2">
+                        <CardTitle className="text-base font-medium flex items-center gap-2">
                           <ExternalLink className="h-4 w-4" />
                           External Sources
                         </CardTitle>

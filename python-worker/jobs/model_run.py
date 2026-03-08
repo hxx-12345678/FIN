@@ -41,6 +41,38 @@ MODEL_TYPE_PROFILES: Dict[str, Dict[str, Any]] = {
         'volatility': 0.02,
         'confidence': 91,
     },
+    '3-statement': {
+        'trend_multiplier': 1.0,
+        'expense_multiplier': 1.0,
+        'seasonality_amplitude': 0.0,
+        'innovation_factor': 0.0,
+        'volatility': 0.0,
+        'confidence': 95,
+    },
+    'dcf': {
+        'trend_multiplier': 1.0,
+        'expense_multiplier': 1.0,
+        'seasonality_amplitude': 0.0,
+        'innovation_factor': 0.0,
+        'volatility': 0.0,
+        'confidence': 92,
+    },
+    'lbo': {
+        'trend_multiplier': 1.0,
+        'expense_multiplier': 1.0,
+        'seasonality_amplitude': 0.0,
+        'innovation_factor': 0.0,
+        'volatility': 0.0,
+        'confidence': 90,
+    },
+    'accretion-dilution': {
+        'trend_multiplier': 1.0,
+        'expense_multiplier': 1.0,
+        'seasonality_amplitude': 0.0,
+        'innovation_factor': 0.0,
+        'volatility': 0.0,
+        'confidence': 93,
+    },
 }
 
 HORIZON_TO_MONTHS = {
@@ -125,11 +157,22 @@ def generate_summary_json(result: Dict, model_json: Dict, params_json: Dict) -> 
     """
     try:
         # 1. Identify the 3-statement source
-        # It could be at top level or nested in 'statements' key (standard for deterministic runs)
-        statements = result.get('statements', result)
+        # Standard deterministic run result should have a 'statements' key.
+        statements = result.get('statements')
         
-        # Use statements as primary source if it contains financial statements
-        has_statements = isinstance(statements, dict) and 'incomeStatement' in statements
+        # If statements is missing from the result, check if the result itself has statement keys
+        if not isinstance(statements, dict) or 'incomeStatement' not in statements:
+            if 'incomeStatement' in result:
+                statements = result
+            else:
+                # Still missing, fallback to the result object
+                statements = result
+
+        # Check for financial statement keys
+        has_statements = isinstance(statements, dict) and ('incomeStatement' in statements or 'income_statement' in statements)
+        if not has_statements:
+            logger.warning(f"No direct financial statements found in result. Keys: {list(result.keys())[:10]}")
+            
         src = statements if has_statements else result
         
         # 2. Extract Aggregate Metrics
@@ -218,9 +261,12 @@ def generate_summary_json(result: Dict, model_json: Dict, params_json: Dict) -> 
             'modelVersion': model_json.get('version', 1) if isinstance(model_json, dict) else 1,
             'modelType': params_json.get('modelType', result.get('modelType', 'baseline')),
             'forecastMonths': src.get('metadata', {}).get('horizonMonths') or result.get('forecastMonths', 12),
-            'statements': statements, # The actual 3-statement model (incomeStatement, cashFlow, balanceSheet)
+            'statements': statements if has_statements else result.get('statements', statements),
             'monthly': flat_monthly,   # Flattened month-by-month metrics
             'kpis': result.get('metrics', {}),
+            'valuation': result.get('valuation'), # DCF specific
+            'lbo': result.get('lbo'),             # LBO specific
+            'sensitivities': result.get('sensitivities'), # Sensitivity Ranking
         }
         
         return summary
@@ -859,6 +905,10 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
         else:
             logger.info(f"Initial cash: ${initial_cash:,.2f} (from CSV import)")
         
+        # Initialize customer count from assumptions
+        customer_count = int(final_assumptions.get('customerCount', 100))
+        logger.info(f"Initial customer count: {customer_count}")
+        
         for tx in transactions:
             tx_date = tx[0]
             tx_amount = float(tx[1]) if tx[1] else 0
@@ -978,11 +1028,11 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
         # Baseline logic: Use the last 12 months strictly BEFORE the model start date.
         # This prevents future actuals (from a partial import or multi-year ledger) 
         # from leaking into the starting point as an "average".
+        # 1. Filter for baseline calculation (strictly 3 years before start for institutional depth)
         start_month_date = current_month.date()
-        cutoff_date_dt = current_month.replace(day=1) - timedelta(days=365)
+        cutoff_date_dt = current_month.replace(day=1) - timedelta(days=1095)
         cutoff_date_start = cutoff_date_dt.date()
         
-        # 1. Filter for baseline calculation (strictly 12 months before start)
         baseline_transactions = [tx for tx in transactions if cutoff_date_start <= tx[0] < start_month_date]
         
         # 2. Map ALL transactions to a full monthly actuals dict for overrides/actuals display
@@ -992,17 +1042,24 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             tx_amount = float(tx[1]) if tx[1] else 0
             m_key = f"{tx_date.year}-{str(tx_date.month).zfill(2)}"
             if m_key not in ledger_actuals:
-                ledger_actuals[m_key] = {'revenue': 0, 'expenses': 0, 'cogs': 0, 'opex': 0, 'netIncome': 0}
+                ledger_actuals[m_key] = {'revenue': 0, 'expenses': 0, 'cogs': 0, 'opex': 0, 'netIncome': 0, 'rd': 0, 'sm': 0, 'ga': 0}
             
             if tx_amount > 0:
                 ledger_actuals[m_key]['revenue'] += tx_amount
             else:
                 ledger_actuals[m_key]['expenses'] += abs(tx_amount)
-                # Categorization logic for ledger actuals fallback
+                # Enhanced SaaS Categorization logic
                 cat = (tx[2] or '').lower()
-                if 'cogs' in cat or 'inventory' in cat or 'cost of' in cat:
+                if any(k in cat for k in ['cogs', 'hosting', 'aws', 'stripe', 'infrastructure', 'cost of']):
                     ledger_actuals[m_key]['cogs'] += abs(tx_amount)
+                elif any(k in cat for k in ['engineering', 'product', 'r&d', 'dev']):
+                    ledger_actuals[m_key]['rd'] += abs(tx_amount)
+                    ledger_actuals[m_key]['opex'] += abs(tx_amount)
+                elif any(k in cat for k in ['marketing', 'sales', 'ads', 'google', 'linkedin', 'sm']):
+                    ledger_actuals[m_key]['sm'] += abs(tx_amount)
+                    ledger_actuals[m_key]['opex'] += abs(tx_amount)
                 else:
+                    ledger_actuals[m_key]['ga'] += abs(tx_amount)
                     ledger_actuals[m_key]['opex'] += abs(tx_amount)
             ledger_actuals[m_key]['netIncome'] = ledger_actuals[m_key]['revenue'] - ledger_actuals[m_key]['expenses']
 
@@ -1277,45 +1334,6 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
         mrr = latest_month_data['revenue']
         arr = mrr * 12  # Standard formula: ARR = MRR * 12
         
-        # STEP 4: Calculate unit economics (Industry Standard: CAC, LTV, Payback)
-        # Get customer count from assumptions - prioritize actual data over defaults
-        revenue_assumptions = final_assumptions.get('revenue', {})
-        if isinstance(revenue_assumptions, dict):
-            customer_count = int(revenue_assumptions.get('customerCount', final_assumptions.get('customerCount', 0)))
-        else:
-            customer_count = int(final_assumptions.get('customerCount', 0))
-        
-        # If no customer count in assumptions, check params_json for startingCustomers (from CSV import)
-        if customer_count == 0 and isinstance(params_json, dict):
-            starting_customers = params_json.get('startingCustomers')
-            if starting_customers and int(starting_customers) > 0:
-                customer_count = int(starting_customers)
-                logger.info(f"Using startingCustomers from params_json: {customer_count}")
-        
-        # If no customer count provided, estimate from revenue (for transparency)
-        if customer_count == 0 and latest_month_data['revenue'] > 0:
-            # Estimate: assume average revenue per customer of $200/month (industry standard for SaaS)
-            estimated_customers = int(latest_month_data['revenue'] / 200)
-            logger.info(f"No customer count provided, estimating {estimated_customers} customers from revenue")
-            customer_count = estimated_customers
-        
-        # Use defaults only if absolutely no data available
-        if customer_count == 0:
-            customer_count = 100  # Default fallback
-            logger.warning("Using default customer count (100) - no actual data available")
-        
-        cac = float(final_assumptions.get('cac', 125))
-        ltv = float(final_assumptions.get('ltv', 2400))
-        churn_rate = float(final_assumptions.get('churnRate', 0.05))
-        
-        # Industry Standard: LTV:CAC Ratio = LTV / CAC
-        ltv_cac_ratio = ltv / cac if cac > 0 else 0
-        
-        # Industry Standard: Payback Period = CAC / (MRR per customer)
-        # MRR per customer = Monthly Recurring Revenue / Number of Customers
-        mrr_per_customer = latest_month_data['revenue'] / customer_count if customer_count > 0 and latest_month_data['revenue'] > 0 else 0
-        payback_period = cac / mrr_per_customer if mrr_per_customer > 0 else 0
-        
         # STEP 5: Calculate gross margin (Industry Standard: Gross Margin % = (Revenue - COGS) / Revenue)
         # Use actual COGS from monthly data if available, otherwise estimate
         annual_cogs = sum(month_data.get('cogs', 0) for month_data in monthly_data.values())
@@ -1327,12 +1345,71 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
         gross_margin = (annual_revenue - annual_cogs) / annual_revenue if annual_revenue > 0 else 0
         ending_cash = latest_month_data['cashBalance']
         confidence_pct = float(model_profile['confidence'])
+
+        # STEP 4: Calculate unit economics (Institutional Standard: CAC, LTV, Payback)
+        # Try to derive from drivers if possible
+        marketing_spend = 0
+        new_customers = 0
+        churn_rate = float(final_assumptions.get('churnRate', 0.05))
+        arpu = latest_month_data['revenue'] / customer_count if customer_count > 0 else 0
+        
+        if driver_results:
+             for d_id, m_data in driver_results.items():
+                d_meta = engine.drivers_meta.get(d_id, {}) if has_drivers else {}
+                d_name = d_meta.get('name', '').lower()
+                if 'marketing' in d_name or 'ad spend' in d_name:
+                    marketing_spend += m_data.get(latest_month_key, 0)
+                if 'new customer' in d_name or 'customer acquisition' in d_name:
+                    new_customers += m_data.get(latest_month_key, 0)
+                if 'churn' in d_name:
+                    churn_rate = m_data.get(latest_month_key, churn_rate)
+        
+        cac = float(final_assumptions.get('cac', 125))
+        if marketing_spend > 0 and new_customers > 0:
+            cac = marketing_spend / new_customers
+            logger.info(f"Derived CAC from drivers: {cac}")
+        
+        # Industry Standard: LTV = (ARPU * Gross Margin %) / Churn Rate
+        # ARPU = Average Revenue Per User
+        # Using annual ARPU for LTV
+        annual_arpu = arpu * 12
+        gross_margin_pct = (annual_revenue - annual_cogs) / annual_revenue if annual_revenue > 0 else 0.8
+        
+        ltv = (annual_arpu * gross_margin_pct) / churn_rate if churn_rate > 0 else (annual_arpu * 5)
+        
+        # Override with assumptions if provided and non-zero
+        assumed_ltv = float(final_assumptions.get('ltv', 0))
+        if assumed_ltv > 0: ltv = assumed_ltv
+        
+        # Industry Standard: LTV:CAC Ratio = LTV / CAC
+        ltv_cac_ratio = ltv / cac if cac > 0 else 0
+        
+        # Industry Standard: Payback Period = CAC / (Monthly Gross Profit per customer)
+        # Monthly Gross Profit per customer = (ARPU * Gross Margin %)
+        monthly_gp_per_customer = arpu * gross_margin_pct
+        payback_period = cac / monthly_gp_per_customer if monthly_gp_per_customer > 0 else 0
+        
+        confidence_pct = float(model_profile['confidence'])
+        
+        # NEW: SaaS Magic Number calculation
+        # Magic Number = (Current Quater Revenue - Previous Quarter Revenue) * 4 / (Quarterly S&M Spend)
+        # Simplified to monthly for now: (Current Month Rev - Previous Month Rev) * 12 / (Current Month S&M)
+        magic_number = 0
+        if marketing_spend > 0:
+            prev_month_key = list(monthly_data.keys())[-2] if len(monthly_data) > 1 else None
+            if prev_month_key:
+                rev_growth_abs = latest_month_data['revenue'] - monthly_data[prev_month_key]['revenue']
+                magic_number = (rev_growth_abs * 12) / marketing_spend
+        
         metrics = calculate_accuracy_metrics(
             baseline_monthly_revenue,
             revenue_growth,
             model_profile,
             starting_revenue or avg_monthly_revenue or 1.0,
         )
+        metrics['magicNumber'] = magic_number
+        metrics['ltvCac'] = ltv_cac_ratio
+        metrics['ruleOf40'] = (revenue_growth * 100) + (gross_margin * 100) # Simplified Rule of 40 (Growth + Margin)
         
         # Log data sources for transparency
         logger.info(
@@ -1401,7 +1478,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
         monthly_burn = max(0, last_month_pl.get('cogs', 0) + last_month_pl.get('operatingExpenses', 0) - last_month_pl.get('revenue', 0))
         runway_months = ending_cash / monthly_burn if monthly_burn > 0 else 999
         
-        # Construct the result dictionary
+        # Construction of the result dictionary
         result = {
             'revenue': float(annual_revenue),
             'expenses': float(annual_expenses),
@@ -1431,6 +1508,164 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             'dag': engine.get_dag_metadata() if has_drivers else None,
             'statements': three_statement_model
         }
+
+        # --- INSTITUTIONAL MODULES (DCF / LBO) ---
+        if model_type == 'dcf':
+            # Perform Valuation Overlay
+            try:
+                # 1. Calculate WACC
+                risk_free_rate = float(final_assumptions.get('riskFreeRate', 0.045))
+                equity_risk_premium = float(final_assumptions.get('equityRiskPremium', 0.055))
+                beta = float(final_assumptions.get('beta', 1.2))
+                cost_of_equity = risk_free_rate + (beta * equity_risk_premium)
+                
+                pre_tax_cost_of_debt = float(final_assumptions.get('costOfDebt', 0.08))
+                tax_rate = float(final_assumptions.get('taxRate', 0.25))
+                cost_of_debt = pre_tax_cost_of_debt * (1 - tax_rate)
+                
+                total_debt = float(three_statement_model['balanceSheet']['annual'].get(str(current_month.year), {}).get('liabilities', {}).get('debt', 0))
+                market_cap = float(final_assumptions.get('marketCap', 1000000)) # Default if not known
+                total_value = market_cap + total_debt
+                
+                w_equity = market_cap / total_value if total_value > 0 else 1.0
+                w_debt = total_debt / total_value if total_value > 0 else 0.0
+                wacc = (w_equity * cost_of_equity) + (w_debt * cost_of_debt)
+                
+                # 2. Extract UFCF (Unlevered Free Cash Flow)
+                # Formula: EBIT * (1 - Tax) + Depreciation - Capex - Change in NWC
+                ufcfs = []
+                years = sorted(three_statement_model['incomeStatement']['annual'].keys())
+                for year in years:
+                    is_data = three_statement_model['incomeStatement']['annual'][year]
+                    cf_data = three_statement_model['cashFlow']['annual'][year]
+                    
+                    ebit = is_data.get('ebit', 0)
+                    dep = is_data.get('depreciation', 0)
+                    tax = is_data.get('incomeTax', 0)
+                    capex = abs(cf_data.get('capex', 0))
+                    nwc_change = cf_data.get('workingCapitalChange', 0)
+                    
+                    ufcf = (ebit * (1 - tax_rate)) + dep - capex + nwc_change
+                    ufcfs.append(ufcf)
+                
+                # 3. Present Value and Terminal Value
+                discount_factors = [(1 / (1 + wacc)**(i+1)) for i in range(len(ufcfs))]
+                pv_flows = sum(f * d for f, d in zip(ufcfs, discount_factors))
+                
+                terminal_method = final_assumptions.get('terminalValueMethod', 'perpetuity').lower()
+                
+                if terminal_method == 'multiple':
+                    exit_multiple = float(final_assumptions.get('exitMultiple', 10.0))
+                    # Term Value = Final Year Metric * Exit Multiple
+                    # Usually EBITDA or Revenue
+                    final_ebitda = three_statement_model['incomeStatement']['annual'][years[-1]].get('ebitda', 0)
+                    terminal_value = final_ebitda * exit_multiple
+                else:
+                    # Perpetuity Growth Method
+                    terminal_growth = float(final_assumptions.get('terminalGrowth', 0.02))
+                    last_fcf = ufcfs[-1] if ufcfs else 0
+                    terminal_value = (last_fcf * (1 + terminal_growth)) / (wacc - terminal_growth) if (wacc - terminal_growth) > 0 else 0
+                
+                pv_terminal = terminal_value / ((1 + wacc) ** len(ufcfs))
+                
+                enterprise_value = pv_flows + pv_terminal
+                equity_value = enterprise_value - total_debt + ending_cash
+                
+                result['valuation'] = {
+                    'wacc': round(wacc, 4),
+                    'costOfEquity': round(cost_of_equity, 4),
+                    'costOfDebt': round(cost_of_debt, 4),
+                    'enterpriseValue': round(enterprise_value, 2),
+                    'equityValue': round(equity_value, 2),
+                    'terminalValue': round(terminal_value, 2),
+                    'terminalMethod': terminal_method,
+                    'presentValueFlows': round(pv_flows, 2),
+                    'presentValueTerminal': round(pv_terminal, 2),
+                    'impliedSharePrice': round(equity_value / float(final_assumptions.get('sharesOutstanding', 1000000)), 2)
+                }
+            except Exception as e:
+                logger.error(f"DCF Calculation failed: {e}")
+
+        elif model_type == 'lbo':
+            # Perform LBO Returns Overlay
+            try:
+                entry_multiple = float(final_assumptions.get('entryMultiple', 8.0))
+                exit_multiple = float(final_assumptions.get('exitMultiple', 10.0))
+                leverage_ratio = float(final_assumptions.get('leverageRatio', 4.0)) # Net Debt / EBITDA
+                
+                # 1. Entry Valuation
+                t0_ebitda = float(three_statement_model['incomeStatement']['monthly'][list(pl_monthly.keys())[0]].get('ebitda', 0) * 12)
+                entry_enterprise_value = t0_ebitda * entry_multiple
+                initial_debt = t0_ebitda * leverage_ratio
+                initial_equity = entry_enterprise_value - initial_debt
+                
+                # 2. Track Paydown
+                # The 3-statement motor already handles debt paydown via overrides if present, 
+                # but for a primary LBO model we look at cumulative FCF available for debt service (CFADS)
+                # CFADS = Cash Flow from Operations - Capex
+                cumulative_cfads = sum(
+                    three_statement_model['cashFlow']['annual'][y].get('operatingCashFlow', 0) + 
+                    three_statement_model['cashFlow']['annual'][y].get('investingCashFlow', 0) 
+                    for y in three_statement_model['cashFlow']['annual']
+                )
+                
+                ending_debt = max(0, initial_debt - cumulative_cfads)
+                
+                # 3. Exit Valuation
+                final_year = sorted(three_statement_model['incomeStatement']['annual'].keys())[-1]
+                final_is_data = three_statement_model['incomeStatement']['annual'][final_year]
+                
+                # institutional fallback: if EBITDA is negative or zero, use revenue multiple
+                if final_is_data.get('ebitda', 0) <= 0:
+                    exit_enterprise_value = final_is_data.get('revenue', 0) * (exit_multiple / 2.0) # assume rev mult is half ebitda mult for simplicity
+                    valuation_method = "Revenue"
+                else:
+                    exit_enterprise_value = final_is_data['ebitda'] * exit_multiple
+                    valuation_method = "EBITDA"
+                    
+                exit_equity_value = exit_enterprise_value - ending_debt
+                
+                # 4. Returns (MOIC and IRR)
+                moic = exit_equity_value / initial_equity if initial_equity > 0 else 0
+                years = len(three_statement_model['incomeStatement']['annual'])
+                # Annualized IRR calculation
+                irr = (moic ** (1.0 / years)) - 1 if moic > 0 and years > 0 else 0
+                
+                result['lbo'] = {
+                    'moic': round(moic, 3),
+                    'irr': round(irr, 4),
+                    'entryEquity': round(initial_equity, 2),
+                    'exitEquity': round(exit_equity_value, 2),
+                    'endingDebt': round(ending_debt, 2),
+                    'totalDebtPaydown': round(initial_debt - ending_debt, 2),
+                    'entryMultiple': entry_multiple,
+                    'exitMultiple': exit_multiple,
+                    'valuationMethod': valuation_method,
+                    'ebitdaGrowth': round((final_is_data.get('ebitda', 1) / max(1, t0_ebitda)) ** (1.0/years) - 1, 4) if years > 0 else 0
+                }
+            except Exception as e:
+                logger.error(f"LBO Calculation failed: {e}")
+
+        # --- SENSITIVITY AUTO-RANKING (Predictive Evolution) ---
+        try:
+            from jobs.forecasting_engine_v2 import SensitivityRanker
+            
+            def sensitivity_proxy(test_assumptions):
+                # Minimal lightweight rerun for sensitivity
+                # (Normally we'd optimize this to avoid full 3-statement loop)
+                return {'revenue': annual_revenue * (1 + test_assumptions.get('revenueGrowth', 0) - revenue_growth)}
+            
+            ranker = SensitivityRanker()
+            relevant_params = {k: v for k, v in final_assumptions.items() if isinstance(v, (int, float))}
+            # Take top 5 for performance
+            top_params = {k: relevant_params[k] for k in list(relevant_params.keys())[:5]}
+            
+            sensitivity_results = ranker.rank_sensitivities(top_params, sensitivity_proxy)
+            result['sensitivities'] = sensitivity_results
+        except Exception as e:
+            logger.warning(f"Sensitivity ranking skipped: {e}")
+
+        return result
 
         # ======================================================================
         # STEP 7: Write results to metric_cubes table

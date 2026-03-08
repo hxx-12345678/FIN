@@ -110,9 +110,10 @@ export const budgetService = {
 
       const result = await prisma.budget.upsert({
         where: {
-          orgId_category_month: {
+          orgId_category_department_month: {
             orgId,
             category: normalizedCategory,
+            department: "General",
             month: budget.month,
           },
         },

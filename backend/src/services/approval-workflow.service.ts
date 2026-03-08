@@ -141,8 +141,45 @@ export const approvalWorkflowService = {
       },
     });
 
-    // TODO: Trigger the actual change (e.g., apply assumption update or ledger adjustment)
-    // This could be handled by a listener or by returning the approved payload to the caller
+    // --- Apply the actual change based on type ---
+    try {
+      if (request.type === 'budget_change') {
+        const payload = request.payloadJson;
+        if (payload && Array.isArray(payload.budgets)) {
+          for (const b of payload.budgets) {
+            await (prisma as any).budget.upsert({
+              where: {
+                orgId_category_department_month: {
+                  orgId: request.orgId,
+                  category: b.category,
+                  department: b.department || "General",
+                  month: b.month
+                }
+              },
+              update: {
+                amount: b.amount,
+                source: "approved_request",
+                updatedAt: new Date()
+              },
+              create: {
+                orgId: request.orgId,
+                category: b.category,
+                department: b.department || "General",
+                month: b.month,
+                amount: b.amount,
+                currency: b.currency || "USD",
+                source: "approved_request",
+                createdById: request.requesterId
+              }
+            });
+          }
+        }
+      }
+    } catch (applyError: any) {
+      console.error('Failed to apply approved change:', applyError);
+      // We still mark it as approved in the workflow, but log the failure
+      // (In a more robust system, this would be transactional or use a job queue)
+    }
 
     return updatedRequest;
   },

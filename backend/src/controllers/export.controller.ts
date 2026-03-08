@@ -52,7 +52,7 @@ export const exportController = {
         },
       });
 
-      res.status(201).json({ export: exportRecord, jobId: job.id });
+      res.status(201).json({ ok: true, export: exportRecord, jobId: job.id });
     } catch (error) {
       next(error);
     }
@@ -129,7 +129,7 @@ export const exportController = {
       }
 
       const exportData = exportRecord[0];
-      
+
       // Get orgId from modelRun if not directly available
       let orgId = exportData.orgId;
       if (!orgId && exportData.modelRunId) {
@@ -198,8 +198,8 @@ export const exportController = {
       const contentType = exportData.type === 'pdf'
         ? 'application/pdf'
         : exportData.type === 'pptx'
-        ? 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
-        : 'text/plain';
+          ? 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+          : 'text/plain';
 
       // Set headers and send file
       res.setHeader('Content-Type', contentType);

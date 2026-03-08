@@ -1,0 +1,1001 @@
+Date,Description,Amount,Category
+2024-11-13,Executive Compensation,-39697,Payroll
+2024-04-13,Executive Compensation,-37170,Payroll
+2024-02-22,Utility Bills,-11807,Rent
+2023-03-28,Engineering Salary,-23566,Payroll
+2024-10-15,GitHub Enterprise,-1237,Software
+2024-02-18,Engineering Salary,-23282,Payroll
+2023-01-26,Subscription Revenue,26614,Revenue
+2023-05-06,Content Marketing,-9038,Marketing
+2023-07-27,Executive Compensation,-31803,Payroll
+2024-09-29,Overage Fees,24571,Revenue
+2024-07-21,DataDog Monitoring,-2095,Web Services
+2024-02-25,Enterprise License,35031,Revenue
+2023-03-21,Google Cloud,-7956,Web Services
+2023-01-02,Enterprise License,49928,Revenue
+2023-12-21,Zoom License,-2433,Software
+2024-04-25,Google Cloud,-2069,Web Services
+2023-04-13,DataDog Monitoring,-6999,Web Services
+2023-04-01,NY Office Rent,-10021,Rent
+2023-05-23,Engineering Salary,-30594,Payroll
+2023-04-25,Sales Commissions,-36380,Payroll
+2024-05-16,NY Office Rent,-10606,Rent
+2024-03-21,LinkedIn Campaign,-8061,Marketing
+2024-05-14,Executive Compensation,-31941,Payroll
+2023-01-03,Sentry Logging,-7260,Web Services
+2024-07-12,Subscription Revenue,18925,Revenue
+2024-08-11,Engineering Salary,-27917,Payroll
+2023-01-27,Zoom License,-521,Software
+2024-11-05,Content Marketing,-2252,Marketing
+2023-08-02,DataDog Monitoring,-5860,Web Services
+2024-04-05,Executive Compensation,-35955,Payroll
+2024-12-03,Utility Bills,-8944,Rent
+2024-07-10,Subscription Revenue,30253,Revenue
+2024-07-30,Content Marketing,-2434,Marketing
+2023-02-24,Zoom License,-2666,Software
+2023-08-06,Executive Compensation,-27736,Payroll
+2024-05-29,Slack Subscription,-2516,Software
+2024-03-19,Executive Compensation,-37359,Payroll
+2024-07-20,NY Office Rent,-9355,Rent
+2024-02-21,NY Office Rent,-5630,Rent
+2023-06-16,AWS Hosting,-7391,Web Services
+2024-11-03,Slack Subscription,-1053,Software
+2023-05-21,Engineering Salary,-29788,Payroll
+2023-08-06,Figma Design,-532,Software
+2023-06-02,Sentry Logging,-1063,Web Services
+2024-03-10,Google Ads,-7519,Marketing
+2023-08-10,SF Office Rent,-5776,Rent
+2023-12-09,Zoom License,-988,Software
+2023-03-24,Professional Services,28018,Revenue
+2023-04-26,Subscription Revenue,22098,Revenue
+2023-05-08,Professional Services,34870,Revenue
+2024-11-04,Google Cloud,-5778,Web Services
+2024-07-17,Overage Fees,46808,Revenue
+2023-03-08,Sales Commissions,-33090,Payroll
+2024-07-19,Subscription Revenue,43104,Revenue
+2024-11-28,DataDog Monitoring,-5267,Web Services
+2023-02-11,Professional Services,8898,Revenue
+2024-02-27,AWS Hosting,-1210,Web Services
+2024-05-29,Google Cloud,-5852,Web Services
+2024-05-15,Google Cloud,-2479,Web Services
+2024-01-28,NY Office Rent,-11495,Rent
+2023-12-20,Content Marketing,-7541,Marketing
+2023-01-02,Overage Fees,9319,Revenue
+2023-12-31,GitHub Enterprise,-1909,Software
+2024-04-19,Google Cloud,-4332,Web Services
+2023-07-15,Utility Bills,-13519,Rent
+2024-06-16,Executive Compensation,-21965,Payroll
+2024-03-01,Engineering Salary,-32752,Payroll
+2024-01-09,Professional Services,41875,Revenue
+2023-12-28,Content Marketing,-6427,Marketing
+2023-11-18,NY Office Rent,-8998,Rent
+2023-06-26,Professional Services,39334,Revenue
+2024-04-26,Sales Commissions,-26546,Payroll
+2023-04-11,Event Sponsorship,-4036,Marketing
+2024-02-06,Google Ads,-9068,Marketing
+2024-09-27,Slack Subscription,-1953,Software
+2024-02-18,Professional Services,9291,Revenue
+2024-05-07,SF Office Rent,-8789,Rent
+2023-10-07,SF Office Rent,-12986,Rent
+2024-01-17,Google Cloud,-5365,Web Services
+2023-05-19,Utility Bills,-8557,Rent
+2024-04-22,SF Office Rent,-6831,Rent
+2024-05-11,GitHub Enterprise,-2078,Software
+2024-09-24,SF Office Rent,-7058,Rent
+2024-02-13,Event Sponsorship,-9832,Marketing
+2023-08-19,Enterprise License,44168,Revenue
+2023-06-25,Marketing Staff,-20018,Payroll
+2023-08-04,Sales Commissions,-37929,Payroll
+2023-12-11,NY Office Rent,-10055,Rent
+2024-10-17,Zoom License,-987,Software
+2024-12-17,DataDog Monitoring,-7359,Web Services
+2023-04-05,LinkedIn Campaign,-6906,Marketing
+2024-07-09,Sales Commissions,-25986,Payroll
+2023-08-06,Engineering Salary,-23329,Payroll
+2023-04-27,DataDog Monitoring,-6033,Web Services
+2024-09-09,Overage Fees,39370,Revenue
+2023-06-11,Overage Fees,36698,Revenue
+2023-05-02,Event Sponsorship,-5925,Marketing
+2023-07-17,Content Marketing,-5085,Marketing
+2024-09-08,Sales Commissions,-28018,Payroll
+2024-08-12,Slack Subscription,-873,Software
+2023-05-28,Event Sponsorship,-9969,Marketing
+2023-12-04,GitHub Enterprise,-2415,Software
+2023-06-12,Enterprise License,17387,Revenue
+2024-04-11,Zoom License,-1340,Software
+2024-12-24,NY Office Rent,-11181,Rent
+2024-08-30,Overage Fees,44379,Revenue
+2024-08-15,Google Cloud,-6667,Web Services
+2023-10-23,GitHub Enterprise,-2445,Software
+2023-07-02,LinkedIn Campaign,-7184,Marketing
+2023-01-03,Content Marketing,-2934,Marketing
+2024-11-28,Content Marketing,-3950,Marketing
+2024-08-17,Utility Bills,-5399,Rent
+2024-12-26,Enterprise License,5022,Revenue
+2024-10-25,LinkedIn Campaign,-5695,Marketing
+2023-02-18,GitHub Enterprise,-1091,Software
+2023-01-10,Sentry Logging,-2721,Web Services
+2024-01-31,DataDog Monitoring,-2691,Web Services
+2024-10-16,Google Ads,-5608,Marketing
+2024-11-14,Slack Subscription,-2007,Software
+2023-02-27,Professional Services,29549,Revenue
+2023-08-07,GitHub Enterprise,-2401,Software
+2024-04-01,SF Office Rent,-11841,Rent
+2023-03-07,Sales Commissions,-30898,Payroll
+2023-01-16,AWS Hosting,-5128,Web Services
+2024-06-19,Marketing Staff,-30268,Payroll
+2023-01-02,Executive Compensation,-34780,Payroll
+2023-05-15,Utility Bills,-5866,Rent
+2024-06-06,Engineering Salary,-31280,Payroll
+2024-06-26,DataDog Monitoring,-6979,Web Services
+2024-11-12,Marketing Staff,-34835,Payroll
+2023-02-14,Professional Services,7754,Revenue
+2023-01-01,Event Sponsorship,-7209,Marketing
+2023-06-24,Google Ads,-7120,Marketing
+2023-01-30,Figma Design,-2210,Software
+2023-05-14,Engineering Salary,-38212,Payroll
+2023-02-14,Event Sponsorship,-8206,Marketing
+2024-06-13,Engineering Salary,-31919,Payroll
+2023-06-05,Professional Services,16337,Revenue
+2023-02-26,AWS Hosting,-2631,Web Services
+2024-01-14,Content Marketing,-8110,Marketing
+2024-03-14,SF Office Rent,-13407,Rent
+2024-06-03,LinkedIn Campaign,-5051,Marketing
+2024-11-24,Slack Subscription,-792,Software
+2023-07-02,SF Office Rent,-5676,Rent
+2023-10-22,Overage Fees,12520,Revenue
+2023-08-25,LinkedIn Campaign,-5217,Marketing
+2024-04-15,Marketing Staff,-36615,Payroll
+2023-07-16,Subscription Revenue,24989,Revenue
+2023-11-10,Overage Fees,17974,Revenue
+2024-05-08,Subscription Revenue,12730,Revenue
+2023-09-26,Sales Commissions,-31027,Payroll
+2024-01-10,Google Ads,-4026,Marketing
+2023-01-03,Subscription Revenue,7492,Revenue
+2023-01-19,Marketing Staff,-38765,Payroll
+2023-11-30,Enterprise License,46687,Revenue
+2024-11-24,Google Ads,-6251,Marketing
+2024-03-13,Engineering Salary,-32373,Payroll
+2023-03-30,Professional Services,24651,Revenue
+2024-09-04,SF Office Rent,-7574,Rent
+2024-04-15,Overage Fees,31128,Revenue
+2024-06-15,Sales Commissions,-31249,Payroll
+2023-11-27,LinkedIn Campaign,-9549,Marketing
+2024-09-13,SF Office Rent,-13367,Rent
+2024-07-14,Google Ads,-5289,Marketing
+2024-05-06,LinkedIn Campaign,-5801,Marketing
+2023-04-25,Slack Subscription,-832,Software
+2024-09-24,Zoom License,-1454,Software
+2024-06-22,AWS Hosting,-3518,Web Services
+2024-06-07,GitHub Enterprise,-548,Software
+2024-07-29,SF Office Rent,-9942,Rent
+2023-04-21,AWS Hosting,-3780,Web Services
+2024-03-05,AWS Hosting,-6800,Web Services
+2023-04-02,Slack Subscription,-1687,Software
+2024-07-18,LinkedIn Campaign,-3869,Marketing
+2023-10-29,GitHub Enterprise,-2203,Software
+2024-07-30,Google Cloud,-7505,Web Services
+2023-02-22,GitHub Enterprise,-1428,Software
+2023-09-08,Marketing Staff,-27320,Payroll
+2024-06-30,Professional Services,27842,Revenue
+2023-03-20,Sales Commissions,-22900,Payroll
+2023-08-19,GitHub Enterprise,-941,Software
+2023-05-13,Sales Commissions,-27334,Payroll
+2023-03-09,Content Marketing,-9720,Marketing
+2024-07-29,AWS Hosting,-7139,Web Services
+2023-10-14,Sentry Logging,-7332,Web Services
+2024-12-21,Professional Services,14064,Revenue
+2024-02-12,DataDog Monitoring,-6414,Web Services
+2024-07-29,Content Marketing,-7993,Marketing
+2023-02-18,Content Marketing,-4681,Marketing
+2024-04-21,Figma Design,-839,Software
+2023-09-14,Sales Commissions,-25473,Payroll
+2024-05-24,Utility Bills,-9105,Rent
+2023-12-09,Subscription Revenue,49452,Revenue
+2023-04-10,Google Cloud,-3204,Web Services
+2023-04-08,GitHub Enterprise,-2253,Software
+2023-02-15,Engineering Salary,-38384,Payroll
+2023-02-17,Event Sponsorship,-9529,Marketing
+2023-06-22,Zoom License,-2212,Software
+2024-10-11,SF Office Rent,-9212,Rent
+2024-05-23,Zoom License,-1999,Software
+2024-11-24,Event Sponsorship,-9679,Marketing
+2023-03-26,Utility Bills,-8310,Rent
+2024-07-17,NY Office Rent,-13105,Rent
+2023-03-14,Event Sponsorship,-4855,Marketing
+2023-12-07,SF Office Rent,-13162,Rent
+2024-08-13,Subscription Revenue,31553,Revenue
+2023-08-01,Marketing Staff,-37205,Payroll
+2023-06-13,LinkedIn Campaign,-7915,Marketing
+2024-12-23,Event Sponsorship,-5103,Marketing
+2023-10-23,Professional Services,13547,Revenue
+2023-05-11,Slack Subscription,-1966,Software
+2024-07-29,Content Marketing,-7009,Marketing
+2024-07-29,Marketing Staff,-39372,Payroll
+2023-04-18,Content Marketing,-6191,Marketing
+2024-04-04,Utility Bills,-12328,Rent
+2024-01-03,Event Sponsorship,-7729,Marketing
+2024-12-25,Utility Bills,-14314,Rent
+2024-05-30,Content Marketing,-4912,Marketing
+2024-03-20,AWS Hosting,-4131,Web Services
+2024-03-08,Enterprise License,19217,Revenue
+2024-11-20,SF Office Rent,-14955,Rent
+2024-05-26,GitHub Enterprise,-1992,Software
+2024-05-05,Sales Commissions,-35085,Payroll
+2023-10-17,Slack Subscription,-2109,Software
+2024-02-25,Subscription Revenue,14531,Revenue
+2023-09-28,LinkedIn Campaign,-3272,Marketing
+2024-05-11,Marketing Staff,-25835,Payroll
+2024-04-09,Zoom License,-2830,Software
+2024-09-24,Figma Design,-2044,Software
+2023-10-15,Figma Design,-2611,Software
+2024-07-12,Utility Bills,-14039,Rent
+2023-09-25,Marketing Staff,-29686,Payroll
+2023-08-29,Enterprise License,34906,Revenue
+2024-09-11,Google Ads,-6463,Marketing
+2023-01-18,Overage Fees,39542,Revenue
+2023-06-09,SF Office Rent,-5323,Rent
+2023-11-23,Executive Compensation,-24508,Payroll
+2023-02-04,Enterprise License,29609,Revenue
+2024-06-20,Google Ads,-8394,Marketing
+2023-08-21,Professional Services,25432,Revenue
+2023-05-04,AWS Hosting,-1693,Web Services
+2023-06-15,GitHub Enterprise,-1705,Software
+2023-04-26,Utility Bills,-8318,Rent
+2024-07-28,Slack Subscription,-2227,Software
+2024-03-21,Zoom License,-1265,Software
+2024-10-05,DataDog Monitoring,-1306,Web Services
+2023-01-01,SF Office Rent,-12854,Rent
+2024-12-29,Content Marketing,-6854,Marketing
+2023-04-24,DataDog Monitoring,-5449,Web Services
+2024-05-14,Professional Services,21834,Revenue
+2024-09-17,GitHub Enterprise,-2104,Software
+2024-05-22,Sales Commissions,-33632,Payroll
+2023-03-13,Google Ads,-7049,Marketing
+2023-12-10,Enterprise License,41312,Revenue
+2023-11-12,Sales Commissions,-33226,Payroll
+2024-02-24,Enterprise License,18335,Revenue
+2024-07-22,Executive Compensation,-31837,Payroll
+2024-10-28,NY Office Rent,-7022,Rent
+2023-02-01,SF Office Rent,-13621,Rent
+2024-07-31,Zoom License,-1921,Software
+2024-10-31,DataDog Monitoring,-1546,Web Services
+2023-08-04,Professional Services,39089,Revenue
+2023-06-24,Subscription Revenue,33673,Revenue
+2024-12-08,Slack Subscription,-2520,Software
+2024-07-27,Google Cloud,-4581,Web Services
+2023-12-02,Google Cloud,-4986,Web Services
+2023-01-22,Engineering Salary,-22933,Payroll
+2024-11-24,Executive Compensation,-30855,Payroll
+2024-01-26,Content Marketing,-2283,Marketing
+2024-01-31,GitHub Enterprise,-1104,Software
+2024-02-11,Slack Subscription,-1038,Software
+2024-04-23,SF Office Rent,-8178,Rent
+2024-08-11,Event Sponsorship,-4134,Marketing
+2023-10-29,Engineering Salary,-37502,Payroll
+2023-07-19,Zoom License,-1053,Software
+2023-10-17,Subscription Revenue,18362,Revenue
+2024-09-17,Subscription Revenue,41819,Revenue
+2023-12-06,NY Office Rent,-13847,Rent
+2024-05-07,Sales Commissions,-20352,Payroll
+2023-03-13,Overage Fees,23386,Revenue
+2023-02-16,AWS Hosting,-2537,Web Services
+2024-12-29,Sentry Logging,-2112,Web Services
+2024-12-27,Utility Bills,-14249,Rent
+2023-08-02,DataDog Monitoring,-2537,Web Services
+2024-12-03,NY Office Rent,-8748,Rent
+2023-10-09,LinkedIn Campaign,-3460,Marketing
+2023-09-26,Utility Bills,-9098,Rent
+2023-01-01,Executive Compensation,-20714,Payroll
+2023-04-13,Executive Compensation,-21261,Payroll
+2023-09-11,LinkedIn Campaign,-9704,Marketing
+2024-10-05,LinkedIn Campaign,-9076,Marketing
+2024-09-18,Utility Bills,-10308,Rent
+2024-11-16,Content Marketing,-4125,Marketing
+2023-03-31,Enterprise License,10763,Revenue
+2024-04-16,AWS Hosting,-1272,Web Services
+2024-01-05,Professional Services,47197,Revenue
+2024-03-10,Event Sponsorship,-7894,Marketing
+2023-02-27,Google Cloud,-2378,Web Services
+2024-05-10,Google Cloud,-1856,Web Services
+2023-09-01,Google Cloud,-7701,Web Services
+2023-06-29,Zoom License,-1608,Software
+2024-05-14,Overage Fees,26503,Revenue
+2024-08-24,Content Marketing,-5429,Marketing
+2024-02-10,SF Office Rent,-12210,Rent
+2023-10-27,Sales Commissions,-39528,Payroll
+2024-06-22,DataDog Monitoring,-1729,Web Services
+2023-11-18,Google Ads,-9534,Marketing
+2024-05-23,Overage Fees,43659,Revenue
+2023-10-31,NY Office Rent,-9464,Rent
+2023-11-15,Sentry Logging,-5113,Web Services
+2024-09-25,Enterprise License,10995,Revenue
+2024-02-10,LinkedIn Campaign,-7666,Marketing
+2024-08-04,Slack Subscription,-2955,Software
+2024-09-28,AWS Hosting,-6571,Web Services
+2023-12-18,DataDog Monitoring,-6099,Web Services
+2024-10-20,GitHub Enterprise,-2451,Software
+2023-11-25,NY Office Rent,-13321,Rent
+2024-03-23,LinkedIn Campaign,-7324,Marketing
+2024-10-21,Engineering Salary,-28691,Payroll
+2023-12-20,Enterprise License,17338,Revenue
+2024-02-06,Slack Subscription,-2928,Software
+2024-12-09,DataDog Monitoring,-4216,Web Services
+2024-08-24,Slack Subscription,-1034,Software
+2024-03-22,Sales Commissions,-39978,Payroll
+2023-08-11,Executive Compensation,-29233,Payroll
+2024-01-26,Marketing Staff,-22555,Payroll
+2024-07-25,NY Office Rent,-11387,Rent
+2024-09-02,Engineering Salary,-28669,Payroll
+2024-12-09,Enterprise License,20090,Revenue
+2023-09-01,Sales Commissions,-28970,Payroll
+2023-08-05,Slack Subscription,-1386,Software
+2023-03-04,Google Cloud,-3200,Web Services
+2024-05-03,Overage Fees,31401,Revenue
+2024-07-15,LinkedIn Campaign,-2951,Marketing
+2023-01-01,Google Ads,-5828,Marketing
+2024-03-07,Utility Bills,-7216,Rent
+2024-09-25,Utility Bills,-14942,Rent
+2023-12-27,NY Office Rent,-6648,Rent
+2023-04-24,Sentry Logging,-7607,Web Services
+2023-10-12,GitHub Enterprise,-2006,Software
+2023-01-17,SF Office Rent,-8398,Rent
+2024-11-26,DataDog Monitoring,-4888,Web Services
+2024-01-21,LinkedIn Campaign,-9377,Marketing
+2024-08-11,Content Marketing,-8989,Marketing
+2023-08-26,DataDog Monitoring,-4451,Web Services
+2023-11-13,DataDog Monitoring,-3970,Web Services
+2023-07-04,Professional Services,26002,Revenue
+2023-09-26,Utility Bills,-11605,Rent
+2023-05-26,Google Ads,-7612,Marketing
+2024-11-03,Utility Bills,-11979,Rent
+2023-10-18,Marketing Staff,-26111,Payroll
+2023-05-25,Utility Bills,-14456,Rent
+2024-04-12,Utility Bills,-8233,Rent
+2024-10-20,AWS Hosting,-7864,Web Services
+2023-01-29,Figma Design,-2820,Software
+2024-07-13,Enterprise License,47485,Revenue
+2023-04-08,NY Office Rent,-12378,Rent
+2024-04-13,Executive Compensation,-31927,Payroll
+2024-07-06,Zoom License,-922,Software
+2023-03-19,Google Cloud,-7315,Web Services
+2023-01-02,Event Sponsorship,-6833,Marketing
+2023-08-13,NY Office Rent,-5184,Rent
+2024-09-11,Slack Subscription,-2869,Software
+2024-11-08,Enterprise License,14734,Revenue
+2024-03-18,Subscription Revenue,39953,Revenue
+2024-06-28,LinkedIn Campaign,-4483,Marketing
+2023-12-13,Zoom License,-1194,Software
+2024-01-03,Professional Services,21881,Revenue
+2024-02-14,NY Office Rent,-5143,Rent
+2023-09-16,Google Ads,-8104,Marketing
+2024-06-15,Google Ads,-7100,Marketing
+2024-06-14,GitHub Enterprise,-511,Software
+2023-08-24,NY Office Rent,-13940,Rent
+2024-03-25,Slack Subscription,-1172,Software
+2023-12-24,Executive Compensation,-39790,Payroll
+2024-10-27,Engineering Salary,-35498,Payroll
+2024-02-13,NY Office Rent,-8181,Rent
+2024-04-15,NY Office Rent,-5065,Rent
+2023-05-24,AWS Hosting,-2089,Web Services
+2024-07-25,Event Sponsorship,-7713,Marketing
+2024-01-25,Marketing Staff,-31079,Payroll
+2024-03-19,GitHub Enterprise,-575,Software
+2024-08-01,Overage Fees,46624,Revenue
+2024-03-19,Figma Design,-876,Software
+2023-12-11,Executive Compensation,-22273,Payroll
+2024-06-16,Slack Subscription,-819,Software
+2024-01-15,Engineering Salary,-27565,Payroll
+2023-08-31,Executive Compensation,-39722,Payroll
+2023-01-08,Marketing Staff,-20071,Payroll
+2023-01-07,LinkedIn Campaign,-7260,Marketing
+2024-06-12,Overage Fees,33509,Revenue
+2023-08-03,Marketing Staff,-21041,Payroll
+2023-07-29,Zoom License,-2661,Software
+2023-08-23,Figma Design,-1999,Software
+2024-11-15,Event Sponsorship,-4359,Marketing
+2023-08-14,Subscription Revenue,16856,Revenue
+2024-09-29,Event Sponsorship,-9494,Marketing
+2023-08-05,Professional Services,38516,Revenue
+2024-08-28,NY Office Rent,-6336,Rent
+2023-11-22,Sentry Logging,-7552,Web Services
+2024-01-02,LinkedIn Campaign,-2508,Marketing
+2024-03-17,Engineering Salary,-20917,Payroll
+2024-08-17,Sales Commissions,-28774,Payroll
+2024-01-23,SF Office Rent,-12174,Rent
+2023-08-11,NY Office Rent,-6243,Rent
+2023-12-20,Subscription Revenue,20851,Revenue
+2023-11-29,Marketing Staff,-37333,Payroll
+2023-11-27,NY Office Rent,-12800,Rent
+2023-02-01,AWS Hosting,-5237,Web Services
+2024-05-01,Overage Fees,7595,Revenue
+2024-09-24,Utility Bills,-11615,Rent
+2023-06-04,DataDog Monitoring,-5862,Web Services
+2023-04-04,GitHub Enterprise,-1779,Software
+2024-01-20,Event Sponsorship,-8866,Marketing
+2024-10-12,Google Ads,-3044,Marketing
+2023-01-14,Event Sponsorship,-2824,Marketing
+2023-03-07,Sales Commissions,-29467,Payroll
+2024-01-15,Google Ads,-6215,Marketing
+2023-11-25,Sentry Logging,-7434,Web Services
+2023-08-20,Professional Services,37648,Revenue
+2023-12-08,Event Sponsorship,-8765,Marketing
+2023-08-31,Google Ads,-6991,Marketing
+2024-01-06,Slack Subscription,-1563,Software
+2023-08-17,Google Cloud,-4432,Web Services
+2024-08-19,Figma Design,-1619,Software
+2023-11-28,SF Office Rent,-14043,Rent
+2023-11-03,Slack Subscription,-1295,Software
+2024-09-06,Enterprise License,45733,Revenue
+2024-12-03,Content Marketing,-7468,Marketing
+2023-06-18,Google Cloud,-1385,Web Services
+2023-11-14,Enterprise License,26439,Revenue
+2024-04-13,Sentry Logging,-1794,Web Services
+2023-08-21,Executive Compensation,-37146,Payroll
+2024-04-30,Google Cloud,-6134,Web Services
+2024-11-14,Subscription Revenue,7556,Revenue
+2024-08-17,Professional Services,32751,Revenue
+2023-01-25,GitHub Enterprise,-1433,Software
+2024-05-09,Engineering Salary,-33442,Payroll
+2024-07-29,Figma Design,-2284,Software
+2023-03-18,NY Office Rent,-9053,Rent
+2024-06-25,Sales Commissions,-25437,Payroll
+2023-10-04,Executive Compensation,-38403,Payroll
+2023-07-25,Professional Services,48580,Revenue
+2023-03-26,Utility Bills,-5144,Rent
+2023-08-27,Sentry Logging,-7220,Web Services
+2023-12-29,Professional Services,38127,Revenue
+2023-11-24,Subscription Revenue,40525,Revenue
+2024-10-22,Enterprise License,30826,Revenue
+2023-11-09,Sentry Logging,-1988,Web Services
+2024-04-07,Content Marketing,-3165,Marketing
+2023-10-14,Utility Bills,-6439,Rent
+2023-06-06,Sentry Logging,-7346,Web Services
+2024-06-25,Slack Subscription,-2408,Software
+2024-06-14,Utility Bills,-14429,Rent
+2023-05-14,Overage Fees,22017,Revenue
+2024-10-06,Subscription Revenue,32314,Revenue
+2024-01-19,Sales Commissions,-33509,Payroll
+2023-02-22,Sales Commissions,-20244,Payroll
+2023-08-15,Google Cloud,-4912,Web Services
+2023-10-02,Zoom License,-2236,Software
+2023-04-02,Sales Commissions,-30949,Payroll
+2023-05-28,LinkedIn Campaign,-2920,Marketing
+2023-05-17,NY Office Rent,-14989,Rent
+2023-07-06,Zoom License,-784,Software
+2023-07-14,Sentry Logging,-1537,Web Services
+2024-08-21,DataDog Monitoring,-4357,Web Services
+2024-01-13,Content Marketing,-2548,Marketing
+2024-05-16,Sentry Logging,-6285,Web Services
+2023-04-23,AWS Hosting,-5081,Web Services
+2023-08-06,Google Cloud,-1714,Web Services
+2023-01-12,Event Sponsorship,-8433,Marketing
+2024-10-20,Subscription Revenue,32690,Revenue
+2023-04-01,Slack Subscription,-2020,Software
+2024-04-09,Utility Bills,-12739,Rent
+2024-08-03,Figma Design,-1099,Software
+2023-03-06,Zoom License,-2253,Software
+2024-05-29,Google Cloud,-3241,Web Services
+2024-03-21,Utility Bills,-8860,Rent
+2023-03-04,SF Office Rent,-5939,Rent
+2023-08-04,GitHub Enterprise,-2080,Software
+2023-06-16,AWS Hosting,-6390,Web Services
+2024-10-20,Google Ads,-2420,Marketing
+2023-12-15,AWS Hosting,-7306,Web Services
+2024-11-06,Google Ads,-5808,Marketing
+2023-03-16,Event Sponsorship,-6508,Marketing
+2024-08-21,Event Sponsorship,-5122,Marketing
+2023-01-05,GitHub Enterprise,-2542,Software
+2023-06-02,Subscription Revenue,43295,Revenue
+2024-01-25,GitHub Enterprise,-1349,Software
+2024-01-29,Enterprise License,31186,Revenue
+2023-11-30,DataDog Monitoring,-3756,Web Services
+2024-11-16,Executive Compensation,-32353,Payroll
+2024-03-31,Figma Design,-1557,Software
+2023-03-08,Utility Bills,-13321,Rent
+2023-02-06,Marketing Staff,-25165,Payroll
+2024-03-13,Content Marketing,-4844,Marketing
+2024-11-02,Sentry Logging,-7486,Web Services
+2023-01-07,Overage Fees,48537,Revenue
+2023-06-29,Professional Services,33648,Revenue
+2024-03-23,Overage Fees,16247,Revenue
+2023-07-07,LinkedIn Campaign,-2159,Marketing
+2024-10-12,Event Sponsorship,-3058,Marketing
+2024-09-22,Google Cloud,-1697,Web Services
+2024-03-10,AWS Hosting,-1286,Web Services
+2024-12-10,Professional Services,39366,Revenue
+2024-01-22,Utility Bills,-7150,Rent
+2024-09-23,Content Marketing,-6546,Marketing
+2024-12-01,Executive Compensation,-20583,Payroll
+2023-11-15,Utility Bills,-6755,Rent
+2023-02-22,DataDog Monitoring,-4867,Web Services
+2024-09-01,Executive Compensation,-35139,Payroll
+2023-06-24,Sales Commissions,-24194,Payroll
+2023-08-14,NY Office Rent,-11865,Rent
+2023-01-30,NY Office Rent,-11724,Rent
+2023-03-11,Executive Compensation,-21178,Payroll
+2024-03-25,Sentry Logging,-6069,Web Services
+2023-05-18,Slack Subscription,-2601,Software
+2023-10-09,SF Office Rent,-12708,Rent
+2023-03-12,Content Marketing,-5746,Marketing
+2023-07-07,Executive Compensation,-21917,Payroll
+2023-09-09,Executive Compensation,-34278,Payroll
+2024-09-09,Content Marketing,-5943,Marketing
+2023-09-20,Overage Fees,20518,Revenue
+2024-12-03,Zoom License,-1567,Software
+2023-06-25,Content Marketing,-6014,Marketing
+2024-09-21,Engineering Salary,-29887,Payroll
+2023-12-17,Content Marketing,-3809,Marketing
+2024-07-30,Google Cloud,-5412,Web Services
+2024-02-25,Sentry Logging,-1148,Web Services
+2024-07-03,NY Office Rent,-11438,Rent
+2024-08-10,Sales Commissions,-21836,Payroll
+2023-04-02,Figma Design,-2409,Software
+2024-01-19,GitHub Enterprise,-2791,Software
+2023-05-23,Professional Services,10849,Revenue
+2023-01-24,Utility Bills,-12738,Rent
+2023-01-20,Sales Commissions,-39085,Payroll
+2023-03-28,Zoom License,-2601,Software
+2024-09-08,Utility Bills,-8341,Rent
+2023-01-12,Google Cloud,-7010,Web Services
+2024-01-14,Google Ads,-9161,Marketing
+2024-07-18,NY Office Rent,-14101,Rent
+2024-04-12,Content Marketing,-2861,Marketing
+2023-07-20,GitHub Enterprise,-1734,Software
+2024-08-06,Professional Services,19481,Revenue
+2023-10-23,Subscription Revenue,49623,Revenue
+2023-10-02,Subscription Revenue,49744,Revenue
+2023-12-28,Overage Fees,32594,Revenue
+2024-04-05,AWS Hosting,-2471,Web Services
+2023-08-03,GitHub Enterprise,-1118,Software
+2023-05-31,Google Ads,-3239,Marketing
+2023-12-20,NY Office Rent,-11520,Rent
+2023-11-13,Engineering Salary,-34171,Payroll
+2023-02-21,Professional Services,42658,Revenue
+2023-11-02,DataDog Monitoring,-3106,Web Services
+2023-09-07,Enterprise License,40166,Revenue
+2023-12-26,Slack Subscription,-1894,Software
+2024-05-10,Subscription Revenue,33561,Revenue
+2023-12-07,Overage Fees,44719,Revenue
+2023-03-24,Enterprise License,43596,Revenue
+2023-03-30,Subscription Revenue,27492,Revenue
+2023-06-27,Executive Compensation,-27133,Payroll
+2023-08-31,Subscription Revenue,43257,Revenue
+2024-02-23,Slack Subscription,-623,Software
+2024-11-09,Sales Commissions,-24004,Payroll
+2024-02-21,Sentry Logging,-1395,Web Services
+2024-06-22,AWS Hosting,-4697,Web Services
+2023-10-27,Enterprise License,46330,Revenue
+2024-02-05,Professional Services,39069,Revenue
+2024-04-12,NY Office Rent,-8563,Rent
+2023-11-13,DataDog Monitoring,-1007,Web Services
+2024-04-10,GitHub Enterprise,-2392,Software
+2024-06-20,Figma Design,-2771,Software
+2024-03-12,Enterprise License,32820,Revenue
+2024-06-23,NY Office Rent,-11091,Rent
+2023-11-11,NY Office Rent,-10385,Rent
+2023-06-25,Sentry Logging,-2371,Web Services
+2024-10-22,Utility Bills,-8510,Rent
+2023-06-28,Subscription Revenue,27881,Revenue
+2023-02-21,Google Ads,-3234,Marketing
+2023-10-18,Enterprise License,40683,Revenue
+2024-05-25,Utility Bills,-13350,Rent
+2023-07-30,Marketing Staff,-30555,Payroll
+2023-01-20,Google Ads,-8786,Marketing
+2023-10-23,DataDog Monitoring,-5177,Web Services
+2024-06-15,Marketing Staff,-35283,Payroll
+2024-03-25,Engineering Salary,-22602,Payroll
+2023-11-29,Content Marketing,-7291,Marketing
+2023-09-12,GitHub Enterprise,-1160,Software
+2023-12-20,Zoom License,-2086,Software
+2024-10-03,Google Ads,-5218,Marketing
+2024-06-15,Enterprise License,48339,Revenue
+2023-01-05,Subscription Revenue,13531,Revenue
+2023-08-13,Figma Design,-1962,Software
+2024-08-08,Enterprise License,41030,Revenue
+2023-02-27,GitHub Enterprise,-1742,Software
+2023-03-12,Sales Commissions,-25368,Payroll
+2023-01-25,Professional Services,48957,Revenue
+2023-09-04,Slack Subscription,-1127,Software
+2023-05-10,SF Office Rent,-5058,Rent
+2024-11-27,Marketing Staff,-25813,Payroll
+2024-05-21,AWS Hosting,-1852,Web Services
+2024-05-02,NY Office Rent,-5753,Rent
+2024-06-19,Sales Commissions,-20214,Payroll
+2024-11-07,Slack Subscription,-2407,Software
+2024-03-16,Content Marketing,-3495,Marketing
+2023-03-29,Professional Services,42297,Revenue
+2023-05-20,Slack Subscription,-898,Software
+2023-10-26,Subscription Revenue,38800,Revenue
+2024-07-04,SF Office Rent,-7868,Rent
+2024-07-02,Marketing Staff,-23889,Payroll
+2024-02-24,Utility Bills,-14206,Rent
+2023-08-17,NY Office Rent,-13090,Rent
+2023-01-12,Sentry Logging,-2027,Web Services
+2024-02-03,Subscription Revenue,5909,Revenue
+2023-04-11,Sentry Logging,-5786,Web Services
+2023-12-31,Executive Compensation,-20218,Payroll
+2023-02-19,NY Office Rent,-14439,Rent
+2024-08-23,Sentry Logging,-4239,Web Services
+2024-11-13,Google Cloud,-7272,Web Services
+2024-04-26,Slack Subscription,-1113,Software
+2024-01-16,SF Office Rent,-14940,Rent
+2024-12-21,Enterprise License,29731,Revenue
+2024-02-21,Overage Fees,36779,Revenue
+2023-06-10,Slack Subscription,-2449,Software
+2023-07-17,Utility Bills,-9917,Rent
+2023-03-29,AWS Hosting,-1438,Web Services
+2024-07-05,AWS Hosting,-6552,Web Services
+2024-08-08,Executive Compensation,-28527,Payroll
+2024-12-16,Executive Compensation,-25163,Payroll
+2024-10-07,Subscription Revenue,10227,Revenue
+2023-08-06,NY Office Rent,-5406,Rent
+2024-02-29,Utility Bills,-10970,Rent
+2024-08-27,Overage Fees,30151,Revenue
+2023-07-05,Engineering Salary,-25589,Payroll
+2023-06-27,Google Cloud,-1080,Web Services
+2023-04-17,Sales Commissions,-29373,Payroll
+2024-07-11,Event Sponsorship,-6074,Marketing
+2023-03-08,Professional Services,46105,Revenue
+2024-11-27,Utility Bills,-8965,Rent
+2024-08-27,Zoom License,-2428,Software
+2023-04-27,Executive Compensation,-26566,Payroll
+2024-02-27,Sentry Logging,-3085,Web Services
+2024-04-30,SF Office Rent,-11340,Rent
+2023-01-17,Subscription Revenue,37505,Revenue
+2024-03-27,AWS Hosting,-1688,Web Services
+2024-06-05,Google Ads,-9254,Marketing
+2024-06-15,NY Office Rent,-5834,Rent
+2023-07-15,Figma Design,-2206,Software
+2023-06-07,Sales Commissions,-23347,Payroll
+2024-04-18,Sales Commissions,-23158,Payroll
+2024-03-04,Utility Bills,-12656,Rent
+2023-11-28,LinkedIn Campaign,-4370,Marketing
+2024-07-14,Content Marketing,-5451,Marketing
+2024-05-17,Overage Fees,5360,Revenue
+2023-09-26,AWS Hosting,-6755,Web Services
+2024-10-10,Overage Fees,24084,Revenue
+2023-06-29,Content Marketing,-8669,Marketing
+2023-03-21,NY Office Rent,-8462,Rent
+2023-02-08,Sentry Logging,-4907,Web Services
+2024-04-17,Event Sponsorship,-3952,Marketing
+2023-11-04,Sales Commissions,-35487,Payroll
+2024-11-10,GitHub Enterprise,-2587,Software
+2023-07-02,AWS Hosting,-2693,Web Services
+2024-05-12,Marketing Staff,-37830,Payroll
+2023-09-23,Marketing Staff,-21437,Payroll
+2023-05-15,Executive Compensation,-29351,Payroll
+2023-07-19,Enterprise License,41656,Revenue
+2024-11-11,Sales Commissions,-23547,Payroll
+2023-12-06,Content Marketing,-5042,Marketing
+2024-10-09,Marketing Staff,-36842,Payroll
+2024-11-24,LinkedIn Campaign,-3145,Marketing
+2024-11-19,Overage Fees,49715,Revenue
+2024-02-12,Slack Subscription,-732,Software
+2023-02-06,GitHub Enterprise,-2459,Software
+2023-07-26,DataDog Monitoring,-2165,Web Services
+2024-11-30,Utility Bills,-10940,Rent
+2023-06-12,Zoom License,-2773,Software
+2023-01-19,Executive Compensation,-32325,Payroll
+2024-03-25,Executive Compensation,-35411,Payroll
+2024-01-19,Subscription Revenue,35837,Revenue
+2024-08-07,GitHub Enterprise,-1376,Software
+2024-02-22,Overage Fees,10432,Revenue
+2024-03-23,Overage Fees,44552,Revenue
+2023-04-16,Google Cloud,-4821,Web Services
+2023-10-09,Slack Subscription,-705,Software
+2023-12-09,Enterprise License,17811,Revenue
+2024-04-07,Marketing Staff,-39589,Payroll
+2024-10-08,Executive Compensation,-26763,Payroll
+2024-09-17,Slack Subscription,-1782,Software
+2023-07-20,SF Office Rent,-13532,Rent
+2023-06-18,Utility Bills,-14685,Rent
+2023-05-24,SF Office Rent,-5030,Rent
+2023-01-27,Enterprise License,31279,Revenue
+2023-04-26,Google Cloud,-7130,Web Services
+2023-11-03,GitHub Enterprise,-1600,Software
+2023-11-21,Zoom License,-1602,Software
+2024-10-26,Event Sponsorship,-5395,Marketing
+2023-06-25,DataDog Monitoring,-4432,Web Services
+2023-10-16,Executive Compensation,-20323,Payroll
+2023-12-24,Subscription Revenue,21614,Revenue
+2024-03-05,Sentry Logging,-2877,Web Services
+2023-01-11,DataDog Monitoring,-5536,Web Services
+2023-06-16,DataDog Monitoring,-6024,Web Services
+2024-03-17,Professional Services,43699,Revenue
+2024-02-15,Sentry Logging,-2218,Web Services
+2024-08-28,Engineering Salary,-31574,Payroll
+2023-12-14,AWS Hosting,-4687,Web Services
+2023-10-29,SF Office Rent,-13605,Rent
+2023-07-10,Overage Fees,28228,Revenue
+2023-10-30,Marketing Staff,-39992,Payroll
+2023-02-13,Google Ads,-5832,Marketing
+2023-08-20,AWS Hosting,-4334,Web Services
+2023-03-03,Executive Compensation,-21150,Payroll
+2023-06-07,DataDog Monitoring,-5586,Web Services
+2024-07-23,Sentry Logging,-1376,Web Services
+2024-02-08,Executive Compensation,-23444,Payroll
+2023-09-09,Zoom License,-1081,Software
+2024-03-12,LinkedIn Campaign,-3096,Marketing
+2023-06-10,Sentry Logging,-4064,Web Services
+2024-01-17,Google Ads,-5984,Marketing
+2024-03-17,Utility Bills,-13461,Rent
+2024-09-16,Professional Services,23565,Revenue
+2023-08-08,Event Sponsorship,-7140,Marketing
+2023-02-17,Google Ads,-9235,Marketing
+2023-08-06,SF Office Rent,-6798,Rent
+2024-05-07,SF Office Rent,-6863,Rent
+2023-11-06,NY Office Rent,-10259,Rent
+2023-10-05,Sentry Logging,-4708,Web Services
+2024-02-19,Professional Services,20360,Revenue
+2023-04-03,Overage Fees,35239,Revenue
+2023-01-16,AWS Hosting,-3137,Web Services
+2024-07-23,Content Marketing,-9753,Marketing
+2023-08-01,NY Office Rent,-8704,Rent
+2024-08-04,Zoom License,-2455,Software
+2023-07-26,Zoom License,-2491,Software
+2023-02-11,Subscription Revenue,28928,Revenue
+2023-01-04,Event Sponsorship,-7377,Marketing
+2024-02-01,Zoom License,-1608,Software
+2024-08-27,Figma Design,-1555,Software
+2024-07-27,Utility Bills,-6713,Rent
+2023-07-05,Utility Bills,-13841,Rent
+2023-05-27,Engineering Salary,-34456,Payroll
+2024-08-10,Marketing Staff,-28700,Payroll
+2024-02-12,Engineering Salary,-35390,Payroll
+2024-06-26,SF Office Rent,-14821,Rent
+2023-11-29,Content Marketing,-7495,Marketing
+2023-09-24,Content Marketing,-9677,Marketing
+2024-01-11,Enterprise License,10489,Revenue
+2023-09-03,Sentry Logging,-1595,Web Services
+2023-02-21,GitHub Enterprise,-1184,Software
+2023-09-10,Zoom License,-2727,Software
+2024-02-26,Overage Fees,46557,Revenue
+2024-06-17,DataDog Monitoring,-7983,Web Services
+2024-04-21,Google Cloud,-4652,Web Services
+2023-07-06,Overage Fees,25077,Revenue
+2023-09-16,Slack Subscription,-1730,Software
+2024-07-11,Marketing Staff,-21779,Payroll
+2023-03-10,Executive Compensation,-26609,Payroll
+2023-01-01,Zoom License,-1608,Software
+2024-01-14,AWS Hosting,-6592,Web Services
+2024-05-06,Figma Design,-2590,Software
+2024-12-07,Professional Services,40536,Revenue
+2024-08-16,Subscription Revenue,48410,Revenue
+2023-03-08,DataDog Monitoring,-1447,Web Services
+2024-09-12,LinkedIn Campaign,-8438,Marketing
+2023-11-26,GitHub Enterprise,-1556,Software
+2023-06-12,Zoom License,-2968,Software
+2023-01-07,NY Office Rent,-8158,Rent
+2023-10-30,Figma Design,-1857,Software
+2024-01-18,Subscription Revenue,20077,Revenue
+2024-03-30,Zoom License,-2160,Software
+2024-11-15,Engineering Salary,-30386,Payroll
+2024-06-04,Sales Commissions,-37695,Payroll
+2024-10-06,Sales Commissions,-36823,Payroll
+2024-09-04,Enterprise License,8390,Revenue
+2023-10-12,DataDog Monitoring,-2782,Web Services
+2023-10-08,GitHub Enterprise,-2882,Software
+2024-01-08,Utility Bills,-8392,Rent
+2024-01-20,Sales Commissions,-27191,Payroll
+2023-12-01,Slack Subscription,-1551,Software
+2023-11-13,GitHub Enterprise,-2766,Software
+2024-04-22,Event Sponsorship,-4300,Marketing
+2023-07-04,Sentry Logging,-3077,Web Services
+2024-12-14,Subscription Revenue,35892,Revenue
+2024-05-05,Content Marketing,-5475,Marketing
+2024-05-25,DataDog Monitoring,-6931,Web Services
+2023-01-14,Subscription Revenue,38318,Revenue
+2024-10-03,LinkedIn Campaign,-5668,Marketing
+2023-11-23,Subscription Revenue,10058,Revenue
+2023-03-30,Utility Bills,-6307,Rent
+2023-09-05,Utility Bills,-11794,Rent
+2024-05-15,Subscription Revenue,9056,Revenue
+2023-08-03,Professional Services,44105,Revenue
+2023-12-12,NY Office Rent,-5496,Rent
+2024-09-06,Engineering Salary,-37587,Payroll
+2024-06-07,Slack Subscription,-1555,Software
+2024-06-11,Zoom License,-2029,Software
+2024-03-19,SF Office Rent,-8685,Rent
+2023-07-23,Event Sponsorship,-5326,Marketing
+2024-04-15,SF Office Rent,-5974,Rent
+2023-02-09,Slack Subscription,-1926,Software
+2024-08-13,Google Cloud,-2749,Web Services
+2023-02-13,Enterprise License,31483,Revenue
+2024-06-15,Enterprise License,26832,Revenue
+2024-11-08,Marketing Staff,-38818,Payroll
+2023-07-24,Enterprise License,45770,Revenue
+2024-02-20,Professional Services,33425,Revenue
+2024-09-20,SF Office Rent,-9734,Rent
+2024-11-22,LinkedIn Campaign,-3751,Marketing
+2023-08-10,Overage Fees,41078,Revenue
+2024-08-19,AWS Hosting,-3067,Web Services
+2024-07-03,Engineering Salary,-26916,Payroll
+2024-11-24,Zoom License,-1181,Software
+2024-09-05,Overage Fees,11686,Revenue
+2023-07-04,Zoom License,-694,Software
+2024-03-11,Professional Services,10473,Revenue
+2024-05-08,Zoom License,-1241,Software
+2023-10-25,AWS Hosting,-6162,Web Services
+2024-07-25,Slack Subscription,-1258,Software
+2023-10-18,NY Office Rent,-13363,Rent
+2024-06-14,Event Sponsorship,-7071,Marketing
+2023-11-13,Google Cloud,-1526,Web Services
+2023-12-01,Engineering Salary,-24469,Payroll
+2023-10-27,Sales Commissions,-23031,Payroll
+2023-12-22,Google Cloud,-5905,Web Services
+2024-10-08,Figma Design,-1734,Software
+2023-05-07,NY Office Rent,-6131,Rent
+2024-11-29,Executive Compensation,-24160,Payroll
+2023-08-02,Enterprise License,28998,Revenue
+2023-01-27,SF Office Rent,-10575,Rent
+2023-10-24,NY Office Rent,-12548,Rent
+2024-05-15,Utility Bills,-13668,Rent
+2023-09-03,Sales Commissions,-27396,Payroll
+2024-09-24,Zoom License,-1340,Software
+2024-02-22,Subscription Revenue,25400,Revenue
+2023-05-31,GitHub Enterprise,-2342,Software
+2023-05-11,DataDog Monitoring,-6314,Web Services
+2023-12-04,Sales Commissions,-31923,Payroll
+2023-05-15,Content Marketing,-2518,Marketing
+2024-04-27,NY Office Rent,-7285,Rent
+2024-04-12,Marketing Staff,-38420,Payroll
+2024-01-23,Enterprise License,33245,Revenue
+2023-02-26,DataDog Monitoring,-4736,Web Services
+2024-12-19,Sentry Logging,-4039,Web Services
+2023-06-01,Subscription Revenue,16751,Revenue
+2023-07-21,Enterprise License,27718,Revenue
+2023-01-15,Slack Subscription,-1846,Software
+2024-07-17,AWS Hosting,-5666,Web Services
+2024-02-24,NY Office Rent,-7637,Rent
+2023-05-02,Overage Fees,46653,Revenue
+2023-12-27,Zoom License,-1720,Software
+2023-04-25,Event Sponsorship,-3670,Marketing
+2024-02-11,Google Cloud,-7758,Web Services
+2024-06-01,Slack Subscription,-2819,Software
+2024-03-19,Marketing Staff,-24672,Payroll
+2023-07-17,Content Marketing,-4027,Marketing
+2024-11-30,Event Sponsorship,-8987,Marketing
+2024-04-12,Event Sponsorship,-6520,Marketing
+2023-06-13,Marketing Staff,-21480,Payroll
+2024-06-07,Sales Commissions,-24273,Payroll
+2024-03-15,AWS Hosting,-7636,Web Services
+2023-11-09,Utility Bills,-8959,Rent
+2023-03-16,Content Marketing,-5737,Marketing
+2023-09-04,GitHub Enterprise,-516,Software
+2024-08-26,DataDog Monitoring,-4410,Web Services
+2023-10-23,Utility Bills,-7638,Rent
+2024-12-31,Subscription Revenue,48181,Revenue
+2023-07-29,Professional Services,49776,Revenue
+2023-06-23,LinkedIn Campaign,-8487,Marketing
+2024-01-06,Content Marketing,-2095,Marketing
+2023-02-18,Marketing Staff,-37463,Payroll
+2024-06-08,GitHub Enterprise,-1334,Software
+2023-11-01,Event Sponsorship,-5526,Marketing
+2023-04-06,SF Office Rent,-11978,Rent
+2024-01-03,AWS Hosting,-2221,Web Services
+2023-02-08,Engineering Salary,-20638,Payroll
+2024-10-17,Google Cloud,-2866,Web Services
+2023-11-02,SF Office Rent,-14577,Rent
+2023-09-03,Professional Services,11619,Revenue
+2024-07-09,Sentry Logging,-5808,Web Services
+2023-08-25,Content Marketing,-2678,Marketing
+2024-11-16,DataDog Monitoring,-4727,Web Services
+2023-06-09,GitHub Enterprise,-2448,Software
+2024-02-14,LinkedIn Campaign,-8822,Marketing
+2024-11-13,DataDog Monitoring,-4110,Web Services
+2024-11-14,NY Office Rent,-6390,Rent
+2023-12-30,Overage Fees,15061,Revenue
+2023-11-24,Figma Design,-2466,Software
+2024-08-14,Figma Design,-1697,Software
+2024-10-18,Sentry Logging,-4869,Web Services
+2024-04-10,AWS Hosting,-2746,Web Services
+2023-09-27,LinkedIn Campaign,-9984,Marketing
+2023-09-13,Google Cloud,-3980,Web Services
+2023-06-07,GitHub Enterprise,-1399,Software
+2024-10-26,Overage Fees,42064,Revenue
+2024-04-28,Executive Compensation,-27306,Payroll
+2023-10-23,Overage Fees,16650,Revenue
+2023-01-30,Engineering Salary,-31602,Payroll
+2024-11-10,Google Ads,-3084,Marketing
+2024-09-07,Content Marketing,-7156,Marketing
+2023-10-21,NY Office Rent,-14878,Rent
+2023-12-26,Professional Services,49175,Revenue
+2023-07-06,Zoom License,-2461,Software
+2024-05-12,Content Marketing,-8929,Marketing
+2023-07-30,Event Sponsorship,-5271,Marketing
+2024-05-27,LinkedIn Campaign,-2051,Marketing
+2024-05-04,AWS Hosting,-4866,Web Services
+2024-08-24,Slack Subscription,-519,Software
+2024-03-30,NY Office Rent,-6277,Rent
+2024-04-04,Sales Commissions,-35121,Payroll
+2024-09-15,Zoom License,-1817,Software
+2023-06-29,Sales Commissions,-32529,Payroll
+2024-03-26,Professional Services,30573,Revenue
+2023-03-09,Engineering Salary,-35515,Payroll
+2023-01-01,Sales Commissions,-26934,Payroll
+2023-11-27,AWS Hosting,-3658,Web Services
+2024-09-29,Overage Fees,21003,Revenue
+2024-11-22,Zoom License,-2222,Software
+2024-10-09,Slack Subscription,-1658,Software
+2023-05-25,Executive Compensation,-21352,Payroll
+2024-11-06,SF Office Rent,-13904,Rent
+2024-09-30,Overage Fees,7574,Revenue
+2024-04-18,Enterprise License,30521,Revenue
+2024-04-16,LinkedIn Campaign,-5215,Marketing
+2023-09-26,Figma Design,-2300,Software
+2023-11-07,Google Ads,-6946,Marketing
+2024-10-07,Figma Design,-1140,Software
+2023-01-10,GitHub Enterprise,-1391,Software
+2024-04-18,Utility Bills,-9726,Rent
+2024-06-17,Subscription Revenue,20700,Revenue
+2024-03-06,Enterprise License,28078,Revenue
+2023-04-27,Professional Services,21801,Revenue
+2023-07-27,Sales Commissions,-30716,Payroll
+2024-11-26,Event Sponsorship,-4099,Marketing
+2023-02-22,NY Office Rent,-12095,Rent
+2023-12-30,DataDog Monitoring,-1345,Web Services
+2024-06-13,Google Cloud,-7576,Web Services
+2023-06-12,SF Office Rent,-13759,Rent
+2023-11-12,Slack Subscription,-2684,Software
+2024-05-20,GitHub Enterprise,-1926,Software
+2023-01-11,NY Office Rent,-8166,Rent
+2024-10-28,Executive Compensation,-39476,Payroll
+2023-09-14,Zoom License,-1937,Software
+2024-11-05,AWS Hosting,-7759,Web Services
+2024-12-23,Subscription Revenue,36758,Revenue
+2024-12-15,GitHub Enterprise,-1973,Software
+2023-09-24,Sentry Logging,-5735,Web Services
+2023-06-08,Zoom License,-1749,Software
+2024-09-03,SF Office Rent,-5394,Rent
+2023-08-14,Content Marketing,-9800,Marketing
+2024-05-14,LinkedIn Campaign,-7178,Marketing
+2023-05-13,Overage Fees,21710,Revenue
+2023-02-26,Sentry Logging,-7910,Web Services
+2023-05-08,Professional Services,33967,Revenue
+2024-02-15,Figma Design,-740,Software
+2024-01-24,Sentry Logging,-5657,Web Services
+2024-02-09,Sales Commissions,-39407,Payroll
+2024-07-20,Utility Bills,-9168,Rent
+2023-06-14,NY Office Rent,-13246,Rent
+2023-12-31,Google Cloud,-6361,Web Services
+2023-03-06,Subscription Revenue,28592,Revenue
+2024-07-01,Google Ads,-6574,Marketing
+2024-06-23,Executive Compensation,-34849,Payroll
+2023-03-31,Sentry Logging,-7701,Web Services
+2024-11-27,GitHub Enterprise,-2353,Software
+2024-11-21,Utility Bills,-8647,Rent
+2024-10-02,Marketing Staff,-33309,Payroll
+2024-12-11,Professional Services,34896,Revenue
+2023-01-08,Content Marketing,-8831,Marketing
+2024-07-20,Executive Compensation,-33986,Payroll
+2023-09-18,Executive Compensation,-26474,Payroll
+2023-06-30,Figma Design,-2093,Software
+2024-12-09,Utility Bills,-6780,Rent
+2024-10-11,Marketing Staff,-27846,Payroll
+2024-12-04,Event Sponsorship,-3591,Marketing
+2023-12-18,Sentry Logging,-4733,Web Services
+2023-09-05,Engineering Salary,-35855,Payroll
+2024-08-11,Figma Design,-2628,Software
+2024-02-02,Utility Bills,-7435,Rent
+2024-09-12,Content Marketing,-8685,Marketing
+2024-08-04,Engineering Salary,-34433,Payroll
+2024-02-18,Subscription Revenue,35080,Revenue
+2023-09-22,Sentry Logging,-4890,Web Services
+2024-11-29,Subscription Revenue,49257,Revenue
+2024-03-20,Google Cloud,-7041,Web Services
+2023-09-20,SF Office Rent,-6187,Rent
+2023-11-21,Utility Bills,-7219,Rent
+2023-08-09,Sales Commissions,-27219,Payroll
+2023-12-02,SF Office Rent,-6892,Rent
+2024-03-23,Slack Subscription,-1030,Software
+2024-06-05,Google Cloud,-6573,Web Services
+2024-02-05,Utility Bills,-11361,Rent
+2023-07-15,Utility Bills,-6022,Rent
+2023-08-02,Enterprise License,38804,Revenue
+2024-11-15,LinkedIn Campaign,-3183,Marketing
+2024-07-10,NY Office Rent,-8062,Rent
+2024-12-13,Overage Fees,47666,Revenue
+2023-03-10,Subscription Revenue,25733,Revenue
+2024-07-24,Utility Bills,-11306,Rent
+2024-11-29,GitHub Enterprise,-1303,Software

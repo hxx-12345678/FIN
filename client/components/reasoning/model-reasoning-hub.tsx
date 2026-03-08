@@ -61,6 +61,36 @@ export function ModelReasoningHub({ modelId, orgId }: ModelReasoningHubProps) {
         } catch (error) {
             console.error("Reasoning error:", error)
             toast.error("Could not complete reasoning analysis")
+            // Use mock data on error
+            setReasoningData({
+                varianceAnalysis: {
+                    baseline: 45000,
+                    current: 52000,
+                    variance: 7000,
+                    variance_percent: 0.156,
+                    drivers: [
+                        { driver: "Revenue Growth", delta: 8500, contribution_percent: 0.121 },
+                        { driver: "COGS Optimization", delta: -1200, contribution_percent: -0.017 },
+                        { driver: "Headcount Changes", delta: -800, contribution_percent: -0.011 },
+                        { driver: "Other Expenses", delta: -500, contribution_percent: -0.007 }
+                    ]
+                },
+                analysis: {
+                    drivers: [
+                        { name: "Monthly Recurring Revenue", sensitivity: 0.85 },
+                        { name: "Customer Acquisition Cost", sensitivity: -0.32 },
+                        { name: "Churn Rate", sensitivity: -0.28 },
+                        { name: "Gross Margins", sensitivity: 0.15 }
+                    ],
+                    recommendations: [
+                        "Focus on MRR growth to maximize burn rate reduction",
+                        "Optimize CAC through channel efficiency",
+                        "Implement churn prevention strategies",
+                        "Maintain gross margin discipline"
+                    ]
+                }
+            })
+            toast.success("Using mock reasoning data for demonstration")
         } finally {
             setLoading(false)
         }

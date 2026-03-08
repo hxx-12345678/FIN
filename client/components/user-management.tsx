@@ -30,6 +30,7 @@ import {
   AlertCircle,
   CheckCircle,
   X,
+  RefreshCw,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -49,6 +50,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
+import { cn } from "@/lib/utils"
 
 interface TeamMember {
   id: string
@@ -140,6 +142,9 @@ function formatTimeAgo(date: Date | string | null): string {
 
 export function UserManagement() {
   const [orgId, setOrgId] = useState<string | null>(null)
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
+  const isAdmin = currentUserRole === "admin"
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedRole, setSelectedRole] = useState("all")
@@ -186,11 +191,21 @@ export function UserManagement() {
         }
         if (response.ok) {
           const data = await response.json()
+          if (data.user?.id) {
+            setUserId(data.user.id)
+          }
           if (data.orgs && data.orgs.length > 0) {
-            const primaryOrgId = data.orgs[0].id
-            localStorage.setItem("orgId", primaryOrgId)
+            // Find current org's role or use first
+            const activeOrgId = storedOrgId || data.orgs[0].id
+            const currentOrg = data.orgs.find((o: any) => o.id === activeOrgId) || data.orgs[0]
+
+            localStorage.setItem("orgId", currentOrg.id)
             if (mounted) {
-              setOrgId(primaryOrgId)
+              setOrgId(currentOrg.id)
+              // Handle roles from /auth/me
+              const userRole = data.roles?.find((r: any) => r.orgId === currentOrg.id)?.role ||
+                data.user?.roles?.find((r: any) => r.orgId === currentOrg.id)?.role || "viewer"
+              setCurrentUserRole(userRole)
             }
           } else {
             if (mounted) {
@@ -703,9 +718,9 @@ export function UserManagement() {
     )
   }
 
-  if (error && !orgId) {
+  if (error) {
     return (
-      <div className="space-y-6 p-4 md:p-6">
+      <div className="flex items-center justify-center h-[calc(100vh-200px)]">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">User Management</h1>
           <p className="text-muted-foreground">Manage team members, roles, and permissions</p>
@@ -737,21 +752,44 @@ export function UserManagement() {
   }
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold">User Management</h1>
-          <p className="text-muted-foreground">Manage team members, roles, and permissions</p>
+    <div className="space-y-6 container mx-auto px-4 py-8 max-w-7xl animate-in fade-in duration-500">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="bg-primary/10 p-2.5 rounded-xl">
+            <Users className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-3xl font-bold tracking-tight">Team Management</h1>
+              {currentUserRole && (
+                <Badge variant="secondary" className={cn(
+                  "capitalize px-2 py-0.5 text-xs font-semibold",
+                  isAdmin ? "bg-amber-100 text-amber-800 border-amber-200" :
+                    currentUserRole === 'finance' ? "bg-blue-100 text-blue-800 border-blue-200" :
+                      "bg-slate-100 text-slate-800 border-slate-200"
+                )}>
+                  {currentUserRole}
+                </Badge>
+              )}
+            </div>
+            <p className="text-muted-foreground mt-1 text-sm sm:text-base">
+              Manage your team members, invitations, and access permissions
+            </p>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setShowInviteDialog(true)}>
-            <UserPlus className="mr-2 h-4 w-4" />
-            Invite User
+        <div className="flex flex-wrap gap-2 sm:gap-3">
+          {isAdmin && (
+            <Button onClick={() => setShowInviteDialog(true)} className="rounded-lg shadow-sm hover:shadow-md transition-all">
+              <UserPlus className="mr-2 h-4 w-4" />
+              Invite Member
+            </Button>
+          )}
+          <Button variant="outline" onClick={fetchAllData} className="rounded-lg hover:bg-muted/50">
+            <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />
+            Refresh
           </Button>
         </div>
       </div>
-
       {/* Team Overview */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card>
@@ -804,18 +842,32 @@ export function UserManagement() {
         <div className="overflow-x-auto">
           <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 min-w-[500px]">
             <TabsTrigger value="members" className="text-xs sm:text-sm">Team Members</TabsTrigger>
-            <TabsTrigger value="roles" className="text-xs sm:text-sm">Roles & Permissions</TabsTrigger>
-            <TabsTrigger value="permissions" className="text-xs sm:text-sm">Permission Matrix</TabsTrigger>
-            <TabsTrigger value="invitations" className="text-xs sm:text-sm">Invitations</TabsTrigger>
-            <TabsTrigger value="access-requests" className="text-xs sm:text-sm">
-              Access Requests
-              {accessRequests.filter((r) => r.status === "pending").length > 0 && (
-                <Badge variant="destructive" className="ml-2">
-                  {accessRequests.filter((r) => r.status === "pending").length}
-                </Badge>
-              )}
-            </TabsTrigger>
+            {isAdmin && (
+              <>
+                <TabsTrigger value="roles" className="text-xs sm:text-sm">Roles & Permissions</TabsTrigger>
+                <TabsTrigger value="permissions" className="text-xs sm:text-sm">Permission Matrix</TabsTrigger>
+                <TabsTrigger value="invitations" className="text-xs sm:text-sm">
+                  Invitations
+                  {invitations.filter((i) => i.status === "pending").length > 0 && (
+                    <Badge variant="secondary" className="ml-2 bg-blue-100 text-blue-800 border-none px-1.5 h-4 min-w-[20px] inline-flex items-center justify-center">
+                      {invitations.filter((i) => i.status === "pending").length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="access-requests" className="text-xs sm:text-sm">
+                  Access Requests
+                  {accessRequests.filter((r) => r.status === "pending").length > 0 && (
+                    <Badge variant="secondary" className="ml-2 bg-amber-100 text-amber-800 border-none px-1.5 h-4 min-w-[20px] inline-flex items-center justify-center">
+                      {accessRequests.filter((r) => r.status === "pending").length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              </>
+            )}
             <TabsTrigger value="activity" className="text-xs sm:text-sm">Activity Log</TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger value="settings" className="text-xs sm:text-sm">Org Settings</TabsTrigger>
+            )}
           </TabsList>
         </div>
 
@@ -906,15 +958,17 @@ export function UserManagement() {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="w-48" collisionPadding={16}>
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      setSelectedUser(member)
-                                      setShowRoleDialog(true)
-                                    }}
-                                  >
-                                    <Shield className="mr-2 h-4 w-4" />
-                                    Change Role
-                                  </DropdownMenuItem>
+                                  {isAdmin && member.id !== userId && (
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        setSelectedUser(member)
+                                        setShowRoleDialog(true)
+                                      }}
+                                    >
+                                      <Shield className="mr-2 h-4 w-4" />
+                                      Change Role
+                                    </DropdownMenuItem>
+                                  )}
                                   <DropdownMenuItem
                                     onClick={() =>
                                       handleToggleStatus(member.id, member.status !== "active")
@@ -1400,6 +1454,6 @@ export function UserManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </div >
   )
 }

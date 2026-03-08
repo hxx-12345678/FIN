@@ -51,6 +51,7 @@ export function IndustrialForecasting({ orgId, modelId }: { orgId: string | null
     const [loading, setLoading] = useState(false)
     const [metrics, setMetrics] = useState<any>(null)
     const [backtestResults, setBacktestResults] = useState<any>(null)
+    const [hasRun, setHasRun] = useState(false)
 
     const fetchForecast = async () => {
         if (!orgId || !modelId) return
@@ -114,17 +115,24 @@ export function IndustrialForecasting({ orgId, modelId }: { orgId: string | null
                 setForecastData(sanitized)
                 setExplanation(data.explanation?.info || "")
                 setMetrics(data.metrics || null)
+                setHasRun(true)
                 if (forecast.length > 0) {
                     toast.success(`Generated ${data.method} forecast with ${historical.length} data points`)
                 } else {
                     toast.info("Run model first to generate forecast data")
                 }
             } else {
-                toast.error(data.message || data.error || "Forecasting failed")
+                setForecastData([])
+                setMetrics(null)
+                if (data.message || data.error) {
+                    toast.error(data.message || data.error)
+                }
             }
         } catch (error) {
             console.error(error)
             toast.error("Failed to connect to forecasting engine")
+            setForecastData([])
+            setMetrics(null)
         } finally {
             setLoading(false)
         }
@@ -165,11 +173,19 @@ export function IndustrialForecasting({ orgId, modelId }: { orgId: string | null
         }
     }
 
+    // Only auto-fetch once on initial load, not every time user switches tabs
     useEffect(() => {
-        if (orgId && modelId) {
+        if (orgId && modelId && !hasRun) {
             fetchForecast()
         }
-    }, [orgId, modelId, selectedMetric, method])
+    }, [orgId, modelId])
+
+    // When metric or method changes after initial load, re-fetch
+    useEffect(() => {
+        if (orgId && modelId && hasRun) {
+            fetchForecast()
+        }
+    }, [selectedMetric, method])
 
     return (
         <div className="space-y-6">
@@ -299,7 +315,7 @@ export function IndustrialForecasting({ orgId, modelId }: { orgId: string | null
                                     <div className="bg-indigo-50 h-full rounded-full" style={{ width: `${Math.min((metrics?.mape || 0) * 3, 100)}%` }}></div>
                                 </div>
                             </div>
-                            
+
                             <div className="space-y-2">
                                 <div className="flex justify-between text-xs">
                                     <span className="text-slate-500">RMSE</span>

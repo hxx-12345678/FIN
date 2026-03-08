@@ -87,7 +87,7 @@ export const shareableLinkService = {
       // Note: We'll store this in a new table or use exports table metadata
       // For now, we'll use a simple approach with a shareable_links table
       // If table doesn't exist, we'll store in exports table metadata
-      
+
       const shareableLink = {
         id: crypto.randomUUID(),
         exportId,
@@ -103,9 +103,20 @@ export const shareableLinkService = {
       await prisma.$executeRaw`
         UPDATE exports
         SET meta_json = jsonb_set(
-          COALESCE(meta_json, '{}'::jsonb),
+          CASE 
+            WHEN meta_json IS NULL OR jsonb_typeof(meta_json) != 'object' 
+            THEN '{}'::jsonb 
+            ELSE meta_json 
+          END,
           '{shareableLinks}',
-          COALESCE(meta_json->'shareableLinks', '[]'::jsonb) || 
+          COALESCE(
+            CASE 
+              WHEN jsonb_typeof(meta_json->'shareableLinks') = 'array' 
+              THEN meta_json->'shareableLinks' 
+              ELSE '[]'::jsonb 
+            END, 
+            '[]'::jsonb
+          ) || 
           jsonb_build_array(jsonb_build_object(
             'id', ${shareableLink.id}::text,
             'token', ${token}::text,
@@ -161,14 +172,14 @@ export const shareableLinkService = {
       for (const exportRecord of exports) {
         let metadata: any = {};
         try {
-          metadata = typeof exportRecord.meta_json === 'string' 
-            ? JSON.parse(exportRecord.meta_json) 
+          metadata = typeof exportRecord.meta_json === 'string'
+            ? JSON.parse(exportRecord.meta_json)
             : (exportRecord.meta_json || {});
         } catch {
           metadata = {};
         }
         const shareableLinks = (metadata.shareableLinks || []) as any[];
-        
+
         for (const link of shareableLinks) {
           if (link.token === token) {
             // Check expiry
@@ -189,7 +200,11 @@ export const shareableLinkService = {
             await prisma.$executeRaw`
               UPDATE exports
               SET meta_json = jsonb_set(
-                meta_json,
+                CASE 
+                  WHEN meta_json IS NULL OR jsonb_typeof(meta_json) != 'object' 
+                  THEN '{}'::jsonb 
+                  ELSE meta_json 
+                END,
                 '{shareableLinks}',
                 (
                   SELECT jsonb_agg(
@@ -199,7 +214,13 @@ export const shareableLinkService = {
                       ELSE link
                     END
                   )
-                  FROM jsonb_array_elements(meta_json->'shareableLinks') AS link
+                  FROM jsonb_array_elements(
+                    CASE 
+                      WHEN jsonb_typeof(meta_json->'shareableLinks') = 'array' 
+                      THEN meta_json->'shareableLinks' 
+                      ELSE '[]'::jsonb 
+                    END
+                  ) AS link
                 )
               )
               WHERE id = ${exportRecord.id}::uuid
@@ -271,11 +292,21 @@ export const shareableLinkService = {
       await prisma.$executeRaw`
         UPDATE exports
         SET meta_json = jsonb_set(
-          meta_json,
+          CASE 
+            WHEN meta_json IS NULL OR jsonb_typeof(meta_json) != 'object' 
+            THEN '{}'::jsonb 
+            ELSE meta_json 
+          END,
           '{shareableLinks}',
           (
-            SELECT jsonb_agg(link)
-            FROM jsonb_array_elements(meta_json->'shareableLinks') AS link
+            SELECT COALESCE(jsonb_agg(link), '[]'::jsonb)
+            FROM jsonb_array_elements(
+              CASE 
+                WHEN jsonb_typeof(meta_json->'shareableLinks') = 'array' 
+                THEN meta_json->'shareableLinks' 
+                ELSE '[]'::jsonb 
+              END
+            ) AS link
             WHERE link->>'token' != ${token}::text
           )
         )
@@ -332,11 +363,11 @@ export const shareableLinkService = {
         FROM exports
         WHERE id = ${exportId}::uuid
       ` as any[];
-      
+
       if (result.length === 0 || !result[0].shareable_links) {
         return [];
       }
-      
+
       let shareableLinks = result[0].shareable_links;
       if (typeof shareableLinks === 'string') {
         try {
@@ -345,7 +376,7 @@ export const shareableLinkService = {
           shareableLinks = [];
         }
       }
-      
+
       if (!Array.isArray(shareableLinks)) {
         shareableLinks = [];
       }

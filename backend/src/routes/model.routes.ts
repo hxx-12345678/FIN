@@ -34,8 +34,17 @@ router.get('/models/:model_id/compare', authenticate, requireModelOwnership('mod
 // Driver & Scenario routes
 router.get('/orgs/:org_id/models/:model_id/drivers', authenticate, requireOrgAccess('org_id'), modelController.getDrivers);
 router.post('/orgs/:org_id/models/:model_id/drivers', authenticate, requireFinanceOrAdmin('org_id'), modelController.upsertDriver);
+router.patch('/orgs/:org_id/models/:model_id/drivers/:driver_id', authenticate, requireFinanceOrAdmin('org_id'), modelController.patchDriver);
 router.get('/orgs/:org_id/models/:model_id/scenarios', authenticate, requireOrgAccess('org_id'), modelController.getScenarios);
+router.patch('/orgs/:org_id/models/:model_id/scenarios/:scenario_id', authenticate, requireFinanceOrAdmin('org_id'), modelController.updateScenario);
+router.delete('/orgs/:org_id/models/:model_id/scenarios/:scenario_id', authenticate, requireFinanceOrAdmin('org_id'), modelController.deleteScenario);
+router.post('/orgs/:org_id/models/:model_id/scenarios/:scenario_id/duplicate', authenticate, requireFinanceOrAdmin('org_id'), modelController.duplicateScenario);
+router.post('/orgs/:org_id/models/:model_id/scenarios/:scenario_id/merge', authenticate, requireFinanceOrAdmin('org_id'), modelController.mergeScenario);
 router.post('/orgs/:org_id/models/:model_id/scenarios/:scenario_id/drivers/:driver_id/values', authenticate, requireFinanceOrAdmin('org_id'), modelController.updateDriverValues);
+
+// Manual Input routes
+router.post('/orgs/:org_id/models/:model_id/manual/input', authenticate, requireFinanceOrAdmin('org_id'), modelController.saveManualInput);
+router.get('/orgs/:org_id/models/:model_id/manual/input', authenticate, requireOrgAccess('org_id'), modelController.getManualInput);
 
 // Hyperblock engine routes
 router.post('/orgs/:orgId/models/:modelId/recompute', authenticate, requireOrgAccess('orgId'), hyperblockController.recompute);

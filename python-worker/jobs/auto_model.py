@@ -258,10 +258,12 @@ def handle_auto_model(job_id: str, org_id: str, object_id: str, logs: dict):
             }
         ]
 
+
+        model_run_job_id = str(uuid.uuid4()) # Must be valid UUID for DB
         cursor.execute("""
             INSERT INTO jobs (id, job_type, "orgId", object_id, status, priority, queue, logs, created_at, updated_at)
             VALUES (
-                gen_random_uuid(),
+                %s,
                 'model_run',
                 %s,
                 %s,
@@ -273,6 +275,7 @@ def handle_auto_model(job_id: str, org_id: str, object_id: str, logs: dict):
                 NOW()
             )
         """, (
+            model_run_job_id,
             org_id,
             model_run_id,
             json.dumps(job_logs),
@@ -281,6 +284,7 @@ def handle_auto_model(job_id: str, org_id: str, object_id: str, logs: dict):
         update_progress(job_id, 100, {
             'status': 'completed',
             'modelRunId': model_run_id,
+            'modelRunJobId': model_run_job_id,
             'assumptionsGenerated': True,
         })
         

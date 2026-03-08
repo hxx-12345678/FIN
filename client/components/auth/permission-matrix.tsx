@@ -91,7 +91,10 @@ export function PermissionMatrix({ roleId, readOnly = false }: PermissionMatrixP
       ]
 
       // Filter to only show permissions that exist in backend response
-      const perms = defaultPerms.filter(p => permsStrings.length === 0 || permsStrings.includes(p.id))
+      const perms = defaultPerms.filter(p => {
+        if (permsStrings.length === 0) return true
+        return permsStrings.some((ps: any) => (typeof ps === 'string' ? ps : ps.id) === p.id)
+      })
       setPermissions(perms)
 
       // Transform backend roles format to frontend format
@@ -196,13 +199,17 @@ export function PermissionMatrix({ roleId, readOnly = false }: PermissionMatrixP
     setError(null)
 
     try {
-      // Use user-management endpoint for updating role permissions
-      const response = await fetch(`${API_BASE_URL}/auth/roles/${selectedRole.id}`, {
+      // Get orgId from localStorage
+      const orgId = localStorage.getItem("orgId")
+
+      // Use system endpoint for updating role permissions
+      const response = await fetch(`${API_BASE_URL}/system/roles/${selectedRole.id}?org_id=${orgId || ''}`, {
         method: "PUT",
         headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
           permissions: Array.from(editedPermissions),
+          org_id: orgId // Include in body too for safety
         }),
       })
 

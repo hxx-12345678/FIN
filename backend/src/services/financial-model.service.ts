@@ -20,6 +20,7 @@ export interface CreateModelRequest {
   model_name: string;
   industry: string;
   revenue_model_type: RevenueModelType;
+  model_type?: string; // e.g. 3-statement, dcf, lbo
   forecast_duration: ForecastDuration;
   start_month?: string; // YYYY-MM format, default = current month
   data_source_type: DataSourceType;
@@ -49,8 +50,16 @@ export interface CreateModelRequest {
   };
   hiring_plan?: Array<{ month: number; role: string; salary: number }>;
 
-  // MANUAL MODEL FIELDS (optional)
+  // GOVERNANCE & AUDITABILITY
+  source_auth_map?: Record<string, string>; // e.g. { "revenue": "ERP", "payroll": "CSV" }
+  is_synthetic?: boolean;
+  baseline_confirmed?: boolean;
   assumptions?: Record<string, any>;
+  init_metadata?: {
+    connector_id?: string;
+    uploaded_file_id?: string;
+    ai_version?: string;
+  };
 }
 
 export interface ModelMetadata {
@@ -66,6 +75,11 @@ export interface ModelMetadata {
   taxRegion?: string;
   description?: string;
   createdAt: Date;
+  // Governance
+  sourceAuthMap?: Record<string, string>;
+  isSynthetic: boolean;
+  baselineConfirmed: boolean;
+  initMetadata?: any;
 }
 
 export interface AssumptionStructure {
@@ -144,6 +158,39 @@ export const financialModelService = {
       throw new ForbiddenError('Only admins and finance users can create models');
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    //  ENTERPRISE DATA GOVERNANCE VALIDATION
+    //  Prevents model creation without verified data context.
+    //  Rule: Data-Driven AI requires real transactions or connectors.
+    //  Rule: Non-blank models require baseline_confirmed = true.
+    // ═══════════════════════════════════════════════════════════════
+    if (request.data_source_type === 'connectors') {
+      // Validate that org actually has transaction data or active connectors
+      const [txCount, connectorCount] = await Promise.all([
+        prisma.rawTransaction.count({ where: { orgId, isDuplicate: false }, take: 1 }),
+        prisma.connector.count({ where: { orgId } }),
+      ]);
+
+      if (txCount === 0 && connectorCount === 0) {
+        throw new ValidationError(
+          'Data-Driven model creation requires at least one connected data source or uploaded transaction history. ' +
+          'Please connect an ERP, upload a CSV, or select Synthetic AI mode instead.'
+        );
+      }
+
+      // Enforce baseline confirmation for data-driven models
+      if (!request.baseline_confirmed) {
+        logger.warn('Model created without baseline confirmation — flagging for audit', {
+          orgId, userId, modelName: request.model_name,
+        });
+      }
+    }
+
+    // Auto-tag synthetic models
+    if (request.data_source_type === 'blank') {
+      request.is_synthetic = true;
+    }
+
     // Determine start month (default to current month)
     const now = new Date();
     const startMonth = request.start_month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -178,6 +225,7 @@ export const financialModelService = {
       metadata: {
         industry: request.industry,
         revenueModelType: request.revenue_model_type,
+        modelType: request.model_type || '3-statement',
         forecastDuration: request.forecast_duration,
         startMonth,
         dataSourceType: request.data_source_type,
@@ -186,6 +234,15 @@ export const financialModelService = {
         taxRegion: request.tax_region,
         description: request.description,
         createdAt: new Date().toISOString(),
+        // Institutional Governance Metadata
+        sourceAuthMap: request.source_auth_map || {},
+        isSynthetic: request.is_synthetic || request.data_source_type === 'blank',
+        baselineConfirmed: request.baseline_confirmed || false,
+        initMetadata: {
+          ...(request.init_metadata || {}),
+          ai_version: request.init_metadata?.ai_version || 'fina-institutional-v1',
+          timestamp: new Date().toISOString(),
+        }
       },
       assumptions: {
         ...templateAssumptions,
@@ -215,8 +272,10 @@ export const financialModelService = {
       metaJson: {
         modelName: request.model_name,
         industry: request.industry,
-        revenueModelType: request.revenue_model_type,
         dataSourceType: request.data_source_type,
+        isSynthetic: request.is_synthetic,
+        sourceAuthMap: request.source_auth_map,
+        baselineConfirmed: request.baseline_confirmed,
       },
     });
 
@@ -523,12 +582,12 @@ export const financialModelService = {
    * Upsert a driver (create or update metadata)
    */
   async upsertDriver(orgId: string, modelId: string, driverData: any) {
-    const { id, name, type, category, timeGranularity, unit, isCalculated, formula } = driverData;
+    const { id, name, type, category, timeGranularity, unit, isCalculated, formula, minRange, maxRange, isLocked, dependencies } = driverData;
 
     return await prisma.$transaction(async (tx) => {
       const isExisting = id && id !== 'new' && /^[a-f0-9-]{36}$/i.test(id);
 
-      const driverDataObj = {
+      const driverDataObj: any = {
         orgId,
         modelId,
         name,
@@ -538,6 +597,10 @@ export const financialModelService = {
         timeGranularity: timeGranularity || 'monthly',
         isCalculated: isCalculated || false,
         formula,
+        minRange: minRange !== undefined ? minRange : null,
+        maxRange: maxRange !== undefined ? maxRange : null,
+        isLocked: isLocked || false,
+        dependencies: dependencies || null,
       };
 
       const driver = isExisting
@@ -576,6 +639,56 @@ export const financialModelService = {
 
       return driver;
     });
+  },
+
+  /**
+   * Patch specific driver fields
+   */
+  async patchDriver(orgId: string, modelId: string, driverId: string, patch: any) {
+    return await prisma.driver.update({
+      where: { id: driverId },
+      data: {
+        ...patch,
+        updatedAt: new Date(),
+      }
+    });
+  },
+
+  /**
+   * Save manual input for a model
+   */
+  async saveManualInput(orgId: string, modelId: string, userId: string, inputData: any) {
+    // For Manual Input, we store it in the model's modelJson.manualInputs field
+    const model = await prisma.model.findUnique({ where: { id: modelId } });
+    if (!model) throw new NotFoundError('Model not found');
+
+    const modelJson = (model.modelJson as any) || {};
+    modelJson.manualInputs = {
+      ...(modelJson.manualInputs || {}),
+      ...inputData,
+      lastUpdated: new Date().toISOString(),
+      updatedBy: userId
+    };
+
+    const updatedModel = await prisma.model.update({
+      where: { id: modelId },
+      data: { modelJson }
+    });
+
+    // Strategy: Manual inputs often trigger a re-run of the baseline
+    // We return the updated model; controller can decide whether to trigger job
+    return updatedModel;
+  },
+
+  /**
+   * Get manual input for a model
+   */
+  async getManualInput(orgId: string, modelId: string) {
+    const model = await prisma.model.findUnique({ where: { id: modelId } });
+    if (!model) throw new NotFoundError('Model not found');
+
+    const modelJson = (model.modelJson as any) || {};
+    return modelJson.manualInputs || {};
   },
 
   /**
@@ -621,17 +734,125 @@ export const financialModelService = {
             { orgId, modelId, name: 'Pessimistic', color: '#ef4444' },
           ],
         });
-        scenarios = await prisma.financialScenario.findMany({
-          where: { orgId, modelId },
-          orderBy: { createdAt: 'asc' },
-        });
       }
-
       return scenarios;
-    } catch (error: any) {
-      console.warn('getScenarios: table may not exist yet:', error.message);
-      return [];
+    } catch (error) {
+      throw error;
     }
+  },
+
+  /**
+   * Rename or update a scenario
+   */
+  updateScenario: async (orgId: string, modelId: string, scenarioId: string, data: any) => {
+    const scenario = await prisma.financialScenario.findFirst({
+      where: { id: scenarioId, orgId, modelId }
+    });
+    if (!scenario) throw new NotFoundError('Scenario not found');
+
+    return await prisma.financialScenario.update({
+      where: { id: scenarioId },
+      data: {
+        name: data.name,
+        color: data.color
+      }
+    });
+  },
+
+  /**
+   * Delete a scenario
+   */
+  deleteScenario: async (orgId: string, modelId: string, scenarioId: string) => {
+    const scenario = await prisma.financialScenario.findFirst({
+      where: { id: scenarioId, orgId, modelId }
+    });
+    if (!scenario) throw new NotFoundError('Scenario not found');
+    if (scenario.isDefault) throw new ValidationError('Cannot delete the default baseline scenario');
+
+    return await prisma.financialScenario.delete({
+      where: { id: scenarioId }
+    });
+  },
+
+  /**
+   * Duplicate a scenario and its driver values
+   */
+  duplicateScenario: async (orgId: string, modelId: string, scenarioId: string) => {
+    const source = await prisma.financialScenario.findFirst({
+      where: { id: scenarioId, orgId, modelId },
+      include: { driverValues: true }
+    });
+    if (!source) throw new NotFoundError('Source scenario not found');
+
+    const duplicate = await prisma.financialScenario.create({
+      data: {
+        orgId,
+        modelId,
+        name: `${source.name} (Copy)`,
+        color: source.color,
+        isDefault: false
+      }
+    });
+
+    if (source.driverValues.length > 0) {
+      await (prisma as any).driverValue.createMany({
+        data: source.driverValues.map(dv => ({
+          driverId: dv.driverId,
+          scenarioId: duplicate.id,
+          month: dv.month,
+          value: dv.value
+        }))
+      });
+    }
+
+    return duplicate;
+  },
+
+  /**
+   * Merge scenario driver values into baseline
+   */
+  mergeScenario: async (orgId: string, modelId: string, scenarioId: string) => {
+    const source = await prisma.financialScenario.findFirst({
+      where: { id: scenarioId, orgId, modelId },
+      include: { driverValues: true }
+    });
+    if (!source) throw new NotFoundError('Source scenario not found');
+
+    const baseline = await prisma.financialScenario.findFirst({
+      where: { modelId, orgId, isDefault: true }
+    });
+    if (!baseline) throw new NotFoundError('Baseline scenario not found');
+    if (baseline.id === scenarioId) throw new ValidationError('Cannot merge baseline into itself');
+
+    // For each driver value in scenario, upsert to baseline
+    for (const dv of source.driverValues) {
+      await (prisma as any).driverValue.upsert({
+        where: {
+          driverId_scenarioId_month: {
+            driverId: dv.driverId,
+            scenarioId: baseline.id,
+            month: dv.month
+          }
+        },
+        update: { value: dv.value },
+        create: {
+          driverId: dv.driverId,
+          scenarioId: baseline.id,
+          month: dv.month,
+          value: dv.value
+        }
+      });
+    }
+
+    await auditService.log({
+      orgId,
+      action: 'scenario_merged',
+      objectType: 'finance',
+      objectId: scenarioId,
+      metaJson: { scenarioName: source.name }
+    });
+
+    return { ok: true, mergedCount: source.driverValues.length };
   },
 
   /**

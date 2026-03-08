@@ -689,10 +689,16 @@ export const userManagementService = {
   /**
    * Get roles with permissions
    */
-  getRoles: async (): Promise<Role[]> => {
-    // Get all roles from user_org_roles
+  getRoles: async (orgId?: string): Promise<Role[]> => {
+    // Get all roles from user_org_roles, filtered by orgId if provided
+    const where: any = {};
+    if (orgId) {
+      where.orgId = orgId;
+    }
+
     const roleCounts = await prisma.userOrgRole.groupBy({
       by: ['role'],
+      where,
       _count: { role: true },
     });
 

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { csvController } from '../controllers/csv.controller';
 import { authenticate } from '../middlewares/auth';
-import { requireOrgAccess } from '../middlewares/rbac';
+import { requireOrgAccess, requireFinanceOrAdmin } from '../middlewares/rbac';
 
 const router = Router();
 
@@ -14,22 +14,24 @@ const upload = multer({
   },
 });
 
-// Upload CSV file - REMOVED requireOrgAccess middleware (checking in controller instead)
+// Upload CSV file (finance or admin required)
 router.post(
   '/orgs/:orgId/import/csv/upload',
   authenticate,
+  requireFinanceOrAdmin('orgId'),
   upload.single('file'),
   csvController.uploadCsv
 );
 
-// Map CSV columns - REMOVED requireOrgAccess middleware (checking in service)
+// Map CSV columns (finance or admin required)
 router.post(
   '/orgs/:orgId/import/csv/map',
   authenticate,
+  requireFinanceOrAdmin('orgId'),
   csvController.mapCsv
 );
 
-// Auto-map CSV columns
+// Auto-map CSV columns (viewer allowed as it's a suggestion)
 router.post(
   '/orgs/:orgId/import/csv/automap',
   authenticate,
@@ -37,11 +39,11 @@ router.post(
   csvController.autoMap
 );
 
-// Save mapping template
+// Save mapping template (finance or admin required)
 router.post(
   '/orgs/:orgId/import/csv/save-mapping-template',
   authenticate,
-  requireOrgAccess('orgId'),
+  requireFinanceOrAdmin('orgId'),
   csvController.saveMappingTemplate
 );
 

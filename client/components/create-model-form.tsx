@@ -1,747 +1,979 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "sonner"
-import { Loader2, Plus, FileText, Database, Sparkles as SparkleIcon, TrendingUp, ShieldCheck, Target, Zap, ArrowRight, CheckCircle2, Brain } from "lucide-react"
+import {
+  Loader2, Plus, FileText, Database, Sparkles as SparkleIcon, TrendingUp,
+  ShieldCheck, Target, Zap, ArrowRight, ArrowLeft, CheckCircle2, Brain,
+  ShieldAlert, History as HistoryIcon, AlertTriangle, Lock, Unlock, Eye, Radio,
+  Building2, DollarSign, Users, Landmark
+} from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 
-interface CreateModelFormProps {
-  orgId?: string | null
-  onSuccess?: (modelId: string) => void
-  onCancel?: () => void
-  aiMode?: boolean // If true, automatically show AI questions after basic form
-  connectors?: any[]
+// ═══════════════════════════════════════════════════════════════════
+//  ENTERPRISE MODEL CREATION FORM
+//  Implements the 6-step institutional governance flow:
+//    Step 0: Data Availability Check (auto on mount)
+//    Step 1: Model Blueprint Configuration
+//    Step 2: Intelligence Engine Selection (gated by data)
+//    Step 3: Source Authority Declaration (data-driven only)
+//    Step 4: Assumption Preview & Baseline Confirmation
+//    Step 5: Strategic Goal + Final Confirm
+// ═══════════════════════════════════════════════════════════════════
+
+type StepId = "blueprint" | "intelligence" | "source-authority" | "assumptions" | "strategic" | "creating"
+
+interface DomainSource {
+  available: boolean
+  sources: string[]
+  suggestedAuthority: string
 }
 
-export function CreateModelForm({ orgId, onSuccess, onCancel, aiMode = false, connectors = [] }: CreateModelFormProps) {
+interface DataStatus {
+  ok?: boolean
+  hasRealData?: boolean
+  hasConnectors?: boolean
+  hasTransactions?: boolean
+  hasUploads?: boolean
+  orgStage?: string
+  intelligenceGating?: {
+    dataDrivenAI: boolean
+    dataDrivenAIReason?: string | null
+    aiPrecisionBuild: boolean
+    aiPrecisionBuildReason?: string | null
+    syntheticAI: boolean
+    manualLogic: boolean
+  }
+  stats?: {
+    connectorsCount: number
+    uploadsCount: number
+    transactionCount: number
+    coaCount: number
+    totalRevenue: number
+    lastTransactionDate: string | null
+    firstTransactionDate: string | null
+    dataAgeDays: number | null
+  }
+  sources?: {
+    erp: boolean
+    crm: boolean
+    payroll: boolean
+    banking: boolean
+    connectors: Array<{ id: string; type: string; status: string; lastSync: string | null }>
+    latestUploads: Array<{ id: string; type: string; createdAt: string; status: string }>
+  }
+  domainSources?: Record<string, DomainSource>
+  auditReadiness?: {
+    hasCOAMapping: boolean
+    hasFinancialBaseline: boolean
+    hasSourceAuthority: boolean
+    isEnterpriseReady: boolean
+    dataFreshness: string
+  }
+}
+
+interface CreateModelFormProps {
+  orgId?: string | null
+  onSuccess?: (data: any) => void
+  onCancel?: () => void
+  aiMode?: boolean
+  connectors?: any[]
+  dataStatus?: DataStatus | null
+  strategicPulse?: any | null
+}
+
+const DOMAIN_ICONS: Record<string, any> = {
+  revenue: TrendingUp,
+  expenses: Landmark,
+  payroll: Users,
+  cash: DollarSign,
+  customers: Building2,
+}
+
+const DOMAIN_LABELS: Record<string, string> = {
+  revenue: "Revenue Actuals",
+  expenses: "Operating Expenses",
+  payroll: "Payroll & Compensation",
+  cash: "Cash & Bank Balances",
+  customers: "Customer Metrics",
+}
+
+export function CreateModelForm({
+  orgId,
+  onSuccess,
+  onCancel,
+  aiMode = false,
+  connectors = [],
+  dataStatus,
+  strategicPulse = null,
+}: CreateModelFormProps) {
   const router = useRouter()
+  const [step, setStep] = useState<StepId>("blueprint")
   const [loading, setLoading] = useState(false)
-  const [step, setStep] = useState<"basic" | "analyzing" | "strategic-confirm" | "ai-questions" | "complete">("basic")
-  const [analysisData, setAnalysisData] = useState<any>(null)
-  const [strategicGoal, setStrategicGoal] = useState<"growth" | "profitability" | "stable">("growth")
-  const [effectiveOrgId, setEffectiveOrgId] = useState<string | null>(orgId || null)
+  const [baselineConfirmed, setBaselineConfirmed] = useState(false)
 
-  // Try to get orgId from localStorage if not provided as prop
-  useEffect(() => {
-    if (!effectiveOrgId) {
-      const storedOrgId = localStorage.getItem("orgId")
-      if (storedOrgId) {
-        setEffectiveOrgId(storedOrgId)
-      }
-    }
-  }, [effectiveOrgId])
-
-  // Update effectiveOrgId when prop changes
-  useEffect(() => {
-    if (orgId) {
-      setEffectiveOrgId(orgId)
-    }
-  }, [orgId])
-
-  // Suggestions based on connectors
-  useEffect(() => {
-    if (connectors.length > 0) {
-      setFormData(prev => ({
-        ...prev,
-        data_source_type: prev.data_source_type || "connectors",
-      }))
-    }
-  }, [connectors])
-
-  useEffect(() => {
-    if (aiMode) {
-      setFormData(prev => ({
-        ...prev,
-        data_source_type: prev.data_source_type || "blank", // Will trigger AI questions
-      }))
-    }
-  }, [aiMode])
-
-  // Form state
+  // Step 1: Blueprint
   const [formData, setFormData] = useState({
-    model_name: "",
-    industry: "",
-    revenue_model_type: "" as "subscription" | "transactional" | "services" | "hybrid" | "",
-    forecast_duration: 12 as 12 | 24 | 36,
-    start_month: "",
-    data_source_type: "" as "connectors" | "csv" | "blank" | "",
-    base_currency: "USD",
-    country: "",
-    tax_region: "",
+    name: "",
+    industry: "SaaS",
+    modelType: "3-statement",
+    revenueModelType: "subscription" as string,
+    duration: "12",
+    startDate: new Date().toISOString().slice(0, 7),
     description: "",
+    versionTag: "v1.0.0-baseline",
+    governanceMode: "audit_locked" as "audit_locked" | "experimental",
   })
 
-  // AI questions state (only for AI-generated models)
-  const [aiAnswers, setAiAnswers] = useState({
-    business_type: "" as "saas" | "ecommerce" | "services" | "mixed" | "",
+  // Step 2: Intelligence engine
+  const [intelligenceEngine, setIntelligenceEngine] = useState<"data-driven" | "synthetic" | "manual">(
+    aiMode ? "data-driven" : "manual"
+  )
+
+  // Step 3: Source authority map (domain -> selected source)
+  const [sourceAuthMap, setSourceAuthMap] = useState<Record<string, string>>({})
+
+  // Step 4: Synthetic AI parameters
+  const [syntheticParams, setSyntheticParams] = useState({
+    business_type: "saas",
     starting_customers: "",
     starting_revenue: "",
     starting_mrr: "",
-    starting_aov: "",
-    major_costs: {
-      payroll: "",
-      infrastructure: "",
-      marketing: "",
-    },
+    monthly_payroll: "",
+    monthly_infrastructure: "",
+    monthly_marketing: "",
     cash_on_hand: "",
-    growth_rate_target: "",
-    retention_rate: "",
-    hiring_plan: [] as Array<{ month: number, role: string, salary: string }>,
-    acquisition_efficiency: {
-      caac: "", // Customer Acquisition Cost
-      payback: "", // Payback period in months
-    }
+    retention_rate: "90",
+    target_cac: "",
   })
 
-  // Set default start month to current month
-  useEffect(() => {
-    const now = new Date()
-    const month = String(now.getMonth() + 1).padStart(2, '0')
-    setFormData(prev => ({
-      ...prev,
-      start_month: prev.start_month || `${now.getFullYear()}-${month}`,
-    }))
-  }, [])
+  // Step 5: Strategic goal
+  const [strategicGoal, setStrategicGoal] = useState<"growth" | "stable" | "profitability">("stable")
 
-  const industries = [
-    "SaaS",
-    "E-commerce",
-    "Services",
-    "Healthcare",
-    "Finance",
-    "Education",
-    "Real Estate",
-    "Manufacturing",
-    "Retail",
-    "Other",
-  ]
+  // Auto-populate source authority from dataStatus domain suggestions
+  useEffect(() => {
+    if (dataStatus?.domainSources) {
+      const map: Record<string, string> = {}
+      Object.entries(dataStatus.domainSources).forEach(([domain, info]) => {
+        if (info.available) {
+          map[domain] = info.suggestedAuthority
+        }
+      })
+      setSourceAuthMap(map)
+    }
+  }, [dataStatus])
+
+  // If AI mode is forced but no data, default to synthetic
+  useEffect(() => {
+    if (aiMode && dataStatus && !dataStatus.intelligenceGating?.dataDrivenAI) {
+      setIntelligenceEngine("synthetic")
+    }
+  }, [aiMode, dataStatus])
+
+  // Pre-fill from Strategic Pulse
+  useEffect(() => {
+    if (strategicPulse) {
+      setFormData(prev => ({
+        ...prev,
+        industry: strategicPulse.detectedIndustry || prev.industry,
+        revenueModelType: strategicPulse.suggestedRevenueModel || prev.revenueModelType,
+        name: `Institutional Plan - ${strategicPulse.detectedIndustry || "General"}`,
+      }))
+    }
+  }, [strategicPulse])
+
+  const industries = ["SaaS", "E-commerce", "Services", "Healthcare", "Finance", "Education", "Manufacturing", "Real Estate", "Retail", "Other"]
 
   const handleInputChange = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
-  const handleAiAnswerChange = (field: string, value: any) => {
-    if (field.startsWith("major_costs.")) {
-      const costField = field.split(".")[1]
-      setAiAnswers(prev => ({
-        ...prev,
-        major_costs: {
-          ...prev.major_costs,
-          [costField]: value,
-        },
-      }))
-    } else {
-      setAiAnswers(prev => ({ ...prev, [field]: value }))
-    }
-  }
-
-  const validateBasicForm = (): boolean => {
-    if (!formData.model_name.trim()) {
-      toast.error("Model name is required")
-      return false
-    }
-    if (!formData.industry) {
-      toast.error("Industry is required")
-      return false
-    }
-    if (!formData.revenue_model_type) {
-      toast.error("Revenue model type is required")
-      return false
-    }
-    if (!formData.data_source_type) {
-      toast.error("Data source type is required")
-      return false
-    }
-    if (!formData.start_month || !/^\d{4}-\d{2}$/.test(formData.start_month)) {
-      toast.error("Start month must be in YYYY-MM format")
-      return false
-    }
-    return true
-  }
-
-  const getAiQuestions = () => {
-    const questions: Array<{
-      key: string
-      label: string
-      type: "text" | "number" | "select"
-      options?: string[]
-      placeholder?: string
-      required?: boolean
-    }> = []
-
-    // Business type (always asked)
-    questions.push({
-      key: "business_type",
-      label: "Business Type",
-      type: "select",
-      options: ["saas", "ecommerce", "services", "mixed"],
-      required: true,
-    })
-
-    // Revenue model specific questions
-    if (formData.revenue_model_type === "subscription") {
-      questions.push({
-        key: "starting_mrr",
-        label: "Starting Monthly Recurring Revenue (MRR)",
-        type: "number",
-        placeholder: "e.g., 50000",
-        required: true,
-      })
-      questions.push({
-        key: "starting_customers",
-        label: "Starting Number of Customers",
-        type: "number",
-        placeholder: "e.g., 100",
-        required: true,
-      })
-    } else if (formData.revenue_model_type === "transactional") {
-      questions.push({
-        key: "starting_aov",
-        label: "Average Order Value (AOV)",
-        type: "number",
-        placeholder: "e.g., 100",
-        required: true,
-      })
-      questions.push({
-        key: "starting_customers",
-        label: "Starting Number of Orders per Month",
-        type: "number",
-        placeholder: "e.g., 500",
-        required: true,
-      })
-    } else {
-      questions.push({
-        key: "starting_revenue",
-        label: "Starting Monthly Revenue",
-        type: "number",
-        placeholder: "e.g., 50000",
-        required: true,
-      })
-    }
-
-    // Cost questions (always asked)
-    questions.push({
-      key: "major_costs.payroll",
-      label: "Monthly Payroll Costs",
-      type: "number",
-      placeholder: "e.g., 50000",
-    })
-    questions.push({
-      key: "major_costs.infrastructure",
-      label: "Monthly Infrastructure Costs",
-      type: "number",
-      placeholder: "e.g., 10000",
-    })
-    questions.push({
-      key: "major_costs.marketing",
-      label: "Monthly Marketing Costs",
-      type: "number",
-      placeholder: "e.g., 20000",
-    })
-
-    // Efficiency parameters (Futuristic standard)
-    questions.push({
-      key: "retention_rate",
-      label: "Expected Customer Retention Rate (%)",
-      type: "number",
-      placeholder: "e.g., 95 (for 5% churn)",
-      required: true,
-    })
-
-    questions.push({
-      key: "acquisition_efficiency.caac",
-      label: "Target CAC ($)",
-      type: "number",
-      placeholder: "e.g., 500",
-    })
-
-    // Cash question (always asked)
-    questions.push({
-      key: "cash_on_hand",
-      label: "Current Total Cash on Hand ($)",
-      type: "number",
-      placeholder: "e.g., 500000",
-      required: true,
-    })
-
-    return questions
-  }
-
-  const handleDataAnalysis = async () => {
-    if (!effectiveOrgId) return;
-    setStep("analyzing");
-
-    try {
-      const res = await fetch(`${API_BASE_URL}/orgs/${effectiveOrgId}/analysis`, {
-        headers: getAuthHeaders(),
-        credentials: "include",
-      });
-
-      if (res.status === 401) {
-        handleUnauthorized()
+  // ═══════════════════════════════════════════════════════════════
+  //  STEP NAVIGATION
+  // ═══════════════════════════════════════════════════════════════
+  const goNext = () => {
+    if (step === "blueprint") {
+      if (!formData.name.trim()) {
+        toast.error("Model name is required")
         return
       }
-
-      const data = await res.json();
-      if (data.ok) {
-        setAnalysisData(data.analysis);
-        // Artificial delay for "Premium AI Feel" and transition window
-        await new Promise(r => setTimeout(r, 2500));
-        setStep("strategic-confirm");
-      } else {
-        throw new Error("Analysis failed");
-      }
-    } catch (e) {
-      setStep("basic");
-      toast.error("AI Analysis failed. Proceeding with standard setup.");
-      await createModel(false);
-    }
-  }
-
-  const handleSubmit = async () => {
-    if (!validateBasicForm()) {
-      return
-    }
-
-    // If data source is CSV/connectors, trigger AI Analysis for Premium Feel
-    if (formData.data_source_type === "csv" || formData.data_source_type === "connectors") {
-      await handleDataAnalysis();
-      return
-    }
-
-    // If data source is blank, show AI questions to generate assumptions
-    if (formData.data_source_type === "blank") {
-      setStep("ai-questions")
-      return
-    }
-
-    // Fallback: create model without AI
-    await createModel(false)
-  }
-
-  const handleStrategicSubmit = async () => {
-    // Merge strategic goal into assumptions
-    const customAssumptions = {
-      revenue: {
-        ...analysisData?.assumptions?.revenue,
-        growthModel: strategicGoal === "growth" ? "exponential" : "linear",
-        revenueGrowth: strategicGoal === "growth"
-          ? (analysisData?.assumptions?.revenue?.revenueGrowth || 0.08) * 1.5
-          : (analysisData?.assumptions?.revenue?.revenueGrowth || 0.08)
-      }
-    };
-
-    // Create model with these strategic biases
-    await createModel(true, customAssumptions);
-  }
-
-  const handleAiSubmit = async () => {
-    // Validate AI answers
-    const questions = getAiQuestions()
-    const requiredQuestions = questions.filter(q => q.required)
-
-    for (const q of requiredQuestions) {
-      if (q.key.startsWith("major_costs.")) {
-        // Skip cost validation
-        continue
-      }
-      const value = aiAnswers[q.key as keyof typeof aiAnswers]
-      if (!value || (typeof value === "string" && !value.trim())) {
-        toast.error(`${q.label} is required`)
-        return
-      }
-    }
-
-    await createModel(true)
-  }
-
-  const createModel = async (isAiGenerated: boolean = false, extraAssumptions?: any) => {
-    if (!effectiveOrgId) {
-      toast.error("Organization ID not found. Please try again or refresh the page.")
-      return
-    }
-
-    setLoading(true)
-
-    try {
-      const token = localStorage.getItem("auth-token") || document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("auth-token="))
-        ?.split("=")[1]
-
-      if (!token) {
-        throw new Error("Authentication token not found. Please log in again.")
-      }
-
-      const payload: any = {
-        model_name: formData.model_name,
-        industry: formData.industry,
-        revenue_model_type: formData.revenue_model_type,
-        forecast_duration: formData.forecast_duration,
-        start_month: formData.start_month,
-        data_source_type: formData.data_source_type,
-        base_currency: formData.base_currency,
-      }
-
-      if (formData.country) payload.country = formData.country
-      if (formData.tax_region) payload.tax_region = formData.tax_region
-      if (formData.description) payload.description = formData.description
-
-      if (extraAssumptions && typeof extraAssumptions === "object") {
-        payload.assumptions = extraAssumptions
-      }
-
-      // Add AI-generated fields if applicable
-      if (isAiGenerated) {
-        payload.business_type = aiAnswers.business_type
-        if (aiAnswers.starting_customers) payload.starting_customers = parseInt(aiAnswers.starting_customers)
-        if (aiAnswers.starting_revenue) payload.starting_revenue = parseFloat(aiAnswers.starting_revenue)
-        if (aiAnswers.starting_mrr) payload.starting_mrr = parseFloat(aiAnswers.starting_mrr)
-        if (aiAnswers.starting_aov) payload.starting_aov = parseFloat(aiAnswers.starting_aov)
-        if (aiAnswers.cash_on_hand) payload.cash_on_hand = parseFloat(aiAnswers.cash_on_hand)
-
-        payload.major_costs = {}
-        if (aiAnswers.major_costs.payroll) payload.major_costs.payroll = parseFloat(aiAnswers.major_costs.payroll)
-        if (aiAnswers.major_costs.infrastructure) payload.major_costs.infrastructure = parseFloat(aiAnswers.major_costs.infrastructure)
-        if (aiAnswers.major_costs.marketing) payload.major_costs.marketing = parseFloat(aiAnswers.major_costs.marketing)
-      }
-
-      console.log("Creating model with payload:", payload)
-      console.log("API URL:", `${API_BASE_URL}/orgs/${effectiveOrgId}/models`)
-
-      const response = await fetch(`${API_BASE_URL}/orgs/${effectiveOrgId}/models`, {
-        method: "POST",
-        credentials: "include",
-        body: JSON.stringify(payload),
-      })
-
-      if (response.status === 401) {
-        handleUnauthorized()
-        throw new Error("Your session has expired. Please log in again.")
-      }
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error?.message || errorData.message || "Failed to create model")
-      }
-
-      const result = await response.json()
-      if (result.ok && result.model) {
-        toast.success("Model created successfully!")
-        setStep("complete")
-
-        if (onSuccess) {
-          onSuccess(result.model.id)
-        } else {
-          router.push(`/financial-modeling?modelId=${result.model.id}`)
+      setStep("intelligence")
+    } else if (step === "intelligence") {
+      if (intelligenceEngine === "data-driven") {
+        // Must have data to proceed
+        if (!dataStatus?.intelligenceGating?.dataDrivenAI) {
+          toast.error("Data-Driven AI is not available. Connect a data source first.")
+          return
         }
+        setStep("source-authority")
+      } else if (intelligenceEngine === "synthetic") {
+        setStep("assumptions")
       } else {
-        throw new Error(result.error?.message || result.message || "Invalid response from server")
+        // Manual — go straight to strategic
+        setStep("strategic")
       }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to create model"
-      toast.error(errorMessage)
-    } finally {
-      setLoading(false)
+    } else if (step === "source-authority") {
+      if (!baselineConfirmed) {
+        toast.error("Please confirm the data baseline integrity before proceeding.")
+        return
+      }
+      setStep("strategic")
+    } else if (step === "assumptions") {
+      // Validate minimum synthetic params
+      if (!syntheticParams.starting_revenue && !syntheticParams.starting_mrr) {
+        toast.error("Please provide at least Starting Revenue or MRR.")
+        return
+      }
+      if (!syntheticParams.cash_on_hand) {
+        toast.error("Cash on Hand is required for synthetic modeling.")
+        return
+      }
+      setStep("strategic")
+    } else if (step === "strategic") {
+      handleFinalSubmit()
     }
   }
 
-  const renderAnalyzingStep = () => {
-    const statuses = [
-      "Securing data pipeline...",
-      "Analyzing transaction history...",
-      "Identifying recurring revenue patterns...",
-      "Benchmarking against industry standards...",
-      "Synthesizing strategic recommendations..."
-    ];
+  const goBack = () => {
+    if (step === "intelligence") setStep("blueprint")
+    else if (step === "source-authority") setStep("intelligence")
+    else if (step === "assumptions") setStep("intelligence")
+    else if (step === "strategic") {
+      if (intelligenceEngine === "data-driven") setStep("source-authority")
+      else if (intelligenceEngine === "synthetic") setStep("assumptions")
+      else setStep("intelligence")
+    }
+  }
 
-    return (
-      <div className="flex flex-col items-center justify-center py-20 space-y-8">
-        <div className="relative">
-          <motion.div
-            animate={{ scale: [1, 1.1, 1], rotate: 360 }}
-            transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-            className="w-24 h-24 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 flex items-center justify-center shadow-xl shadow-purple-200"
-          >
-            <SparkleIcon className="h-10 w-10 text-white" />
-          </motion.div>
-          <motion.div
-            animate={{ scale: [1, 1.5, 1], opacity: [0.2, 0.5, 0.2] }}
-            transition={{ duration: 2, repeat: Infinity }}
-            className="absolute inset-0 rounded-full bg-blue-400 -z-10 blur-xl"
-          />
-        </div>
+  // ═══════════════════════════════════════════════════════════════
+  //  FINAL SUBMIT — assembles all data and calls onSuccess
+  // ═══════════════════════════════════════════════════════════════
+  const handleFinalSubmit = () => {
+    setStep("creating")
 
-        <div className="text-center space-y-2">
-          <h3 className="text-xl font-semibold bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-blue-600">
-            FinaPilot AI is Thinking
-          </h3>
-          <div className="h-6">
-            <AnimatePresence mode="wait">
-              <motion.p
-                key={Math.floor(Date.now() / 2000)}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="text-sm text-muted-foreground"
-              >
-                {statuses[Math.floor((Date.now() / 1000) % statuses.length)]}
-              </motion.p>
-            </AnimatePresence>
-          </div>
-        </div>
+    const payload: any = {
+      ...formData,
+      intelligenceEngine,
+      strategicGoal,
+      baselineConfirmed: intelligenceEngine === "data-driven" ? baselineConfirmed : true,
+      sourceAuthMap: intelligenceEngine === "data-driven" ? sourceAuthMap : {},
+    }
 
-        <div className="w-64 h-2 bg-slate-100 rounded-full overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: "100%" }}
-            transition={{ duration: 2.5, ease: "easeInOut" }}
-            className="h-full bg-gradient-to-r from-purple-500 to-blue-500"
-          />
-        </div>
-      </div>
-    );
-  };
+    if (intelligenceEngine === "synthetic") {
+      payload.aiAnswers = {
+        business_type: syntheticParams.business_type,
+        starting_customers: syntheticParams.starting_customers,
+        starting_revenue: syntheticParams.starting_revenue || syntheticParams.starting_mrr,
+        cash_on_hand: syntheticParams.cash_on_hand,
+      }
+    }
 
-  const renderStrategicStep = () => {
-    return (
-      <div className="space-y-6">
-        <div className="p-4 rounded-xl bg-purple-50 border border-purple-100 flex gap-4 items-start">
-          <div className="p-2 bg-white rounded-lg shadow-sm text-purple-600">
-            <TrendingUp className="h-5 w-5" />
-          </div>
-          <div className="space-y-1">
-            <h4 className="font-medium text-purple-900">AI Data Insight</h4>
-            <p className="text-sm text-purple-700 leading-relaxed">
-              {analysisData?.insight?.summary} {analysisData?.insight?.benchmarks?.text}
-            </p>
-          </div>
-        </div>
+    // Simulate a brief processing step (enterprise feel)
+    setTimeout(() => {
+      if (onSuccess) {
+        onSuccess(payload)
+      }
+    }, 800)
+  }
 
-        <div className="space-y-4">
-          <Label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Choose Your Strategic Outlook</Label>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {[
-              { id: 'growth', label: 'Aggressive Growth', icon: Zap, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200', desc: 'Focus on MoM revenue scaling.' },
-              { id: 'stable', label: 'Sustainable', icon: Target, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200', desc: 'Balanced growth and burn.' },
-              { id: 'profitability', label: 'Efficiency First', icon: ShieldCheck, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200', desc: 'Prioritize runway & unit economics.' },
-            ].map((opt) => (
-              <button
-                key={opt.id}
-                onClick={() => setStrategicGoal(opt.id as any)}
-                className={`p-4 rounded-xl border-2 text-left transition-all hover:shadow-md ${strategicGoal === opt.id ? `${opt.border} ${opt.bg} ring-2 ring-primary ring-offset-2` : 'border-slate-100 bg-white hover:border-slate-300'}`}
-              >
-                <opt.icon className={`h-6 w-6 mb-3 ${opt.color}`} />
-                <h5 className="font-bold text-slate-900">{opt.label}</h5>
-                <p className="text-xs text-slate-500 mt-1">{opt.desc}</p>
-              </button>
-            ))}
-          </div>
-        </div>
+  // ═══════════════════════════════════════════════════════════════
+  //  STEP PROGRESS INDICATOR
+  // ═══════════════════════════════════════════════════════════════
+  const steps: { id: StepId; label: string }[] = [
+    { id: "blueprint", label: "Blueprint" },
+    { id: "intelligence", label: "Intelligence" },
+    ...(intelligenceEngine === "data-driven" ? [{ id: "source-authority" as StepId, label: "Source Authority" }] : []),
+    ...(intelligenceEngine === "synthetic" ? [{ id: "assumptions" as StepId, label: "Assumptions" }] : []),
+    { id: "strategic", label: "Confirm" },
+  ]
 
-        <div className="flex gap-3 pt-4">
-          <Button variant="ghost" onClick={() => setStep("basic")} disabled={loading}>Back</Button>
-          <Button onClick={handleStrategicSubmit} disabled={loading} className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg">
-            {loading ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-            Confirm & Initialize Model
-          </Button>
-        </div>
-      </div>
-    );
-  };
+  const currentStepIndex = steps.findIndex(s => s.id === step)
 
   return (
-    <Card className="overflow-hidden border-none shadow-2xl ring-1 ring-slate-200">
+    <div className="space-y-6">
+      {/* Step Progress Bar */}
+      {step !== "creating" && (
+        <div className="flex items-center gap-1 px-2">
+          {steps.map((s, i) => (
+            <div key={s.id} className="flex items-center flex-1">
+              <div className={`flex items-center gap-2 ${i <= currentStepIndex ? 'text-primary' : 'text-slate-300'}`}>
+                <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all duration-300 ${i < currentStepIndex ? 'bg-primary border-primary text-white' :
+                  i === currentStepIndex ? 'border-primary text-primary bg-primary/10' :
+                    'border-slate-200 text-slate-400'
+                  }`}>
+                  {i < currentStepIndex ? <CheckCircle2 className="h-4 w-4" /> : i + 1}
+                </div>
+                <span className={`text-xs font-semibold hidden sm:inline ${i <= currentStepIndex ? '' : 'text-slate-400'}`}>
+                  {s.label}
+                </span>
+              </div>
+              {i < steps.length - 1 && (
+                <div className={`flex-1 h-0.5 mx-2 transition-all duration-500 ${i < currentStepIndex ? 'bg-primary' : 'bg-slate-200'}`} />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       <AnimatePresence mode="wait">
         <motion.div
           key={step}
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -20 }}
-          transition={{ duration: 0.3 }}
+          transition={{ duration: 0.2 }}
         >
-          {step === "basic" && (
-            <CardContent className="p-0">
-              <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-8 text-white relative overflow-hidden">
-                <div className="relative z-10">
-                  <CardTitle className="text-2xl">Financial Model Hub</CardTitle>
-                  <CardDescription className="text-slate-400 mt-1">Design the blueprint of your company&apos;s future.</CardDescription>
+          {/* ═══════════════════════════════════════════════════════
+              STEP 1: MODEL BLUEPRINT
+          ═══════════════════════════════════════════════════════ */}
+          {step === "blueprint" && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-slate-500">Model Name *</Label>
+                  <Input
+                    placeholder="e.g. FY25 Institutional Plan"
+                    value={formData.name}
+                    autoFocus
+                    onChange={(e) => handleInputChange("name", e.target.value)}
+                    className="h-11 text-base"
+                  />
                 </div>
-                <div className="absolute top-0 right-0 p-8 opacity-10">
-                  <SparkleIcon size={120} />
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-slate-500">Industry Sector</Label>
+                  <Select value={formData.industry} onValueChange={(v) => handleInputChange("industry", v)}>
+                    <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {industries.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-              <div className="p-8 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-slate-500">Revenue Engine</Label>
+                  <Select value={formData.revenueModelType} onValueChange={(v) => handleInputChange("revenueModelType", v)}>
+                    <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="subscription">Subscription (MRR/ARR)</SelectItem>
+                      <SelectItem value="transactional">Transactional (AOV)</SelectItem>
+                      <SelectItem value="services">Professional Services</SelectItem>
+                      <SelectItem value="hybrid">Hybrid</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-slate-500">Model Architecture</Label>
+                  <Select value={formData.modelType} onValueChange={(v) => handleInputChange("modelType", v)}>
+                    <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="3-statement">3-Statement Operating Model</SelectItem>
+                      <SelectItem value="dcf">Discounted Cash Flow (DCF)</SelectItem>
+                      <SelectItem value="lbo">Leveraged Buyout (LBO)</SelectItem>
+                      <SelectItem value="accretion-dilution">Accretion / Dilution (M&A)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-slate-500">Forecast Window</Label>
+                  <Select value={formData.duration} onValueChange={(v) => handleInputChange("duration", v)}>
+                    <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="12">12 Months</SelectItem>
+                      <SelectItem value="24">24 Months</SelectItem>
+                      <SelectItem value="36">36 Months</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-slate-500">Ignition Month</Label>
+                  <Input type="month" value={formData.startDate} onChange={(e) => handleInputChange("startDate", e.target.value)} className="h-11" />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                {onCancel && <Button variant="ghost" onClick={onCancel}>Cancel</Button>}
+                <Button onClick={goNext} className="px-8 h-11 bg-slate-900 text-white hover:bg-slate-800 shadow-lg">
+                  Continue <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* AI Strategic Insights Overlay */}
+              {aiMode && strategicPulse && (
+                <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl space-y-3">
+                  <div className="flex items-center gap-2 text-indigo-700">
+                    <SparkleIcon className="h-4 w-4 animate-pulse" />
+                    <span className="text-xs font-black uppercase tracking-widest">AI Strategic Insights Detected</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-xs">
+                    <div className="p-2 bg-white rounded-lg border border-indigo-50">
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">Volume Pattern</p>
+                      <p className="font-semibold text-slate-800">{strategicPulse.volumeIntensity || "Consistent"}</p>
+                    </div>
+                    <div className="p-2 bg-white rounded-lg border border-indigo-50">
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">Expense Model</p>
+                      <p className="font-semibold text-slate-800">{strategicPulse.expenseConcentration || "Distributed"}</p>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-indigo-600/70 italic">
+                    * Parameters above pre-populated based on {dataStatus?.stats?.transactionCount?.toLocaleString() || "recent"} verified accounting entries.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ═══════════════════════════════════════════════════════
+              STEP 2: INTELLIGENCE ENGINE SELECTION (GATED)
+          ═══════════════════════════════════════════════════════ */}
+          {step === "intelligence" && (
+            <div className="space-y-5">
+              {/* Data Context Banner */}
+              <div className={`p-4 rounded-xl border-2 ${dataStatus?.hasRealData
+                ? 'bg-green-50 border-green-200'
+                : 'bg-amber-50 border-amber-200'
+                }`}>
+                <div className="flex items-start gap-3">
+                  {dataStatus?.hasRealData ? (
+                    <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                  )}
+                  <div>
+                    <p className={`text-sm font-bold ${dataStatus?.hasRealData ? 'text-green-900' : 'text-amber-900'}`}>
+                      {dataStatus?.hasRealData
+                        ? `Data detected: ${dataStatus.stats?.transactionCount || 0} transactions, ${dataStatus.stats?.connectorsCount || 0} connectors, ${dataStatus.stats?.uploadsCount || 0} uploads`
+                        : "No verified data sources connected to this organization."}
+                    </p>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      {dataStatus?.hasRealData
+                        ? `Organization stage: ${dataStatus.orgStage || 'Unknown'} · Last data: ${dataStatus.stats?.lastTransactionDate ? new Date(dataStatus.stats.lastTransactionDate).toLocaleDateString() : 'N/A'}`
+                        : "Connect an ERP, upload a CSV, or use Synthetic AI to begin."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <Label className="text-xs font-bold uppercase text-slate-500 block">Select Model Intelligence Source</Label>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Data-Driven AI */}
+                <button
+                  onClick={() => dataStatus?.intelligenceGating?.dataDrivenAI && setIntelligenceEngine("data-driven")}
+                  disabled={!dataStatus?.intelligenceGating?.dataDrivenAI}
+                  className={`p-5 rounded-xl border-2 text-left flex flex-col gap-3 transition-all relative group ${intelligenceEngine === "data-driven"
+                    ? 'border-blue-600 bg-blue-50 ring-2 ring-blue-600 ring-offset-2 shadow-lg'
+                    : !dataStatus?.intelligenceGating?.dataDrivenAI
+                      ? 'border-slate-100 bg-slate-50 opacity-50 cursor-not-allowed'
+                      : 'border-slate-100 bg-white hover:border-blue-200 hover:shadow-md'
+                    }`}
+                >
+                  {!dataStatus?.intelligenceGating?.dataDrivenAI && (
+                    <Lock className="h-4 w-4 text-slate-400 absolute top-3 right-3" />
+                  )}
+                  <div className={`p-2.5 w-fit rounded-xl ${intelligenceEngine === "data-driven" ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-100 text-slate-500'}`}>
+                    <HistoryIcon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-sm">Data-Driven AI</div>
+                    <div className="text-[11px] text-slate-500 mt-1 leading-snug">
+                      Syncs historical actuals from ERP, GL, and uploaded data. Highest auditability.
+                    </div>
+                  </div>
+                  {!dataStatus?.intelligenceGating?.dataDrivenAI && (
+                    <Badge variant="outline" className="text-[10px] w-fit text-red-600 border-red-200 bg-red-50">
+                      {dataStatus?.intelligenceGating?.dataDrivenAIReason || "Connect data first"}
+                    </Badge>
+                  )}
+                </button>
+
+                {/* Synthetic AI */}
+                <button
+                  onClick={() => setIntelligenceEngine("synthetic")}
+                  className={`p-5 rounded-xl border-2 text-left flex flex-col gap-3 transition-all group ${intelligenceEngine === "synthetic"
+                    ? 'border-purple-600 bg-purple-50 ring-2 ring-purple-600 ring-offset-2 shadow-lg'
+                    : 'border-slate-100 bg-white hover:border-purple-200 hover:shadow-md'
+                    }`}
+                >
+                  <div className={`p-2.5 w-fit rounded-xl ${intelligenceEngine === "synthetic" ? 'bg-purple-600 text-white shadow-lg' : 'bg-slate-100 text-slate-500'}`}>
+                    <SparkleIcon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-sm">Synthetic AI Benchmark</div>
+                    <div className="text-[11px] text-slate-500 mt-1 leading-snug">
+                      Generates a model using industry benchmarks. No real data required. Clearly labeled as synthetic.
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] w-fit text-purple-600 border-purple-200 bg-purple-50">
+                    Always Available
+                  </Badge>
+                </button>
+
+                {/* Manual */}
+                <button
+                  onClick={() => setIntelligenceEngine("manual")}
+                  className={`p-5 rounded-xl border-2 text-left flex flex-col gap-3 transition-all group ${intelligenceEngine === "manual"
+                    ? 'border-slate-900 bg-slate-50 ring-2 ring-slate-900 ring-offset-2 shadow-lg'
+                    : 'border-slate-100 bg-white hover:border-slate-300 hover:shadow-md'
+                    }`}
+                >
+                  <div className={`p-2.5 w-fit rounded-xl ${intelligenceEngine === "manual" ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-100 text-slate-500'}`}>
+                    <Plus className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-sm">Manual Build</div>
+                    <div className="text-[11px] text-slate-500 mt-1 leading-snug">
+                      Define every driver and assumption manually. Full control, zero AI inference.
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] w-fit text-slate-600 border-slate-200 bg-slate-50">
+                    Always Available
+                  </Badge>
+                </button>
+              </div>
+
+              <div className="flex justify-between pt-2">
+                <Button variant="ghost" onClick={goBack}><ArrowLeft className="mr-2 h-4 w-4" /> Back</Button>
+                <Button onClick={goNext} className="px-8 h-11 bg-slate-900 text-white hover:bg-slate-800 shadow-lg">
+                  Continue <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ═══════════════════════════════════════════════════════
+              STEP 3: SOURCE AUTHORITY DECLARATION (Data-Driven Only)
+          ═══════════════════════════════════════════════════════ */}
+          {step === "source-authority" && (
+            <div className="space-y-5">
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
+                <h4 className="font-bold text-blue-900 flex items-center gap-2 text-sm">
+                  <ShieldCheck className="h-4 w-4" />
+                  Source Authority Declaration — Enterprise Required
+                </h4>
+                <p className="text-xs text-blue-700 leading-relaxed">
+                  Define the authoritative data source for each financial domain. This determines which system is the
+                  &quot;source of truth&quot; when multiple sources provide overlapping data. Conflicts are resolved using your declared hierarchy.
+                </p>
+              </div>
+
+              {/* Domain-level source selection */}
+              <div className="space-y-3">
+                {dataStatus?.domainSources && Object.entries(dataStatus.domainSources)
+                  .filter(([, info]) => info.available)
+                  .map(([domain, info]) => {
+                    const Icon = DOMAIN_ICONS[domain] || Database
+                    return (
+                      <div key={domain} className="p-4 border rounded-xl bg-white hover:bg-slate-50/50 transition-all">
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                              <Icon className="h-5 w-5" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold text-slate-900">{DOMAIN_LABELS[domain] || domain}</p>
+                              <p className="text-[11px] text-slate-500">
+                                {info.sources.length} source{info.sources.length !== 1 ? 's' : ''} detected
+                                {info.sources.length > 1 && (
+                                  <span className="text-amber-600 font-semibold ml-1">· Multi-source conflict possible</span>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                          <Select
+                            value={sourceAuthMap[domain] || info.suggestedAuthority}
+                            onValueChange={(v) => setSourceAuthMap(prev => ({ ...prev, [domain]: v }))}
+                          >
+                            <SelectTrigger className="w-[200px] h-9 bg-white text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {info.sources.map(src => (
+                                <SelectItem key={src} value={src}>
+                                  <span className="flex items-center gap-2">
+                                    {src === info.suggestedAuthority && <Radio className="h-3 w-3 text-primary" />}
+                                    {src}
+                                  </span>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )
+                  })}
+
+                {/* Domains with no data */}
+                {dataStatus?.domainSources && Object.entries(dataStatus.domainSources)
+                  .filter(([, info]) => !info.available)
+                  .map(([domain]) => {
+                    const Icon = DOMAIN_ICONS[domain] || Database
+                    return (
+                      <div key={domain} className="p-4 border border-dashed border-slate-200 rounded-xl bg-slate-50/50 opacity-60">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 shrink-0">
+                            <Icon className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-slate-500">{DOMAIN_LABELS[domain] || domain}</p>
+                            <p className="text-[11px] text-slate-400">No source available — will use AI estimate or manual input</p>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+              </div>
+
+              {/* Baseline Confirmation Checkbox */}
+              <div className={`p-4 rounded-xl border-2 flex items-start gap-3 transition-all ${baselineConfirmed
+                ? 'border-green-300 bg-green-50'
+                : 'border-dashed border-red-200 bg-red-50/50'
+                }`}>
+                <Checkbox
+                  id="baseline-confirm"
+                  checked={baselineConfirmed}
+                  onCheckedChange={(v) => setBaselineConfirmed(!!v)}
+                  className="mt-0.5"
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="baseline-confirm" className={`text-sm font-bold cursor-pointer ${baselineConfirmed ? 'text-green-900' : 'text-red-900'}`}>
+                    Confirm Source Authority & Baseline Integrity
+                  </Label>
+                  <p className="text-[11px] text-slate-600 leading-relaxed">
+                    I confirm that the source authority declarations above are correct, and the financial model
+                    should be initialized using the selected data sources. All calculations will trace back to
+                    these sources for auditability.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex justify-between pt-2">
+                <Button variant="ghost" onClick={goBack}><ArrowLeft className="mr-2 h-4 w-4" /> Back</Button>
+                <Button onClick={goNext} disabled={!baselineConfirmed} className="px-8 h-11 bg-primary text-white hover:bg-primary/90 shadow-lg">
+                  <ShieldCheck className="mr-2 h-4 w-4" /> Confirm Authority
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ═══════════════════════════════════════════════════════
+              STEP 4: SYNTHETIC ASSUMPTION INPUT (Synthetic Only)
+          ═══════════════════════════════════════════════════════ */}
+          {step === "assumptions" && (
+            <div className="space-y-5">
+              <div className="p-4 bg-purple-50 border border-purple-200 rounded-xl space-y-2">
+                <h4 className="font-bold text-purple-900 flex items-center gap-2 text-sm">
+                  <SparkleIcon className="h-4 w-4" />
+                  Synthetic Model Parameters
+                </h4>
+                <div className="text-xs text-purple-700 leading-relaxed">
+                  This model will be initialized using <strong>synthetic assumptions</strong> — no real financial data is connected.
+                  All projections will be clearly labeled as <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-purple-100 border-purple-300">SYNTHETIC</Badge> for auditability.
+                </div>
+              </div>
+
+              <div className="space-y-4 max-h-[380px] overflow-y-auto pr-1">
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-slate-500">Business Type *</Label>
+                  <Select value={syntheticParams.business_type} onValueChange={(v) => setSyntheticParams(p => ({ ...p, business_type: v }))}>
+                    <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="saas">SaaS / Subscription</SelectItem>
+                      <SelectItem value="ecommerce">E-commerce / Transactional</SelectItem>
+                      <SelectItem value="services">Professional Services</SelectItem>
+                      <SelectItem value="mixed">Hybrid / Mixed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase text-slate-500">Model Name</Label>
+                    <Label className="text-xs font-bold uppercase text-slate-500">Starting Monthly Revenue ($) *</Label>
                     <Input
-                      placeholder="e.g. Series A Projections"
-                      value={formData.model_name}
-                      autoFocus
-                      onChange={(e) => handleInputChange("model_name", e.target.value)}
-                      className="h-12 border-slate-200 focus:ring-purple-500 transition-all text-lg font-medium"
+                      type="number" placeholder="e.g. 50000"
+                      value={syntheticParams.starting_revenue}
+                      onChange={(e) => setSyntheticParams(p => ({ ...p, starting_revenue: e.target.value }))}
+                      className="h-10"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase text-slate-500">Industry Sector</Label>
-                    <Select value={formData.industry} onValueChange={(val) => handleInputChange("industry", val)}>
-                      <SelectTrigger className="h-12"><SelectValue placeholder="Industry" /></SelectTrigger>
-                      <SelectContent>
-                        {industries.map(ind => <SelectItem key={ind} value={ind}>{ind}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <Label className="text-xs font-bold uppercase text-slate-500">Starting Customers</Label>
+                    <Input
+                      type="number" placeholder="e.g. 100"
+                      value={syntheticParams.starting_customers}
+                      onChange={(e) => setSyntheticParams(p => ({ ...p, starting_customers: e.target.value }))}
+                      className="h-10"
+                    />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase text-slate-500">Revenue Engine</Label>
-                    <Select value={formData.revenue_model_type} onValueChange={(val) => handleInputChange("revenue_model_type", val)}>
-                      <SelectTrigger className="h-12"><SelectValue placeholder="Engine" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="subscription">Subscription</SelectItem>
-                        <SelectItem value="transactional">Transactional</SelectItem>
-                        <SelectItem value="services">Services</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label className="text-xs font-bold uppercase text-slate-500">Monthly Payroll ($)</Label>
+                    <Input
+                      type="number" placeholder="e.g. 50000"
+                      value={syntheticParams.monthly_payroll}
+                      onChange={(e) => setSyntheticParams(p => ({ ...p, monthly_payroll: e.target.value }))}
+                      className="h-10"
+                    />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase text-slate-500">Scale Window</Label>
-                    <Select value={String(formData.forecast_duration)} onValueChange={(val) => handleInputChange("forecast_duration", parseInt(val))}>
-                      <SelectTrigger className="h-12"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="12">12 Months</SelectItem>
-                        <SelectItem value="24">24 Months</SelectItem>
-                        <SelectItem value="36">36 Months</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label className="text-xs font-bold uppercase text-slate-500">Infrastructure ($)</Label>
+                    <Input
+                      type="number" placeholder="e.g. 10000"
+                      value={syntheticParams.monthly_infrastructure}
+                      onChange={(e) => setSyntheticParams(p => ({ ...p, monthly_infrastructure: e.target.value }))}
+                      className="h-10"
+                    />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase text-slate-500">Ignition Month</Label>
-                    <Input type="month" value={formData.start_month} onChange={(e) => handleInputChange("start_month", e.target.value)} className="h-12" />
+                    <Label className="text-xs font-bold uppercase text-slate-500">Marketing ($)</Label>
+                    <Input
+                      type="number" placeholder="e.g. 20000"
+                      value={syntheticParams.monthly_marketing}
+                      onChange={(e) => setSyntheticParams(p => ({ ...p, monthly_marketing: e.target.value }))}
+                      className="h-10"
+                    />
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <Label className="text-xs font-bold uppercase text-slate-500">Intelligence Source</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase text-slate-500">Cash on Hand ($) *</Label>
+                    <Input
+                      type="number" placeholder="e.g. 500000"
+                      value={syntheticParams.cash_on_hand}
+                      onChange={(e) => setSyntheticParams(p => ({ ...p, cash_on_hand: e.target.value }))}
+                      className="h-10"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase text-slate-500">Retention Rate (%)</Label>
+                    <Input
+                      type="number" placeholder="e.g. 90"
+                      value={syntheticParams.retention_rate}
+                      onChange={(e) => setSyntheticParams(p => ({ ...p, retention_rate: e.target.value }))}
+                      className="h-10"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-slate-500">Target CAC ($)</Label>
+                  <Input
+                    type="number" placeholder="e.g. 500"
+                    value={syntheticParams.target_cac}
+                    onChange={(e) => setSyntheticParams(p => ({ ...p, target_cac: e.target.value }))}
+                    className="h-10"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-between pt-2">
+                <Button variant="ghost" onClick={goBack}><ArrowLeft className="mr-2 h-4 w-4" /> Back</Button>
+                <Button onClick={goNext} className="px-8 h-11 bg-purple-600 text-white hover:bg-purple-700 shadow-lg">
+                  Review & Confirm <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ═══════════════════════════════════════════════════════
+              STEP 5: STRATEGIC CONFIGURATION + FINAL PREVIEW
+          ═══════════════════════════════════════════════════════ */}
+          {step === "strategic" && (
+            <div className="space-y-5">
+              {/* Summary Panel */}
+              <div className="p-5 bg-slate-50 border rounded-xl space-y-4">
+                <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                  <Eye className="h-4 w-4" />
+                  Model Initialization Summary
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Model</p>
+                    <p className="font-semibold text-slate-900 truncate">{formData.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Industry</p>
+                    <p className="font-semibold text-slate-900">{formData.industry}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Engine</p>
+                    <Badge variant="outline" className={`text-[10px] ${intelligenceEngine === "data-driven" ? "bg-blue-50 text-blue-700 border-blue-200" :
+                      intelligenceEngine === "synthetic" ? "bg-purple-50 text-purple-700 border-purple-200" :
+                        "bg-slate-50 text-slate-700 border-slate-200"
+                      }`}>
+                      {intelligenceEngine === "data-driven" ? "Data-Driven" :
+                        intelligenceEngine === "synthetic" ? "Synthetic AI" : "Manual"}
+                    </Badge>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Horizon</p>
+                    <p className="font-semibold text-slate-900">{formData.duration} months</p>
+                  </div>
+                </div>
+
+                {/* Show source authority summary for data-driven */}
+                {intelligenceEngine === "data-driven" && Object.keys(sourceAuthMap).length > 0 && (
+                  <div className="pt-3 border-t">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Source Authority Map</p>
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(sourceAuthMap).map(([domain, source]) => (
+                        <Badge key={domain} variant="outline" className="text-[10px] bg-blue-50 border-blue-200">
+                          {domain}: {source}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Show synthetic params summary */}
+                {intelligenceEngine === "synthetic" && (
+                  <div className="pt-3 border-t">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Declared Assumptions (Synthetic)</p>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      {syntheticParams.starting_revenue && (
+                        <div><span className="text-slate-400">Revenue:</span> <span className="font-bold">${Number(syntheticParams.starting_revenue).toLocaleString()}/mo</span></div>
+                      )}
+                      {syntheticParams.cash_on_hand && (
+                        <div><span className="text-slate-400">Cash:</span> <span className="font-bold">${Number(syntheticParams.cash_on_hand).toLocaleString()}</span></div>
+                      )}
+                      {syntheticParams.starting_customers && (
+                        <div><span className="text-slate-400">Customers:</span> <span className="font-bold">{syntheticParams.starting_customers}</span></div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Strategic Goal */}
+              <div className="space-y-3">
+                <Label className="text-xs font-bold uppercase text-slate-500">Strategic Outlook</Label>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {[
+                    { id: "growth" as const, label: "Aggressive Growth", icon: Zap, color: "orange", desc: "Maximize MoM revenue scaling, accept higher burn." },
+                    { id: "stable" as const, label: "Sustainable", icon: Target, color: "blue", desc: "Balanced growth with controlled burn rate." },
+                    { id: "profitability" as const, label: "Efficiency First", icon: ShieldCheck, color: "green", desc: "Prioritize runway & unit economics." },
+                  ].map(opt => (
+                    <button
+                      key={opt.id}
+                      onClick={() => setStrategicGoal(opt.id)}
+                      className={`p-4 rounded-xl border-2 text-left transition-all ${strategicGoal === opt.id
+                        ? `border-${opt.color}-500 bg-${opt.color}-50 ring-2 ring-${opt.color}-500 ring-offset-1 shadow-md`
+                        : 'border-slate-100 bg-white hover:border-slate-200'
+                        }`}
+                    >
+                      <opt.icon className={`h-5 w-5 mb-2 ${strategicGoal === opt.id ? `text-${opt.color}-600` : 'text-slate-400'}`} />
+                      <h5 className="font-bold text-sm text-slate-900">{opt.label}</h5>
+                      <p className="text-[11px] text-slate-500 mt-1">{opt.desc}</p>
+                    </button>
+                  ))}
+                </div>
+                {/* Maturity & Governance */}
+                <div className="p-5 border-2 border-indigo-100 rounded-xl bg-indigo-50/10 space-y-4">
+                  <h4 className="text-xs font-black text-indigo-700 uppercase tracking-widest flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4" />
+                    Maturity & Governance Mode
+                  </h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <button
-                      onClick={() => handleInputChange("data_source_type", "connectors")}
-                      className={`p-4 rounded-xl border-2 text-left flex items-center gap-4 transition-all ${formData.data_source_type === "connectors" ? 'border-primary bg-primary/5' : 'border-slate-100 hover:border-slate-300'}`}
-                    >
-                      <div className={`p-2 rounded-lg ${formData.data_source_type === "connectors" ? 'bg-primary text-white' : 'bg-slate-100'}`}>
-                        <Database className="h-5 w-5" />
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-black uppercase text-slate-400">Version Tag</Label>
+                      <Input
+                        value={formData.versionTag}
+                        onChange={(e) => setFormData(p => ({ ...p, versionTag: e.target.value }))}
+                        placeholder="e.g. v1.0.0-baseline"
+                        className="h-9 font-mono text-xs border-indigo-200 focus:ring-indigo-500"
+                      />
+                      <p className="text-[9px] text-slate-400">Immutable tag used for institutional audit trails.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-black uppercase text-slate-400">Snapshot Mode</Label>
+                      <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+                        <button
+                          onClick={() => setFormData(p => ({ ...p, governanceMode: "audit_locked" }))}
+                          className={`flex-1 px-3 py-1.5 rounded-md text-[10px] font-black uppercase transition-all ${formData.governanceMode === 'audit_locked' ? 'bg-white shadow text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+                        >
+                          Audit Locked
+                        </button>
+                        <button
+                          onClick={() => setFormData(p => ({ ...p, governanceMode: "experimental" }))}
+                          className={`flex-1 px-3 py-1.5 rounded-md text-[10px] font-black uppercase transition-all ${formData.governanceMode === 'experimental' ? 'bg-white shadow text-slate-600' : 'text-slate-400 hover:text-slate-600'}`}
+                        >
+                          Experimental
+                        </button>
                       </div>
-                      <div>
-                        <div className="font-bold">Sync Connectors</div>
-                        <div className="text-xs text-slate-500 italic">ERP, QBO, Xero, Plaid</div>
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => handleInputChange("data_source_type", "blank")}
-                      className={`p-4 rounded-xl border-2 text-left flex items-center gap-4 transition-all ${formData.data_source_type === "blank" ? 'border-primary bg-primary/5' : 'border-slate-100 hover:border-slate-300'}`}
-                    >
-                      <div className={`p-2 rounded-lg ${formData.data_source_type === "blank" ? 'bg-primary text-white' : 'bg-slate-100'}`}>
-                        <SparkleIcon className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <div className="font-bold">AI Synthetic Generation</div>
-                        <div className="text-xs text-slate-500 italic">Predictive Benchmarking</div>
-                      </div>
-                    </button>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-4 gap-3">
-                  {onCancel && <Button variant="ghost" onClick={onCancel}>Cancel</Button>}
+                {/* Synthetic Disclosure Warning */}
+                {intelligenceEngine === "synthetic" && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                    <p className="text-xs text-amber-800">
+                      <strong>Synthetic Model Notice:</strong> This model is generated using declared assumptions and industry benchmarks.
+                      No real financial data is connected. The model will be tagged as <code className="bg-amber-100 px-1 rounded font-mono">SYNTHETIC</code> in all outputs and audit logs.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex justify-between pt-2">
+                  <Button variant="ghost" onClick={goBack}><ArrowLeft className="mr-2 h-4 w-4" /> Back</Button>
                   <Button
-                    onClick={handleSubmit}
-                    disabled={loading || !formData.model_name || !formData.industry}
-                    className="px-8 h-12 bg-slate-900 text-white rounded-xl shadow-xl hover:shadow-2xl transition-all"
+                    onClick={goNext}
+                    className={`px-8 h-11 shadow-lg text-white ${intelligenceEngine === "synthetic"
+                      ? "bg-purple-600 hover:bg-purple-700"
+                      : "bg-slate-900 hover:bg-slate-800"
+                      }`}
                   >
-                    Next Step <ArrowRight className="ml-2 h-4 w-4" />
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    {intelligenceEngine === "synthetic" ? "Create Synthetic Model" :
+                      intelligenceEngine === "data-driven" ? "Initialize from Verified Data" :
+                        "Create Model"}
                   </Button>
                 </div>
               </div>
-            </CardContent>
+            </div>
           )}
 
-          {step === "analyzing" && (
-            <CardContent className="p-12">
-              {renderAnalyzingStep()}
-            </CardContent>
-          )}
-
-          {step === "strategic-confirm" && (
-            <CardContent className="p-8">
-              <div className="flex items-center gap-3 mb-8">
-                <div className="p-3 bg-blue-100 rounded-2xl text-blue-600">
-                  <Brain className="h-6 w-6" />
-                </div>
-                <div>
-                  <h3 className="text-2xl font-bold">AI Strategy Configuration</h3>
-                  <p className="text-slate-500">We&apos;ve analyzed your data. Now tell us your aim.</p>
-                </div>
+          {/* ═══════════════════════════════════════════════════════
+              CREATING STATE
+          ═══════════════════════════════════════════════════════ */}
+          {step === "creating" && (
+            <div className="py-16 flex flex-col items-center justify-center space-y-6">
+              <div className="relative">
+                <Loader2 className="h-14 w-14 animate-spin text-primary" />
+                <div className="absolute inset-0 rounded-full bg-primary/10 animate-pulse blur-xl" />
               </div>
-              {renderStrategicStep()}
-            </CardContent>
-          )}
-
-          {step === "ai-questions" && (
-            <CardContent className="p-8 pb-12">
-              <div className="flex items-center gap-3 mb-8">
-                <div className="p-3 bg-purple-100 rounded-2xl text-purple-600">
-                  <SparkleIcon className="h-6 w-6" />
-                </div>
-                <div>
-                  <h3 className="text-2xl font-bold">AI Guided Setup</h3>
-                  <p className="text-slate-500">Let&apos;s calibrate your synthetic model.</p>
-                </div>
+              <div className="text-center space-y-2">
+                <h3 className="text-lg font-bold text-slate-900">Initializing Financial Model</h3>
+                <p className="text-sm text-slate-500">
+                  {intelligenceEngine === "data-driven"
+                    ? "Mapping data sources and validating baseline integrity..."
+                    : intelligenceEngine === "synthetic"
+                      ? "Generating synthetic benchmark from declared assumptions..."
+                      : "Creating model structure with manual driver scaffold..."}
+                </p>
               </div>
-              <div className="space-y-6 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                {getAiQuestions().map(q => (
-                  <div key={q.key} className="space-y-2">
-                    <Label className="font-semibold text-slate-700">{q.label} {q.required && "*"}</Label>
-                    {q.type === "select" ? (
-                      <Select value={aiAnswers[q.key as keyof typeof aiAnswers] as any} onValueChange={v => handleAiAnswerChange(q.key, v)}>
-                        <SelectTrigger className="h-11"><SelectValue placeholder="Select..." /></SelectTrigger>
-                        <SelectContent>
-                          {q.options?.map(o => <SelectItem key={o} value={o}>{o.toUpperCase()}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Input
-                        placeholder={q.placeholder}
-                        type={q.type}
-                        className="h-11"
-                        value={q.key.includes('.') ? (aiAnswers.major_costs as any)[q.key.split('.')[1]] : (aiAnswers[q.key as keyof typeof aiAnswers] as any)}
-                        onChange={e => handleAiAnswerChange(q.key, e.target.value)}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-4 mt-8">
-                <Button variant="ghost" onClick={() => setStep("basic")}>Back</Button>
-                <Button onClick={handleAiSubmit} disabled={loading} className="flex-1 h-12 bg-purple-600 hover:bg-purple-700 shadow-xl">
-                  {loading ? <Loader2 className="animate-spin mr-2" /> : <Plus className="mr-2" />}
-                  Generate Model
-                </Button>
-              </div>
-            </CardContent>
+            </div>
           )}
         </motion.div>
       </AnimatePresence>
-    </Card>
+    </div>
   )
 }
-

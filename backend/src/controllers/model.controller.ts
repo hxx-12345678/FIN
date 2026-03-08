@@ -129,33 +129,36 @@ export const modelController = {
             },
             drivers: true,
             driverFormulas: true,
-          },
-        });
-      } catch (relationError: any) {
-        // Relations may not exist in production DB yet - fall back to core fields
-        console.warn('getModel: falling back to core fields (relation query failed):', relationError.message);
-        model = await prisma.model.findUnique({
-          where: { id: model_id },
-          select: {
-            id: true,
-            name: true,
-            version: true,
-            modelJson: true,
-            orgId: true,
-            createdAt: true,
-            createdBy: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
+            modelRuns: {
+              orderBy: { createdAt: 'desc' },
+              take: 5,
             },
           },
         });
+
+        // Fetch audit logs for the model
         if (model) {
-          (model as any).drivers = [];
-          (model as any).driverFormulas = [];
+          const auditLogs = await prisma.auditLog.findMany({
+            where: {
+              orgId: model.orgId,
+              objectId: model.id,
+              objectType: 'model'
+            },
+            include: {
+              actorUser: {
+                select: { email: true, name: true }
+              }
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 10
+          });
+          (model as any).auditLogs = auditLogs;
         }
+      } catch (relationError: any) {
+        console.warn('getModel: falling back to core fields (relation query failed):', relationError.message);
+        model = await prisma.model.findUnique({
+          where: { id: model_id },
+        });
       }
 
       if (!model) {
@@ -817,6 +820,16 @@ export const modelController = {
     }
   },
 
+  patchDriver: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { org_id, model_id, driver_id } = req.params;
+      const driver = await financialModelService.patchDriver(org_id, model_id, driver_id, req.body);
+      res.json({ ok: true, driver });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   updateDriverValues: async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const { org_id, scenario_id, driver_id } = req.params;
@@ -832,6 +845,67 @@ export const modelController = {
       const { org_id, model_id } = req.params;
       const scenarios = await financialModelService.getScenarios(org_id, model_id);
       res.json({ ok: true, scenarios });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  updateScenario: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { org_id, model_id, scenario_id } = req.params;
+      const result = await financialModelService.updateScenario(org_id, model_id, scenario_id, req.body);
+      res.json({ ok: true, scenario: result });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  deleteScenario: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { org_id, model_id, scenario_id } = req.params;
+      await financialModelService.deleteScenario(org_id, model_id, scenario_id);
+      res.json({ ok: true, message: 'Scenario deleted successfully' });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  duplicateScenario: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { org_id, model_id, scenario_id } = req.params;
+      const result = await financialModelService.duplicateScenario(org_id, model_id, scenario_id);
+      res.status(201).json({ ok: true, scenario: result });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  mergeScenario: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { org_id, model_id, scenario_id } = req.params;
+      const result = await financialModelService.mergeScenario(org_id, model_id, scenario_id);
+      res.json({ ok: true, result });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  saveManualInput: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) throw new ValidationError('User not authenticated');
+      const { org_id, model_id } = req.params;
+      const result = await financialModelService.saveManualInput(org_id, model_id, req.user.id, req.body);
+      res.json({ ok: true, model: result });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  getManualInput: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { org_id, model_id } = req.params;
+      const inputs = await financialModelService.getManualInput(org_id, model_id);
+      res.json({ ok: true, inputs });
     } catch (error) {
       next(error);
     }

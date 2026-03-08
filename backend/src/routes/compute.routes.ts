@@ -8,5 +8,6 @@ const router = Router();
 // Financial Reasoning & Simulation routes
 router.post('/reasoning', authenticate, requireModelOwnership('modelId'), computeController.getReasoning);
 router.post('/scenario', authenticate, requireModelOwnership('modelId'), computeController.simulateScenario);
+router.post('/ai-pipeline', authenticate, requireModelOwnership('modelId'), computeController.generateAIPipeline);
 
 export default router;

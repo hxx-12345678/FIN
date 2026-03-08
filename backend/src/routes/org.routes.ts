@@ -19,5 +19,8 @@ router.get('/:id/access-requests', authenticate, requireAdmin('id'), orgControll
 router.post('/:id/access-requests/:requestId/approve', authenticate, requireAdmin('id'), orgController.approveAccessRequest);
 router.post('/:id/access-requests/:requestId/reject', authenticate, requireAdmin('id'), orgController.rejectAccessRequest);
 
+// Data status (discovery)
+router.get('/:id/data-status', authenticate, requireOrgAccess('id'), orgController.getDataStatus);
+
 export default router;
 

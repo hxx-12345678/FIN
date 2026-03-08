@@ -114,5 +114,21 @@ export const orgController = {
       next(error);
     }
   },
+  /**
+   * GET /api/v1/orgs/:id/data-status - Data health status for an organization
+   */
+  getDataStatus: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        throw new ValidationError('User not authenticated');
+      }
+
+      const { id: orgId } = req.params;
+      const status = await orgService.getDataStatus(orgId);
+      res.json(status);
+    } catch (error) {
+      next(error);
+    }
+  },
 };
 

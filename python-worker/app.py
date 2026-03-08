@@ -460,6 +460,269 @@ def compute_scenario(req: ScenarioRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# =============================================================================
+# ENTERPRISE FINANCIAL CONTROL LAYER ENDPOINTS
+# =============================================================================
+
+from jobs.financial_control_layer import (
+    DebtScheduleEngine, EquityDilutionEngine, TaxLogicEngine,
+    DeferredRevenueEngine, WorkingCapitalEngine, ReconciliationEngine,
+    run_financial_controls
+)
+from jobs.forecasting_engine_v2 import (
+    RegimeDetector, FeatureAwareForecast, HybridForecast,
+    SensitivityRanker, ModelConfidenceEngine, EnhancedBacktester,
+    run_enterprise_forecast
+)
+from jobs.constraint_solver import (
+    AccountingConstraintSolver, SparseMatrixOptimizer,
+    CircularReferenceResolver, CrossSheetConstraints
+)
+from jobs.ai_modeling_pipeline import (
+    DataProfilingAgent, ModelSelectionAgent, AssumptionGenerator,
+    AdaptiveParameterMode, run_ai_modeling_pipeline
+)
+
+
+class FinancialControlsRequest(BaseModel):
+    statements: Dict[str, Any]  # 3-statement output
+    debtInstruments: Optional[List[Dict[str, Any]]] = None
+    equityConfig: Optional[Dict[str, Any]] = None
+    taxConfig: Optional[Dict[str, Any]] = None
+    contracts: Optional[List[Dict[str, Any]]] = None
+    workingCapitalConfig: Optional[Dict[str, Any]] = None
+
+
+@app.post("/compute/financial-controls", dependencies=[Depends(verify_worker_secret)])
+def compute_financial_controls(req: FinancialControlsRequest):
+    """
+    Run the complete Financial Control Layer:
+    - Debt schedule computation & covenant checking
+    - Working capital dynamics (DSO/DPO/DIO)
+    - Deferred revenue scheduling (ASC 606)
+    - Balance sheet reconciliation & constraint enforcement
+    """
+    try:
+        result = run_financial_controls(
+            statements=req.statements,
+            debt_instruments=req.debtInstruments,
+            contracts=req.contracts,
+            working_capital_config=req.workingCapitalConfig
+        )
+        return {"status": "success", "result": result}
+    except Exception as e:
+        logger.error(f"Financial controls failed: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class EnterpriseForecastRequest(BaseModel):
+    history: List[float]
+    steps: int
+    features: Optional[Dict[str, List[float]]] = None
+    featuresForecast: Optional[Dict[str, List[float]]] = None
+    drivers: Optional[Dict[str, Any]] = None
+    driverOverrides: Optional[Dict[int, float]] = None
+    assumptions: Optional[Dict[str, float]] = None
+    industryBenchmarks: Optional[Dict[str, List[float]]] = None
+
+
+@app.post("/compute/forecast/enterprise", dependencies=[Depends(verify_worker_secret)])
+def compute_enterprise_forecast(req: EnterpriseForecastRequest):
+    """
+    Enterprise forecasting pipeline with regime detection,
+    hybrid statistical+driver-based, feature-aware, confidence scoring,
+    and comprehensive backtesting.
+    """
+    try:
+        benchmarks = None
+        if req.industryBenchmarks:
+            benchmarks = {k: tuple(v) for k, v in req.industryBenchmarks.items()}
+
+        result = run_enterprise_forecast(
+            history=req.history,
+            steps=req.steps,
+            features=req.features,
+            features_forecast=req.featuresForecast,
+            drivers=req.drivers,
+            driver_overrides=req.driverOverrides,
+            assumptions=req.assumptions,
+            industry_benchmarks=benchmarks
+        )
+        return {"status": "success", "result": result}
+    except Exception as e:
+        logger.error(f"Enterprise forecast failed: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class RegimeDetectionRequest(BaseModel):
+    history: List[float]
+    method: str = "auto"
+    sensitivity: float = 2.0
+
+
+@app.post("/compute/forecast/regime", dependencies=[Depends(verify_worker_secret)])
+def compute_regime_detection(req: RegimeDetectionRequest):
+    """Detect structural breaks / regime shifts in time series."""
+    try:
+        result = RegimeDetector.detect_regimes(req.history, req.method, req.sensitivity)
+        return {"status": "success", "result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ConfidenceRequest(BaseModel):
+    history: List[float]
+    forecast: List[float]
+    assumptions: Optional[Dict[str, float]] = None
+    industryBenchmarks: Optional[Dict[str, List[float]]] = None
+
+
+@app.post("/compute/forecast/confidence", dependencies=[Depends(verify_worker_secret)])
+def compute_model_confidence(req: ConfidenceRequest):
+    """Compute comprehensive model confidence score."""
+    try:
+        benchmarks = None
+        if req.industryBenchmarks:
+            benchmarks = {k: tuple(v) for k, v in req.industryBenchmarks.items()}
+
+        result = ModelConfidenceEngine.compute_confidence(
+            history=req.history,
+            forecast=req.forecast,
+            assumptions=req.assumptions,
+            industry_benchmarks=benchmarks
+        )
+        return {"status": "success", "result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ConstraintValidationRequest(BaseModel):
+    incomeStatement: Dict[str, Dict]
+    cashFlow: Dict[str, Dict]
+    balanceSheet: Dict[str, Dict]
+
+
+@app.post("/compute/constraints/validate", dependencies=[Depends(verify_worker_secret)])
+def compute_constraint_validation(req: ConstraintValidationRequest):
+    """
+    Validate accounting constraints and cross-sheet consistency.
+    """
+    try:
+        # Cross-sheet validation
+        cross_sheet = CrossSheetConstraints.enforce_cross_sheet(
+            income_statement=req.incomeStatement,
+            cash_flow=req.cashFlow,
+            balance_sheet=req.balanceSheet
+        )
+
+        # Reconciliation
+        recon = ReconciliationEngine.reconcile(
+            income_statement=req.incomeStatement,
+            cash_flow=req.cashFlow,
+            balance_sheet=req.balanceSheet
+        )
+
+        return {
+            "status": "success",
+            "crossSheet": cross_sheet,
+            "reconciliation": recon,
+            "allValid": cross_sheet['valid'] and recon['reconciled']
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class AIPipelineRequest(BaseModel):
+    data: Dict[str, List[float]]
+    targetMetric: str = "revenue"
+    businessContext: Optional[Dict[str, Any]] = None
+    industryBenchmarks: Optional[Dict[str, Dict]] = None
+
+
+@app.post("/compute/ai-pipeline", dependencies=[Depends(verify_worker_secret)])
+def compute_ai_pipeline(req: AIPipelineRequest):
+    """
+    Run the 5-step AI modeling pipeline:
+    1. Data Profiling
+    2. Model Selection
+    3. Assumption Generation
+    4. → Returns for human review
+    5. → Executed after approval via /compute/hyperblock
+    """
+    try:
+        result = run_ai_modeling_pipeline(
+            data=req.data,
+            business_context=req.businessContext,
+            industry_benchmarks=req.industryBenchmarks,
+            target_metric=req.targetMetric
+        )
+        return {"status": "success", "result": result}
+    except Exception as e:
+        logger.error(f"AI pipeline failed: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class SensitivityRequest(BaseModel):
+    history: List[float]
+    steps: int
+    assumptions: Dict[str, float]
+    targetMetric: str = "revenue"
+    perturbation: float = 0.10
+
+
+@app.post("/compute/sensitivity", dependencies=[Depends(verify_worker_secret)])
+def compute_sensitivity_ranking(req: SensitivityRequest):
+    """
+    Auto-rank which assumptions impact target metric the most.
+    Uses perturbation-based sensitivity analysis.
+    """
+    try:
+        from jobs.forecasting_engine import ForecastingEngine
+
+        def compute_fn(assumptions):
+            # Use trend forecast with growth-adjusted history
+            growth = assumptions.get('revenue_growth', 0.08)
+            simulated = [
+                req.history[-1] * (1 + growth) ** (i + 1)
+                for i in range(req.steps)
+            ]
+            return {'revenue': sum(simulated) / len(simulated) if simulated else 0}
+
+        result = SensitivityRanker.rank_sensitivities(
+            base_assumptions=req.assumptions,
+            compute_fn=compute_fn,
+            target_metric=req.targetMetric,
+            perturbation=req.perturbation
+        )
+        return {"status": "success", "result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ParameterModeRequest(BaseModel):
+    hasConnector: bool = False
+    hasCsv: bool = False
+    hasTransactions: bool = False
+    transactionMonths: int = 0
+
+
+@app.post("/compute/parameter-mode", dependencies=[Depends(verify_worker_secret)])
+def compute_parameter_mode(req: ParameterModeRequest):
+    """
+    Detect which frontend parameter mode to use (Enterprise / CSV / Startup).
+    """
+    try:
+        result = AdaptiveParameterMode.detect_mode(
+            has_connector=req.hasConnector,
+            has_csv=req.hasCsv,
+            has_transactions=req.hasTransactions,
+            transaction_months=req.transactionMonths
+        )
+        return {"status": "success", "result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Background polling
 polling_active = False
 polling_thread = None

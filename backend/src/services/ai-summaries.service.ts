@@ -9,11 +9,12 @@ import prisma from '../config/database';
 import { logger } from '../utils/logger';
 
 export interface SummaryRequest {
-  reportType: 'pl' | 'cashflow' | 'balance_sheet' | 'budget_actual' | 'overview';
+  reportType: 'pl' | 'cashflow' | 'balance_sheet' | 'budget_actual' | 'overview' | 'growth';
   orgId: string;
   modelId?: string;
   period?: string;
   includeMetrics?: boolean;
+  strategy?: string;
 }
 
 export interface FinancialSummary {
@@ -71,11 +72,11 @@ export const aiSummariesService = {
       };
 
       let summary: FinancialSummary;
-      
+
       try {
         const response = await llmClient.call(llmRequest, llmConfig);
         const parsed = JSON.parse(response.content);
-        
+
         summary = {
           executiveSummary: parsed.executiveSummary || 'No summary available',
           keyHighlights: parsed.keyHighlights || [],

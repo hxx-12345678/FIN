@@ -62,10 +62,11 @@ export const hyperblockService = {
 
             const { results, affectedNodes, trace, metrics } = response.data;
 
+            let createdTrace = null;
             // 5. Save trace for explainability if an update occurred
             if (update) {
                 try {
-                    await (prisma as any).computationTrace.create({
+                    createdTrace = await (prisma as any).computationTrace.create({
                         data: {
                             orgId,
                             modelId,
@@ -83,7 +84,7 @@ export const hyperblockService = {
             return {
                 results,
                 affectedNodes,
-                trace,
+                trace: createdTrace ? [createdTrace] : (trace || []),
                 metrics
             };
         } catch (error: any) {

@@ -26,7 +26,7 @@ import {
     Layers
 } from "lucide-react"
 import { toast } from "sonner"
-import { API_BASE_URL } from "@/lib/api-config"
+import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { useOrg } from "@/lib/org-context"
 
 interface StatementData {
@@ -59,6 +59,8 @@ interface ThreeStatementViewerProps {
     modelId: string | null
     runId: string | null
     statements: StatementData | null
+    modelRuns?: any[]
+    onCellClick?: (cellId: string, value: any) => void
 }
 
 // Local formatter that respects organization currency
@@ -78,41 +80,125 @@ const formatPercent = (value: number) => {
     return `${(value * 100).toFixed(1)}%`
 }
 
-export function ThreeStatementViewer({ orgId, modelId, runId, statements }: ThreeStatementViewerProps) {
+export function ThreeStatementViewer({ orgId, modelId, runId, statements, modelRuns, onCellClick }: ThreeStatementViewerProps) {
     const { currencySymbol } = useOrg()
     const [activeStatement, setActiveStatement] = useState<'income' | 'cashflow' | 'balance'>('income')
     const [viewMode, setViewMode] = useState<'monthly' | 'annual'>('monthly')
     const [selectedScenario, setSelectedScenario] = useState('base')
     const [forecastHorizon, setForecastHorizon] = useState('12')
 
-    // Memoize monthly data
-    const monthlyPL = useMemo(() => statements?.incomeStatement?.monthly || {}, [statements])
-    const monthlyCF = useMemo(() => statements?.cashFlow?.monthly || {}, [statements])
-    const monthlyBS = useMemo(() => statements?.balanceSheet?.monthly || {}, [statements])
+    const activeStatements = useMemo(() => {
+        const resolveStatements = (data: any) => {
+            if (!data) return null
+            try {
+                const parsed = typeof data === 'string' ? JSON.parse(data) : data
+                // If it has 'statements' key with nested incomeStatement, use that
+                if (parsed?.statements && (parsed.statements.incomeStatement || parsed.statements.cashFlow || parsed.statements.balanceSheet)) {
+                    return parsed.statements
+                }
+                return parsed
+            } catch (e) {
+                console.error("Failed to parse statements data", e)
+                return null
+            }
+        }
 
-    const annualPL = useMemo(() => statements?.incomeStatement?.annual || {}, [statements])
-    const annualCF = useMemo(() => statements?.cashFlow?.annual || {}, [statements])
-    const annualBS = useMemo(() => statements?.balanceSheet?.annual || {}, [statements])
+        if (!modelRuns || modelRuns.length === 0) return resolveStatements(statements)
+
+        if (selectedScenario === 'base') {
+            const baseRun = modelRuns.find(r => r.runType === 'baseline' && r.status === 'done')
+            return resolveStatements(baseRun?.summaryJson || statements)
+        }
+
+        const targetType = selectedScenario === 'pessimistic' ? 'conservative' : selectedScenario
+        const scenarioRun = [...modelRuns].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).find(r => {
+            const params = typeof r.paramsJson === 'string' ? JSON.parse(r.paramsJson) : r.paramsJson;
+            return (
+                r.runType === 'scenario' &&
+                r.status === 'done' &&
+                (params?.scenarioType === targetType)
+            );
+        })
+        return resolveStatements(scenarioRun?.summaryJson)
+    }, [selectedScenario, modelRuns, statements])
+
+    // Memoize monthly data
+    const monthlyPL = useMemo(() => activeStatements?.incomeStatement?.monthly || {}, [activeStatements])
+    const monthlyCF = useMemo(() => activeStatements?.cashFlow?.monthly || {}, [activeStatements])
+    const monthlyBS = useMemo(() => activeStatements?.balanceSheet?.monthly || {}, [activeStatements])
+
+    const annualPL = useMemo(() => activeStatements?.incomeStatement?.annual || {}, [activeStatements])
+    const annualCF = useMemo(() => activeStatements?.cashFlow?.annual || {}, [activeStatements])
+    const annualBS = useMemo(() => activeStatements?.balanceSheet?.annual || {}, [activeStatements])
 
     const months = useMemo(() => Object.keys(monthlyPL).sort(), [monthlyPL])
     const years = useMemo(() => Object.keys(annualPL).sort(), [annualPL])
 
+    const [exporting, setExporting] = useState(false)
     const isValidated = statements?.validation?.passed ?? false
 
-    if (!statements || Object.keys(monthlyPL).length === 0) {
+    const handleExport = async () => {
+        if (!runId) {
+            toast.error("Model must be run before exporting.")
+            return
+        }
+        setExporting(true)
+        try {
+            const res = await fetch(`${API_BASE_URL}/model-runs/${runId}/export`, {
+                method: 'POST',
+                headers: {
+                    ...getAuthHeaders(),
+                    'Content-Type': 'application/json'
+                },
+                credentials: "include",
+                body: JSON.stringify({
+                    type: 'csv',
+                    statements: ['income', 'cashflow', 'balance'],
+                    scenario: selectedScenario
+                })
+            })
+
+            if (res.status === 401) {
+                handleUnauthorized()
+                return
+            }
+
+            const data = await res.json()
+            if ((data.ok || data.export) && (data.exportId || data.export?.id)) {
+                const exportId = data.exportId || data.export?.id;
+                toast.success("Excel export initiated. Preparing your file...")
+                // In a real app we'd poll, but for now we'll just open the download link after a short delay
+                // or tell the user to wait. 
+                setTimeout(() => {
+                    window.open(`${API_BASE_URL}/exports/${exportId}/download`, '_blank')
+                    setExporting(false)
+                }, 3000)
+            } else {
+                toast.error(data.message || "Failed to start export")
+                setExporting(false)
+            }
+        } catch (error) {
+            console.error("Export error:", error)
+            toast.error("An error occurred while exporting")
+            setExporting(false)
+        }
+    }
+
+    if (!activeStatements || Object.keys(monthlyPL).length === 0) {
         return (
-            <Card className="border-dashed">
-                <CardContent className="p-12 text-center">
-                    <Layers className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">No Financial Statements Available</h3>
-                    <p className="text-muted-foreground mb-4">
-                        Run a model to generate P&L, Cash Flow, and Balance Sheet statements.
+            <div className="flex flex-col items-center justify-center p-20 bg-slate-900/50 rounded-xl border border-slate-800 text-center space-y-4">
+                <div className="h-16 w-16 bg-slate-800 rounded-full flex items-center justify-center text-slate-500">
+                    <TrendingUp className="h-8 w-8" />
+                </div>
+                <div>
+                    <h3 className="text-xl font-bold text-white">No Statement Data Available</h3>
+                    <p className="text-slate-400 mt-1">
+                        {selectedScenario === 'base'
+                            ? "Please ensure the model has been run to generate financial projections."
+                            : `No completed run for the '${selectedScenario}' scenario was found.`}
                     </p>
-                    <Badge variant="outline" className="text-xs">
-                        3-Statement Financial Model
-                    </Badge>
-                </CardContent>
-            </Card>
+                </div>
+            </div>
         )
     }
 
@@ -221,8 +307,9 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                     </CardTitle>
                                     <CardDescription>Revenue, COGS, Operating Expenses, EBITDA, Net Income</CardDescription>
                                 </div>
-                                <Button variant="outline" size="sm">
-                                    <Download className="h-4 w-4 mr-1" /> Export
+                                <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
+                                    {exporting ? <RefreshCw className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
+                                    {exporting ? 'Exporting...' : 'Export'}
                                 </Button>
                             </div>
                         </CardHeader>
@@ -246,7 +333,15 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             </TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyPL[period] : annualPL[period]
-                                                return <TableCell key={period} className="text-right text-green-700">{formatValueLineItem(data?.revenue, currencySymbol)}</TableCell>
+                                                return (
+                                                    <TableCell
+                                                        key={period}
+                                                        className="text-right text-green-700 cursor-pointer hover:bg-green-100 transition-colors"
+                                                        onClick={() => onCellClick?.(`${period}:revenue`, data?.revenue)}
+                                                    >
+                                                        {formatValueLineItem(data?.revenue, currencySymbol)}
+                                                    </TableCell>
+                                                )
                                             })}
                                         </TableRow>
                                         {/* COGS */}
@@ -254,7 +349,15 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             <TableCell className="pl-8">Cost of Goods Sold</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyPL[period] : annualPL[period]
-                                                return <TableCell key={period} className="text-right text-red-600">({formatValueLineItem(data?.cogs, currencySymbol)})</TableCell>
+                                                return (
+                                                    <TableCell
+                                                        key={period}
+                                                        className="text-right text-red-600 cursor-pointer hover:bg-red-50"
+                                                        onClick={() => onCellClick?.(`${period}:cogs`, data?.cogs)}
+                                                    >
+                                                        ({formatValueLineItem(data?.cogs, currencySymbol)})
+                                                    </TableCell>
+                                                )
                                             })}
                                         </TableRow>
                                         {/* Gross Profit */}
@@ -262,7 +365,15 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             <TableCell>Gross Profit</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyPL[period] : annualPL[period]
-                                                return <TableCell key={period} className="text-right">{formatValueLineItem(data?.grossProfit, currencySymbol)}</TableCell>
+                                                return (
+                                                    <TableCell
+                                                        key={period}
+                                                        className="text-right cursor-pointer hover:bg-slate-50"
+                                                        onClick={() => onCellClick?.(`${period}:grossProfit`, data?.grossProfit)}
+                                                    >
+                                                        {formatValueLineItem(data?.grossProfit, currencySymbol)}
+                                                    </TableCell>
+                                                )
                                             })}
                                         </TableRow>
                                         {/* Gross Margin */}
@@ -278,7 +389,15 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             <TableCell className="pl-8">Operating Expenses</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyPL[period] : annualPL[period]
-                                                return <TableCell key={period} className="text-right text-red-600">({formatValueLineItem(data?.operatingExpenses, currencySymbol)})</TableCell>
+                                                return (
+                                                    <TableCell
+                                                        key={period}
+                                                        className="text-right text-red-600 cursor-pointer hover:bg-red-50"
+                                                        onClick={() => onCellClick?.(`${period}:operatingExpenses`, data?.operatingExpenses)}
+                                                    >
+                                                        ({formatValueLineItem(data?.operatingExpenses, currencySymbol)})
+                                                    </TableCell>
+                                                )
                                             })}
                                         </TableRow>
                                         {/* Depreciation */}
@@ -286,7 +405,15 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             <TableCell className="pl-8">Depreciation</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyPL[period] : annualPL[period]
-                                                return <TableCell key={period} className="text-right text-muted-foreground">({formatValueLineItem(data?.depreciation, currencySymbol)})</TableCell>
+                                                return (
+                                                    <TableCell
+                                                        key={period}
+                                                        className="text-right text-muted-foreground cursor-pointer hover:bg-slate-50"
+                                                        onClick={() => onCellClick?.(`${period}:depreciation`, data?.depreciation)}
+                                                    >
+                                                        ({formatValueLineItem(data?.depreciation, currencySymbol)})
+                                                    </TableCell>
+                                                )
                                             })}
                                         </TableRow>
                                         {/* EBITDA */}
@@ -297,7 +424,15 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             </TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyPL[period] : annualPL[period]
-                                                return <TableCell key={period} className="text-right text-blue-700">{formatValueLineItem(data?.ebitda, currencySymbol)}</TableCell>
+                                                return (
+                                                    <TableCell
+                                                        key={period}
+                                                        className="text-right text-blue-700 cursor-pointer hover:bg-blue-100"
+                                                        onClick={() => onCellClick?.(`${period}:ebitda`, data?.ebitda)}
+                                                    >
+                                                        {formatValueLineItem(data?.ebitda, currencySymbol)}
+                                                    </TableCell>
+                                                )
                                             })}
                                         </TableRow>
                                         {/* Interest Expense */}
@@ -305,7 +440,15 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             <TableCell className="pl-8">Interest Expense</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyPL[period] : annualPL[period]
-                                                return <TableCell key={period} className="text-right">({formatValueLineItem(data?.interestExpense, currencySymbol)})</TableCell>
+                                                return (
+                                                    <TableCell
+                                                        key={period}
+                                                        className="text-right cursor-pointer hover:bg-slate-50"
+                                                        onClick={() => onCellClick?.(`${period}:interestExpense`, data?.interestExpense)}
+                                                    >
+                                                        ({formatValueLineItem(data?.interestExpense, currencySymbol)})
+                                                    </TableCell>
+                                                )
                                             })}
                                         </TableRow>
                                         {/* Income Tax */}
@@ -313,7 +456,15 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                             <TableCell className="pl-8">Income Tax</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyPL[period] : annualPL[period]
-                                                return <TableCell key={period} className="text-right text-red-600">({formatValueLineItem(data?.incomeTax, currencySymbol)})</TableCell>
+                                                return (
+                                                    <TableCell
+                                                        key={period}
+                                                        className="text-right text-red-600 cursor-pointer hover:bg-red-50"
+                                                        onClick={() => onCellClick?.(`${period}:incomeTax`, data?.incomeTax)}
+                                                    >
+                                                        ({formatValueLineItem(data?.incomeTax, currencySymbol)})
+                                                    </TableCell>
+                                                )
                                             })}
                                         </TableRow>
                                         {/* Net Income */}
@@ -326,7 +477,11 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                                 const data = viewMode === 'monthly' ? monthlyPL[period] : annualPL[period]
                                                 const value = data?.netIncome || 0
                                                 return (
-                                                    <TableCell key={period} className={`text-right ${value >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                                    <TableCell
+                                                        key={period}
+                                                        className={`text-right cursor-pointer hover:bg-green-200 ${value >= 0 ? 'text-green-700' : 'text-red-700'}`}
+                                                        onClick={() => onCellClick?.(`${period}:netIncome`, value)}
+                                                    >
                                                         {formatValueLineItem(value, currencySymbol)}
                                                         {value >= 0 ?
                                                             <ArrowUpRight className="h-3 w-3 inline ml-1" /> :
@@ -355,8 +510,9 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                     </CardTitle>
                                     <CardDescription>Operating, Investing, and Financing Activities</CardDescription>
                                 </div>
-                                <Button variant="outline" size="sm">
-                                    <Download className="h-4 w-4 mr-1" /> Export
+                                <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
+                                    {exporting ? <RefreshCw className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
+                                    {exporting ? 'Exporting...' : 'Export'}
                                 </Button>
                             </div>
                         </CardHeader>
@@ -493,8 +649,9 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements }: Thre
                                     </CardTitle>
                                     <CardDescription>Assets, Liabilities, and Shareholders Equity</CardDescription>
                                 </div>
-                                <Button variant="outline" size="sm">
-                                    <Download className="h-4 w-4 mr-1" /> Export
+                                <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
+                                    {exporting ? <RefreshCw className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
+                                    {exporting ? 'Exporting...' : 'Export'}
                                 </Button>
                             </div>
                         </CardHeader>

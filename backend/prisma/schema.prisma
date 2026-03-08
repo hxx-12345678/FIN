@@ -271,6 +271,10 @@ model Driver {
   unit            String?
   formula         String?
   isCalculated    Boolean         @default(false) @map("is_calculated")
+  minRange        Decimal?        @map("min_range") @db.Decimal(20, 4)
+  maxRange        Decimal?        @map("max_range") @db.Decimal(20, 4)
+  isLocked        Boolean         @default(false) @map("is_locked")
+  dependencies    Json?
   version         Int             @default(1)
   createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -798,6 +802,7 @@ model Budget {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orgId       String   @map("org_id") @db.Uuid
   category    String
+  department  String?  @default("General")
   month       String
   amount      Decimal  @db.Decimal(20, 4)
   currency    String   @default("USD")
@@ -808,10 +813,11 @@ model Budget {
   createdBy   User?    @relation("budget_createdBy", fields: [createdById], references: [id])
   org         Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
-  @@unique([orgId, category, month])
+  @@unique([orgId, category, department, month])
   @@index([orgId])
   @@index([orgId, month])
   @@index([category])
+  @@index([department])
   @@map("budgets")
 }
 
