@@ -222,11 +222,12 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
 
         if (!response.ok) {
           if (response.status === 401) {
-            // Token expired, clear and redirect
+            // Token expired, clear and redirect cleanly
             localStorage.removeItem("auth-token")
             localStorage.removeItem("refresh-token")
             localStorage.removeItem("orgId")
-            window.location.href = "/"
+            window.history.replaceState(null, "", "/")
+            window.location.reload()
             return
           }
           throw new Error("Failed to fetch user data")
@@ -342,20 +343,23 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
       localStorage.removeItem("orgId")
       localStorage.removeItem("finapilot_has_visited")
       localStorage.removeItem("finapilot_onboarding_complete")
+      localStorage.removeItem("is-logged-in")
+      localStorage.removeItem("userId")
 
-      // Clear cookies
+      localStorage.removeItem("finapilot_active_view")
+      localStorage.removeItem("finapilot_mode_selected")
+
+      // Clear cookies by triggering an expiration
       document.cookie = "auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
       document.cookie = "refresh-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
 
       toast.success("Signed out successfully")
 
+      // Immediately clear URL history and push to /
+      window.history.replaceState(null, "", "/")
+
       // Dispatch custom event to reset app state and show landing page
-      // This avoids full page reload and works with component-based routing
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent("signout", { detail: {} }))
-        // Fallback: reload if event listener not set up
-        window.location.href = "/"
-      }, 300)
+      window.dispatchEvent(new CustomEvent("signout", { detail: {} }))
     } catch (error) {
       console.error("Sign out error:", error)
       toast.error("Failed to sign out. Please try again.")

@@ -64,11 +64,11 @@ export const handleUnauthorized = (): void => {
   // Dispatch event to trigger login modal or redirect
   window.dispatchEvent(new CustomEvent("auth-required", { detail: { reason: "Token expired or invalid" } }))
 
-  // Redirect to login if on protected route
-  if (typeof window !== "undefined" && !window.location.pathname.startsWith('/login')) {
+  // Redirect to landing page if on protected route
+  if (typeof window !== "undefined" && window.location.pathname !== '/') {
     // Small delay to allow toasts/feedback
     setTimeout(() => {
-      window.location.href = '/login'
+      window.location.href = '/'
     }, 500)
   }
 }

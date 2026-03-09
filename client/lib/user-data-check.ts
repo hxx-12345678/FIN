@@ -44,8 +44,8 @@ export async function checkUserHasData(orgId: string): Promise<boolean> {
       const connectorsResult = await connectorsResponse.json()
       if (connectorsResult.ok && connectorsResult.data) {
         // Handle both array and object response formats
-        const connectorsList = Array.isArray(connectorsResult.data) 
-          ? connectorsResult.data 
+        const connectorsList = Array.isArray(connectorsResult.data)
+          ? connectorsResult.data
           : connectorsResult.data.connectors || []
         const connectedConnectors = connectorsList.filter(
           (c: any) => c && (c.status === "connected" || c.status === "syncing")
@@ -54,9 +54,22 @@ export async function checkUserHasData(orgId: string): Promise<boolean> {
           return true
         }
       }
-    } else if (connectorsResponse.status === 404) {
-      // No connectors found - this is normal for new users, continue checking other data sources
-      // Don't log this as an error
+    }
+
+    // NEW SECONDARY CHECK: Check if user has any custom models (prevents redirect for users with synthetic models)
+    const modelsResponse = await fetch(`${API_BASE_URL}/orgs/${orgId}/models`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+    })
+
+    if (modelsResponse.ok) {
+      const modelsResult = await modelsResponse.json()
+      if (modelsResult.ok && modelsResult.models && modelsResult.models.length > 0) {
+        return true
+      }
     }
 
     return false

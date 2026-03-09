@@ -94,8 +94,16 @@ export function DriverManagement({ orgId, modelId, onRecompute }: {
                 // Initialize local value state for the first month
                 const values: Record<string, number> = {}
                 data.drivers.forEach((d: any) => {
-                    // This is a simplification; in real app we'd fetch actual values
-                    values[d.id] = 50
+                    // Start by picking up persisted db values, otherwise default sensibly
+                    if (d.values && d.values.length > 0) {
+                        values[d.id] = parseFloat(d.values[0].value)
+                    } else if (d.type === 'headcount') {
+                        values[d.id] = 10
+                    } else if (d.type === 'revenue') {
+                        values[d.id] = 1000
+                    } else {
+                        values[d.id] = 50
+                    }
                 })
                 setDriverValues(values)
             } else {
@@ -189,7 +197,11 @@ export function DriverManagement({ orgId, modelId, onRecompute }: {
                     headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
                     credentials: "include",
                     body: JSON.stringify({
-                        updates: [{ driverId, value }]
+                        // Send the correct incremental update format expected by the backend engine
+                        update: {
+                            nodeId: driverId,
+                            values: { "2024-01": value }
+                        }
                     })
                 })
                 const data = await res.json()

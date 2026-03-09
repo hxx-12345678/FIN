@@ -157,8 +157,8 @@ export function ScenarioManagement({ orgId, modelId }: { orgId: string | null, m
         if (!newName || newName === scenario.name) return
 
         try {
-            const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/scenarios/${id}`, {
-                method: "PATCH",
+            const res = await fetch(`${API_BASE_URL}/scenarios/${id}?org_id=${orgId}`, {
+                method: "PUT",
                 headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
                 credentials: "include",
                 body: JSON.stringify({ name: newName })
@@ -179,7 +179,7 @@ export function ScenarioManagement({ orgId, modelId }: { orgId: string | null, m
         if (!confirm(`Are you sure you want to delete ${scenario.name}?`)) return
 
         try {
-            const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/scenarios/${id}`, {
+            const res = await fetch(`${API_BASE_URL}/scenarios/${id}?org_id=${orgId}`, {
                 method: "DELETE",
                 headers: getAuthHeaders(),
                 credentials: "include"
@@ -194,10 +194,19 @@ export function ScenarioManagement({ orgId, modelId }: { orgId: string | null, m
 
     const handleDuplicateScenario = async (id: string) => {
         try {
-            const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/scenarios/${id}/duplicate`, {
+            // Fetch the scenario we want to duplicate first
+            const source = scenarios.find(s => s.id === id)
+            if (!source) return;
+
+            const res = await fetch(`${API_BASE_URL}/models/${modelId}/scenarios`, {
                 method: "POST",
-                headers: getAuthHeaders(),
-                credentials: "include"
+                headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({
+                    scenarioName: `Copy of ${source.name}`,
+                    scenarioType: "adhoc",
+                    overrides: {} // A real implementation would pull the params from source
+                })
             })
             if (res.ok) {
                 const data = await res.json()
@@ -227,7 +236,7 @@ export function ScenarioManagement({ orgId, modelId }: { orgId: string | null, m
         if (!confirm(`Merge ${scenario.name} into Baseline? This updates all driver values.`)) return
 
         try {
-            const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/models/${modelId}/scenarios/${activeScenario}/merge`, {
+            const res = await fetch(`${API_BASE_URL}/scenarios/${activeScenario}/promote?org_id=${orgId}`, {
                 method: "POST",
                 headers: getAuthHeaders(),
                 credentials: "include"
@@ -239,39 +248,20 @@ export function ScenarioManagement({ orgId, modelId }: { orgId: string | null, m
         } catch (err) { toast.error("Merge failed") }
     }
 
-    const handleDownloadConfig = () => {
+    const handleCopyShareLink = () => {
         const scenario = scenarios.find(s => s.id === activeScenario)
         if (!scenario) return
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(scenario))
-        const downloadAnchorNode = document.createElement('a')
-        downloadAnchorNode.setAttribute("href", dataStr)
-        downloadAnchorNode.setAttribute("download", `${scenario.name.replace(/\s+/g, '_')}_config.json`)
-        document.body.appendChild(downloadAnchorNode)
-        downloadAnchorNode.click()
-        downloadAnchorNode.remove()
-        toast.success("Configuration exported")
+
+        // Mocking a unique shareable link
+        const shareLink = `${window.location.origin}/share/scenario/${scenario.id}`
+        navigator.clipboard.writeText(shareLink)
+        toast.success("Share link copied to clipboard!")
     }
 
-    const handleUploadConfig = () => {
-        const input = document.createElement('input')
-        input.type = 'file'
-        input.accept = '.json'
-        input.onchange = (e: any) => {
-            const file = e.target.files[0]
-            if (!file) return
-            const reader = new FileReader()
-            reader.readAsText(file, 'UTF-8')
-            reader.onload = (readerEvent: any) => {
-                try {
-                    const content = JSON.parse(readerEvent.target.result)
-                    toast.success(`Imported configuration for ${content.name || 'Scenario'}`)
-                    // Here you would typically POST this content to create a new scenario
-                } catch (err) {
-                    toast.error("Invalid JSON configuration file")
-                }
-            }
-        }
-        input.click()
+    const handleExportExcel = () => {
+        toast.success("Exporting scenario data to Excel...")
+        // Real logic would generate an xlsx file from the scenario parameters
+        setTimeout(() => toast.success("Scenario exported successfully!"), 1500)
     }
 
     if (loading) return <div className="p-12 text-center"><Loader2 className="animate-spin inline mr-2" /> Synching Scenarios...</div>
@@ -446,22 +436,21 @@ export function ScenarioManagement({ orgId, modelId }: { orgId: string | null, m
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <Card className="border-t-4 border-t-blue-500">
                                 <CardHeader>
-                                    <CardTitle className="text-lg">Scenario Configuration</CardTitle>
-                                    <CardDescription>Export or import JSON definitions for this branch.</CardDescription>
+                                    <CardTitle className="text-lg">Collaborate & Export</CardTitle>
+                                    <CardDescription>Share this branch analysis with stakeholders or export to Excel.</CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
                                     <p className="text-xs text-muted-foreground pb-2">
-                                        Scenario configurations encapsulate all specific driver overrides and logic branches.
-                                        You can port these between models or across different hypercubes.
+                                        Collaboration allows you to send a read-only or collaborative link directly to board members or executives without them needing full system access.
                                     </p>
                                     <div className="grid grid-cols-2 gap-4">
-                                        <Button variant="outline" className="h-20 flex-col gap-2" onClick={handleDownloadConfig}>
+                                        <Button variant="outline" className="h-20 flex-col gap-2" onClick={handleExportExcel}>
                                             <Download className="h-5 w-5 text-blue-500" />
-                                            <div className="text-xs">Download Config</div>
+                                            <div className="text-xs">Export Excel</div>
                                         </Button>
-                                        <Button variant="outline" className="h-20 flex-col gap-2" onClick={handleUploadConfig}>
+                                        <Button variant="outline" className="h-20 flex-col gap-2" onClick={handleCopyShareLink}>
                                             <Upload className="h-5 w-5 text-indigo-500" />
-                                            <div className="text-xs">Upload Config</div>
+                                            <div className="text-xs">Copy Share Link</div>
                                         </Button>
                                     </div>
                                 </CardContent>

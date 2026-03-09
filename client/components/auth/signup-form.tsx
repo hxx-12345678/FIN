@@ -88,6 +88,10 @@ export function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormProps) {
       }
 
       toast.success("Account created successfully!")
+
+      // Dispatch signup success event
+      window.dispatchEvent(new CustomEvent("signup-success", { detail: {} }))
+
       onSuccess?.()
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Signup failed. Please try again."

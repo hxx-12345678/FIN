@@ -97,7 +97,7 @@ function HomePageContent() {
     const currentHash = window.location.hash.replace("#", "")
     const searchParams = new URLSearchParams(window.location.search)
     const tabParam = searchParams.get("tab")
-    const authToken = localStorage.getItem("auth-token")
+    const authToken = localStorage.getItem("auth-token") || localStorage.getItem("is-logged-in")
 
     const validViews = [
       "overview", "modeling", "budget-actual", "scenarios", "simulations",
@@ -127,11 +127,26 @@ function HomePageContent() {
         }
       }
     } else {
-      setShowLanding(true)
+      // Defer showing landing to avoid React state flashes if currently animating out
+      setTimeout(() => setShowLanding(true), 0)
     }
 
     const checkAuthAndState = async () => {
       const hasSelectedMode = localStorage.getItem("finapilot_mode_selected")
+
+      // If no auth token, ALWAYS show landing page regardless of hash
+      if (!authToken) {
+        setTimeout(() => setShowLanding(true), 0)
+        setShowOnboarding(false)
+        setDemoMode(false)
+
+        // Actively strip any hashes or search params so the user sees a clean '/'
+        if (window.location.hash || window.location.search) {
+          window.history.replaceState(null, "", "/")
+        }
+
+        return
+      }
 
       // CRITICAL: Check hash FIRST before any redirect logic - if user has a valid hash, respect it
       // This prevents redirecting to integrations when user is on another component
@@ -157,14 +172,6 @@ function HomePageContent() {
         setActiveView(effectiveView)
         if (!currentHash) window.location.hash = `#${effectiveView}`
         return // CRITICAL: Return early to prevent any redirect logic
-      }
-
-      // If no auth token, show landing page
-      if (!authToken) {
-        setShowLanding(true)
-        setShowOnboarding(false)
-        setDemoMode(false)
-        return
       }
 
       // If authenticated but hasn't selected demo/real mode, or selected real data but hasn't integrated
@@ -251,30 +258,22 @@ function HomePageContent() {
       setShowOnboarding(false)
       setDemoMode(false)
       setActiveView("overview")
+
+      // Clear localStorage
       localStorage.removeItem("finapilot_mode_selected")
       localStorage.removeItem("finapilot_has_visited")
       localStorage.removeItem("finapilot_onboarding_complete")
+      localStorage.removeItem("is-logged-in")
+      localStorage.removeItem("userId")
+      localStorage.removeItem("finapilot_active_view")
+
+      // Remove hash and search params from URL and force standard reload for clean slate
+      window.history.replaceState(null, "", "/")
+      window.location.reload()
     }
 
-    const handleLoginSuccess = async () => {
-      // Check if user has data
-      const orgId = await getUserOrgId()
-      if (orgId) {
-        const hasData = await checkUserHasData(orgId)
-        if (hasData) {
-          // User has data - mark integration complete and go to overview
-          localStorage.setItem("finapilot_mode_selected", "true")
-          localStorage.removeItem("finapilot_demo_mode")
-          setShowLanding(false)
-          setShowOnboarding(false)
-          setDemoMode(false)
-          setActiveView("overview")
-          window.location.hash = "#overview"
-          return
-        }
-      }
-      
-      // No data - redirect to integrations
+    const handleSignupSuccess = () => {
+      // First time signup -> must go to integrations
       localStorage.setItem("finapilot_mode_selected", "pending_integration")
       localStorage.removeItem("finapilot_demo_mode")
       setShowLanding(false)
@@ -282,6 +281,17 @@ function HomePageContent() {
       setDemoMode(false)
       setActiveView("integrations")
       window.location.hash = "#integrations"
+    }
+
+    const handleLoginSuccess = async () => {
+      // Any normal login -> go to overview
+      localStorage.setItem("finapilot_mode_selected", "true")
+      localStorage.removeItem("finapilot_demo_mode")
+      setShowLanding(false)
+      setShowOnboarding(false)
+      setDemoMode(false)
+      setActiveView("overview")
+      window.location.hash = "#overview"
     }
 
     // Handle hash-based navigation
@@ -310,6 +320,7 @@ function HomePageContent() {
 
     window.addEventListener("signout", handleSignOut)
     window.addEventListener("login-success", handleLoginSuccess)
+    window.addEventListener("signup-success", handleSignupSuccess)
     window.addEventListener("hashchange", handleHashChange)
     window.addEventListener("navigate-view", handleNavigateView as EventListener)
 
@@ -319,6 +330,7 @@ function HomePageContent() {
     return () => {
       window.removeEventListener("signout", handleSignOut)
       window.removeEventListener("login-success", handleLoginSuccess)
+      window.removeEventListener("signup-success", handleSignupSuccess)
       window.removeEventListener("hashchange", handleHashChange)
       window.removeEventListener("navigate-view", handleNavigateView as EventListener)
     }
@@ -326,7 +338,7 @@ function HomePageContent() {
 
   const handleGetStarted = () => {
     // When clicking "Get Started" from landing page, check if user is logged in
-    const authToken = localStorage.getItem("auth-token")
+    const authToken = localStorage.getItem("auth-token") || localStorage.getItem("is-logged-in")
     const hasSelectedMode = localStorage.getItem("finapilot_mode_selected")
 
     if (authToken && !hasSelectedMode) {

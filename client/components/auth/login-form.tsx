@@ -45,6 +45,10 @@ export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
 
       // Use HttpOnly cookies instead of localStorage for tokens
       // The backend already sets HttpOnly cookies via setAuthCookies helper
+      // Wait, due to CORS/same-site issues on dev/preview environments, we still need local auth-token mapping
+      if (data.token) {
+        localStorage.setItem("auth-token", data.token)
+      }
 
       // Store non-sensitive metadata for UI persistence
       localStorage.setItem("is-logged-in", "true")
