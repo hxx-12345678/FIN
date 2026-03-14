@@ -82,22 +82,6 @@ export class SlackAdapter implements ProviderAdapter {
     throw new Error('Token refresh not yet implemented for Slack. Use OAuth callback to get new token.');
   }
 
-  /**
-   * Validate Slack credentials (Bot Token)
-   */
-  async validateCredentials(credentials: any): Promise<{ success: boolean; error?: string }> {
-    const { botToken } = credentials;
-    if (!botToken) {
-      return { success: false, error: 'Slack Bot Token is required' };
-    }
-
-    try {
-      const isValid = await this.validateApiKey(botToken);
-      return { success: isValid };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  }
 
   /**
    * Validate Slack bot token
