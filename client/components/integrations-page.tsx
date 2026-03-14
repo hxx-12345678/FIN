@@ -10,13 +10,13 @@ import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { 
-  RefreshCw, 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
-  AlertTriangle, 
-  Database, 
+import {
+  RefreshCw,
+  CheckCircle,
+  XCircle,
+  Clock,
+  AlertTriangle,
+  Database,
   Activity,
   Plus,
   ExternalLink,
@@ -26,6 +26,7 @@ import {
   FileText
 } from "lucide-react"
 import { CSVImportWizard } from "./csv-import-wizard"
+import { ConnectorCredentialsModal } from "./connector-credentials-modal"
 import { toast } from "sonner"
 import { integrationTemplates, downloadCSV } from "@/utils/csv-template-generator"
 import {
@@ -41,7 +42,7 @@ import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-conf
 interface Connector {
   id: string
   type: string
-  status: "connected" | "disconnected" | "syncing" | "error"
+  status: "connected" | "disconnected" | "syncing" | "error" | "auth_pending"
   lastSyncedAt?: string
   syncFrequencyHours?: number
   autoSyncEnabled: boolean
@@ -53,7 +54,7 @@ interface Connector {
 interface Integration {
   id: string
   name: string
-  type: "accounting" | "payment" | "banking"
+  type: "accounting" | "payment" | "banking" | "erp" | "collaboration" | "compliance"
   icon: string
   description: string
   supported: boolean
@@ -66,7 +67,7 @@ const availableIntegrations: Integration[] = [
     name: "QuickBooks Online",
     type: "accounting",
     icon: "📊",
-    description: "Sync invoices, expenses, and financial data from QuickBooks",
+    description: "Sync chart of accounts, invoices, expenses, P&L, and balance sheet data from QuickBooks Online via OAuth 2.0",
     supported: true,
   },
   {
@@ -74,15 +75,7 @@ const availableIntegrations: Integration[] = [
     name: "Xero",
     type: "accounting",
     icon: "📈",
-    description: "Connect your Xero accounting system for real-time financial data",
-    supported: true,
-  },
-  {
-    id: "tally",
-    name: "Tally",
-    type: "accounting",
-    icon: "📋",
-    description: "Import data from Tally accounting software",
+    description: "Connect Xero for real-time sync of journals, contacts, bank transactions, and financial statements via Xero OAuth",
     supported: true,
   },
   {
@@ -90,15 +83,7 @@ const availableIntegrations: Integration[] = [
     name: "Zoho Books",
     type: "accounting",
     icon: "📑",
-    description: "Sync transactions and financial data from Zoho Books",
-    supported: true,
-  },
-  {
-    id: "razorpay",
-    name: "Razorpay",
-    type: "payment",
-    icon: "💳",
-    description: "Import payment transactions from Razorpay",
+    description: "Pull invoices, bills, chart of accounts, and tax summaries from Zoho Books using Zoho OAuth 2.0 API",
     supported: true,
   },
   {
@@ -106,62 +91,79 @@ const availableIntegrations: Integration[] = [
     name: "Stripe",
     type: "payment",
     icon: "💵",
-    description: "Sync payment data from Stripe",
+    description: "Sync subscriptions, charges, payouts, refunds, and MRR/ARR metrics from Stripe via API key or OAuth",
     supported: true,
   },
   {
-    id: "slack",
-    name: "Slack",
+    id: "razorpay",
+    name: "Razorpay",
     type: "payment",
-    icon: "💬",
-    description: "Get notifications and alerts in Slack",
-    supported: false,
-  },
-  {
-    id: "asana",
-    name: "Asana",
-    type: "payment",
-    icon: "📋",
-    description: "Sync tasks and project data from Asana",
-    supported: false,
-  },
-  {
-    id: "google-calendar",
-    name: "Google Calendar",
-    type: "payment",
-    icon: "📅",
-    description: "Sync calendar events and reminders",
-    supported: false,
+    icon: "💳",
+    description: "Import payment settlements, refunds, disputes, and GST invoices from Razorpay using API key authentication",
+    supported: true,
   },
   {
     id: "plaid",
     name: "Plaid",
     type: "banking",
     icon: "🏦",
-    description: "Connect bank accounts via Plaid",
-    supported: false,
+    description: "Securely connect bank accounts via Plaid Link for real-time balance, transaction, and cash flow data across 12,000+ institutions",
+    supported: true,
   },
   {
     id: "cleartax",
     name: "ClearTax",
-    type: "accounting",
-    icon: "📊",
-    description: "Sync tax and compliance data from ClearTax",
-    supported: false,
+    type: "compliance",
+    icon: "📋",
+    description: "Sync GST filings, TDS returns, ITR data, and compliance status from ClearTax for automated tax reconciliation",
+    supported: true,
   },
   {
-    id: "supabase",
-    name: "Supabase",
-    type: "accounting",
-    icon: "🗄️",
-    description: "Connect to Supabase database",
-    supported: false,
+    id: "slack",
+    name: "Slack",
+    type: "collaboration",
+    icon: "💬",
+    description: "Receive real-time KPI alerts, anomaly notifications, budget variance warnings, and AI CFO insights directly in Slack channels",
+    supported: true,
+  },
+  {
+    id: "asana",
+    name: "Asana",
+    type: "collaboration",
+    icon: "✅",
+    description: "Track financial planning tasks, approval workflows, and close timelines by syncing Asana projects and task statuses",
+    supported: true,
+  },
+  {
+    id: "sap",
+    name: "SAP S/4HANA",
+    type: "erp",
+    icon: "🏢",
+    description: "Enterprise integration with SAP for GL accounts, cost centers, profit centers, and financial consolidation via SAP OData APIs",
+    supported: true,
+  },
+  {
+    id: "oracle",
+    name: "Oracle Financials Cloud",
+    type: "erp",
+    icon: "🔶",
+    description: "Connect Oracle ERP Cloud to pull general ledger, AP/AR, fixed assets, and intercompany transactions via REST APIs",
+    supported: true,
+  },
+  {
+    id: "salesforce",
+    name: "Salesforce",
+    type: "collaboration",
+    icon: "☁️",
+    description: "Sync sales pipeline, opportunities, and contract value for accurate revenue forecasting and cash flow projections",
+    supported: true,
   },
 ]
 
+
 export function IntegrationsPage() {
   // 1. STATE
-  const [integrations, setIntegrations] = useState<Integration[]>(() => 
+  const [integrations, setIntegrations] = useState<Integration[]>(() =>
     availableIntegrations.map(i => ({ ...i, connector: undefined }))
   )
   const [connectors, setConnectors] = useState<Connector[]>([])
@@ -174,6 +176,9 @@ export function IntegrationsPage() {
   const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null)
   const [importHistory, setImportHistory] = useState<any[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
+  // New state for credentials modal
+  const [showCredentialsModal, setShowCredentialsModal] = useState(false)
+  const [pendingConnectorId, setPendingConnectorId] = useState<string | null>(null)
 
   // 2. HELPERS
   const getAuthToken = useCallback(() => {
@@ -202,7 +207,7 @@ export function IntegrationsPage() {
   const fetchImportHistory = useCallback(async (id: string) => {
     if (!id) return
     console.log("[Integrations] Fetching import history for org:", id)
-    
+
     setLoadingHistory(true)
 
     try {
@@ -252,7 +257,7 @@ export function IntegrationsPage() {
         } else if (Array.isArray(result)) {
           list = result
         }
-        
+
         setConnectors(list)
         setIntegrations(availableIntegrations.map(i => ({
           ...i,
@@ -292,7 +297,7 @@ export function IntegrationsPage() {
     const success = urlParams.get('success')
     const error = urlParams.get('error')
     const connectorId = urlParams.get('connectorId')
-    
+
     if (success && connectorId) {
       toast.success(`Successfully connected connector!`, { duration: 5000 })
       // Clean URL
@@ -344,20 +349,20 @@ export function IntegrationsPage() {
   useEffect(() => {
     const handleRefresh = async (event: CustomEvent) => {
       const { rowsImported, orgId: importedOrgId } = event.detail || {}
-      
+
       // Use the orgId from event if available, otherwise use current orgId
       const targetOrgId = importedOrgId || orgId
-      
+
       if (targetOrgId) {
         console.log("[Integrations] CSV import completed, refreshing data...", { rowsImported, targetOrgId })
         toast.success(`CSV import completed! Refreshing integrations...`)
-        
+
         // Update orgId if it came from the event
         if (importedOrgId && importedOrgId !== orgId) {
           setOrgId(importedOrgId)
           localStorage.setItem("orgId", importedOrgId)
         }
-        
+
         // Refresh all data with a small delay to ensure backend has processed
         setTimeout(async () => {
           await fetchAllData(targetOrgId)
@@ -368,7 +373,7 @@ export function IntegrationsPage() {
         console.warn("[Integrations] No orgId available for refresh")
       }
     }
-    
+
     const listener = handleRefresh as unknown as EventListener
     window.addEventListener('csv-import-completed', listener)
     window.addEventListener('xlsx-import-completed', listener)
@@ -379,21 +384,74 @@ export function IntegrationsPage() {
   }, [orgId, fetchAllData, fetchImportHistory])
 
   // 4. HANDLERS
-  const handleConnect = async (integration: Integration) => {
+  const handleConnect = async (integration: Integration, fromDialog: boolean = false) => {
     if (!orgId) return toast.error("Organization ID not found")
-    
-    // Tally doesn't use OAuth - show instructions instead
-    if (integration.id === 'tally') {
-      toast.info(
-        "Tally requires manual CSV export. Please export data from Tally ERP 9 and use the CSV Import feature above.",
-        { duration: 8000 }
-      )
+
+    // API-key-based connectors (SAP, Oracle, Razorpay, Plaid, ClearTax, Asana, Stripe)
+    const apiKeyConnectors = ['sap', 'oracle', 'razorpay', 'plaid', 'cleartax', 'asana', 'stripe']
+    // OAuth-based connectors (QuickBooks, Xero, Zoho, Salesforce, Slack)
+    const oauthConnectors = ['quickbooks', 'xero', 'zoho', 'salesforce', 'slack']
+
+    if (apiKeyConnectors.includes(integration.id)) {
+      // For API-key-based connectors, check if connector already exists
+      const existingConnector = integration.connector;
+      
+      if (existingConnector) {
+        // Just show credentials modal with existing ID
+        setPendingConnectorId(existingConnector.id)
+        setSelectedIntegration(integration)
+        setShowCredentialsModal(true)
+        return
+      }
+
+      // Create new connector if doesn't exist
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/orgs/${orgId}/connectors`,
+          {
+            method: "POST",
+            headers: getAuthHeaders(),
+            credentials: "include",
+            body: JSON.stringify({ type: integration.id, config: {} }),
+          }
+        )
+
+        if (response.status === 401) {
+          handleUnauthorized()
+          throw new Error("Session expired. Please log in again.")
+        }
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.message || `Failed to create ${integration.name} connector`)
+        }
+
+        const result = await response.json()
+        const connectorId = result.data?.connectorId || result.data?.id
+
+        // Show credentials modal
+        if (connectorId) {
+          setPendingConnectorId(connectorId)
+          setSelectedIntegration(integration)
+          setShowCredentialsModal(true)
+        } else {
+          throw new Error("No connector ID received")
+        }
+      } catch (err) {
+        console.error('[Integrations] API key connector error:', err)
+        toast.error(err instanceof Error ? err.message : "Connection failed", { duration: 8000 })
+      }
       return
     }
 
-    setSelectedIntegration(integration)
-    setShowConnectDialog(true)
+    // OAuth-based connectors (default flow)
+    if (!fromDialog) {
+      setSelectedIntegration(integration)
+      setShowConnectDialog(true)
+      return
+    }
 
+    // Only proceed if from dialog
     try {
       const response = await fetch(
         `${API_BASE_URL}/orgs/${orgId}/connectors/${integration.id}/start-oauth`,
@@ -414,7 +472,7 @@ export function IntegrationsPage() {
         const errorMessage = errorData.message || errorData.error || `HTTP ${response.status}: Failed to start OAuth`
         throw new Error(errorMessage)
       }
-      
+
       const result = await response.json()
       if (result.ok && result.data?.authUrl) {
         // Redirect to OAuth provider
@@ -495,6 +553,7 @@ export function IntegrationsPage() {
       case "connected": return <CheckCircle className="h-4 w-4 text-green-500" />
       case "syncing": return <RefreshCw className="h-4 w-4 text-blue-500 animate-spin" />
       case "error": return <XCircle className="h-4 w-4 text-red-500" />
+      case "auth_pending": return <Clock className="h-4 w-4 text-amber-500" />
       default: return <Clock className="h-4 w-4 text-gray-500" />
     }
   }
@@ -504,6 +563,7 @@ export function IntegrationsPage() {
       case "connected": return <Badge className="bg-green-100 text-green-800">Connected</Badge>
       case "syncing": return <Badge className="bg-blue-100 text-blue-800">Syncing</Badge>
       case "error": return <Badge className="bg-red-100 text-red-800">Error</Badge>
+      case "auth_pending": return <Badge className="bg-amber-100 text-amber-800">Setup Pending</Badge>
       default: return <Badge variant="secondary">Disconnected</Badge>
     }
   }
@@ -621,9 +681,9 @@ export function IntegrationsPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Recent CSV Imports</CardTitle>
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => orgId && fetchImportHistory(orgId)}
               disabled={loadingHistory}
             >
@@ -644,16 +704,15 @@ export function IntegrationsPage() {
                 <div key={job.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`font-medium ${
-                        job.status === 'done' || job.status === 'completed' ? 'text-green-600' : 
+                      <span className={`font-medium ${job.status === 'done' || job.status === 'completed' ? 'text-green-600' :
                         job.status === 'failed' || job.status === 'error' ? 'text-red-600' :
-                        'text-blue-600'
-                      }`}>
-                        {job.status === 'done' || job.status === 'completed' ? '✅ Completed' : 
-                         job.status === 'failed' || job.status === 'error' ? '❌ Failed' :
-                         job.status === 'running' ? '🔄 Running' :
-                         job.status === 'queued' ? '⏳ Queued' :
-                         job.status}
+                          'text-blue-600'
+                        }`}>
+                        {job.status === 'done' || job.status === 'completed' ? '✅ Completed' :
+                          job.status === 'failed' || job.status === 'error' ? '❌ Failed' :
+                            job.status === 'running' ? '🔄 Running' :
+                              job.status === 'queued' ? '⏳ Queued' :
+                                job.status}
                       </span>
                       <span className="text-sm text-muted-foreground">
                         {new Date(job.createdAt).toLocaleString()}
@@ -731,7 +790,7 @@ export function IntegrationsPage() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {connector ? (
+                    {connector && connector.status === "connected" ? (
                       <>
                         <div className="flex items-center justify-between">
                           {getStatusBadge(connector.status)}
@@ -747,9 +806,23 @@ export function IntegrationsPage() {
                         </div>
                       </>
                     ) : (
-                      <Button className="w-full" size="sm" onClick={() => handleConnect(integration)} disabled={!integration.supported}>
-                        <Plus className="h-3 w-3 mr-1" /> Connect
-                      </Button>
+                      <div className="space-y-4">
+                        {connector && connector.status !== "connected" && (
+                          <div className="flex items-center justify-between">
+                            {getStatusBadge(connector.status)}
+                            <Badge variant="outline" className="text-[10px]">{integration.type}</Badge>
+                          </div>
+                        )}
+                        <Button 
+                          className="w-full" 
+                          size="sm" 
+                          onClick={() => handleConnect(integration)} 
+                          disabled={!integration.supported}
+                          variant={connector?.status === "error" ? "destructive" : "default"}
+                        >
+                          {connector ? (connector.status === "auth_pending" ? "Complete Setup" : "Reconnect") : <><Plus className="h-3 w-3 mr-1" /> Connect</>}
+                        </Button>
+                      </div>
                     )}
                   </CardContent>
                 </Card>
@@ -767,10 +840,28 @@ export function IntegrationsPage() {
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowConnectDialog(false)}>Cancel</Button>
-            <Button onClick={() => selectedIntegration && handleConnect(selectedIntegration)}>Continue <ExternalLink className="h-4 w-4 ml-2" /></Button>
+            <Button onClick={() => selectedIntegration && handleConnect(selectedIntegration, true)}>Continue <ExternalLink className="h-4 w-4 ml-2" /></Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Credentials Modal for API-Key Connectors */}
+      {pendingConnectorId && selectedIntegration && (
+        <ConnectorCredentialsModal
+          open={showCredentialsModal}
+          onOpenChange={setShowCredentialsModal}
+          connectorId={pendingConnectorId}
+          connectorType={selectedIntegration.id}
+          connectorName={selectedIntegration.name}
+          orgId={orgId || ""}
+          onSuccess={() => {
+            // Refresh data after successful configuration
+            if (orgId) {
+              fetchAllData(orgId)
+            }
+          }}
+        />
+      )}
     </div>
   )
 }

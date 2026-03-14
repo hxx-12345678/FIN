@@ -44,30 +44,30 @@ import {
 const GlowingBackground = () => (
   <div className="fixed inset-0 -z-50 bg-gradient-to-b from-slate-50 via-white to-slate-50 overflow-hidden">
     {/* Subtle grid pattern */}
-    <div 
+    <div
       className="absolute inset-0 bg-[linear-gradient(to_right,#e2e8f0_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f0_1px,transparent_1px)] bg-[size:40px_40px] opacity-30"
     />
-    
+
     {/* Soft gradient orbs */}
-    <motion.div 
-      animate={{ 
+    <motion.div
+      animate={{
         scale: [1, 1.2, 1],
         opacity: [0.1, 0.2, 0.1],
         x: [0, 50, 0],
         y: [0, 30, 0]
       }}
       transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute top-0 left-0 w-[600px] h-[600px] rounded-full bg-blue-400/20 blur-[120px]" 
+      className="absolute top-0 left-0 w-[600px] h-[600px] rounded-full bg-blue-400/20 blur-[120px]"
     />
-    <motion.div 
-      animate={{ 
+    <motion.div
+      animate={{
         scale: [1.2, 1, 1.2],
         opacity: [0.1, 0.15, 0.1],
         x: [0, -40, 0],
         y: [0, -20, 0]
       }}
       transition={{ duration: 18, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-      className="absolute top-[20%] right-0 w-[500px] h-[500px] rounded-full bg-indigo-400/15 blur-[100px]" 
+      className="absolute top-[20%] right-0 w-[500px] h-[500px] rounded-full bg-indigo-400/15 blur-[100px]"
     />
   </div>
 )
@@ -94,7 +94,7 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
   const [scrolled, setScrolled] = useState(false)
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [authMode, setAuthMode] = useState<"login" | "signup">("login")
-  
+
   const containerRef = useRef(null)
   const { scrollYProgress } = useScroll({
     target: containerRef,
@@ -127,21 +127,20 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
 
       {/* Navigation - Professional & Trustworthy */}
       <nav
-        className={`fixed top-0 left-0 right-0 z-[9999] transition-all duration-300 ${
-          scrolled ? "py-4 bg-white/95 backdrop-blur-lg border-b border-slate-200 shadow-sm" : "py-6 bg-white/80 backdrop-blur-sm"
-        }`}
+        className={`fixed top-0 left-0 right-0 z-[9999] transition-all duration-300 ${scrolled ? "py-4 bg-white/95 backdrop-blur-lg border-b border-slate-200 shadow-sm" : "py-6 bg-white/80 backdrop-blur-sm"
+          }`}
       >
         <div className="max-w-7xl mx-auto px-6 lg:px-8 flex items-center justify-between">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             className="flex items-center gap-3 group cursor-pointer"
           >
             {/* Use the icon.svg favicon as logo */}
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
-              <img 
-                src="/icon.svg" 
-                alt="FinaPilot Logo" 
+              <img
+                src="/icon.svg"
+                alt="FinaPilot Logo"
                 className="w-6 h-6"
               />
             </div>
@@ -151,7 +150,7 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
           </motion.div>
 
           <div className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-600">
-            {["Features", "How It Works", "Pricing", "Resources"].map((l) => (
+            {["Features", "How It Works", "Resources"].map((l) => (
               <a key={l} href={`#${l.toLowerCase().replace(" ", "-")}`} className="hover:text-blue-600 transition-colors">
                 {l}
               </a>
@@ -159,9 +158,9 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
           </div>
 
           <div className="flex items-center gap-4">
-            <Button 
-              variant="ghost" 
-              className="hidden sm:flex font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100" 
+            <Button
+              variant="ghost"
+              className="hidden sm:flex font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100"
               onClick={openLogin}
             >
               Sign In
@@ -170,16 +169,16 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
             >
-              <Button 
-                onClick={openSignup} 
+              <Button
+                onClick={openSignup}
                 className="bg-blue-600 text-white hover:bg-blue-700 font-semibold shadow-lg shadow-blue-500/25 transition-all"
               >
                 Get Started Free
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </motion.div>
-            <button 
-              className="md:hidden p-2 rounded-lg hover:bg-slate-100 transition-colors" 
+            <button
+              className="md:hidden p-2 rounded-lg hover:bg-slate-100 transition-colors"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               aria-label="Toggle menu"
             >
@@ -198,10 +197,10 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
               className="md:hidden bg-white border-t border-slate-200 overflow-hidden"
             >
               <div className="px-6 py-6 space-y-4">
-                {["Features", "How It Works", "Pricing", "Resources"].map((l) => (
-                  <a 
-                    key={l} 
-                    href={`#${l.toLowerCase().replace(" ", "-")}`} 
+                {["Features", "How It Works", "Resources"].map((l) => (
+                  <a
+                    key={l}
+                    href={`#${l.toLowerCase().replace(" ", "-")}`}
                     className="block text-base font-medium text-slate-600 hover:text-blue-600 transition-colors"
                     onClick={() => setMobileMenuOpen(false)}
                   >
@@ -332,7 +331,7 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
           </div>
 
           {/* Hero Image/Video Placeholder */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.6 }}
@@ -349,7 +348,7 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
                   <p className="text-sm text-slate-500">Replace this placeholder with your product video or screenshot</p>
                 </div>
               </div>
-              
+
               {/* Optional: Add a screenshot overlay */}
               <div className="absolute inset-0 bg-gradient-to-t from-slate-900/20 to-transparent" />
             </div>
@@ -631,139 +630,71 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
         </div>
       </section>
 
-      {/* Pricing Section */}
-      <section id="pricing" className="py-24 px-6 bg-white">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center max-w-3xl mx-auto mb-16 space-y-4">
-            <Badge className="bg-orange-50 text-orange-700 border-orange-200 py-1.5 px-4 text-sm font-semibold">
-              Transparent Pricing
+      {/* Enterprise CTA Section */}
+      <section id="enterprise" className="py-24 px-6 bg-white">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center max-w-3xl mx-auto mb-12 space-y-4">
+            <Badge className="bg-blue-50 text-blue-700 border-blue-200 py-1.5 px-4 text-sm font-semibold">
+              Enterprise-Grade Platform
             </Badge>
             <h2 className="text-4xl sm:text-5xl font-bold tracking-tight text-slate-900">
-              Choose the Plan That Fits Your Needs
+              Built for Finance Teams of Every Size
             </h2>
             <p className="text-xl text-slate-600 font-medium">
-              Start free, upgrade as you grow. All plans include our core features.
+              Get a customized plan tailored to your organization. Our team will walk you through the platform
+              and set up everything for your specific needs.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+          <div className="grid md:grid-cols-3 gap-8 mb-12">
             {[
               {
-                name: "Starter",
-                price: "$0",
-                period: "forever",
-                description: "Perfect for trying FinaPilot",
-                features: [
-                  "1 workspace",
-                  "Core dashboard",
-                  "Manual CSV import",
-                  "Basic forecasting",
-                  "Email support"
-                ],
-                cta: "Start Free",
-                popular: false
+                icon: "🏢",
+                title: "Custom Integrations",
+                description: "Connect QuickBooks, Xero, SAP, Oracle, Stripe, Razorpay, Plaid, and more with dedicated setup support"
               },
               {
-                name: "Professional",
-                price: "$199",
-                period: "per month",
-                description: "For growing finance teams",
-                features: [
-                  "Unlimited workspaces",
-                  "Automated connectors",
-                  "Monte Carlo simulations",
-                  "AI CFO Assistant",
-                  "Scenario planning",
-                  "Investor-ready exports",
-                  "Priority support"
-                ],
-                cta: "Start Free Trial",
-                popular: true
+                icon: "🤖",
+                title: "AI CFO Assistant",
+                description: "24/7 autonomous monitoring, anomaly detection, and proactive KPI alerts with quantified explanations"
               },
               {
-                name: "Enterprise",
-                price: "Custom",
-                period: "pricing",
-                description: "For large organizations",
-                features: [
-                  "Everything in Professional",
-                  "Advanced RBAC & approvals",
-                  "Cell-level provenance",
-                  "Dedicated success manager",
-                  "SSO/SAML integration",
-                  "Custom integrations",
-                  "24/7 phone support"
-                ],
-                cta: "Contact Sales",
-                popular: false
+                icon: "📊",
+                title: "Board-Ready Reports",
+                description: "Auto-generated executive decks, EBITDA bridges, and investor summaries — ready in seconds"
               },
-            ].map((plan, i) => (
+            ].map((feature, i) => (
               <motion.div
                 key={i}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: i * 0.1 }}
                 viewport={{ once: true }}
-                whileHover={{ y: -8, transition: { duration: 0.2 } }}
-                className={`relative rounded-2xl border-2 p-8 ${
-                  plan.popular
-                    ? "border-blue-600 bg-blue-50 shadow-xl scale-105"
-                    : "border-slate-200 bg-white shadow-sm"
-                }`}
+                className="rounded-2xl border-2 border-slate-200 bg-white shadow-sm p-8 space-y-3"
               >
-                {plan.popular && (
-                  <div className="absolute top-0 right-6 -translate-y-1/2 bg-blue-600 text-white px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide shadow-lg">
-                    Most Popular
-                  </div>
-                )}
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-2xl font-bold text-slate-900 mb-2">{plan.name}</h3>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-5xl font-bold text-slate-900">{plan.price}</span>
-                      {plan.period !== "forever" && (
-                        <span className="text-slate-600 font-medium">/{plan.period}</span>
-                      )}
-                    </div>
-                    <p className="text-slate-600 mt-2 font-medium">{plan.description}</p>
-                  </div>
-                  <ul className="space-y-4">
-                    {plan.features.map((feature, j) => (
-                      <li key={j} className="flex items-start gap-3">
-                        <CheckCircle2 className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
-                          plan.popular ? "text-blue-600" : "text-green-600"
-                        }`} />
-                        <span className="text-slate-700 font-medium">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <Button
-                    onClick={plan.name === "Enterprise" ? requestDemo : openSignup}
-                    className={`w-full h-12 font-semibold ${
-                      plan.popular
-                        ? "bg-blue-600 text-white hover:bg-blue-700"
-                        : "bg-slate-900 text-white hover:bg-slate-800"
-                    }`}
-                  >
-                    {plan.cta}
-                  </Button>
-                </div>
+                <span className="text-4xl">{feature.icon}</span>
+                <h3 className="text-xl font-bold text-slate-900">{feature.title}</h3>
+                <p className="text-slate-600 font-medium leading-relaxed">{feature.description}</p>
               </motion.div>
             ))}
           </div>
 
-          {/* Money-Back Guarantee */}
-          <div className="mt-16 text-center">
-            <div className="inline-flex items-center gap-3 px-6 py-4 bg-green-50 border border-green-200 rounded-xl">
-              <ShieldCheck className="w-6 h-6 text-green-600" />
-              <div className="text-left">
-                <div className="font-bold text-green-900">14-Day Money-Back Guarantee</div>
-                <div className="text-sm text-green-700">Not satisfied? Get a full refund, no questions asked.</div>
-              </div>
-            </div>
+          <div className="text-center space-y-6">
+            <Button
+              size="lg"
+              onClick={requestDemo}
+              className="bg-blue-600 text-white hover:bg-blue-700 h-14 px-10 text-lg font-semibold shadow-xl"
+            >
+              Contact Sales
+              <ArrowRight className="w-5 h-5 ml-2" />
+            </Button>
+            <p className="text-sm text-slate-500 font-medium">
+              Free demo • No commitment • Dedicated onboarding support
+            </p>
           </div>
         </div>
       </section>
+
 
       {/* Final CTA Section */}
       <section className="py-24 px-6 bg-gradient-to-br from-blue-600 to-indigo-700 text-white">
@@ -805,9 +736,9 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
             <div className="md:col-span-4 space-y-6">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center">
-                  <img 
-                    src="/icon.svg" 
-                    alt="FinaPilot Logo" 
+                  <img
+                    src="/icon.svg"
+                    alt="FinaPilot Logo"
                     className="w-6 h-6"
                   />
                 </div>
@@ -833,7 +764,7 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
               {[
                 {
                   title: "Product",
-                  links: ["Features", "Pricing", "Integrations", "Security"]
+                  links: ["Features", "Enterprise", "Integrations", "Security"]
                 },
                 {
                   title: "Resources",

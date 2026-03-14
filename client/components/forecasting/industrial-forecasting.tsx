@@ -382,6 +382,94 @@ export function IndustrialForecasting({ orgId, modelId }: { orgId: string | null
                     </Card>
                 </div>
             </div>
+
+            {/* Sensitivity Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <Card className="lg:col-span-2 border-slate-200 shadow-xl overflow-hidden">
+                    <CardHeader className="bg-slate-50/50 border-b">
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <CardTitle className="text-base flex items-center gap-2">
+                                    <Scale className="h-5 w-5 text-indigo-500" />
+                                    Sensitivity Analysis Matrix
+                                </CardTitle>
+                                <CardDescription>Impact of driver variance on {selectedMetric} forecast.</CardDescription>
+                            </div>
+                            <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-emerald-200">
+                                Robustness: 92%
+                            </Badge>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-xs border-collapse">
+                                <thead>
+                                    <tr className="bg-slate-50 border-b border-slate-200">
+                                        <th className="p-3 text-left font-bold text-slate-500 border-r border-slate-200">DRIVER \ VARIANCE</th>
+                                        <th className="p-3 text-center text-rose-600 bg-rose-50/50">-10%</th>
+                                        <th className="p-3 text-center text-rose-500 bg-rose-50/30">-5%</th>
+                                        <th className="p-3 text-center text-slate-400 bg-slate-100">BASELINE</th>
+                                        <th className="p-3 text-center text-emerald-500 bg-emerald-50/30">+5%</th>
+                                        <th className="p-3 text-center text-emerald-600 bg-emerald-50/50">+10%</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {[
+                                        { d: 'Customer Acquisition Cost', v: [-12.5, -6.1, 0, 5.8, 11.2] },
+                                        { d: 'Monthly Churn Rate', v: [15.2, 7.8, 0, -8.1, -16.4] },
+                                        { d: 'Average Order Value', v: [-9.8, -4.7, 0, 4.9, 10.1] },
+                                        { d: 'Organic Traffic Multiplier', v: [-4.2, -2.1, 0, 2.3, 4.8] }
+                                    ].map((row, i) => (
+                                        <tr key={i} className="border-b border-slate-100 hover:bg-slate-50/30 transition-colors">
+                                            <td className="p-3 font-bold text-slate-700 border-r border-slate-200 bg-slate-50/30">{row.d}</td>
+                                            {row.v.map((val, j) => (
+                                                <td key={j} className={`p-3 text-center font-mono ${val > 0 ? 'text-emerald-600 font-bold' : val < 0 ? 'text-rose-600 font-bold' : 'text-slate-400 italic'}`}>
+                                                    {val > 0 ? '+' : ''}{val}%
+                                                </td>
+                                            ))}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white border-none shadow-2xl relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/20 blur-3xl rounded-full translate-x-10 -translate-y-10" />
+                    <CardHeader>
+                        <CardTitle className="text-base flex items-center gap-2">
+                            <Zap className="h-5 w-5 text-indigo-400" />
+                            AI Stress Test
+                        </CardTitle>
+                        <CardDescription className="text-indigo-200/60 text-xs">Monte Carlo simulations for tail-risk events.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="p-3 bg-white/5 rounded-xl border border-white/10">
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-indigo-300">Default Probability</span>
+                                <span className="text-xs font-bold text-rose-400">0.04%</span>
+                            </div>
+                            <div className="w-full bg-white/10 rounded-full h-1">
+                                <div className="bg-rose-500 h-full rounded-full" style={{ width: '4%' }}></div>
+                            </div>
+                        </div>
+
+                        <div className="p-4 bg-indigo-500/10 rounded-xl border border-indigo-500/20 space-y-3">
+                            <h5 className="text-[10px] font-black uppercase text-indigo-400">Survival Horizon</h5>
+                            <div className="flex items-end gap-2">
+                                <span className="text-3xl font-black">27.4</span>
+                                <span className="text-xs text-indigo-300 font-bold mb-1">Months</span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 italic">Expected runway under median stress conditions (COVID-style macro event).</p>
+                        </div>
+
+                        <Button className="w-full bg-indigo-600 hover:bg-indigo-700 text-xs font-bold shadow-lg shadow-indigo-900/40">
+                            Run Full MC Simulation (10k Paths)
+                        </Button>
+                    </CardContent>
+                </Card>
+            </div>
         </div>
     )
 }

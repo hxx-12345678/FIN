@@ -135,6 +135,7 @@ export function FinancialModeling() {
   const [loadingDataStatus, setLoadingDataStatus] = useState(false)
   const [strategicPulse, setStrategicPulse] = useState<any>(null)
   const [isAnalyzingPulse, setIsAnalyzingPulse] = useState(false)
+  const [isGlobalRecomputing, setIsGlobalRecomputing] = useState(false)
 
   const { chartData: paginatedChartData, hasMore, loadMore, initializeData } = useChartPagination({
     defaultMonths: 36,
@@ -1017,6 +1018,14 @@ export function FinancialModeling() {
             </div>
           </div>
         </CardContent>
+        {isGlobalRecomputing && (
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center animate-in fade-in duration-300">
+            <div className="flex flex-col items-center gap-3 bg-white p-6 rounded-2xl shadow-2xl border-2 border-primary/20">
+              <Loader2 className="h-10 w-10 animate-spin text-primary" />
+              <p className="text-sm font-black text-slate-800 uppercase tracking-tighter">Hyper-Trace™ Engine Recomputing...</p>
+            </div>
+          </div>
+        )}
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1456,24 +1465,140 @@ export function FinancialModeling() {
           <DriverManagement
             orgId={orgId}
             modelId={selectedModel}
+            onGenerateReport={handleAIGenerateReport}
+            onRecomputeStart={() => setIsGlobalRecomputing(true)}
             onRecompute={(data) => {
-              // Ensure we have a valid trace object before prepending
               if (data.trace && Array.isArray(data.trace) && data.trace.length > 0 && typeof data.trace[0] === 'object') {
                 setComputationTraces(prev => [data.trace[0], ...prev].slice(0, 20));
               }
               if (data.affectedNodes) {
                 setAffectedNodeIds(data.affectedNodes);
               }
-              // Refresh run data for all tabs (Dashboard, Statements, etc)
+
+              // CRITICAL: Update local state with recompute results for immediate reactivity
+              if (data.results) {
+                const results = data.results;
+                const existingSummary = typeof currentRun?.summaryJson === 'string' 
+                   ? JSON.parse(currentRun.summaryJson) 
+                   : currentRun?.summaryJson;
+                
+                // Seed monthsMap from existing monthly data if it exists to maintain consistency for untouched metrics
+                const monthsMap: Record<string, any> = {};
+                if (existingSummary?.monthly) {
+                  Object.keys(existingSummary.monthly).forEach(m => {
+                    monthsMap[m] = { ...existingSummary.monthly[m] };
+                  });
+                }
+
+                // Pivot node-based results to month-based results
+                Object.keys(results).forEach(nodeId => {
+                  const records = results[nodeId];
+                  if (Array.isArray(records)) {
+                    records.forEach((record: any) => {
+                      const m = record.month;
+                      if (!monthsMap[m]) monthsMap[m] = { month: m, monthKey: m };
+                      
+                      // Map specific metrics by their category or name
+                      const driver = currentModel?.drivers?.find((d: any) => d.id === nodeId);
+                      const name = driver?.name?.toLowerCase() || '';
+                      const category = driver?.category?.toLowerCase() || '';
+                      
+                      // 1. Map by Explicit name (Priority)
+                      if (name === 'revenue' || name === 'total revenue' || name.includes('income_total')) monthsMap[m].revenue = record.value;
+                      else if (name === 'cogs' || name === 'total cogs' || name.includes('cost_of_sales')) monthsMap[m].cogs = record.value;
+                      else if (name === 'gross profit' || name === 'gp') monthsMap[m].grossProfit = record.value;
+                      else if (name === 'net income' || name === 'pat') monthsMap[m].netIncome = record.value;
+                      else if (name === 'operating expenses' || name === 'total expenses' || name === 'opex' || name.includes('total_operating')) monthsMap[m].operatingExpenses = record.value;
+                      else if (name === 'ebitda' || name === 'operating profit') monthsMap[m].ebitda = record.value;
+                      else if (name === 'depreciation' || name === 'amortization') monthsMap[m].depreciation = record.value;
+                      else if (name === 'interest' || name === 'interest expense' || name === 'interest_cost') monthsMap[m].interestExpense = record.value;
+                      else if (name === 'taxes' || name === 'tax' || name === 'taxation') monthsMap[m].taxExpense = record.value;
+                      else if (name === 'cash' || name === 'ending cash' || name === 'cash balance' || name.includes('liquidity')) monthsMap[m].endingCash = record.value;
+                      
+                      // 2. Map by Category (Aggregate if not specific) - Ensures all drivers affect the totals
+                      const isRevenue = category === 'revenue' || name.includes('price') || name.includes('sales') || name.includes('units') || name.includes('subscription');
+                      const isCogs = category === 'cogs' || category === 'direct' || name.includes('material') || name.includes('labor') || name.includes('shipping');
+                      const isOpex = category === 'opex' || category === 'expense' || category === 'expenses' || category === 'marketing' || category === 'r&d' || category === 'g&a' || category === 'salaries' || category === 'rent';
+
+                      if (isRevenue && !name.includes('total')) {
+                        monthsMap[m].revenue = (monthsMap[m].revenue || 0) + record.value;
+                      } else if (isCogs && !name.includes('total')) {
+                        monthsMap[m].cogs = (monthsMap[m].cogs || 0) + record.value;
+                      } else if (isOpex && !name.includes('total')) {
+                        monthsMap[m].operatingExpenses = (monthsMap[m].operatingExpenses || 0) + record.value;
+                      }
+                    });
+                  }
+                });
+
+                const mappedData = Object.values(monthsMap).sort((a: any, b: any) => a.month.localeCompare(b.month));
+
+                // POST-PROCESSING: Calculate derived metrics if engine didn't return them
+                mappedData.forEach((m: any) => {
+                  if (m.revenue !== undefined && m.cogs !== undefined && m.grossProfit === undefined) {
+                    m.grossProfit = m.revenue - m.cogs;
+                  }
+                  if (m.grossProfit !== undefined && m.operatingExpenses !== undefined && m.ebitda === undefined) {
+                    m.ebitda = m.grossProfit - m.operatingExpenses;
+                  }
+                  if (m.ebitda !== undefined && m.netIncome === undefined) {
+                    m.netIncome = m.ebitda - (m.depreciation || 0) - (m.interestExpense || 0) - (m.taxExpense || 0);
+                  }
+                  // Calculate margins
+                  m.grossMargin = m.revenue ? m.grossProfit / m.revenue : 0;
+                  m.ebitdaMargin = m.revenue ? m.ebitda / m.revenue : 0;
+                });
+
+                if (mappedData.length > 0) {
+                  setFinancialData(mappedData);
+                }
+
+                // Update current run summary locally so other tabs (Statements) update
+                if (currentRun) {
+                  const existingSummary = typeof currentRun.summaryJson === 'string' 
+                    ? JSON.parse(currentRun.summaryJson) 
+                    : currentRun.summaryJson;
+                  
+                  setCurrentRun({
+                    ...currentRun,
+                    summaryJson: {
+                      ...existingSummary,
+                      // For 3-statement viewer consistency
+                      incomeStatement: {
+                        ...existingSummary?.incomeStatement,
+                        monthly: { ...(existingSummary?.incomeStatement?.monthly || {}), ...monthsMap }
+                      },
+                      cashFlow: {
+                        ...existingSummary?.cashFlow,
+                        monthly: { ...(existingSummary?.cashFlow?.monthly || {}), ...monthsMap }
+                      },
+                      balanceSheet: {
+                        ...existingSummary?.balanceSheet,
+                        monthly: { ...(existingSummary?.balanceSheet?.monthly || {}), ...monthsMap }
+                      },
+                      // Basic summary metrics for cards
+                      totalRevenue: Object.values(monthsMap).reduce((sum, m: any) => sum + (m.revenue || 0), 0),
+                      netIncome: Object.values(monthsMap).reduce((sum, m: any) => sum + (m.netIncome || 0), 0),
+                      monthly: { ...(existingSummary?.monthly || {}), ...monthsMap }
+                    }
+                  });
+                }
+              }
+
+              setIsGlobalRecomputing(false);
+              // Still fetch runs to ensure DB consistency in background
               if (orgId && selectedModel) fetchModelRuns(orgId, selectedModel);
             }}
           />
         </TabsContent>
 
         <TabsContent value="scenarios" className="space-y-4">
-          <ScenarioManagement
-            orgId={orgId}
-            modelId={selectedModel}
+          <ScenarioManagement 
+            orgId={orgId} 
+            modelId={selectedModel} 
+            onRefresh={() => {
+              if (orgId && selectedModel) fetchModelRuns(orgId, selectedModel);
+            }}
           />
         </TabsContent>
 

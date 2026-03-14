@@ -1,6 +1,11 @@
+import sys
+import os
+# Ensure the current directory (python-worker) is in the search path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Header, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 import os
 import uuid
@@ -135,10 +140,10 @@ def run_next(queue: Optional[str] = 'default', background: Optional[bool] = Fals
     try:
         if background:
             # Run in a background thread to keep request fast
-            background_tasks.add_task(_run_reserved_job_sync, queue)
+            background_tasks.add_task(_run_reserved_job_sync, str(queue) if queue else 'default')
             return JSONResponse({"status": "scheduled"}, status_code=202)
         else:
-            job = _run_reserved_job_sync(queue)
+            job = _run_reserved_job_sync(str(queue) if queue else 'default')
             if job is None:
                 return JSONResponse({"status": "no_job"}, status_code=204)
             return {"status": "processed", "job_id": job.get('id')}
@@ -205,7 +210,7 @@ class HyperblockComputeRequest(BaseModel):
     months: List[str]
     dimensions: Optional[List[Dict[str, Any]]] = None # [{name, members}]
     nodes: List[Dict[str, Any]] # {id, name, formula, category, dims: []}
-    update: Optional[Dict[str, Any]] = None # {nodeId, values: [{month, value, coords}], userId}
+    data_update: Optional[Dict[str, Any]] = Field(None, alias="update") # {nodeId, values: [{month, value, coords}], userId}
 
 class ForecastRequest(BaseModel):
     history: List[float]
@@ -241,9 +246,12 @@ def compute_hyperblock(req: HyperblockComputeRequest):
         logger.info(f"🚀 Initializing HyperblockEngine for {cache_key}")
         engine = HyperblockEngine(req.modelId)
         # Load dimensions
-        if req.dimensions:
+        if req.dimensions is not None:
             for dim in req.dimensions:
-                engine.define_dimension(dim['name'], dim['members'])
+                dim_members = dim.get('members')
+                if dim_members is not None:
+                    for mem in dim_members:
+                        engine.add_member(str(dim['name']), mem)
         
         engine.initialize_horizon(req.months)
         
@@ -262,10 +270,10 @@ def compute_hyperblock(req: HyperblockComputeRequest):
             
     # Apply update if provided
     affected_nodes = []
-    if req.update:
-        node_id = req.update['nodeId']
-        values = req.update['values']
-        user_id = req.update.get('userId', 'system')
+    if req.data_update is not None:
+        node_id = req.data_update['nodeId']
+        values = req.data_update['values']
+        user_id = req.data_update.get('userId', 'system')
         
         logger.info(f"⚡ Incremental update: {node_id} by {user_id}")
         
@@ -310,33 +318,33 @@ def compute_forecast(req: ForecastRequest):
     Returns flat forecast array + confidence bands for bracket testing.
     """
     try:
-        explanation = {}
+        explanation: Dict[str, Any] = {}
         raw_result = None
         
         if req.method == "arima":
             raw_result = ForecastingEngine.forecast_arima(req.history, req.steps)
-            explanation = {"info": "ARIMA(1,1,1) model fitted to historical trend."}
+            explanation["info"] = "ARIMA(1,1,1) model fitted to historical trend."
         elif req.method == "seasonal":
             raw_result = ForecastingEngine.forecast_seasonal(req.history, req.steps, req.period)
-            explanation = {"info": f"Seasonal decomposition (period={req.period}) applied."}
+            explanation["info"] = f"Seasonal decomposition (period={req.period}) applied."
         elif req.method == "trend":
             raw_result = ForecastingEngine.forecast_trend(req.history, req.steps)
-            explanation = {"info": "Linear regression trend projection."}
+            explanation["info"] = "Linear regression trend projection."
         elif req.method == "regression" and req.drivers_history:
             raw_result = ForecastingEngine.forecast_regression(req.history, req.steps, req.drivers_history, req.drivers_forecast)
-            explanation = {"info": "Multi-variate regression using operational drivers."}
+            explanation["info"] = "Multi-variate regression using operational drivers."
             if req.driver_names:
                 explanation["drivers"] = req.driver_names
         else: # auto
             if req.drivers_history:
                 raw_result = ForecastingEngine.forecast_regression(req.history, req.steps, req.drivers_history, req.drivers_forecast)
-                explanation = {"info": "Auto-selected multi-variate regression."}
+                explanation["info"] = "Auto-selected multi-variate regression."
             elif len(req.history) >= req.period * 2:
                 raw_result = ForecastingEngine.forecast_seasonal(req.history, req.steps, req.period)
-                explanation = {"info": "Auto-selected seasonal model due to sufficient history."}
+                explanation["info"] = "Auto-selected seasonal model due to sufficient history."
             else:
                 raw_result = ForecastingEngine.forecast_arima(req.history, req.steps)
-                explanation = {"info": "Auto-selected ARIMA model for short history."}
+                explanation["info"] = "Auto-selected ARIMA model for short history."
         
         # Normalize: methods now return {mean, lower, upper} dicts
         if isinstance(raw_result, dict):
@@ -535,8 +543,11 @@ def compute_enterprise_forecast(req: EnterpriseForecastRequest):
     """
     try:
         benchmarks = None
-        if req.industryBenchmarks:
-            benchmarks = {k: tuple(v) for k, v in req.industryBenchmarks.items()}
+        if req.industryBenchmarks is not None:
+            benchmarks = {}
+            for k, v in req.industryBenchmarks.items():
+                if v is not None:
+                    benchmarks[str(k)] = tuple(v)
 
         result = run_enterprise_forecast(
             history=req.history,
@@ -582,8 +593,11 @@ def compute_model_confidence(req: ConfidenceRequest):
     """Compute comprehensive model confidence score."""
     try:
         benchmarks = None
-        if req.industryBenchmarks:
-            benchmarks = {k: tuple(v) for k, v in req.industryBenchmarks.items()}
+        if req.industryBenchmarks is not None:
+            benchmarks = {}
+            for k, v in req.industryBenchmarks.items():
+                if v is not None:
+                    benchmarks[str(k)] = tuple(v)
 
         result = ModelConfidenceEngine.compute_confidence(
             history=req.history,
@@ -754,8 +768,7 @@ def polling_loop():
                             job_runner.run_job_with_retry(job, handler)
                             logger.info(f"✅ Completed job {job['id']}")
                         finally:
-                            if job['id'] in active_jobs:
-                                del active_jobs[job['id']]
+                            active_jobs.pop(job['id'], None)
                     else:
                         logger.error(f"❌ Unknown job type: {job_type} for job {job['id']}")
                         job_runner.fail_job(job['id'], ValueError(f"Unknown job type: {job_type}"))

@@ -75,7 +75,7 @@ export const connectorService = {
   },
   startOAuth: async (orgId: string, type: ConnectorType, userId: string) => {
     // Validate connector type
-    const validTypes: ConnectorType[] = ['quickbooks', 'xero', 'zoho', 'stripe', 'plaid', 'razorpay', 'tally', 'csv'];
+    const validTypes: ConnectorType[] = ['quickbooks', 'xero', 'zoho', 'stripe', 'plaid', 'razorpay', 'tally', 'csv', 'sap', 'oracle', 'cleartax', 'slack', 'asana', 'salesforce'];
     if (!validTypes.includes(type)) {
       throw new ValidationError(`Invalid connector type. Must be one of: ${validTypes.join(', ')}`);
     }
@@ -398,6 +398,135 @@ export const connectorService = {
       createdAt: connector.createdAt,
       // Do not return encryptedConfig
     }));
+  },
+
+  /**
+   * Create a generic connector for API-key-based integrations (SAP, Oracle, ClearTax, Slack, Asana, etc.)
+   * These don't use OAuth - they use API keys, webhooks, or tokens configured post-creation.
+   */
+  createGenericConnector: async (orgId: string, type: string, userId: string, connectorConfig: any) => {
+    // Verify user has access to org
+    const role = await orgRepository.getUserRole(userId, orgId);
+    if (!role) {
+      throw new ForbiddenError('No access to this organization');
+    }
+    if (!['admin', 'finance'].includes(role.role)) {
+      throw new ForbiddenError('Only admins and finance users can create connectors');
+    }
+
+    // Upsert connector with 'disconnected' status (User needs to configure credentials first)
+    const connector = await connectorRepository.upsert(orgId, type, {
+      status: 'disconnected',
+      configJson: {
+        connectedAt: null,
+        integrationType: 'api_key',
+        ...(connectorConfig || {}),
+      },
+    });
+
+    return {
+      connectorId: connector.id,
+      status: connector.status,
+      type: connector.type,
+    };
+  },
+
+  /**
+   * Configure a connector with credentials and validate them
+   * This is used for API-key based connectors (SAP, Oracle, Razorpay, Plaid, ClearTax, Asana, Slack, Stripe)
+   */
+  configureConnector: async (
+    connectorId: string,
+    type: string,
+    userId: string,
+    credentials: any
+  ) => {
+    // Verify connector exists and user has access
+    const connector = await connectorRepository.findById(connectorId);
+    if (!connector) {
+      throw new ValidationError('Connector not found');
+    }
+
+    if (connector.type !== type) {
+      throw new ValidationError(`Connector type mismatch. Expected ${connector.type}, got ${type}`);
+    }
+
+    // Verify user has access to org
+    const role = await orgRepository.getUserRole(userId, connector.orgId);
+    if (!role) {
+      throw new ForbiddenError('No access to this organization');
+    }
+
+    if (!['admin', 'finance'].includes(role.role)) {
+      throw new ForbiddenError('Only admins and finance users can configure connectors');
+    }
+
+    // Get the adapter and validate credentials
+    let adapter;
+    try {
+      adapter = getProviderAdapter(type as any);
+    } catch (error: any) {
+      throw new ValidationError(`Failed to initialize adapter: ${error.message}`);
+    }
+
+    if (!adapter.validateCredentials) {
+      throw new ValidationError(`This connector type does not support API key configuration`);
+    }
+
+    // Validate the credentials by calling the adapter's validation method
+    const validationResult = await adapter.validateCredentials(credentials);
+    if (!validationResult.success) {
+      // Return error but don't throw - let controller handle it
+      return {
+        success: false,
+        error: validationResult.error || 'Credential validation failed',
+        connectorId,
+      };
+    }
+
+    // Encrypt credentials and save
+    const payloadJson = JSON.stringify(credentials);
+    const encryptedBase64 = encrypt(payloadJson);
+    const encryptedBytes = Buffer.from(encryptedBase64, 'base64');
+
+    // Update connector with encrypted credentials and mark as connected
+    const updated = await connectorRepository.update(connectorId, {
+      status: 'connected',
+      encryptedConfig: encryptedBytes,
+      configJson: {
+        connectedAt: new Date().toISOString(),
+        type: type,
+      },
+    });
+
+    // Trigger initial sync for the connector
+    try {
+      await jobService.createJob(
+        {
+          jobType: 'connector_initial_sync' as any,
+          orgId: connector.orgId,
+          objectId: connectorId,
+          params: {
+            connectorId,
+            type,
+            provider: type,
+            syncedBy: userId,
+          },
+          createdByUserId: userId,
+        },
+        `${type}_initial_sync:${connector.orgId}:${connectorId}`
+      );
+    } catch (error: any) {
+      console.warn(`Failed to create initial sync job for ${type}:`, error);
+      // Don't fail the whole operation if sync job fails
+    }
+
+    return {
+      success: true,
+      connectorId: updated.id,
+      status: updated.status,
+      message: `${type} connector configured and marked as connected. Initial sync queued.`,
+    };
   },
 };
 

@@ -40,6 +40,22 @@ router.get(
   connectorController.listConnectors
 );
 
+// Create a generic connector (for API-key-based integrations like SAP, Oracle, ClearTax, etc.)
+router.post(
+  '/orgs/:orgId/connectors',
+  authenticate,
+  requireFinanceOrAdmin('orgId'),
+  connectorController.createConnector
+);
+
+// Configure a connector with API credentials (for API-key-based connectors)
+router.post(
+  '/orgs/:orgId/connectors/:id/configure',
+  authenticate,
+  requireFinanceOrAdmin('orgId'),
+  connectorController.configureConnector
+);
+
 // Connector sync health
 router.get('/connectors/:id/health', authenticate, requireConnectorOwnership('id'), connectorSyncController.getConnectorHealth);
 

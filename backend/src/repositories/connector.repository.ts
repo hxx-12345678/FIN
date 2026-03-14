@@ -78,9 +78,9 @@ export const connectorRepository = {
       return await prisma.connector.update({
         where: { id: existing.id },
         data: {
-          status: data.status || existing.status,
-          configJson: data.configJson || existing.configJson,
-          encryptedConfig: data.encryptedConfig || existing.encryptedConfig,
+          status: data.status !== undefined ? data.status : existing.status,
+          configJson: data.configJson !== undefined ? data.configJson : existing.configJson,
+          encryptedConfig: data.encryptedConfig !== undefined ? data.encryptedConfig : existing.encryptedConfig,
         },
       });
     }
@@ -89,7 +89,7 @@ export const connectorRepository = {
       data: {
         orgId,
         type,
-        status: data.status || 'auth_pending',
+        status: data.status || 'disconnected',
         configJson: data.configJson,
         encryptedConfig: data.encryptedConfig,
       },

@@ -103,23 +103,23 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements, modelR
             }
         }
 
-        if (!modelRuns || modelRuns.length === 0) return resolveStatements(statements)
-
-        if (selectedScenario === 'base') {
-            const baseRun = modelRuns.find(r => r.runType === 'baseline' && r.status === 'done')
-            return resolveStatements(baseRun?.summaryJson || statements)
+        // PRIORITY: If we have direct statements passed (local recompute), use them
+        if (selectedScenario === 'base' && statements) {
+            return resolveStatements(statements)
         }
+
+        if (!modelRuns || modelRuns.length === 0) return resolveStatements(statements)
 
         const targetType = selectedScenario === 'pessimistic' ? 'conservative' : selectedScenario
         const scenarioRun = [...modelRuns].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).find(r => {
             const params = typeof r.paramsJson === 'string' ? JSON.parse(r.paramsJson) : r.paramsJson;
             return (
-                r.runType === 'scenario' &&
+                (selectedScenario === 'base' ? r.runType === 'baseline' : r.runType === 'scenario') &&
                 r.status === 'done' &&
-                (params?.scenarioType === targetType)
+                (selectedScenario === 'base' || params?.scenarioType === targetType)
             );
         })
-        return resolveStatements(scenarioRun?.summaryJson)
+        return resolveStatements(scenarioRun?.summaryJson || (selectedScenario === 'base' ? statements : null))
     }, [selectedScenario, modelRuns, statements])
 
     // Memoize monthly data

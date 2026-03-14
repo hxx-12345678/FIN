@@ -40,6 +40,18 @@ export const config = {
       clientId: process.env.ZOHO_CLIENT_ID || '',
       clientSecret: process.env.ZOHO_CLIENT_SECRET || '',
     },
+    slack: {
+      clientId: process.env.SLACK_CLIENT_ID || '',
+      clientSecret: process.env.SLACK_CLIENT_SECRET || '',
+    },
+    asana: {
+      clientId: process.env.ASANA_CLIENT_ID || '',
+      clientSecret: process.env.ASANA_CLIENT_SECRET || '',
+    },
+    salesforce: {
+      clientId: process.env.SALESFORCE_CLIENT_ID || '',
+      clientSecret: process.env.SALESFORCE_CLIENT_SECRET || '',
+    },
   },
   encryption: {
     key: process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || '',

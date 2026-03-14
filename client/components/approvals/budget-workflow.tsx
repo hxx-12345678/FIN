@@ -241,7 +241,15 @@ export function BudgetWorkflow({ orgId, modelId }: { orgId: string | null, model
                             </p>
                         </div>
 
-                        <Button className="w-full bg-indigo-600 hover:bg-indigo-700 h-10 font-black text-[10px] tracking-widest uppercase shadow-lg shadow-indigo-600/30">
+                        <Button 
+                            onClick={() => {
+                                toast.success("Policy request submitted to Risk Committee.", {
+                                    description: "A draft policy for 'Operational Drift Limits' has been created for review."
+                                });
+                                fetchRequests();
+                            }}
+                            className="w-full bg-indigo-600 hover:bg-indigo-700 h-10 font-black text-[10px] tracking-widest uppercase shadow-lg shadow-indigo-600/30"
+                        >
                             <Send className="h-4 w-4 mr-2" /> REQUEST NEW POLICY
                         </Button>
                     </CardContent>

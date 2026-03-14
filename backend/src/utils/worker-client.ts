@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { config } from '../config/env';
 
-const PYTHON_WORKER_URL = process.env.PYTHON_WORKER_URL || 'http://localhost:5000';
+const PYTHON_WORKER_URL = process.env.WORKER_URL || process.env.PYTHON_WORKER_URL || 'http://localhost:5000';
 
 /**
  * Worker Client Utility (SOC 2 Hardened)

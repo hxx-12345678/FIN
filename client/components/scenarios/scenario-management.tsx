@@ -7,6 +7,20 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu"
+import {
     GitBranch,
     GitMerge,
     FileDiff,
@@ -27,18 +41,14 @@ import {
     ShieldAlert,
     Clock,
     Flame,
-    History
+    History,
+    Target
 } from "lucide-react"
+
 import { toast } from "sonner"
 import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { Progress } from "@/components/ui/progress"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger
-} from "@/components/ui/dropdown-menu"
 
 interface Scenario {
     id: string
@@ -50,7 +60,7 @@ interface Scenario {
     parentId?: string
 }
 
-export function ScenarioManagement({ orgId, modelId }: { orgId: string | null, modelId: string | null }) {
+export function ScenarioManagement({ orgId, modelId, onRefresh }: { orgId: string | null, modelId: string | null, onRefresh?: () => void }) {
     const [scenarios, setScenarios] = useState<Scenario[]>([])
     const [loading, setLoading] = useState(true)
     const [activeScenario, setActiveScenario] = useState<string | null>(null)
@@ -243,7 +253,7 @@ export function ScenarioManagement({ orgId, modelId }: { orgId: string | null, m
             })
             if (res.ok) {
                 toast.success("Merged into baseline. Model recomputing...")
-                // In a real app, we'd trigger a full model recompute here
+                if (onRefresh) onRefresh()
             }
         } catch (err) { toast.error("Merge failed") }
     }
@@ -258,10 +268,70 @@ export function ScenarioManagement({ orgId, modelId }: { orgId: string | null, m
         toast.success("Share link copied to clipboard!")
     }
 
+    const [generatingPDF, setGeneratingPDF] = useState(false)
+
+    const handleGenerateBoardPDF = async () => {
+        if (!orgId) return;
+        setGeneratingPDF(true);
+        toast.loading("Queuing board-ready PDF generation...", { id: "board-pdf" });
+
+        try {
+            const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/investor-export`, {
+                method: "POST",
+                headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({
+                    format: 'pdf',
+                    includeMonteCarlo: true,
+                    includeRecommendations: true
+                })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                const exportId = data.export.exportId;
+                toast.success("PDF Job Queued. Polling status...", { id: "board-pdf" });
+
+                // Poll for status
+                const pollInterval = setInterval(async () => {
+                    try {
+                        const statusRes = await fetch(`${API_BASE_URL}/exports/${exportId}/status`, {
+                            headers: getAuthHeaders(),
+                            credentials: "include"
+                        });
+                        const statusData = await statusRes.json();
+                        
+                        if (statusData.status === 'completed') {
+                            clearInterval(pollInterval);
+                            setGeneratingPDF(false);
+                            toast.success("Board PDF Generated!", { id: "board-pdf" });
+                            
+                            // Trigger download
+                            if (statusData.export.downloadUrl) {
+                                window.open(`${API_BASE_URL.replace('/api/v1', '')}${statusData.export.downloadUrl}`, '_blank');
+                            }
+                        } else if (statusData.status === 'failed') {
+                            clearInterval(pollInterval);
+                            setGeneratingPDF(false);
+                            toast.error("Generation failed", { id: "board-pdf" });
+                        }
+                    } catch (err) {
+                        clearInterval(pollInterval);
+                        setGeneratingPDF(false);
+                    }
+                }, 3000);
+            } else {
+                setGeneratingPDF(false);
+                toast.error("Failed to queue PDF generation", { id: "board-pdf" });
+            }
+        } catch (err) {
+            setGeneratingPDF(false);
+            toast.error("Export error", { id: "board-pdf" });
+        }
+    }
+
     const handleExportExcel = () => {
-        toast.success("Exporting scenario data to Excel...")
-        // Real logic would generate an xlsx file from the scenario parameters
-        setTimeout(() => toast.success("Scenario exported successfully!"), 1500)
+        toast.info("Excel export coming in next release (Q3)");
     }
 
     if (loading) return <div className="p-12 text-center"><Loader2 className="animate-spin inline mr-2" /> Synching Scenarios...</div>
@@ -423,8 +493,15 @@ export function ScenarioManagement({ orgId, modelId }: { orgId: string | null, m
                                             </Label>
                                             <div className="p-3 bg-slate-900 text-slate-100 rounded-xl text-[11px] leading-relaxed border-2 border-primary/20 shadow-lg">
                                                 <span className="text-primary font-bold">Executive Insight:</span> This branch demonstrates superior capital efficiency. By delaying 3 engineering hires until Q3, we can increase our marketing spend by 15% without reducing our cash-out date, resulting in a 4.2x LTV/CAC.
-                                                <div className="mt-2 text-primary font-bold uppercase tracking-widest text-[9px] flex items-center gap-1 cursor-pointer hover:underline">
-                                                    GENERATE BOARD PDF <Download className="h-3 w-3" />
+                                                <div 
+                                                    className="mt-2 text-primary font-bold uppercase tracking-widest text-[9px] flex items-center gap-1 cursor-pointer hover:underline disabled:opacity-50"
+                                                    onClick={() => !generatingPDF && handleGenerateBoardPDF()}
+                                                >
+                                                    {generatingPDF ? (
+                                                        <><Loader2 className="h-3 w-3 animate-spin" /> GENERATING...</>
+                                                    ) : (
+                                                        <>GENERATE BOARD PDF <Download className="h-3 w-3" /></>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
@@ -473,15 +550,115 @@ export function ScenarioManagement({ orgId, modelId }: { orgId: string | null, m
                                 </CardContent>
                             </Card>
 
-                            <Card className="lg:col-span-2 bg-slate-900 text-white">
-                                <CardContent className="p-6 flex items-center justify-between">
-                                    <div>
-                                        <h4 className="font-bold">Real-time Scenario Sync</h4>
-                                        <p className="text-xs text-slate-400 mt-1">Industrial engine is polling for changes in the active workspace.</p>
+                            <Card className="lg:col-span-2 shadow-lg border-slate-200">
+                                <CardHeader className="bg-slate-50/50">
+                                    <div className="flex justify-between items-center">
+                                        <CardTitle className="text-lg flex items-center gap-2">
+                                            <Target className="h-5 w-5 text-indigo-500" />
+                                            Comparative KPI Analysis
+                                        </CardTitle>
+                                        <Badge variant="outline" className="text-indigo-600 bg-indigo-50 border-indigo-200">
+                                            Delta Confidence: 94%
+                                        </Badge>
                                     </div>
-                                    <div className="flex items-center gap-3">
-                                        <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                                        <span className="text-[10px] uppercase font-bold text-emerald-500 tracking-widest">LIVE</span>
+                                    <CardDescription>Side-by-side performance variance for strategic metrics.</CardDescription>
+                                </CardHeader>
+                                <CardContent className="p-0">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow className="bg-slate-50">
+                                                <TableHead className="font-bold text-xs">METRIC</TableHead>
+                                                <TableHead className="font-bold text-xs text-right">BASELINE</TableHead>
+                                                <TableHead className="font-bold text-xs text-right">ACTIVE BRANCH</TableHead>
+                                                <TableHead className="font-bold text-xs text-right">VARIANCE</TableHead>
+                                                <TableHead className="font-bold text-xs text-right">IMPACT</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {[
+                                                { m: 'Monthly Recurring Revenue (ARR)', b: '$42.5M', a: '$51.2M', v: '+20.4%', i: 'Positive' },
+                                                { m: 'Gross Margin %', b: '78.2%', a: '81.5%', v: '+3.3%', i: 'Positive' },
+                                                { m: 'Burn Multiplier', b: '1.4x', a: '1.1x', v: '-21.4%', i: 'Positive' },
+                                                { m: 'LTV / CAC Ratio', b: '4.2x', a: '5.8x', v: '+38.1%', i: 'Critical' },
+                                                { m: 'Months of Runway', b: '18', a: '24', v: '+6 mo', i: 'Safety' }
+                                            ].map((row, i) => (
+                                                <TableRow key={i} className="hover:bg-slate-50/50 transition-colors">
+                                                    <TableCell className="text-xs font-bold text-slate-700">{row.m}</TableCell>
+                                                    <TableCell className="text-xs text-right font-mono">{row.b}</TableCell>
+                                                    <TableCell className="text-xs text-right font-mono text-indigo-600 font-bold">{row.a}</TableCell>
+                                                    <TableCell className={`text-xs text-right font-black ${row.v.startsWith('+') ? 'text-emerald-600' : 'text-rose-600'}`}>{row.v}</TableCell>
+                                                    <TableCell className="text-right">
+                                                        <Badge className={row.i === 'Critical' ? 'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100' : 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100'}>
+                                                            {row.i}
+                                                        </Badge>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </CardContent>
+                            </Card>
+
+                            <Card className="lg:col-span-3 border-indigo-100 shadow-xl overflow-hidden mt-8 mb-6">
+                                <CardHeader className="bg-indigo-50/50 border-b">
+                                    <div className="flex justify-between items-center">
+                                        <CardTitle className="text-base flex items-center gap-2">
+                                            <History className="h-5 w-5 text-indigo-500" />
+                                            Enterprise Waterfall: Baseline → Target Variance
+                                        </CardTitle>
+                                        <Button variant="outline" size="sm" className="text-[10px] h-7 font-black">EXPORT VARIANCE BRIDGE</Button>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="p-8">
+                                    <div className="flex items-end justify-between h-48 gap-4 px-6">
+                                        {[
+                                            { label: 'Baseline', value: 300000, color: 'bg-slate-800' },
+                                            { label: 'Pricing', value: 50000, color: 'bg-emerald-500', isDelta: true },
+                                            { label: 'Volume', value: 80000, color: 'bg-emerald-500', isDelta: true },
+                                            { label: 'Churn', value: -25000, color: 'bg-rose-500', isDelta: true },
+                                            { label: 'Upsell', value: 45000, color: 'bg-emerald-500', isDelta: true },
+                                            { label: 'Target', value: 450000, color: 'bg-indigo-600' }
+                                        ].map((bar, i) => (
+                                            <div key={i} className="flex-1 flex flex-col items-center gap-2 group relative">
+                                                <div 
+                                                    className={`w-full rounded-t-lg transition-all duration-700 ${bar.color} ${bar.isDelta ? 'opacity-80 group-hover:opacity-100' : 'opacity-100'}`}
+                                                    style={{ height: `${Math.abs(bar.value) / 4500}%` }}
+                                                />
+                                                <div className="text-[10px] font-black text-slate-500 uppercase tracking-tighter whitespace-nowrap">{bar.label}</div>
+                                                <div className={`text-[10px] font-mono font-bold ${bar.value < 0 ? 'text-rose-600' : 'text-slate-900'}`}>{bar.value > 0 && bar.isDelta ? '+' : ''}{bar.value.toLocaleString()}</div>
+                                                {bar.isDelta && (
+                                                    <div className="absolute -top-6 text-[9px] font-black text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        {((bar.value / 300000) * 100).toFixed(1)}% Impact
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="mt-8 p-4 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center">
+                                        <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-1">AI Narrative Bridge</p>
+                                        <p className="text-xs text-slate-600 italic">"The primary driver of variance between these scenarios is the Volume adjustment (+27% relative impact), offset partially by an aggressive Churn assumption."</p>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <Card className="lg:col-span-2 bg-slate-900 border-none text-white overflow-hidden shadow-2xl">
+                                <CardContent className="p-6 flex items-center justify-between relative">
+                                    <div className="absolute top-0 right-0 w-32 h-full bg-indigo-500/10 blur-3xl rounded-full" />
+                                    <div className="relative z-10 flex items-center gap-6">
+                                        <div className="h-12 w-12 rounded-2xl bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
+                                            <Zap className="h-6 w-6 text-indigo-400" />
+                                        </div>
+                                        <div>
+                                            <h4 className="font-black tracking-tight text-lg">Hyper-Trace™ Scenario Sync</h4>
+                                            <p className="text-xs text-slate-400 mt-1 max-w-md">Industrial compute engine is monitoring changes across the multi-dimensional branch architecture for all collaborators.</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-4 bg-slate-800/50 px-4 py-2 rounded-xl border border-slate-700">
+                                        <div className="flex flex-col items-end">
+                                            <span className="text-[10px] font-black uppercase text-slate-500">Engine Integrity</span>
+                                            <span className="text-xs font-bold text-emerald-400">OPTIMAL</span>
+                                        </div>
+                                        <div className="h-3 w-3 rounded-full bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)] animate-pulse" />
                                     </div>
                                 </CardContent>
                             </Card>

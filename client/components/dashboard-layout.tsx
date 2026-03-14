@@ -162,11 +162,6 @@ const managementItems = [
     key: "compliance",
   },
   {
-    title: "Pricing & Billing",
-    icon: CreditCard,
-    key: "pricing",
-  },
-  {
     title: "Settings",
     icon: Settings,
     key: "settings",
@@ -371,8 +366,8 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
     setShowSwitchOrgDialog(true)
   }
 
-  const handleBillingUsage = () => {
-    onViewChange("pricing")
+  const handleContactSales = () => {
+    window.location.href = "mailto:sales@finapilot.ai?subject=FinaPilot%20Enterprise%20Inquiry"
   }
 
   const handleAccountSettings = () => {
@@ -549,9 +544,9 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
                     <Building2 className="mr-2 h-4 w-4" />
                     Switch Organization
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleBillingUsage}>
+                  <DropdownMenuItem onClick={handleContactSales}>
                     <CreditCard className="mr-2 h-4 w-4" />
-                    Billing & Usage
+                    Contact Sales
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleMFA}>

@@ -154,5 +154,89 @@ export const connectorController = {
       next(error);
     }
   },
+
+  /**
+   * POST /api/v1/orgs/:orgId/connectors
+   * Create a generic connector (for API-key-based integrations like SAP, Oracle, etc.)
+   */
+  createConnector: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        throw new ValidationError('User not authenticated');
+      }
+
+      const { orgId } = req.params;
+      const { type, config: connectorConfig } = req.body;
+
+      if (!orgId) {
+        throw new ValidationError('orgId is required');
+      }
+      if (!type) {
+        throw new ValidationError('Connector type is required');
+      }
+
+      // Check if connector of this type already exists
+      const existing = await connectorService.listConnectors(orgId, req.user.id);
+      const alreadyExists = existing.some((c: any) => c.type === type);
+      if (alreadyExists) {
+        return res.status(409).json({ ok: false, message: `A ${type} connector already exists for this organization` });
+      }
+
+      // Create connector via service
+      const result = await connectorService.createGenericConnector(orgId, type, req.user.id, connectorConfig || {});
+
+      res.status(201).json({ ok: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  /**
+   * POST /api/v1/orgs/:orgId/connectors/:id/configure
+   * Configure a connector with API credentials and validate them
+   * Used for API-key based connectors (SAP, Oracle, Razorpay, etc.)
+   */
+  configureConnector: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        throw new ValidationError('User not authenticated');
+      }
+
+      const { orgId, id: connectorId } = req.params;
+      const { type, credentials } = req.body;
+
+      if (!orgId) {
+        throw new ValidationError('orgId is required');
+      }
+
+      if (!connectorId) {
+        throw new ValidationError('Connector ID is required');
+      }
+
+      if (!type) {
+        throw new ValidationError('Connector type is required');
+      }
+
+      if (!credentials || typeof credentials !== 'object') {
+        throw new ValidationError('Credentials object is required');
+      }
+
+      // Call service to validate and configure
+      const result = await connectorService.configureConnector(connectorId, type, req.user.id, credentials);
+
+      if (!result.success) {
+        // Validation failed - return 400 with error
+        return res.status(400).json({ 
+          ok: false, 
+          error: { message: result.error } 
+        });
+      }
+
+      // Success
+      res.status(200).json({ ok: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  },
 };
 

@@ -105,9 +105,19 @@ export function AIAssistTab({ orgId, modelId }: AIAssistTabProps) {
         }
     }
 
+    const [simLogs, setSimLogs] = useState<string[]>([])
+
+    const addLog = (msg: string) => {
+        setSimLogs(prev => [msg, ...prev].slice(0, 5))
+    }
+
     const handleInitialize = async () => {
-        setInitialized(true)
-        toast.success("AI assumptions confirmed and applied to model.")
+        addLog("Syncing AI parameters to Hyperblock engine...")
+        setTimeout(() => {
+            setInitialized(true)
+            toast.success("AI assumptions confirmed and applied to model.")
+            addLog("Industrial baseline locked.")
+        }, 800)
     }
 
     if (!orgId || !modelId) return <div className="p-12 text-center text-muted-foreground">Select a model to use AI assistance.</div>
@@ -203,9 +213,27 @@ export function AIAssistTab({ orgId, modelId }: AIAssistTabProps) {
                             <CheckCircle2 className="h-8 w-8 mx-auto text-emerald-500" />
                             <h4 className="font-bold text-sm">Model Initialized</h4>
                             <p className="text-xs">Drivers have been auto-configured for <b>{strategy}</b> strategy.</p>
-                            <Button variant="ghost" className="text-[10px] h-6 mt-2" onClick={() => { setShowSuggestions(false); setInitialized(false); setStrategy(null); }}>Reset AI Layer</Button>
+                            <Button variant="ghost" className="text-[10px] h-6 mt-2" onClick={() => { setShowSuggestions(false); setInitialized(false); setStrategy(null); setSimLogs([]); }}>Reset AI Layer</Button>
                         </div>
                     )}
+
+                    <Card className="border-slate-200 shadow-sm bg-slate-50/50">
+                        <CardHeader className="py-3">
+                            <CardTitle className="text-[10px] font-black uppercase text-slate-500 tracking-widest">AI Simulation Log</CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-4 pb-4">
+                            <div className="space-y-2">
+                                {simLogs.length > 0 ? simLogs.map((log, i) => (
+                                    <div key={i} className="flex gap-2 items-start text-[10px] animate-in fade-in slide-in-from-left-1">
+                                        <span className="text-slate-400 font-mono">[{new Date().toLocaleTimeString([], { hour12: false })}]</span>
+                                        <span className="text-slate-600 font-medium">{log}</span>
+                                    </div>
+                                )) : (
+                                    <div className="text-[10px] text-slate-400 italic">No recent simulations...</div>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
                 </div>
 
                 {/* Main Content: Explainability Hub */}

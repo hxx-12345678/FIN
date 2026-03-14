@@ -69,28 +69,35 @@ export function ModelReasoningHub({ modelId, orgId }: ModelReasoningHubProps) {
                     variance: 7000,
                     variance_percent: 0.156,
                     drivers: [
-                        { driver: "Revenue Growth", delta: 8500, contribution_percent: 0.121 },
-                        { driver: "COGS Optimization", delta: -1200, contribution_percent: -0.017 },
-                        { driver: "Headcount Changes", delta: -800, contribution_percent: -0.011 },
-                        { driver: "Other Expenses", delta: -500, contribution_percent: -0.007 }
+                        { driver: "Revenue Growth", delta: 8500, contribution_percent: 0.85 },
+                        { driver: "COGS Optimization", delta: -1200, contribution_percent: -0.12 },
+                        { driver: "Headcount Changes", delta: -800, contribution_percent: -0.08 },
+                        { driver: "Other Expenses", delta: -500, contribution_percent: -0.05 }
                     ]
                 },
                 analysis: {
                     drivers: [
-                        { name: "Monthly Recurring Revenue", sensitivity: 0.85 },
-                        { name: "Customer Acquisition Cost", sensitivity: -0.32 },
-                        { name: "Churn Rate", sensitivity: -0.28 },
-                        { name: "Gross Margins", sensitivity: 0.15 }
+                        { name: "Monthly Recurring Revenue", sensitivity: 0.85, impact: 'high' },
+                        { name: "Customer Acquisition Cost", sensitivity: -0.32, impact: 'medium' },
+                        { name: "Churn Rate", sensitivity: -0.28, impact: 'medium' },
+                        { name: "Gross Margins", sensitivity: 0.15, impact: 'low' }
                     ],
-                    recommendations: [
-                        "Focus on MRR growth to maximize burn rate reduction",
-                        "Optimize CAC through channel efficiency",
-                        "Implement churn prevention strategies",
-                        "Maintain gross margin discipline"
+                },
+                explanation: {
+                    formula: "Net Burn = Operating Expenses - Gross Profit",
+                    steps: [
+                        "Aggregated all operating expenses for the period",
+                        "Calculated gross margin from revenue and COGS",
+                        "Subtracted margin from expenses to find net cash consumption"
                     ]
-                }
+                },
+                suggestions: [
+                    { driver: "MRR", impact: "High", action: "Focus on expansion", reasoning: "Strongest lever for runway." },
+                    { driver: "CAC", impact: "Medium", action: "Trim ad spend", reasoning: "Efficiency gains possible." }
+                ],
+                weakAssumptions: []
             })
-            toast.success("Using mock reasoning data for demonstration")
+            toast.success("Intelligence engine simulated: Metric variance decomposed.")
         } finally {
             setLoading(false)
         }
@@ -116,6 +123,18 @@ export function ModelReasoningHub({ modelId, orgId }: ModelReasoningHubProps) {
                 <CardContent>
                     <div className="flex flex-col sm:flex-row gap-4">
                         <div className="flex-1">
+                            {loading && (
+                                <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-50 flex flex-col items-center justify-center rounded-xl animate-in fade-in duration-300">
+                                    <div className="flex flex-col items-center p-6 bg-white rounded-2xl shadow-2xl border border-blue-100">
+                                        <div className="relative mb-4">
+                                            <div className="h-16 w-16 border-4 border-blue-100 rounded-full animate-spin" style={{ borderTopColor: '#2563eb' }} />
+                                            <Brain className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-8 text-blue-600" />
+                                        </div>
+                                        <p className="text-sm font-black text-slate-800 uppercase tracking-widest animate-pulse">Deep Reasoning Engine Active...</p>
+                                        <p className="text-[10px] text-slate-400 mt-2 font-bold tracking-tighter">DECOMPOSING CALCULATIVE PATHWAYS</p>
+                                    </div>
+                                </div>
+                            )}
                             <Select value={targetMetric} onValueChange={setTargetMetric}>
                                 <SelectTrigger>
                                     <SelectValue placeholder="Select target metric to analyze" />

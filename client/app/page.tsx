@@ -18,7 +18,7 @@ import { UserManagement } from "@/components/user-management"
 import { IntegrationsPage } from "@/components/integrations-page"
 import { NotificationsPage } from "@/components/notifications-page"
 import { CompliancePage } from "@/components/compliance-page"
-import { PricingPage } from "@/components/pricing-page"
+
 import { SettingsPage } from "@/components/settings-page"
 import { OnboardingPage } from "@/components/onboarding-page"
 import { CollaborationPage } from "@/components/collaboration-page"
@@ -102,7 +102,7 @@ function HomePageContent() {
     const validViews = [
       "overview", "modeling", "budget-actual", "scenarios", "simulations",
       "forecasting", "assistant", "reports", "board-reporting", "investor",
-      "users", "integrations", "notifications", "compliance", "pricing",
+      "users", "integrations", "notifications", "compliance",
       "settings", "onboarding", "collaboration", "job-queue", "export-queue",
       "approvals", "ledger"
     ]
@@ -412,8 +412,6 @@ function HomePageContent() {
           return <NotificationsPage />
         case "compliance":
           return <CompliancePage />
-        case "pricing":
-          return <PricingPage />
         case "settings":
           return <SettingsPage />
         case "onboarding":

@@ -10,6 +10,7 @@ export interface ProviderAdapter {
   getAuthUrl(orgId: string, state: string, redirectUri: string): Promise<string>;
   exchangeCode(code: string, redirectUri: string): Promise<ProviderTokens>;
   refreshToken(refreshToken: string): Promise<ProviderTokens>;
+  validateCredentials?(credentials: any): Promise<{ success: boolean; error?: string }>;
   getSyncJobsParams?(tokens: ProviderTokens): Record<string, any>;
 }
 

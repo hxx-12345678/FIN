@@ -31,3 +31,4 @@ uvicorn[standard]>=0.22.0
 # Statistical Modeling
 statsmodels==0.14.1
 scikit-learn==1.4.1.post1
+aiohttp==3.9.3

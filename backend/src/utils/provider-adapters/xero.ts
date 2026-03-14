@@ -22,10 +22,13 @@ export class XeroAdapter extends BaseProviderAdapter {
 
   async getAuthUrl(orgId: string, state: string, redirectUri: string): Promise<string> {
     const scopes = [
+      'openid',
+      'profile',
+      'email',
       'accounting.transactions',
       'accounting.contacts',
       'accounting.settings',
-      'offline_access', // Required for refresh tokens
+      'offline_access',
     ].join(' ');
 
     const params = new URLSearchParams({
