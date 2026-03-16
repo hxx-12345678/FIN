@@ -519,6 +519,32 @@ export const modelController = {
     }
   },
 
+  updateRunScratchpad: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) throw new ValidationError('User not authenticated');
+      
+      const { model_id, run_id } = req.params;
+      const { summaryJson } = req.body;
+
+      if (!summaryJson) throw new ValidationError('summaryJson is required');
+
+      const run = await prisma.modelRun.findFirst({
+        where: { id: run_id, modelId: model_id }
+      });
+      if (!run) throw new NotFoundError('Model run not found');
+
+      // Update the run's summaryJson in-place
+      await prisma.modelRun.update({
+        where: { id: run_id },
+        data: { summaryJson }
+      });
+
+      res.json({ ok: true, message: 'Scratchpad saved' });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   deleteModel: async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.user) {

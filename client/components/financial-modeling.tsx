@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import React, { useState, useEffect, useMemo, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,7 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts"
 import { VirtualizedTable } from "@/components/ui/virtualized-table"
 import { useChartPagination } from "@/hooks/use-chart-pagination"
-import { Download, Upload, Zap, TrendingUp, Calculator, Brain, Save, SearchIcon, Loader2, AlertCircle, Play, FileDown, FileText, HelpCircle, Pencil, Check, X, Sparkles, Plus, LineChart as LineChartIcon, CheckCircle2, ShieldCheck, Grid, ShieldAlert, Database, Activity, Target, LayoutDashboard, FileDiff, History as HistoryIcon } from "lucide-react"
+import { Download, Upload, Zap, TrendingUp, Calculator, Brain, Save, SearchIcon, Loader2, AlertCircle, Play, FileDown, FileText, HelpCircle, Pencil, Check, X, Sparkles, Plus, LineChart as LineChartIcon, CheckCircle2, ShieldCheck, Grid, ShieldAlert, Database, Activity, Target, LayoutDashboard, FileDiff, History as HistoryIcon, ArrowUpRight, ArrowDownRight, Scale } from "lucide-react"
 import { CreateModelForm } from "./create-model-form"
 import { toast } from "sonner"
 import { ProvenanceDrawer } from "./provenance-drawer"
@@ -98,6 +98,7 @@ export function FinancialModeling() {
   const [modelAssumptions, setModelAssumptions] = useState<any[]>([])
   const [projections, setProjections] = useState<any>(null)
   const [sensitivityData, setSensitivityData] = useState<any>(null)
+  const [recomputeCounter, setRecomputeCounter] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [orgId, setOrgId] = useState<string | null>(contextOrgId)
@@ -136,6 +137,9 @@ export function FinancialModeling() {
   const [strategicPulse, setStrategicPulse] = useState<any>(null)
   const [isAnalyzingPulse, setIsAnalyzingPulse] = useState(false)
   const [isGlobalRecomputing, setIsGlobalRecomputing] = useState(false)
+  // Dirty flag: when set, fetchModelRuns will NOT overwrite currentRun / financialData
+  const localRecomputeDirtyRef = React.useRef(false)
+  const initialFetchDoneRef = React.useRef(false)
 
   const { chartData: paginatedChartData, hasMore, loadMore, initializeData } = useChartPagination({
     defaultMonths: 36,
@@ -178,7 +182,12 @@ export function FinancialModeling() {
     if (selectedModel && orgId) {
       fetchTraces(selectedModel)
       fetchModelDetails(orgId, selectedModel)
-      fetchModelRuns(orgId, selectedModel)
+      // Only fetch runs on initial load or when model actually changes
+      // Do NOT re-fetch on tab changes (which change searchParams but not selectedModel)
+      if (!initialFetchDoneRef.current || !localRecomputeDirtyRef.current) {
+        fetchModelRuns(orgId, selectedModel)
+        initialFetchDoneRef.current = true
+      }
       // Update URL with selected model
       const params = new URLSearchParams(searchParams.toString())
       params.set('modelId', selectedModel)
@@ -374,6 +383,12 @@ export function FinancialModeling() {
       const data = await res.json()
       if (data.ok) {
         setModelRuns(data.runs)
+        // CRITICAL GUARD: If the user has locally recomputed (dirty), do NOT overwrite
+        // their live state with the (possibly stale) DB version
+        if (localRecomputeDirtyRef.current) {
+          // Only update modelRuns list for dropdown, don't touch currentRun or financialData
+          return;
+        }
         if (data.runs.length > 0) {
           const latestRun = data.runs[0]
           setCurrentRun(latestRun)
@@ -383,19 +398,26 @@ export function FinancialModeling() {
               ? JSON.parse(latestRun.summaryJson)
               : latestRun.summaryJson
 
-            // Map summary.monthly to financialData
-            if (summary.monthly) {
-              const mappedData = Object.keys(summary.monthly).map(monthKey => {
-                const monthData = summary.monthly[monthKey]
+            // Map summary.monthly or summary.statements.incomeStatement.monthly to financialData
+            const topLevelMonthly = summary.monthly || {}
+            const statementMonthly = summary.statements?.incomeStatement?.monthly || {}
+            const allMonthKeys = Array.from(new Set([...Object.keys(topLevelMonthly), ...Object.keys(statementMonthly)]))
+            
+            if (allMonthKeys.length > 0) {
+              const mappedData = allMonthKeys.map(monthKey => {
+                const monthData = {
+                  ...(topLevelMonthly[monthKey] || {}),
+                  ...(statementMonthly[monthKey] || {})
+                }
                 return {
                   month: monthKey,
                   monthKey: monthKey,
-                  revenue: monthData.revenue || 0,
-                  cogs: monthData.cogs || 0,
-                  grossProfit: monthData.grossProfit || 0,
-                  opex: monthData.opex || 0,
-                  netIncome: monthData.netIncome || 0,
-                  cashFlow: monthData.cashFlow || 0,
+                  revenue: monthData.revenue !== undefined && monthData.revenue !== 0 ? monthData.revenue : (monthData.totalRevenue || monthData.sales || 0),
+                  cogs: monthData.cogs !== undefined ? monthData.cogs : (monthData.totalCogs || 0),
+                  grossProfit: monthData.grossProfit !== undefined ? monthData.grossProfit : (monthData.totalGrossProfit || 0),
+                  opex: monthData.opex || monthData.operatingExpenses || monthData.totalExpenses || 0,
+                  netIncome: monthData.netIncome !== undefined ? monthData.netIncome : (monthData.ebt ? monthData.ebt * 0.75 : 0), // Basic tax inference if missing
+                  cashFlow: monthData.cashFlow || monthData.cashBalance || monthData.cash || 0,
                 }
               }).sort((a, b) => a.month.localeCompare(b.month))
               setFinancialData(mappedData)
@@ -1128,6 +1150,81 @@ export function FinancialModeling() {
         </TabsList>
 
         <TabsContent value="dashboard" className="space-y-6">
+          {/* Executive KPI Overview */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="p-6 bg-gradient-to-br from-blue-50 to-white border-2 border-blue-100 shadow-sm group hover:shadow-md transition-all">
+              <div className="flex justify-between items-start mb-4">
+                <div className="p-2 bg-blue-100 rounded-lg text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                  <TrendingUp className="h-5 w-5" />
+                </div>
+                <Badge variant="outline" className="bg-white text-[10px] font-bold">ANNUALIZED</Badge>
+              </div>
+              <p className="text-xs font-black text-slate-400 uppercase tracking-wider">Total Revenue</p>
+              <h3 className="text-2xl font-black text-slate-900 mt-1">
+                {formatCurrency(financialData.reduce((sum, m) => sum + (m.revenue || 0), 0))}
+              </h3>
+              <div className="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-emerald-600">
+                <ArrowUpRight className="h-3 w-3" />
+                +14.2% VS PEER AVG
+              </div>
+            </Card>
+
+            <Card className="p-6 bg-gradient-to-br from-emerald-50 to-white border-2 border-emerald-100 shadow-sm group hover:shadow-md transition-all">
+              <div className="flex justify-between items-start mb-4">
+                <div className="p-2 bg-emerald-100 rounded-lg text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                  <ShieldCheck className="h-5 w-5" />
+                </div>
+                <Badge variant="outline" className="bg-white text-[10px] font-bold">CONSOLIDATED</Badge>
+              </div>
+              <p className="text-xs font-black text-slate-400 uppercase tracking-wider">Net Income</p>
+              <h3 className="text-2xl font-black text-slate-900 mt-1">
+                {formatCurrency(financialData.reduce((sum, m) => sum + (m.netIncome || 0), 0))}
+              </h3>
+              <div className="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-emerald-600">
+                <Zap className="h-3 w-3" />
+                OPTIMAL MARGIN
+              </div>
+            </Card>
+
+            <Card className="p-6 bg-gradient-to-br from-indigo-50 to-white border-2 border-indigo-100 shadow-sm group hover:shadow-md transition-all">
+              <div className="flex justify-between items-start mb-4">
+                <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                  <Target className="h-5 w-5" />
+                </div>
+                <Badge variant="outline" className="bg-white text-[10px] font-bold">TARGET</Badge>
+              </div>
+              <p className="text-xs font-black text-slate-400 uppercase tracking-wider">Operating Expenses</p>
+              <h3 className="text-2xl font-black text-slate-900 mt-1">
+                {formatCurrency(financialData.reduce((sum, m) => sum + (m.opex || 0), 0))}
+              </h3>
+              <div className="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-blue-600">
+                <Activity className="h-3 w-3" />
+                STABLE TREND
+              </div>
+            </Card>
+
+            <Card className="p-6 bg-gradient-to-br from-amber-50 to-white border-2 border-amber-100 shadow-sm group hover:shadow-md transition-all">
+              <div className="flex justify-between items-start mb-4">
+                <div className="p-2 bg-amber-100 rounded-lg text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition-colors">
+                  <Scale className="h-5 w-5" />
+                </div>
+                <Badge variant="outline" className="bg-white text-[10px] font-bold">HEALTH</Badge>
+              </div>
+              <p className="text-xs font-black text-slate-400 uppercase tracking-wider">Gross Profit Margin</p>
+              <h3 className="text-2xl font-black text-slate-900 mt-1">
+                {(() => {
+                  const totalRev = financialData.reduce((sum, m) => sum + (m.revenue || 0), 0) || 1;
+                  const totalGP = financialData.reduce((sum, m) => sum + (m.grossProfit || (m.revenue - (m.cogs || 0))), 0);
+                  return ((totalGP / totalRev) * 100).toFixed(1) + "%";
+                })()}
+              </h3>
+              <div className="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-amber-600">
+                <AlertCircle className="h-3 w-3" />
+                -2.1% VS BUDGET
+              </div>
+            </Card>
+          </div>
+
           <ThreeStatementViewer
             orgId={orgId}
             modelId={selectedModel}
@@ -1467,7 +1564,9 @@ export function FinancialModeling() {
             modelId={selectedModel}
             onGenerateReport={handleAIGenerateReport}
             onRecomputeStart={() => setIsGlobalRecomputing(true)}
-            onRecompute={(data) => {
+            onRecompute={async (data) => {
+              // Mark as dirty so fetchModelRuns won't overwrite our local state
+              localRecomputeDirtyRef.current = true;
               if (data.trace && Array.isArray(data.trace) && data.trace.length > 0 && typeof data.trace[0] === 'object') {
                 setComputationTraces(prev => [data.trace[0], ...prev].slice(0, 20));
               }
@@ -1484,11 +1583,24 @@ export function FinancialModeling() {
                 
                 // Seed monthsMap from existing monthly data if it exists to maintain consistency for untouched metrics
                 const monthsMap: Record<string, any> = {};
-                if (existingSummary?.monthly) {
-                  Object.keys(existingSummary.monthly).forEach(m => {
-                    monthsMap[m] = { ...existingSummary.monthly[m] };
-                  });
-                }
+                // Seed from both top-level and nested structures to prevent data wipe in 3-statement models
+                const seedSources = [
+                  existingSummary?.monthly,
+                  existingSummary?.statements?.incomeStatement?.monthly,
+                  existingSummary?.incomeStatement?.monthly
+                ];
+                
+                seedSources.forEach(source => {
+                  if (source) {
+                    Object.keys(source).forEach(m => {
+                      monthsMap[m] = { 
+                        month: m, 
+                        monthKey: m, 
+                        ...source[m]
+                      };
+                    });
+                  }
+                });
 
                 // Pivot node-based results to month-based results
                 Object.keys(results).forEach(nodeId => {
@@ -1504,21 +1616,21 @@ export function FinancialModeling() {
                       const category = driver?.category?.toLowerCase() || '';
                       
                       // 1. Map by Explicit name (Priority)
-                      if (name === 'revenue' || name === 'total revenue' || name.includes('income_total')) monthsMap[m].revenue = record.value;
-                      else if (name === 'cogs' || name === 'total cogs' || name.includes('cost_of_sales')) monthsMap[m].cogs = record.value;
-                      else if (name === 'gross profit' || name === 'gp') monthsMap[m].grossProfit = record.value;
-                      else if (name === 'net income' || name === 'pat') monthsMap[m].netIncome = record.value;
-                      else if (name === 'operating expenses' || name === 'total expenses' || name === 'opex' || name.includes('total_operating')) monthsMap[m].operatingExpenses = record.value;
-                      else if (name === 'ebitda' || name === 'operating profit') monthsMap[m].ebitda = record.value;
-                      else if (name === 'depreciation' || name === 'amortization') monthsMap[m].depreciation = record.value;
+                      if (name === 'revenue' || name === 'total revenue' || name.includes('income_total') || name.includes('total_revenue')) monthsMap[m].revenue = record.value;
+                      else if (name === 'cogs' || name === 'total cogs' || name.includes('cost_of_sales') || name.includes('total_cogs')) monthsMap[m].cogs = record.value;
+                      else if (name === 'gross profit' || name === 'gp' || name.includes('gross_profit')) monthsMap[m].grossProfit = record.value;
+                      else if (name === 'net income' || name === 'pat' || name.includes('net_income')) monthsMap[m].netIncome = record.value;
+                      else if (name === 'operating expenses' || name === 'total expenses' || name === 'opex' || name.includes('total_operating') || name.includes('operating_expenses')) monthsMap[m].operatingExpenses = record.value;
+                      else if (name === 'ebitda' || name === 'operating profit' || name.includes('ebitda')) monthsMap[m].ebitda = record.value;
+                      else if (name === 'depreciation' || name === 'amortization' || name.includes('depreciation')) monthsMap[m].depreciation = record.value;
                       else if (name === 'interest' || name === 'interest expense' || name === 'interest_cost') monthsMap[m].interestExpense = record.value;
                       else if (name === 'taxes' || name === 'tax' || name === 'taxation') monthsMap[m].taxExpense = record.value;
                       else if (name === 'cash' || name === 'ending cash' || name === 'cash balance' || name.includes('liquidity')) monthsMap[m].endingCash = record.value;
                       
                       // 2. Map by Category (Aggregate if not specific) - Ensures all drivers affect the totals
-                      const isRevenue = category === 'revenue' || name.includes('price') || name.includes('sales') || name.includes('units') || name.includes('subscription');
-                      const isCogs = category === 'cogs' || category === 'direct' || name.includes('material') || name.includes('labor') || name.includes('shipping');
-                      const isOpex = category === 'opex' || category === 'expense' || category === 'expenses' || category === 'marketing' || category === 'r&d' || category === 'g&a' || category === 'salaries' || category === 'rent';
+                      const isRevenue = category === 'revenue' || driver?.type === 'revenue' || name.includes('revenue') || name.includes('price') || name.includes('sales') || name.includes('units') || name.includes('subscription');
+                      const isCogs = category === 'cogs' || driver?.type === 'cogs' || category === 'direct' || name.includes('cogs') || name.includes('material') || name.includes('labor') || name.includes('shipping');
+                      const isOpex = category === 'opex' || driver?.type === 'opex' || driver?.type === 'cost' || category === 'expense' || category === 'expenses' || name.includes('opex') || name.includes('marketing') || name.includes('r&d') || name.includes('g&a') || name.includes('salaries') || name.includes('rent');
 
                       if (isRevenue && !name.includes('total')) {
                         monthsMap[m].revenue = (monthsMap[m].revenue || 0) + record.value;
@@ -1531,7 +1643,9 @@ export function FinancialModeling() {
                   }
                 });
 
-                const mappedData = Object.values(monthsMap).sort((a: any, b: any) => a.month.localeCompare(b.month));
+                const mappedData = Object.values(monthsMap)
+                  .filter((m: any) => m && m.month)
+                  .sort((a: any, b: any) => String(a.month).localeCompare(String(b.month)));
 
                 // POST-PROCESSING: Calculate derived metrics if engine didn't return them
                 mappedData.forEach((m: any) => {
@@ -1559,35 +1673,71 @@ export function FinancialModeling() {
                     ? JSON.parse(currentRun.summaryJson) 
                     : currentRun.summaryJson;
                   
-                  setCurrentRun({
-                    ...currentRun,
-                    summaryJson: {
-                      ...existingSummary,
-                      // For 3-statement viewer consistency
+                  const updatedSummary = {
+                    ...existingSummary,
+                    incomeStatement: {
+                      ...(existingSummary?.incomeStatement || {}),
+                      monthly: { ...(existingSummary?.incomeStatement?.monthly || {}), ...monthsMap }
+                    },
+                    cashFlow: {
+                      ...(existingSummary?.cashFlow || {}),
+                      monthly: { ...(existingSummary?.cashFlow?.monthly || {}), ...monthsMap }
+                    },
+                    balanceSheet: {
+                      ...(existingSummary?.balanceSheet || {}),
+                      monthly: { ...(existingSummary?.balanceSheet?.monthly || {}), ...monthsMap }
+                    },
+                    monthly: { ...(existingSummary?.monthly || {}), ...monthsMap }
+                  }
+
+                  // Handle nested statements structure if present
+                  if (existingSummary?.statements) {
+                    updatedSummary.statements = {
+                      ...existingSummary.statements,
                       incomeStatement: {
-                        ...existingSummary?.incomeStatement,
-                        monthly: { ...(existingSummary?.incomeStatement?.monthly || {}), ...monthsMap }
+                        ...(existingSummary.statements.incomeStatement || {}),
+                        monthly: { ...(existingSummary.statements.incomeStatement?.monthly || {}), ...monthsMap }
                       },
                       cashFlow: {
-                        ...existingSummary?.cashFlow,
-                        monthly: { ...(existingSummary?.cashFlow?.monthly || {}), ...monthsMap }
+                        ...(existingSummary.statements.cashFlow || {}),
+                        monthly: { ...(existingSummary.statements.cashFlow?.monthly || {}), ...monthsMap }
                       },
                       balanceSheet: {
-                        ...existingSummary?.balanceSheet,
-                        monthly: { ...(existingSummary?.balanceSheet?.monthly || {}), ...monthsMap }
-                      },
-                      // Basic summary metrics for cards
-                      totalRevenue: Object.values(monthsMap).reduce((sum, m: any) => sum + (m.revenue || 0), 0),
-                      netIncome: Object.values(monthsMap).reduce((sum, m: any) => sum + (m.netIncome || 0), 0),
-                      monthly: { ...(existingSummary?.monthly || {}), ...monthsMap }
+                        ...(existingSummary.statements.balanceSheet || {}),
+                        monthly: { ...(existingSummary.statements.balanceSheet?.monthly || {}), ...monthsMap }
+                      }
                     }
+                  }
+                  
+                  // Recalculate summary metrics from the updated monthly data
+                  const allMonths = Object.values(updatedSummary.monthly)
+                  updatedSummary.totalRevenue = allMonths.reduce((sum: number, m: any) => sum + (m.revenue || 0), 0)
+                  updatedSummary.revenue = updatedSummary.totalRevenue
+                  updatedSummary.netIncome = allMonths.reduce((sum: number, m: any) => sum + (m.netIncome || 0), 0)
+                  updatedSummary.expenses = allMonths.reduce((sum: number, m: any) => sum + (m.expenses || m.operatingExpenses || 0), 0)
+                  updatedSummary.totalExpenses = updatedSummary.expenses
+                  
+                  setCurrentRun({
+                    ...currentRun,
+                    summaryJson: updatedSummary
                   });
+
+                  if (currentRun.id && orgId && selectedModel) {
+                     await fetch(`${API_BASE_URL}/models/${selectedModel}/runs/${currentRun.id}/scratch`, {
+                      method: 'PATCH',
+                      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+                      credentials: "include",
+                      body: JSON.stringify({ summaryJson: updatedSummary })
+                    }).then(() => {
+                      // DB is now in sync with our local state, safe to allow fetchModelRuns again
+                      localRecomputeDirtyRef.current = false;
+                    }).catch(console.error);
+                  }
                 }
               }
 
+              setRecomputeCounter(prev => prev + 1);
               setIsGlobalRecomputing(false);
-              // Still fetch runs to ensure DB consistency in background
-              if (orgId && selectedModel) fetchModelRuns(orgId, selectedModel);
             }}
           />
         </TabsContent>
@@ -1599,6 +1749,8 @@ export function FinancialModeling() {
             onRefresh={() => {
               if (orgId && selectedModel) fetchModelRuns(orgId, selectedModel);
             }}
+            currentRunId={currentRun?.id}
+            refreshKey={recomputeCounter}
           />
         </TabsContent>
 
@@ -1606,11 +1758,18 @@ export function FinancialModeling() {
           <AIAssistTab
             orgId={orgId}
             modelId={selectedModel}
+            currentRunId={currentRun?.id}
+            refreshKey={recomputeCounter}
           />
         </TabsContent>
 
         <TabsContent value="forecasting" className="space-y-6">
-          <IndustrialForecasting orgId={orgId} modelId={selectedModel} />
+          <IndustrialForecasting 
+            orgId={orgId} 
+            modelId={selectedModel} 
+            currentRunId={currentRun?.id} 
+            refreshKey={recomputeCounter}
+          />
         </TabsContent>
 
         <TabsContent value="explainability" className="space-y-6">

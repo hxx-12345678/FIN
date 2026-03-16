@@ -24,6 +24,7 @@ router.patch('/models/:model_id', authenticate, requireModelOwnership('model_id'
 router.get('/models/:model_id/runs', authenticate, requireModelOwnership('model_id'), modelController.getModelRuns);
 router.post('/models/:model_id/run', authenticate, requireModelOwnership('model_id', 'finance'), modelController.createModelRun);
 router.get('/models/:model_id/runs/:run_id', authenticate, requireModelOwnership('model_id'), requireRunOwnership('run_id'), modelController.getModelRun);
+router.patch('/models/:model_id/runs/:run_id/scratch', authenticate, requireModelOwnership('model_id', 'finance'), requireRunOwnership('run_id', 'finance'), modelController.updateRunScratchpad);
 
 // Snapshot & Compare routes - finance or admin required for snapshots
 router.post('/models/:model_id/snapshot', authenticate, requireModelOwnership('model_id', 'finance'), modelController.createSnapshot);

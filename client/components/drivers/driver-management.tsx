@@ -114,7 +114,15 @@ export function DriverManagement({ orgId, modelId, onRecompute, onRecomputeStart
                         values[d.id] = 50
                     }
                 })
-                setDriverValues(values)
+                const cachedStr = sessionStorage.getItem(`drivers_${modelId}`);
+                let cached = {};
+                try {
+                    if (cachedStr) cached = JSON.parse(cachedStr);
+                } catch(e) {}
+                
+                const finalValues = { ...values, ...cached };
+                setDriverValues(finalValues)
+                sessionStorage.setItem(`drivers_${modelId}`, JSON.stringify(finalValues));
             } else {
                 setDrivers([])
                 setDriverValues({})
@@ -200,7 +208,11 @@ export function DriverManagement({ orgId, modelId, onRecompute, onRecomputeStart
         setDeltas(prev => ({ ...prev, [driverId]: delta }));
 
         // Immediate visual update
-        setDriverValues(prev => ({ ...prev, [driverId]: value }))
+        setDriverValues(prev => {
+            const next = { ...prev, [driverId]: value };
+            sessionStorage.setItem(`drivers_${modelId}`, JSON.stringify(next));
+            return next;
+        })
 
         if (!isLive) {
             setPendingChanges(true);
@@ -221,7 +233,7 @@ export function DriverManagement({ orgId, modelId, onRecompute, onRecomputeStart
                     body: JSON.stringify({
                         update: {
                             nodeId: driverId,
-                            values: { "2024-01": value }
+                            values: { [new Date().toISOString().slice(0, 7)]: value }
                         }
                     })
                 })
@@ -421,8 +433,8 @@ export function DriverManagement({ orgId, modelId, onRecompute, onRecomputeStart
                                                 <div className="flex items-center gap-2">
                                                     <Slider
                                                         value={[drivers.find(d => d.name.toLowerCase().includes('price')) ? (driverValues[drivers.find(d => d.name.toLowerCase().includes('price'))!.id] || 499) : 499]}
-                                                        max={2000}
-                                                        step={10}
+                                                        max={Math.max(2000, (drivers.find(d => d.name.toLowerCase().includes('price')) ? (driverValues[drivers.find(d => d.name.toLowerCase().includes('price'))!.id] || 499) : 499) * 2)}
+                                                        step={1}
                                                         className="flex-1"
                                                         onValueChange={(val) => {
                                                             const d = drivers.find(drv => drv.name.toLowerCase().includes('price'))
@@ -516,9 +528,9 @@ export function DriverManagement({ orgId, modelId, onRecompute, onRecomputeStart
                                                     <Slider
                                                         disabled={d.isLocked}
                                                         value={[driverValues[d.id] || 0]}
-                                                        max={d.maxRange || 1000}
+                                                        max={Math.max(d.maxRange || 1000, (driverValues[d.id] || 0) * 2)}
                                                         min={d.minRange || 0}
-                                                        step={1}
+                                                        step={Math.max(0.01, (Math.max(d.maxRange || 1000, (driverValues[d.id] || 0) * 2)) / 1000)}
                                                         className="flex-1"
                                                         onValueChange={(val) => handleValueChange(d.id, val[0])}
                                                     />

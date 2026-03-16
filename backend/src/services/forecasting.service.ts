@@ -23,10 +23,11 @@ export const forecastingService = {
         steps: number;
         method?: 'auto' | 'arima' | 'trend' | 'seasonal' | 'regression';
         period?: number;
+        runId?: string; // NEW
     }) => {
         try {
             // 1. Get history
-            const history = await forecastingService.getHistoricalMetricData(orgId, modelId, params.metricName);
+            const history = await forecastingService.getHistoricalMetricData(orgId, modelId, params.metricName, params.runId);
 
             // 2. Call Python worker via secure client
             const response = await workerClient.post('/compute/forecast', {
@@ -92,7 +93,7 @@ export const forecastingService = {
      * Get historical data for a metric from the DB or Cube
      * Falls back to latest model run data if cube is empty
      */
-    getHistoricalMetricData: async (orgId: string, modelId: string, metricName: string) => {
+    getHistoricalMetricData: async (orgId: string, modelId: string, metricName: string, runId?: string) => {
         try {
             // First try: Fetch from MetricCube (our multi-dimensional store)
             let cubeData: number[] = [];
@@ -128,15 +129,17 @@ export const forecastingService = {
             // Fallback: Extract from the latest completed model run's monthly data
             // This ensures forecasting works even if metric_cubes table doesn't exist
             console.log(`MetricCube empty for ${metricName}, falling back to latest model run data`);
-            const latestRun = await prisma.modelRun.findFirst({
-                where: {
-                    modelId,
-                    orgId,
-                    status: 'done'
-                },
-                orderBy: { createdAt: 'desc' },
-                select: { summaryJson: true }
-            });
+            const latestRun = runId 
+                ? await prisma.modelRun.findUnique({ where: { id: runId }, select: { summaryJson: true } })
+                : await prisma.modelRun.findFirst({
+                    where: {
+                        modelId,
+                        orgId,
+                        status: 'done'
+                    },
+                    orderBy: { createdAt: 'desc' },
+                    select: { summaryJson: true }
+                });
 
             if (latestRun?.summaryJson) {
                 const summary = latestRun.summaryJson as any;
@@ -160,7 +163,7 @@ export const forecastingService = {
                 const values = sortedMonths.map(m => {
                     const val = monthly[m]?.[dataKey];
                     return typeof val === 'number' ? val : 0;
-                }).filter(v => v !== 0);
+                });
 
                 if (values.length > 0) {
                     console.log(`Extracted ${values.length} data points from latest model run for ${metricName}`);

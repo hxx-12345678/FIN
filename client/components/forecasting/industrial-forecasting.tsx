@@ -42,7 +42,7 @@ interface ForecastResult {
     }
 }
 
-export function IndustrialForecasting({ orgId, modelId }: { orgId: string | null, modelId: string | null }) {
+export function IndustrialForecasting({ orgId, modelId, currentRunId, refreshKey }: { orgId: string | null, modelId: string | null, currentRunId?: string | null, refreshKey?: number }) {
     const { currencySymbol, formatCurrency } = useOrg()
     const [selectedMetric, setSelectedMetric] = useState("revenue")
     const [method, setMethod] = useState("auto")
@@ -64,7 +64,8 @@ export function IndustrialForecasting({ orgId, modelId }: { orgId: string | null
                 body: JSON.stringify({
                     metricName: selectedMetric,
                     steps: 12,
-                    method
+                    method,
+                    runId: currentRunId
                 })
             })
 
@@ -173,12 +174,11 @@ export function IndustrialForecasting({ orgId, modelId }: { orgId: string | null
         }
     }
 
-    // Only auto-fetch once on initial load, not every time user switches tabs
     useEffect(() => {
-        if (orgId && modelId && !hasRun) {
+        if (orgId && modelId) {
             fetchForecast()
         }
-    }, [orgId, modelId])
+    }, [orgId, modelId, currentRunId, refreshKey])
 
     // When metric or method changes after initial load, re-fetch
     useEffect(() => {

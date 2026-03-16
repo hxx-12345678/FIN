@@ -75,9 +75,14 @@ const formatValueLineItem = (value: number, symbol: string) => {
     return `${symbol}${value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 }
 
-const formatPercent = (value: number) => {
+const formatPercent = (value: number | undefined | null) => {
     if (value === undefined || value === null) return '-'
-    return `${(value * 100).toFixed(1)}%`
+    // If value is a ratio (e.g. 0.85), format as 85.0%
+    if (Math.abs(value) < 1.05 && value !== 0) {
+        return `${(value * 100).toFixed(1)}%`
+    }
+    // If value is already a percentage (e.g. 85.0), just add %
+    return `${value.toFixed(1)}%`
 }
 
 export function ThreeStatementViewer({ orgId, modelId, runId, statements, modelRuns, onCellClick }: ThreeStatementViewerProps) {
@@ -381,7 +386,8 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements, modelR
                                             <TableCell className="pl-8 italic">Gross Margin %</TableCell>
                                             {(viewMode === 'monthly' ? months.slice(0, 6) : years).map(period => {
                                                 const data = viewMode === 'monthly' ? monthlyPL[period] : annualPL[period]
-                                                return <TableCell key={period} className="text-right italic">{formatPercent(data?.grossMargin)}</TableCell>
+                                                const margin = data?.grossMargin || (data?.revenue ? (data.grossProfit / data.revenue) : 0)
+                                                return <TableCell key={period} className="text-right italic">{formatPercent(margin)}</TableCell>
                                             })}
                                         </TableRow>
                                         {/* Operating Expenses */}

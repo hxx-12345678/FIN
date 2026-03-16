@@ -14,7 +14,7 @@ export const forecastingController = {
     forecastMetric: async (req: AuthRequest, res: Response, next: NextFunction) => {
         try {
             const { orgId, modelId } = req.params;
-            const { metricName, steps, method, period } = req.body;
+            const { metricName, steps, method, period, runId } = req.body;
 
             if (!metricName) throw new ValidationError('metricName is required');
 
@@ -26,7 +26,8 @@ export const forecastingController = {
                 metricName,
                 steps: steps || 12,
                 method,
-                period
+                period,
+                runId
             });
 
             // Include the historical data in the response so the frontend 

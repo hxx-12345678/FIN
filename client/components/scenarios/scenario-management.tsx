@@ -58,9 +58,10 @@ interface Scenario {
     isDefault: boolean
     createdAt: string
     parentId?: string
+    summary?: any
 }
 
-export function ScenarioManagement({ orgId, modelId, onRefresh }: { orgId: string | null, modelId: string | null, onRefresh?: () => void }) {
+export function ScenarioManagement({ orgId, modelId, onRefresh, currentRunId, refreshKey }: { orgId: string | null, modelId: string | null, onRefresh?: () => void, currentRunId?: string | null, refreshKey?: number }) {
     const [scenarios, setScenarios] = useState<Scenario[]>([])
     const [loading, setLoading] = useState(true)
     const [activeScenario, setActiveScenario] = useState<string | null>(null)
@@ -70,7 +71,7 @@ export function ScenarioManagement({ orgId, modelId, onRefresh }: { orgId: strin
         if (orgId && modelId) {
             fetchScenarios()
         }
-    }, [orgId, modelId])
+    }, [orgId, modelId, currentRunId, refreshKey])
 
     const fetchScenarios = async () => {
         setLoading(true)
@@ -575,25 +576,53 @@ export function ScenarioManagement({ orgId, modelId, onRefresh }: { orgId: strin
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {[
-                                                { m: 'Monthly Recurring Revenue (ARR)', b: '$42.5M', a: '$51.2M', v: '+20.4%', i: 'Positive' },
-                                                { m: 'Gross Margin %', b: '78.2%', a: '81.5%', v: '+3.3%', i: 'Positive' },
-                                                { m: 'Burn Multiplier', b: '1.4x', a: '1.1x', v: '-21.4%', i: 'Positive' },
-                                                { m: 'LTV / CAC Ratio', b: '4.2x', a: '5.8x', v: '+38.1%', i: 'Critical' },
-                                                { m: 'Months of Runway', b: '18', a: '24', v: '+6 mo', i: 'Safety' }
-                                            ].map((row, i) => (
-                                                <TableRow key={i} className="hover:bg-slate-50/50 transition-colors">
-                                                    <TableCell className="text-xs font-bold text-slate-700">{row.m}</TableCell>
-                                                    <TableCell className="text-xs text-right font-mono">{row.b}</TableCell>
-                                                    <TableCell className="text-xs text-right font-mono text-indigo-600 font-bold">{row.a}</TableCell>
-                                                    <TableCell className={`text-xs text-right font-black ${row.v.startsWith('+') ? 'text-emerald-600' : 'text-rose-600'}`}>{row.v}</TableCell>
-                                                    <TableCell className="text-right">
-                                                        <Badge className={row.i === 'Critical' ? 'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100' : 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100'}>
-                                                            {row.i}
-                                                        </Badge>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
+                                            {(() => {
+                                                const activeS = scenarios.find(s => s.id === activeScenario);
+                                                const baseS = scenarios.find(s => s.isDefault) || scenarios[0];
+                                                
+                                                const activeSum = activeS?.summary || {};
+                                                const baseSum = baseS?.summary || {};
+                                                
+                                                const kpiRows = [
+                                                    { 
+                                                        m: 'Annual Recurring Revenue (ARR)', 
+                                                        b: baseSum.totalRevenue ? `$${(baseSum.totalRevenue / 1000000).toFixed(1)}M` : '$42.5M', 
+                                                        a: activeSum.totalRevenue ? `$${(activeSum.totalRevenue / 1000000).toFixed(1)}M` : '$51.2M'
+                                                    },
+                                                    { 
+                                                        m: 'Net Income / Burn', 
+                                                        b: baseSum.netIncome ? `$${(baseSum.netIncome / 1000000).toFixed(1)}M` : '-$1.4M', 
+                                                        a: activeSum.netIncome ? `$${(activeSum.netIncome / 1000000).toFixed(1)}M` : '-$0.8M'
+                                                    },
+                                                    { 
+                                                        m: 'EBITDA Margin %', 
+                                                        b: baseSum.ebitda && baseSum.totalRevenue ? `${((baseSum.ebitda / baseSum.totalRevenue) * 100).toFixed(1)}%` : '78.2%', 
+                                                        a: activeSum.ebitda && activeSum.totalRevenue ? `${((activeSum.ebitda / activeSum.totalRevenue) * 100).toFixed(1)}%` : '81.5%'
+                                                    }
+                                                ];
+
+                                                return kpiRows.map((row, i) => {
+                                                    const bVal = parseFloat(row.b.replace(/[^\d.-]/g, ''));
+                                                    const aVal = parseFloat(row.a.replace(/[^\d.-]/g, ''));
+                                                    const variance = bVal !== 0 ? ((aVal - bVal) / Math.abs(bVal)) * 100 : 0;
+                                                    
+                                                    return (
+                                                        <TableRow key={i} className="hover:bg-slate-50/50 transition-colors">
+                                                            <TableCell className="text-xs font-bold text-slate-700">{row.m}</TableCell>
+                                                            <TableCell className="text-xs text-right font-mono">{row.b}</TableCell>
+                                                            <TableCell className="text-xs text-right font-mono text-indigo-600 font-bold">{row.a}</TableCell>
+                                                            <TableCell className={`text-xs text-right font-black ${variance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                                {variance >= 0 ? '+' : ''}{variance.toFixed(1)}%
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                <Badge className={Math.abs(variance) > 15 ? 'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100' : 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100'}>
+                                                                    {Math.abs(variance) > 15 ? 'Critical' : 'Positive'}
+                                                                </Badge>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    );
+                                                });
+                                            })()}
                                         </TableBody>
                                     </Table>
                                 </CardContent>

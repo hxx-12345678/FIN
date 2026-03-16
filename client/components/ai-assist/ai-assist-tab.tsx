@@ -28,9 +28,11 @@ import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-conf
 interface AIAssistTabProps {
     orgId: string | null
     modelId: string | null
+    currentRunId?: string | null
+    refreshKey?: number
 }
 
-export function AIAssistTab({ orgId, modelId }: AIAssistTabProps) {
+export function AIAssistTab({ orgId, modelId, currentRunId, refreshKey }: AIAssistTabProps) {
     const [strategy, setStrategy] = useState<"aggressive" | "sustainable" | "efficiency" | null>(null)
     const [loading, setLoading] = useState(false)
     const [sensitivities, setSensitivities] = useState<any[]>([])
@@ -43,24 +45,28 @@ export function AIAssistTab({ orgId, modelId }: AIAssistTabProps) {
         if (modelId) {
             fetchModelAnalysis()
         }
-    }, [modelId])
+    }, [modelId, currentRunId, refreshKey])
 
     const fetchModelAnalysis = async () => {
         try {
             setLoading(true)
-            // Fetch the latest model run to get computed sensitivities
-            const res = await fetch(`${API_BASE_URL}/models/${modelId}/runs?limit=1`, {
+            // Fetch specific run if available, otherwise latest
+            const url = currentRunId 
+                ? `${API_BASE_URL}/models/${modelId}/runs/${currentRunId}`
+                : `${API_BASE_URL}/models/${modelId}/runs?limit=1`;
+                
+            const res = await fetch(url, {
                 headers: getAuthHeaders(),
                 credentials: "include"
             })
 
             if (res.ok) {
                 const data = await res.json()
-                if (data.ok && data.runs?.[0]) {
-                    const latestRun = data.runs[0]
-                    const summary = typeof latestRun.summaryJson === 'string'
-                        ? JSON.parse(latestRun.summaryJson)
-                        : latestRun.summaryJson;
+                const run = data.run || data.runs?.[0]
+                if (data.ok && run) {
+                    const summary = typeof run.summaryJson === 'string'
+                        ? JSON.parse(run.summaryJson)
+                        : run.summaryJson;
 
                     if (summary?.sensitivities?.parameters) {
                         setSensitivities(summary.sensitivities.parameters)
