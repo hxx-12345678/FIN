@@ -119,9 +119,11 @@ export function RiskAnalysisHub({ orgId, modelId }: { orgId: string | null, mode
         return riskData.months.map((m: string, i: number) => ({
             name: m,
             p5: metric.p5?.[i] ?? 0,
+            p10: metric.p10?.[i] ?? 0,
             p25: metric.p25?.[i] ?? 0,
             p50: metric.p50?.[i] ?? 0,
             p75: metric.p75?.[i] ?? 0,
+            p90: metric.p90?.[i] ?? 0,
             p95: metric.p95?.[i] ?? 0,
             mean: metric.mean?.[i] ?? 0
         }))
@@ -206,9 +208,28 @@ export function RiskAnalysisHub({ orgId, modelId }: { orgId: string | null, mode
                                 <div className="space-y-1">
                                     <div className="flex justify-between text-[10px]">
                                         <span>Variance Range</span>
-                                        <span>±15%</span>
+                                        <span>±{config.variance || 15}%</span>
                                     </div>
-                                    <Slider defaultValue={[15]} max={30} step={1} className="py-2" />
+                                    <Slider 
+                                        defaultValue={[config.variance || 15]} 
+                                        max={50} 
+                                        step={1} 
+                                        className="py-2" 
+                                        onValueChange={(vals) => {
+                                            const v = vals[0]
+                                            setDistributions({
+                                                ...distributions,
+                                                [key]: { 
+                                                    ...config, 
+                                                    variance: v,
+                                                    std: Math.abs(config.mean * (v / 100)),
+                                                    min: config.mean * (1 - v/100),
+                                                    max: config.mean * (1 + v/100),
+                                                    mode: config.mean
+                                                }
+                                            })
+                                        }}
+                                    />
                                 </div>
                             </div>
                         ))}
@@ -276,11 +297,13 @@ export function RiskAnalysisHub({ orgId, modelId }: { orgId: string | null, mode
                                         <RechartsTooltip
                                             contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
                                         />
-                                        <Area type="monotone" dataKey="p95" stroke="none" fill="#fecaca" fillOpacity={0.3} name="95% CI (Upper)" />
-                                        <Area type="monotone" dataKey="p5" stroke="none" fill="#fecaca" fillOpacity={0.3} name="95% CI (Lower)" />
-                                        <Area type="monotone" dataKey="p75" stroke="none" fill="#fda4af" fillOpacity={0.4} name="50% CI (Upper)" />
-                                        <Area type="monotone" dataKey="p25" stroke="none" fill="#fda4af" fillOpacity={0.4} name="50% CI (Lower)" />
-                                        <Line type="monotone" dataKey="p50" stroke="#e11d48" strokeWidth={3} dot={false} name="Median (P50)" />
+                                        <Area type="monotone" dataKey="p95" stroke="none" fill="#fecaca" fillOpacity={0.2} name="95% CI (Upper)" />
+                                        <Area type="monotone" dataKey="p5" stroke="none" fill="#fecaca" fillOpacity={0.2} name="95% CI (Lower)" />
+                                        <Area type="monotone" dataKey="p90" stroke="none" fill="#fca5a5" fillOpacity={0.25} name="80% CI (Upper)" />
+                                        <Area type="monotone" dataKey="p10" stroke="none" fill="#fca5a5" fillOpacity={0.25} name="80% CI (Lower)" />
+                                        <Area type="monotone" dataKey="p75" stroke="none" fill="#f87171" fillOpacity={0.3} name="50% CI (Upper)" />
+                                        <Area type="monotone" dataKey="p25" stroke="none" fill="#f87171" fillOpacity={0.3} name="50% CI (Lower)" />
+                                        <Line type="monotone" dataKey="p50" stroke="#b91c1c" strokeWidth={3} dot={false} name="Median (P50)" />
                                     </AreaChart>
                                 </ResponsiveContainer>
                             </div>

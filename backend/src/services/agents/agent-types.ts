@@ -32,6 +32,7 @@ export type AgentActionType =
   | 'anomaly_scan'        // Detect anomalies
   | 'report_generation'   // Generate reports
   | 'recommendation'      // Provide strategic recommendations
+  | 'grounding'           // Cross-reference data for truth
   | 'escalation';         // Escalate to human
 
 // Data source types for explainability
@@ -181,6 +182,11 @@ export interface AgentResponse {
     probability: number;
     metrics: Record<string, number>;
     children?: string[];
+  }[];
+  weakAssumptions?: {
+    name: string;
+    issue: string;
+    recommendation: string;
   }[];
 }
 

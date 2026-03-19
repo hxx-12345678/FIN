@@ -3,8 +3,10 @@ import json
 import os
 from datetime import datetime, timezone
 import numpy as np
-from typing import Dict, List, Tuple, Optional
+import pandas as pd
+from typing import Dict, List, Tuple, Optional, Any
 from scipy import stats
+from scipy.stats import spearmanr
 from utils.db import get_db_connection
 from utils.s3 import upload_bytes_to_s3
 from utils.logger import setup_logger
@@ -124,14 +126,7 @@ def sample_distribution(dist_type: str, params: Dict, size: Tuple[int, ...], rng
 
 def compute_confidence_intervals(results: np.ndarray, confidence_levels: List[float] = [0.80, 0.90, 0.95]) -> Dict:
     """
-    Compute confidence intervals for simulation results.
-    
-    Args:
-        results: Array of shape (num_simulations, months)
-        confidence_levels: List of confidence levels (e.g., [0.80, 0.90, 0.95])
-    
-    Returns:
-        Dictionary with confidence intervals per month
+    Compute confidence intervals and CVaR for simulation results.
     """
     try:
         num_sims, num_months = results.shape
@@ -143,18 +138,84 @@ def compute_confidence_intervals(results: np.ndarray, confidence_levels: List[fl
             upper_percentile = (1 - alpha / 2) * 100
             
             # Compute percentiles across simulations (axis=0)
-            lower = np.percentile(results, lower_percentile, axis=0, method='linear')
-            upper = np.percentile(results, upper_percentile, axis=0, method='linear')
+            lower = np.percentile(results, lower_percentile, axis=0)
+            upper = np.percentile(results, upper_percentile, axis=0)
+            
+            # Compute CVaR (Expected Shortfall) - Average of values below alpha/2 percentile
+            # This is a critical industrial metric for risk management
+            cvar_lower = []
+            for m in range(num_months):
+                month_results = results[:, m]
+                threshold = lower[m]
+                tail = month_results[month_results <= threshold]
+                cvar_lower.append(float(np.mean(tail)) if tail.size > 0 else float(threshold))
             
             intervals[f'ci_{int(conf_level * 100)}'] = {
                 'lower': lower.tolist(),
                 'upper': upper.tolist(),
                 'width': (upper - lower).tolist(),
+                'cvar_lower': cvar_lower,  # Tail risk metric
             }
         
         return intervals
     except Exception as e:
         logger.error(f"Error computing confidence intervals: {str(e)}", exc_info=True)
+        return {}
+
+
+def compute_bivariate_sensitivity(
+    results: np.ndarray,
+    driver_samples: Dict[str, np.ndarray],
+    driver_x: str,
+    driver_y: str,
+    bins: int = 5
+) -> Dict:
+    """
+    Compute bivariate sensitivity analysis (heatmap data).
+    Calculates the average outcome for different ranges of two driver variables.
+    """
+    try:
+        outcome = results[:, -1]  # Final month outcome
+        x_vals = driver_samples[driver_x][:, -1]
+        y_vals = driver_samples[driver_y][:, -1]
+
+        # Define bins for X and Y
+        x_bins = np.linspace(np.min(x_vals), np.max(x_vals), bins + 1)
+        y_bins = np.linspace(np.min(y_vals), np.max(y_vals), bins + 1)
+
+        heatmap = []
+        for i in range(bins):
+            for j in range(bins):
+                # Mask for samples falling into this (X, Y) bucket
+                mask = (x_vals >= x_bins[i]) & (x_vals < x_bins[i+1]) & \
+                       (y_vals >= y_bins[j]) & (y_vals < y_bins[j+1])
+                
+                if np.any(mask):
+                    avg_outcome = np.mean(outcome[mask])
+                    count = np.sum(mask)
+                else:
+                    avg_outcome = 0
+                    count = 0
+                
+                heatmap.append({
+                    'x_bin': i,
+                    'y_bin': j,
+                    'x_range': [float(x_bins[i]), float(x_bins[i+1])],
+                    'y_range': [float(y_bins[j]), float(y_bins[j+1])],
+                    'avg_outcome': float(avg_outcome),
+                    'count': int(count)
+                })
+        
+        return {
+            'driver_x': driver_x,
+            'driver_y': driver_y,
+            'bins_x': x_bins.tolist(),
+            'bins_y': y_bins.tolist(),
+            'heatmap': heatmap,
+            'baseline_outcome': float(np.median(outcome))
+        }
+    except Exception as e:
+        logger.error(f"Error computing bivariate sensitivity: {str(e)}")
         return {}
 
 
@@ -194,7 +255,6 @@ def compute_tornado_sensitivity(
                 correlation = np.corrcoef(driver_values, final_month_cash)[0, 1]
                 
                 # Compute rank correlation (Spearman) for robustness
-                from scipy.stats import spearmanr
                 rank_corr, _ = spearmanr(driver_values, final_month_cash)
                 
                 sensitivity[driver_name] = {
@@ -307,13 +367,13 @@ def handle_monte_carlo(job_id: str, org_id: str, object_id: str, logs: dict):
                 logger.info(f"Chunking required: estimated {estimated_memory / 1e9:.2f}GB memory")
                 results, driver_samples = run_chunked_simulations_enhanced(
                     num_simulations, months, drivers, overrides, seed, 
-                    job_id, cursor, conn, logs
+                    job_id, cursor, conn, logs, model_data, model_run_id
                 )
             else:
                 logger.info(f"Running vectorized simulations: {num_simulations} sims × {months} months")
                 results, driver_samples = run_vectorized_simulations_enhanced(
                     num_simulations, months, drivers, overrides, seed,
-                    job_id, cursor, conn, logs
+                    job_id, cursor, conn, logs, model_data, model_run_id
                 )
             
             # Calculate percentiles
@@ -327,7 +387,8 @@ def handle_monte_carlo(job_id: str, org_id: str, object_id: str, logs: dict):
             if model_data:
                 baseline = model_data.get('baseline', {})
                 if isinstance(baseline, dict):
-                    initial_cash = float(baseline.get('cash', baseline.get('cashBalance', baseline.get('initialCash', 0.0))))
+                    raw_val = baseline.get('cash') or baseline.get('cashBalance') or baseline.get('initialCash') or 0.0
+                    initial_cash = float(raw_val)
                 # Also try to get from summary_json if available
                 if initial_cash == 0.0:
                     try:
@@ -359,6 +420,24 @@ def handle_monte_carlo(job_id: str, org_id: str, object_id: str, logs: dict):
                 )
                 percentiles_data['tornado_sensitivity'] = tornado_sensitivity
             
+            # Add bivariate sensitivity (Heatmap) if multiple drivers exist
+            if include_tornado and driver_samples and len(drivers) >= 2:
+                update_progress(job_id, 93, {'status': 'computing_bivariate_sensitivity'})
+                y_drivers = list(drivers.keys())
+                x_driver = y_drivers[0]
+                y_driver = y_drivers[1]
+                
+                if 'tornado_sensitivity' in percentiles_data:
+                    top_drivers = list(percentiles_data['tornado_sensitivity'].keys())
+                    if len(top_drivers) >= 2:
+                        x_driver = top_drivers[0]
+                        y_driver = top_drivers[1]
+                
+                bivariate = compute_bivariate_sensitivity(
+                    results, driver_samples, x_driver, y_driver, bins=8
+                )
+                percentiles_data['bivariate_sensitivity'] = bivariate
+
             # Add distribution definitions
             percentiles_data['distribution_definitions'] = DISTRIBUTION_DEFINITIONS
             
@@ -490,7 +569,9 @@ def run_vectorized_simulations_enhanced(
     job_id: str,
     cursor,
     conn,
-    logs: dict
+    logs: dict,
+    model_data: dict,
+    model_run_id: str
 ) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
     """Run vectorized simulations using NumPy with enhanced distribution support"""
     try:
@@ -500,22 +581,21 @@ def run_vectorized_simulations_enhanced(
         driver_arrays = {}
         for driver_name, driver_config in drivers.items():
             dist_type = driver_config.get('dist', 'normal')
-            driver_arrays[driver_name] = sample_distribution(
+            samples = sample_distribution(
                 dist_type, driver_config, (num_simulations, months), rng
             )
+            driver_arrays[driver_name] = samples if samples is not None else np.zeros((num_simulations, months))
         
         # Apply model computation (vectorized)
-        revenue_driver = driver_arrays.get('revenue_growth', np.zeros((num_simulations, months)))
-        expense_driver = driver_arrays.get('expense_growth', np.zeros((num_simulations, months)))
+        revenue_driver_raw = driver_arrays.get('revenue_growth')
+        revenue_driver = revenue_driver_raw if revenue_driver_raw is not None else np.zeros((num_simulations, months))
+        
+        expense_driver_raw = driver_arrays.get('expense_growth')
+        expense_driver = expense_driver_raw if expense_driver_raw is not None else np.zeros((num_simulations, months))
         
         # Baseline values
-        baseline = {}
-        baseline_cash = None
-        try:
-            if isinstance(model_data, dict):
-                baseline_cash = model_data.get('cash', model_data.get('cashBalance', model_data.get('initialCash')))
-        except Exception:
-            baseline_cash = None
+        baseline = model_data.get('baseline', {})
+        baseline_cash = model_data.get('cash', model_data.get('cashBalance', model_data.get('initialCash')))
 
         if baseline_cash is None:
             try:
@@ -532,8 +612,8 @@ def run_vectorized_simulations_enhanced(
 
         base_values = {
             'cash': float(baseline_cash if baseline_cash is not None else 1000000),
-            'revenue': float(baseline.get('revenue', 100000) if isinstance(baseline, dict) else 100000),
-            'opex': float(baseline.get('opex', 50000) if isinstance(baseline, dict) else 50000),
+            'revenue': float(baseline.get('revenue', 100000)),
+            'opex': float(baseline.get('opex', 50000)),
         }
         
         # Vectorized computation
@@ -559,7 +639,9 @@ def run_chunked_simulations_enhanced(
     job_id: str,
     cursor,
     conn,
-    logs: dict
+    logs: dict,
+    model_data: dict,
+    model_run_id: str
 ) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
     """Run simulations in chunks to manage memory efficiently"""
     try:
@@ -584,7 +666,7 @@ def run_chunked_simulations_enhanced(
             # Run chunk
             chunk_results, chunk_drivers = run_vectorized_simulations_enhanced(
                 chunk_size_actual, months, drivers, overrides, chunk_seed,
-                job_id, cursor, conn, logs
+                job_id, cursor, conn, logs, model_data, model_run_id
             )
             
             all_results.append(chunk_results)

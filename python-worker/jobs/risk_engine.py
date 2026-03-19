@@ -109,13 +109,16 @@ class RiskEngine:
             dist = config.get('dist', 'normal')
             params = config.get('params', {})
             
+            # Helper to get parameter from 'params' or 'config' directly (frontend compatibility)
+            def get_p(key, default):
+                return params.get(key, config.get(key, default))
+
             target_shape = engine.data[actual_node_id].shape
             
             # Use the correlated uniform variable for this driver
             u = correlated_uniforms[:, i]
             
             # We must reshape u to broadcast across months/dimensions if needed
-            # Shape for broadcasting: (num_sims, 1, 1, ..., 1) for all extra dimensions
             broadcast_dims = len(target_shape) - 1
             u_reshaped = u.reshape((num_simulations,) + (1,) * broadcast_dims)
             u_broadcasts = np.broadcast_to(u_reshaped, target_shape)
@@ -124,34 +127,34 @@ class RiskEngine:
             import scipy.stats as stats
             
             if dist == 'normal':
-                mu = params.get('mu', params.get('mean', 0.0))
-                sigma = params.get('sigma', params.get('std', 0.1))
+                mu = get_p('mu', get_p('mean', 0.0))
+                sigma = get_p('sigma', get_p('std', 0.1))
                 samples = stats.norm.ppf(u_broadcasts, loc=mu, scale=sigma)
             elif dist == 't': # Fat-tail T-Distribution
-                df = params.get('df', 3.0) # degrees of freedom (low df = fatter tails)
-                loc = params.get('loc', 0.0)
-                scale = params.get('scale', 1.0)
+                df = get_p('df', 3.0) 
+                loc = get_p('loc', 0.0)
+                scale = get_p('scale', 1.0)
                 samples = stats.t.ppf(u_broadcasts, df=df, loc=loc, scale=scale)
             elif dist == 'lognormal':
-                mu = params.get('mu', params.get('mean', 0.0))
-                sigma = params.get('sigma', params.get('std', 0.1))
+                mu = get_p('mu', get_p('mean', 0.0))
+                sigma = get_p('sigma', get_p('std', 0.1))
                 samples = stats.lognorm.ppf(u_broadcasts, s=sigma, scale=np.exp(mu))
             elif dist == 'uniform':
-                low = params.get('min', -0.1)
-                high = params.get('max', 0.1)
+                low = get_p('min', -0.1)
+                high = get_p('max', 0.1)
                 samples = stats.uniform.ppf(u_broadcasts, loc=low, scale=high-low)
             elif dist == 'triangular':
-                left = params.get('min', -0.1)
-                mode = params.get('mode', 0.0)
-                right = params.get('max', 0.1)
-                c = (mode - left) / (right - left) if right > left else 0.5
+                left = get_p('min', -0.1)
+                mode = get_p('mode', 0.0)
+                right = get_p('max', 0.1)
+                c = (mode - left) / (right - left) if (right > left) else 0.5
                 samples = stats.triang.ppf(u_broadcasts, c=c, loc=left, scale=right-left)
             elif dist == 'pareto': # Fat-tail
-                b = params.get('b', 2.0)
-                scale = params.get('scale', 1.0)
+                b = get_p('b', 2.0)
+                scale = get_p('scale', 1.0)
                 samples = stats.pareto.ppf(u_broadcasts, b=b, scale=scale)
             else:
-                samples = np.full(target_shape, float(params.get('value', 0.0)))
+                samples = np.full(target_shape, float(get_p('value', 0.0)))
                 
             # 3.1 Regime Switching Stochastic Overlay (Institutional Standard)
             regime_params = config.get('regime_switching')
@@ -197,7 +200,11 @@ class RiskEngine:
             
             output_metrics[node_id] = {
                 "p5": pvals[0].tolist(),
+                "p10": pvals[1].tolist(),
+                "p25": pvals[2].tolist(),
                 "p50": pvals[3].tolist(),
+                "p75": pvals[4].tolist(),
+                "p90": pvals[5].tolist(),
                 "p95": pvals[6].tolist(),
                 "mean": np.mean(collapsed_data, axis=0).tolist(),
                 "std": np.std(collapsed_data, axis=0).tolist()

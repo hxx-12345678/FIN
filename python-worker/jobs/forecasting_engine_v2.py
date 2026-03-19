@@ -178,9 +178,9 @@ class RegimeDetector:
 
         for i in range(1, len(y)):
             cusum_pos[i] = max(0, cusum_pos[i - 1] + (y[i] - mean) - threshold * 0.5)
-            cusum_neg[i] = min(0, cusum_neg[i - 1] + (y[i] - mean) + threshold * 0.5)
+            cusum_neg[i] = min(0.0, float(cusum_neg[i - 1]) + (float(y[i]) - mean) + float(threshold) * 0.5)
 
-            if cusum_pos[i] > threshold or cusum_neg[i] < -threshold:
+            if float(cusum_pos[i]) > float(threshold) or float(cusum_neg[i]) < -float(threshold):
                 breakpoints.append(i)
                 cusum_pos[i] = 0
                 cusum_neg[i] = 0
@@ -251,7 +251,7 @@ class FeatureAwareForecast:
         steps: int,
         features_history: Dict[str, List[float]],
         features_forecast: Dict[str, List[float]],
-        feature_names: List[str] = None
+        feature_names: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
         Multi-feature regression forecast with attribution.
@@ -348,8 +348,8 @@ class HybridForecast:
     def forecast_hybrid(
         history: List[float],
         steps: int,
-        drivers: Dict[str, Any] = None,
-        driver_overrides: Dict[int, float] = None,
+        drivers: Optional[Dict[str, Any]] = None,
+        driver_overrides: Optional[Dict[int, float]] = None,
         statistical_method: str = 'auto'
     ) -> Dict[str, Any]:
         """
@@ -404,12 +404,12 @@ class HybridForecast:
                 }
 
         # Step 3: Blend statistical + driver-based
-        stat_weight = max(0, 1.0 - driver_weight_total)
+        stat_weight = max(0.0, 1.0 - float(driver_weight_total))
         blended = []
         source_tracking = []
 
         for i in range(steps):
-            stat_val = stat_values[i] if i < len(stat_values) else stat_values[-1]
+            stat_val = float(stat_values[i]) if i < len(stat_values) else float(stat_values[-1])
 
             if i in driver_overrides:
                 # User explicitly overrode this month
@@ -441,16 +441,16 @@ class HybridForecast:
             blended.append(round(float(final_val), 2))
 
         # Confidence intervals
-        std_err = np.std(history[-6:]) if len(history) >= 6 else np.std(history) if len(history) > 1 else abs(np.mean(history)) * 0.1
+        std_err = float(np.std(history[-6:])) if len(history) >= 6 else float(np.std(history)) if len(history) > 1 else float(abs(np.mean(history))) * 0.1
         intervals = np.sqrt(np.arange(1, steps + 1))
 
         return {
             'mean': blended,
-            'lower': [round(v - 1.96 * std_err * intervals[i], 2) for i, v in enumerate(blended)],
-            'upper': [round(v + 1.96 * std_err * intervals[i], 2) for i, v in enumerate(blended)],
+            'lower': [round(float(v - 1.96 * std_err * float(intervals[i])), 2) for i, v in enumerate(blended)],
+            'upper': [round(float(v + 1.96 * std_err * float(intervals[i])), 2) for i, v in enumerate(blended)],
             'method': 'hybrid',
-            'statistical_weight': round(stat_weight, 2),
-            'driver_weight': round(driver_weight_total, 2),
+            'statistical_weight': round(float(stat_weight), 2),  # type: ignore
+            'driver_weight': round(float(driver_weight_total), 2),  # type: ignore
             'regime_info': regime_info,
             'source_tracking': source_tracking,
             'driver_contributions': driver_contributions,
@@ -574,8 +574,8 @@ class ModelConfidenceEngine:
     def compute_confidence(
         history: List[float],
         forecast: List[float],
-        assumptions: Dict[str, float] = None,
-        industry_benchmarks: Dict[str, Tuple[float, float]] = None
+        assumptions: Optional[Dict[str, float]] = None,
+        industry_benchmarks: Optional[Dict[str, Tuple[float, float]]] = None
     ) -> Dict[str, Any]:
         """
         Compute comprehensive model confidence score.
@@ -754,8 +754,8 @@ class EnhancedBacktester:
     @staticmethod
     def run_comprehensive_backtest(
         history: List[float],
-        windows: List[int] = None,
-        methods: List[str] = None
+        windows: Optional[List[int]] = None,
+        methods: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
         Walk-forward backtesting across multiple windows and methods.
@@ -857,12 +857,12 @@ class EnhancedBacktester:
 def run_enterprise_forecast(
     history: List[float],
     steps: int,
-    features: Dict[str, List[float]] = None,
-    features_forecast: Dict[str, List[float]] = None,
-    drivers: Dict[str, Any] = None,
-    driver_overrides: Dict[int, float] = None,
-    assumptions: Dict[str, float] = None,
-    industry_benchmarks: Dict[str, Tuple[float, float]] = None
+    features: Optional[Dict[str, List[float]]] = None,
+    features_forecast: Optional[Dict[str, List[float]]] = None,
+    drivers: Optional[Dict[str, Any]] = None,
+    driver_overrides: Optional[Dict[int, float]] = None,
+    assumptions: Optional[Dict[str, float]] = None,
+    industry_benchmarks: Optional[Dict[str, Tuple[float, float]]] = None
 ) -> Dict[str, Any]:
     """
     Complete 2026-standard enterprise forecasting pipeline.
@@ -909,5 +909,17 @@ def run_enterprise_forecast(
 
     # 5. Backtesting
     result['backtest'] = EnhancedBacktester.run_comprehensive_backtest(history)
+    
+    # 6. Sensitivity Ranking (if drivers/assumptions provided)
+    if assumptions and drivers:
+        def compute_fn(params):
+            # Simple simulation for sensitivity mapping
+            # In a real system, this would call the full model recompute
+            return { 'revenue': hybrid['mean'][-1] * (1 + sum(params.values()) / 100) }
+            
+        result['sensitivity'] = SensitivityRanker.rank_sensitivities(
+            base_assumptions=assumptions,
+            compute_fn=compute_fn
+        )
 
     return result

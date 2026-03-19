@@ -179,6 +179,7 @@ export const scenarioService = {
       runwayMonths: number;
       [key: string]: any;
     };
+    insights: any[];
   }> => {
     // Get scenario run
     const scenarioRun = await prisma.modelRun.findUnique({
@@ -256,10 +257,62 @@ export const scenarioService = {
       mrr: (scenarioSummary.mrr || 0) - (baselineSummary.mrr || 0),
     };
 
+    // Generate dynamic insights
+    const insights = [];
+    
+    // Revenue Insight
+    if (delta.revenue > 0) {
+      const pct = ((delta.revenue / (baselineSummary.totalRevenue || 1)) * 100).toFixed(1);
+      insights.push({
+        type: 'growth',
+        title: 'Increased Revenue Potential',
+        description: `This scenario projections a ${pct}% increase in total revenue ($${(delta.revenue / 1000).toFixed(0)}K additional) compared to baseline.`,
+        sentiment: 'positive'
+      });
+    } else if (delta.revenue < 0) {
+      const pct = Math.abs((delta.revenue / (baselineSummary.totalRevenue || 1)) * 100).toFixed(1);
+      insights.push({
+        type: 'risk',
+        title: 'Revenue Downside Risk',
+        description: `Revenue is projected to be ${pct}% lower than baseline, representing a $${(Math.abs(delta.revenue) / 1000).toFixed(0)}K impact.`,
+        sentiment: 'negative'
+      });
+    }
+
+    // Runway Insight
+    if (delta.runwayMonths > 0) {
+      insights.push({
+        type: 'stability',
+        title: 'Improved Runway Stability',
+        description: `Strategic adjustments in this scenario extend your cash runway by ${delta.runwayMonths} months.`,
+        sentiment: 'positive'
+      });
+    } else if (delta.runwayMonths < 0) {
+      insights.push({
+        type: 'burn',
+        title: 'Runway Impact',
+        description: `Aggressive spending or lower revenue in this scenario reduces runway by ${Math.abs(delta.runwayMonths)} months.`,
+        sentiment: 'warning'
+      });
+    }
+
+    // Efficiency Insight
+    const baselineEfficiency = (baselineSummary.totalRevenue || 0) / (baselineSummary.totalExpenses || 1);
+    const scenarioEfficiency = (scenarioSummary.totalRevenue || 0) / (scenarioSummary.totalExpenses || 1);
+    if (scenarioEfficiency > baselineEfficiency * 1.05) {
+      insights.push({
+        type: 'efficiency',
+        title: 'Superior Capital Efficiency',
+        description: 'This scenario yields a better Revenue/Expense ratio, indicating more efficient capital utilization.',
+        sentiment: 'positive'
+      });
+    }
+
     return {
       scenario: scenarioSummary,
       baseline: baselineSummary,
       delta,
+      insights
     };
   },
 

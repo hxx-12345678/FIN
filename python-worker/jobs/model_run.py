@@ -73,6 +73,14 @@ MODEL_TYPE_PROFILES: Dict[str, Dict[str, Any]] = {
         'volatility': 0.0,
         'confidence': 93,
     },
+    'saas': {
+        'trend_multiplier': 1.15,
+        'expense_multiplier': 0.95,
+        'seasonality_amplitude': 0.02,
+        'innovation_factor': 0.01,
+        'volatility': 0.015,
+        'confidence': 89,
+    },
 }
 
 HORIZON_TO_MONTHS = {
@@ -148,31 +156,20 @@ def calculate_accuracy_metrics(
 
 def generate_summary_json(result: Dict[str, Any], model_json: Dict, params_json: Dict) -> Dict[str, Any]:
     """
-    Generate comprehensive summary_json for model run.
-    """
-def generate_summary_json(result: Dict, model_json: Dict, params_json: Dict) -> Dict:
-    """
     Generate a high-level summary of the model run for the dashboard.
     Works with both flat industry-standard metrics and nested 3-statement structures.
     """
     try:
         # 1. Identify the 3-statement source
-        # Standard deterministic run result should have a 'statements' key.
         statements = result.get('statements')
         
-        # If statements is missing from the result, check if the result itself has statement keys
         if not isinstance(statements, dict) or 'incomeStatement' not in statements:
             if 'incomeStatement' in result:
                 statements = result
             else:
-                # Still missing, fallback to the result object
                 statements = result
 
-        # Check for financial statement keys
         has_statements = isinstance(statements, dict) and ('incomeStatement' in statements or 'income_statement' in statements)
-        if not has_statements:
-            logger.warning(f"No direct financial statements found in result. Keys: {list(result.keys())[:10]}")
-            
         src = statements if has_statements else result
         
         # 2. Extract Aggregate Metrics
@@ -181,11 +178,9 @@ def generate_summary_json(result: Dict, model_json: Dict, params_json: Dict) -> 
         net_income = 0
         
         if has_statements and 'annual' in src['incomeStatement']:
-            # Aggregate from first year annual P&L for dashboard (standard)
             annual_is = src['incomeStatement']['annual']
             years = sorted(annual_is.keys())
             if years:
-                # Use only first year (usually current/first forecast year) for the high-level summary cards
                 first_year = years[0]
                 data = annual_is[first_year]
                 total_revenue = data.get('revenue', 0)
@@ -195,12 +190,11 @@ def generate_summary_json(result: Dict, model_json: Dict, params_json: Dict) -> 
                                  data.get('incomeTax', 0))
                 net_income = data.get('netIncome', 0)
         else:
-            # Fallback to flat result keys
             total_revenue = result.get('revenue') or result.get('totalRevenue') or 0
             total_expenses = result.get('expenses') or result.get('totalExpenses') or 0
             net_income = result.get('netIncome') or (float(total_revenue) - float(total_expenses))
 
-        # 3. Cash & Runway (Last visible month)
+        # 3. Cash & Runway
         ending_cash = 0
         burn_rate = result.get('burnRate') or result.get('monthlyBurn') or 0
         runway_months = result.get('runwayMonths') or result.get('runway') or 0
@@ -213,7 +207,7 @@ def generate_summary_json(result: Dict, model_json: Dict, params_json: Dict) -> 
         else:
             ending_cash = result.get('cashBalance') or result.get('cash') or 0
 
-        # 4. Flatten Monthly Data for Charts/Hypercube
+        # 4. Flatten Monthly Data
         flat_monthly = {}
         monthly_is = src.get('incomeStatement', {}).get('monthly') if has_statements else result.get('monthly')
         
@@ -223,24 +217,17 @@ def generate_summary_json(result: Dict, model_json: Dict, params_json: Dict) -> 
             
             for m, data in monthly_is.items():
                 if not isinstance(data, dict): continue
-                
                 entry = {**data}
-                # Merge statements if we have them
                 if m in monthly_cf: entry.update(monthly_cf[m])
                 if m in monthly_bs: entry.update(monthly_bs[m])
-                
-                # Ensure compatibility keys for frontend
                 if 'cash' not in entry and 'endingCash' in entry: entry['cash'] = entry['endingCash']
                 if 'expenses' not in entry:
-                    # Sum components if total missing
                     entry['expenses'] = (entry.get('operatingExpenses', 0) + 
                                        entry.get('cogs', 0) + 
                                        entry.get('interestExpense', 0) + 
                                        entry.get('incomeTax', 0))
-                
                 flat_monthly[m] = entry
         else:
-            # Fallback to whatever monthly data is present
             flat_monthly = result.get('monthly', {})
 
         # 5. Build Final Summary Object
@@ -257,23 +244,26 @@ def generate_summary_json(result: Dict, model_json: Dict, params_json: Dict) -> 
             'runwayMonths': float(runway_months),
             'arr': float(result.get('arr', total_revenue)),
             'mrr': float(result.get('mrr', total_revenue / 12)),
+            'ltv': float(result.get('ltv', 0)),
+            'cac': float(result.get('cac', 0)),
             'generatedAt': datetime.now(timezone.utc).isoformat(),
             'modelVersion': model_json.get('version', 1) if isinstance(model_json, dict) else 1,
             'modelType': params_json.get('modelType', result.get('modelType', 'baseline')),
             'forecastMonths': src.get('metadata', {}).get('horizonMonths') or result.get('forecastMonths', 12),
             'statements': statements if has_statements else result.get('statements', statements),
-            'monthly': flat_monthly,   # Flattened month-by-month metrics
+            'monthly': flat_monthly,
             'kpis': result.get('metrics', {}),
-            'valuation': result.get('valuation'), # DCF specific
-            'lbo': result.get('lbo'),             # LBO specific
-            'sensitivities': result.get('sensitivities'), # Sensitivity Ranking
+            'valuation': result.get('valuation'),
+            'lbo': result.get('lbo'),
+            'accretionDilution': result.get('accretionDilution'),
+            'valuationSummary': result.get('valuationSummary'),
+            'sensitivities': result.get('sensitivities'),
         }
         
         return summary
 
     except Exception as e:
         logger.error(f"Failed to generate summary_json: {str(e)}", exc_info=True)
-        # Extreme fallback
         return {
             'revenue': float(result.get('revenue', 0)),
             'error': str(e),
@@ -353,7 +343,10 @@ def handle_model_run(job_id: str, org_id: str, object_id: str, logs: dict):
             summary_json = None
             result = None
             
-            if cached_result and cached_result.get('summaryJson'):
+            use_cache = params_json.get('useCache', params_json.get('use_cache', True))
+            if isinstance(use_cache, str): use_cache = use_cache.lower() == 'true'
+            
+            if cached_result and cached_result.get('summaryJson') and use_cache:
                 logger.info(f"Using cached model run: {cached_result['modelRunId']}")
                 summary_json = cached_result['summaryJson']
                 result = summary_json.get('fullResult', summary_json)
@@ -780,7 +773,7 @@ def handle_model_run(job_id: str, org_id: str, object_id: str, logs: dict):
                 pass
 
 
-def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: str, org_id: str, cursor, model_id: str = None, job_id: str = None) -> Dict[str, Any]:
+def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: str, org_id: str, cursor, model_id: Optional[str] = None, job_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Compute deterministic model results using industry-standard 3-statement financial model.
     Uses actual transaction data from raw_transactions as baseline.
@@ -1185,7 +1178,14 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             expense_growth = float(final_assumptions.get('expenseGrowth', 0.05))
         
         params_json = params_json or {}
-        model_type = str(params_json.get('modelType') or params_json.get('model_type') or 'prophet').lower()
+        # Priority: params_json > model_json metadata > default 'prophet'
+        model_type = str(
+            params_json.get('modelType') or 
+            params_json.get('model_type') or 
+            model_json.get('metadata', {}).get('modelType') or 
+            model_json.get('metadata', {}).get('model_type') or 
+            'prophet'
+        ).lower()
         model_profile = MODEL_TYPE_PROFILES.get(model_type, MODEL_TYPE_PROFILES['prophet'])
         horizon_raw = params_json.get('horizon') or params_json.get('forecast_horizon') or params_json.get('forecastMonths')
         forecast_months = None
@@ -1409,7 +1409,37 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
         )
         metrics['magicNumber'] = magic_number
         metrics['ltvCac'] = ltv_cac_ratio
-        metrics['ruleOf40'] = (revenue_growth * 100) + (gross_margin * 100) # Simplified Rule of 40 (Growth + Margin)
+        
+        # Industry Standard: Rule of 40 = Revenue Growth % + EBITDA Margin %
+        # EBITDA Margin = (Revenue - COGS - OpEx + D&A) / Revenue
+        # Simplified: use operating margin as proxy
+        ebitda_margin = ((annual_revenue - annual_expenses) / annual_revenue) if annual_revenue > 0 else 0
+        metrics['ruleOf40'] = (revenue_growth * 100) + (ebitda_margin * 100)
+        
+        # Industry Standard: NRR (Net Revenue Retention)
+        # NRR = (Starting MRR + Expansion - Contraction - Churn) / Starting MRR
+        # Using revenue growth as expansion proxy, churn_rate as churn proxy
+        first_month_key = list(monthly_data.keys())[0] if monthly_data else None
+        starting_mrr = monthly_data[first_month_key]['revenue'] if first_month_key else mrr
+        expansion_mrr = max(0, mrr - starting_mrr) if mrr > starting_mrr else 0  # Revenue increase
+        contraction_mrr = max(0, starting_mrr - mrr) if starting_mrr > mrr else 0  # Revenue decrease
+        churned_mrr = starting_mrr * churn_rate  # Estimated churn
+        nrr = ((starting_mrr + expansion_mrr - contraction_mrr - churned_mrr) / starting_mrr * 100) if starting_mrr > 0 else 100
+        metrics['nrr'] = round(float(nrr), 1)
+        
+        # Industry Standard: GRR (Gross Revenue Retention)
+        # GRR = (Starting MRR - Churn MRR - Downgrade MRR) / Starting MRR
+        # Simplified: GRR = 1 - monthly churn rate (annualized)
+        grr = ((starting_mrr - churned_mrr - contraction_mrr) / starting_mrr * 100) if starting_mrr > 0 else 100
+        grr = min(100, max(0, grr))  # GRR is always <= 100%
+        metrics['grr'] = round(float(grr), 1)
+        
+        # Industry Standard: Burn Multiple = Net Burn / Net New ARR
+        # Lower is better (<2x good, >4x concerning)
+        net_new_arr = max(0, arr - (starting_mrr * 12)) if starting_mrr > 0 else 0
+        net_burn = max(0, monthly_burn * 12)  # Annualized burn
+        burn_multiple = net_burn / net_new_arr if net_new_arr > 0 else 0
+        metrics['burnMultiple'] = round(float(burn_multiple), 2)
         
         # Log data sources for transparency
         logger.info(
@@ -1499,6 +1529,12 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             'ltv': float(ltv),
             'ltvCacRatio': float(ltv_cac_ratio),
             'paybackPeriod': float(payback_period),
+            'nrr': float(nrr),
+            'grr': float(grr),
+            'burnMultiple': float(burn_multiple),
+            'magicNumber': float(magic_number),
+            'ruleOf40': float(metrics['ruleOf40']),
+            'ebitdaMargin': float(ebitda_margin),
             'monthly': monthly_data, 
             'metrics': metrics,
             'modelType': model_type,
@@ -1509,9 +1545,12 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             'statements': three_statement_model
         }
 
-        # --- INSTITUTIONAL MODULES (DCF / LBO) ---
+        # --- INSTITUTIONAL MODULES (DCF / LBO / M&A) ---
         if model_type == 'dcf':
-            # Perform Valuation Overlay
+            # ═══════════════════════════════════════════════════════
+            # INSTITUTIONAL DCF VALUATION V2
+            # Features: Mid-Year Convention, WACC (Net Debt), Exit Fallbacks
+            # ═══════════════════════════════════════════════════════
             try:
                 # 1. Calculate WACC
                 risk_free_rate = float(final_assumptions.get('riskFreeRate', 0.045))
@@ -1521,130 +1560,323 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                 
                 pre_tax_cost_of_debt = float(final_assumptions.get('costOfDebt', 0.08))
                 tax_rate = float(final_assumptions.get('taxRate', 0.25))
-                cost_of_debt = pre_tax_cost_of_debt * (1 - tax_rate)
+                cost_of_debt_at = pre_tax_cost_of_debt * (1 - tax_rate)
                 
-                total_debt = float(three_statement_model['balanceSheet']['annual'].get(str(current_month.year), {}).get('liabilities', {}).get('debt', 0))
-                market_cap = float(final_assumptions.get('marketCap', 1000000)) # Default if not known
-                total_value = market_cap + total_debt
+                # Market Geometry (Net Debt = Debt - Cash)
+                market_cap = float(final_assumptions.get('marketCap', 1000000))
+                y0_keys = list(three_statement_model.get('balanceSheet', {}).get('annual', {}).keys())
+                y0_bs = three_statement_model['balanceSheet']['annual'][y0_keys[0]] if y0_keys else {}
                 
-                w_equity = market_cap / total_value if total_value > 0 else 1.0
-                w_debt = total_debt / total_value if total_value > 0 else 0.0
-                wacc = (w_equity * cost_of_equity) + (w_debt * cost_of_debt)
+                liabilities = y0_bs.get('liabilities', {}) if y0_bs else {}
+                assets = y0_bs.get('assets', {}) if y0_bs else {}
+                y0_debt = float(liabilities.get('debt', 0)) if isinstance(liabilities, dict) else 0
+                y0_cash = float(assets.get('cash', 0)) if isinstance(assets, dict) else 0
+                net_debt = y0_debt - y0_cash
                 
-                # 2. Extract UFCF (Unlevered Free Cash Flow)
-                # Formula: EBIT * (1 - Tax) + Depreciation - Capex - Change in NWC
+                total_value_est = market_cap + y0_debt
+                w_equity = market_cap / total_value_est if total_value_est > 0 else 1.0
+                w_debt = 1.0 - w_equity
+                
+                wacc = (w_equity * cost_of_equity) + (w_debt * cost_of_debt_at)
+                
+                # 2. Free Cash Flow Stream (UFCF)
                 ufcfs = []
                 years = sorted(three_statement_model['incomeStatement']['annual'].keys())
                 for year in years:
                     is_data = three_statement_model['incomeStatement']['annual'][year]
                     cf_data = three_statement_model['cashFlow']['annual'][year]
+                    # Formula: EBIT(1-T) + D&A - Capex - ΔNWC
+                    ebit_at = float(is_data.get('ebit', 0)) * (1 - tax_rate)
+                    da = float(is_data.get('depreciation', 0))
+                    capex = abs(float(cf_data.get('capex', 0)))
+                    nwc_change = float(cf_data.get('workingCapitalChange', 0))
                     
-                    ebit = is_data.get('ebit', 0)
-                    dep = is_data.get('depreciation', 0)
-                    tax = is_data.get('incomeTax', 0)
-                    capex = abs(cf_data.get('capex', 0))
-                    nwc_change = cf_data.get('workingCapitalChange', 0)
-                    
-                    ufcf = (ebit * (1 - tax_rate)) + dep - capex + nwc_change
-                    ufcfs.append(ufcf)
+                    ufcfs.append(ebit_at + da - capex + nwc_change)
                 
-                # 3. Present Value and Terminal Value
-                discount_factors = [(1 / (1 + wacc)**(i+1)) for i in range(len(ufcfs))]
-                pv_flows = sum(f * d for f, d in zip(ufcfs, discount_factors))
+                # 3. Present Value (Mid-Year Convention: 0.5yr adjustment)
+                pv_flows = 0.0
+                for i, fcf in enumerate(ufcfs):
+                    # Mid-year convention assumes cash flows occur on average in middle of year
+                    pv_flows += fcf / ((1 + wacc) ** (i + 0.5))
                 
+                # 4. Terminal Value
                 terminal_method = final_assumptions.get('terminalValueMethod', 'perpetuity').lower()
+                if not years:
+                    logger.warning("DCF skipped terminal value: no projected years found")
+                    raise ValueError("Insufficient projection data for DCF valuation")
+                    
+                final_year_key = years[-1]
+                final_is = three_statement_model['incomeStatement']['annual'].get(final_year_key, {})
                 
                 if terminal_method == 'multiple':
                     exit_multiple = float(final_assumptions.get('exitMultiple', 10.0))
-                    # Term Value = Final Year Metric * Exit Multiple
-                    # Usually EBITDA or Revenue
-                    final_ebitda = three_statement_model['incomeStatement']['annual'][years[-1]].get('ebitda', 0)
-                    terminal_value = final_ebitda * exit_multiple
+                    ebitda = float(final_is.get('ebitda', 0))
+                    # Fallback for negative EBITDA: use Revenue Multiple (approx 1/4th of EBITDA multiple)
+                    if ebitda <= 0:
+                        term_val = float(final_is.get('revenue', 0)) * (exit_multiple / 4.0)
+                        method_used = "Revenue Multiple Fallback"
+                    else:
+                        term_val = ebitda * exit_multiple
+                        method_used = "EBITDA Multiple"
                 else:
-                    # Perpetuity Growth Method
-                    terminal_growth = float(final_assumptions.get('terminalGrowth', 0.02))
-                    last_fcf = ufcfs[-1] if ufcfs else 0
-                    terminal_value = (last_fcf * (1 + terminal_growth)) / (wacc - terminal_growth) if (wacc - terminal_growth) > 0 else 0
+                    g = float(final_assumptions.get('terminalGrowth', 0.02))
+                    term_val = (ufcfs[-1] * (1 + g)) / (wacc - g) if (wacc - g) > 0 else 0
+                    method_used = "Perpetuity Growth"
                 
-                pv_terminal = terminal_value / ((1 + wacc) ** len(ufcfs))
+                pv_term_val = term_val / ((1 + wacc) ** len(ufcfs))
+                implied_ev = pv_flows + pv_term_val
+                implied_equity_val = implied_ev - net_debt
                 
-                enterprise_value = pv_flows + pv_terminal
-                equity_value = enterprise_value - total_debt + ending_cash
+                shares = float(final_assumptions.get('sharesOutstanding', 1000000))
+                implied_price = implied_equity_val / shares if shares > 0 else 0
                 
+                # 5. Sensitivity Analysis (Institutional 5x5 Matrix)
+                wacc_steps = [wacc - 0.01, wacc - 0.005, wacc, wacc + 0.005, wacc + 0.01]
+                growth_steps = [g - 0.01, g - 0.005, g, g + 0.005, g + 0.01] if terminal_method != 'multiple' else [1.0, 1.0, 1.0, 1.0, 1.0]
+                
+                sensitivity_matrix = []
+                for w_step in wacc_steps:
+                    row = []
+                    for g_step in growth_steps:
+                        if w_step <= g_step: # Mathematical impossibility check
+                            row.append(0)
+                            continue
+                        # Recalculate implied price for this cell
+                        cell_pv_flows = sum([f / ((1 + w_step) ** (i + 0.5)) for i, f in enumerate(ufcfs)])
+                        cell_term_val = (ufcfs[-1] * (1 + g_step)) / (w_step - g_step)
+                        cell_pv_term = cell_term_val / ((1 + w_step) ** len(ufcfs))
+                        cell_price = (cell_pv_flows + cell_pv_term - net_debt) / shares if shares > 0 else 0
+                        row.append(round(float(cell_price), 2))
+                    sensitivity_matrix.append(row)
+
                 result['valuation'] = {
-                    'wacc': round(wacc, 4),
-                    'costOfEquity': round(cost_of_equity, 4),
-                    'costOfDebt': round(cost_of_debt, 4),
-                    'enterpriseValue': round(enterprise_value, 2),
-                    'equityValue': round(equity_value, 2),
-                    'terminalValue': round(terminal_value, 2),
-                    'terminalMethod': terminal_method,
-                    'presentValueFlows': round(pv_flows, 2),
-                    'presentValueTerminal': round(pv_terminal, 2),
-                    'impliedSharePrice': round(equity_value / float(final_assumptions.get('sharesOutstanding', 1000000)), 2)
+                    'enterpriseValue': round(float(implied_ev), 2),
+                    'equityValue': round(float(implied_equity_val), 2),
+                    'impliedSharePrice': round(float(implied_price), 2),
+                    'wacc': round(float(wacc), 4),
+                    'pvOfFreeCashFlows': round(float(pv_flows), 2),
+                    'pvOfTerminalValue': round(float(pv_term_val), 2),
+                    'terminalValue': round(float(term_val), 2),
+                    'terminalMethodUsed': method_used,
+                    'sensitivityMatrix': {
+                        'waccSteps': [round(w * 100, 1) for w in wacc_steps],
+                        'growthSteps': [round(g * 100, 1) for g in growth_steps],
+                        'matrix': sensitivity_matrix
+                    }
                 }
             except Exception as e:
-                logger.error(f"DCF Calculation failed: {e}")
+                logger.error(f"Institutional DCF failed: {e}")
 
         elif model_type == 'lbo':
-            # Perform LBO Returns Overlay
+            # ═══════════════════════════════════════════════════════
+            # INSTITUTIONAL LBO ENGINE V2
+            # Features: Sources & Uses, Cumulative Cash Sweep, Returns 
+            # ═══════════════════════════════════════════════════════
             try:
                 entry_multiple = float(final_assumptions.get('entryMultiple', 8.0))
                 exit_multiple = float(final_assumptions.get('exitMultiple', 10.0))
                 leverage_ratio = float(final_assumptions.get('leverageRatio', 4.0)) # Net Debt / EBITDA
+                tax_rate = float(final_assumptions.get('taxRate', 0.25))
                 
-                # 1. Entry Valuation
-                t0_ebitda = float(three_statement_model['incomeStatement']['monthly'][list(pl_monthly.keys())[0]].get('ebitda', 0) * 12)
-                entry_enterprise_value = t0_ebitda * entry_multiple
-                initial_debt = t0_ebitda * leverage_ratio
-                initial_equity = entry_enterprise_value - initial_debt
+                # Dynamic Parameters (No Hardcoding)
+                senior_rate = float(final_assumptions.get('seniorDebtRate', 0.06))
+                sub_rate = float(final_assumptions.get('subDebtRate', 0.10))
+                mandatory_amort = float(final_assumptions.get('mandatoryAmortization', 0.05))
+                sweep_pct = float(final_assumptions.get('excessCashSweep', 0.80))
+                fee_rate = float(final_assumptions.get('transactionFeeRate', 0.015))
                 
-                # 2. Track Paydown
-                # The 3-statement motor already handles debt paydown via overrides if present, 
-                # but for a primary LBO model we look at cumulative FCF available for debt service (CFADS)
-                # CFADS = Cash Flow from Operations - Capex
-                cumulative_cfads = sum(
-                    three_statement_model['cashFlow']['annual'][y].get('operatingCashFlow', 0) + 
-                    three_statement_model['cashFlow']['annual'][y].get('investingCashFlow', 0) 
-                    for y in three_statement_model['cashFlow']['annual']
-                )
+                # 1. Entry Valuation & Sources/Uses
+                monthly_is = three_statement_model.get('incomeStatement', {}).get('monthly', {})
+                t0_month_keys = list(monthly_is.keys())
+                t0_month = t0_month_keys[0] if t0_month_keys else None
+                t0_ebitda = float(monthly_is[t0_month].get('ebitda', 0) * 12) if t0_month else float(monthly_burn * 12)
                 
-                ending_debt = max(0, initial_debt - cumulative_cfads)
+                purchase_price = t0_ebitda * entry_multiple
+                transaction_fees = purchase_price * fee_rate # Dynamic deal fees
+                total_uses = purchase_price + transaction_fees
+                
+                # Debt Tranches (Senior 70%, Sub 30% of total debt)
+                total_debt_entry = t0_ebitda * leverage_ratio
+                senior_debt = total_debt_entry * 0.7
+                sub_debt = total_debt_entry * 0.3
+                sponsor_equity = total_uses - total_debt_entry
+                
+                sources_uses = {
+                    'sources': {'Senior Debt': round(senior_debt, 0), 'Sub Debt': round(sub_debt, 0), 'Equity': round(sponsor_equity, 0)},
+                    'uses': {'Purchase Price': round(purchase_price, 0), 'Fees': round(transaction_fees, 0)}
+                }
+                
+                # 2. Multi-Year Debt Schedule & Cash Sweep
+                years = sorted(three_statement_model['cashFlow']['annual'].keys())
+                running_senior_debt = senior_debt
+                running_sub_debt = sub_debt
+                debt_schedule = []
+                
+                for year in years:
+                    is_data = three_statement_model['incomeStatement']['annual'][year]
+                    cf_data = three_statement_model['cashFlow']['annual'][year]
+                    
+                    # Interest Calculation
+                    i_senior = running_senior_debt * senior_rate
+                    i_sub = running_sub_debt * sub_rate
+                    annual_interest = i_senior + i_sub
+                    
+                    # CFADS = EBITDA - Taxes - Capex - Change in Working Capital - Interest
+                    # (Interest must be paid before principal paydown)
+                    ebitda = float(is_data.get('ebitda', 0))
+                    ebit = float(is_data.get('ebit', 0))
+                    taxes = (ebit - annual_interest) * tax_rate
+                    capex_out = abs(float(cf_data.get('capex', 0)))
+                    nwc_out = abs(float(cf_data.get('workingCapitalChange', 0))) if float(cf_data.get('workingCapitalChange', 0)) < 0 else 0
+                    
+                    cfads = ebitda - taxes - capex_out - nwc_out - annual_interest
+                    
+                    # Senior Paydown (Mandatory + Optional Sweep)
+                    mandatory = senior_debt * mandatory_amort
+                    senior_paydown = min(running_senior_debt, max(mandatory, cfads * sweep_pct)) # sweep dynamic % to senior first
+                    running_senior_debt -= senior_paydown
+                    
+                    # Sub Paydown (Sweep remaining CFADS)
+                    remaining_cf = max(0, cfads - senior_paydown)
+                    sub_paydown = min(running_sub_debt, remaining_cf)
+                    running_sub_debt -= sub_paydown
+                    
+                    debt_schedule.append({
+                        'year': year,
+                        'ebitda': round(ebitda, 0),
+                        'cfads': round(cfads, 0),
+                        'seniorPaydown': round(senior_paydown, 0),
+                        'subPaydown': round(sub_paydown, 0),
+                        'remainingDebt': round(running_senior_debt + running_sub_debt, 0)
+                    })
+                
+                ending_debt = running_senior_debt + running_sub_debt
                 
                 # 3. Exit Valuation
-                final_year = sorted(three_statement_model['incomeStatement']['annual'].keys())[-1]
-                final_is_data = three_statement_model['incomeStatement']['annual'][final_year]
+                final_year = years[-1] if years else None
+                final_is = three_statement_model.get('incomeStatement', {}).get('annual', {}).get(final_year, {}) if final_year else {}
+                final_ebitda = float(final_is.get('ebitda', 0)) if final_year else float(t0_ebitda)
+                exit_ev = final_ebitda * exit_multiple
+                exit_equity = exit_ev - ending_debt
                 
-                # institutional fallback: if EBITDA is negative or zero, use revenue multiple
-                if final_is_data.get('ebitda', 0) <= 0:
-                    exit_enterprise_value = final_is_data.get('revenue', 0) * (exit_multiple / 2.0) # assume rev mult is half ebitda mult for simplicity
-                    valuation_method = "Revenue"
-                else:
-                    exit_enterprise_value = final_is_data['ebitda'] * exit_multiple
-                    valuation_method = "EBITDA"
-                    
-                exit_equity_value = exit_enterprise_value - ending_debt
-                
-                # 4. Returns (MOIC and IRR)
-                moic = exit_equity_value / initial_equity if initial_equity > 0 else 0
-                years = len(three_statement_model['incomeStatement']['annual'])
-                # Annualized IRR calculation
-                irr = (moic ** (1.0 / years)) - 1 if moic > 0 and years > 0 else 0
+                # 4. Returns
+                moic = exit_equity / sponsor_equity if sponsor_equity > 0 else 0
+                irr = (moic ** (1.0 / len(years)) - 1) if moic > 0 and len(years) > 0 else 0
                 
                 result['lbo'] = {
-                    'moic': round(moic, 3),
-                    'irr': round(irr, 4),
-                    'entryEquity': round(initial_equity, 2),
-                    'exitEquity': round(exit_equity_value, 2),
-                    'endingDebt': round(ending_debt, 2),
-                    'totalDebtPaydown': round(initial_debt - ending_debt, 2),
-                    'entryMultiple': entry_multiple,
-                    'exitMultiple': exit_multiple,
-                    'valuationMethod': valuation_method,
-                    'ebitdaGrowth': round((final_is_data.get('ebitda', 1) / max(1, t0_ebitda)) ** (1.0/years) - 1, 4) if years > 0 else 0
+                    'moic': round(float(moic), 3),
+                    'irr': round(float(irr), 4),
+                    'entryEquity': round(float(sponsor_equity), 2),
+                    'exitEquity': round(float(exit_equity), 2),
+                    'endingDebt': round(float(ending_debt), 2),
+                    'totalDebtPaydown': round(float(total_debt_entry - ending_debt), 2),
+                    'debtSchedule': debt_schedule,
+                    'sourcesUses': sources_uses,
+                    'seniorDebtRate': senior_rate * 100,
+                    'subDebtRate': sub_rate * 100,
+                    'mandatoryAmortization': mandatory_amort * 100,
+                    'excessCashSweep': sweep_pct * 100,
+                    'transactionFeeRate': fee_rate * 100,
+                    'ebitdaGrowth': round((final_ebitda / max(1, t0_ebitda)) ** (1.0/len(years)) - 1, 4) if len(years) > 0 else 0
                 }
             except Exception as e:
-                logger.error(f"LBO Calculation failed: {e}")
+                logger.error(f"Institutional LBO failed: {e}")
+
+        elif model_type == 'accretion-dilution':
+            # ═══════════════════════════════════════════════════════
+            # INSTITUTIONAL M&A ENGINE V2
+            # Features: Transaction Fees, Synergy Phase-In, Share Rec
+            # ═══════════════════════════════════════════════════════
+            try:
+                # 1. Acquirer (A) Stats
+                annual_is = three_statement_model.get('incomeStatement', {}).get('annual', {})
+                a_keys = sorted(list(annual_is.keys()))
+                a_data = annual_is[a_keys[0]] if a_keys else {}
+                a_ni = float(a_data.get('netIncome', annual_net_income))
+                a_shares = float(final_assumptions.get('sharesOutstanding', 1000000))
+                a_eps = a_ni / a_shares if a_shares > 0 else 0
+                a_price = float(final_assumptions.get('sharePrice', 50.0))
+                
+                # 2. Target (T) Stats
+                t_ni = float(final_assumptions.get('targetNetIncome', a_ni * 0.3))
+                t_rev = float(final_assumptions.get('targetRevenue', annual_revenue * 0.25))
+                t_pe = float(final_assumptions.get('targetPE', 15.0))
+                t_equity_val = t_ni * t_pe
+                
+                # 3. Deal Geometry
+                premium = float(final_assumptions.get('purchasePremium', 0.30))
+                total_purchase_price = t_equity_val * (1 + premium)
+                fee_rate = float(final_assumptions.get('transactionFeeRate', 0.015))
+                transaction_fees = total_purchase_price * fee_rate # Dynamic Advisor/Legal/Diligence
+                total_capital_required = total_purchase_price + transaction_fees
+                
+                # 4. Financing Mix
+                stock_pc = float(final_assumptions.get('stockPercentage', 0.5))
+                cash_pc = 1.0 - stock_pc
+                
+                cost_of_debt = float(final_assumptions.get('costOfDebt', 0.08))
+                tax_rate = float(final_assumptions.get('taxRate', 0.25))
+                new_debt = total_capital_required * cash_pc
+                interest_after_tax = new_debt * cost_of_debt * (1 - tax_rate)
+                
+                # 5. Synergies (Phased)
+                # institutional standard: 70% in Year 1, 100% in Year 2
+                run_rate_synergies = float(final_assumptions.get('costSynergies', t_rev * 0.05))
+                phase_in = float(final_assumptions.get('synergyPhaseIn', 0.70))
+                y1_synergies_at = run_rate_synergies * phase_in * (1 - tax_rate)
+                
+                # 6. Asset Write-up & Amortization
+                premium_paid = total_purchase_price - t_equity_val
+                write_up_pct = float(final_assumptions.get('assetWriteUpPct', 0.20))
+                amort_period = int(final_assumptions.get('amortizationPeriod', 10))
+                amort_annual = (premium_paid * write_up_pct) / amort_period if amort_period > 0 else 0
+                
+                # 7. Pro-Forma Net Income
+                pf_ni = a_ni + t_ni + y1_synergies_at - interest_after_tax - (amort_annual * (1 - tax_rate))
+                
+                # 8. Pro-Forma Shares
+                new_shares = (total_purchase_price * stock_pc) / a_price if a_price > 0 else 0
+                pf_shares = a_shares + new_shares
+                
+                pf_eps = pf_ni / pf_shares if pf_shares > 0 else 0
+                acc_dil_pc = (pf_eps / a_eps - 1) * 100 if a_eps != 0 else 0
+
+                # 9. Breakeven Synergies
+                # Synergy required to make the deal flat (0% accretion/dilution)
+                # PF_NI must be Standalone_EPS * PF_Shares
+                required_pf_ni = a_eps * pf_shares
+                needed_synergy_at = required_pf_ni - (a_ni + t_ni - interest_after_tax - amort_annual)
+                breakeven_synergies = needed_synergy_at / (1 - tax_rate)
+                
+                result['accretionDilution'] = {
+                    'isAccretive': pf_eps > a_eps,
+                    'accretionDilutionPct': float(round(acc_dil_pc, 2)),
+                    'acquirerEPS': float(round(a_eps, 4)),
+                    'proFormaEPS': float(round(pf_eps, 4)),
+                    'epsChange': float(round(pf_eps - a_eps, 4)),
+                    'purchasePrice': float(round(total_purchase_price, 2)),
+                    'transactionFees': float(round(transaction_fees, 2)),
+                    'newSharesIssued': float(round(new_shares, 0)),
+                    'proFormaShares': float(round(pf_shares, 0)),
+                    'costSynergies': float(round(run_rate_synergies, 2)),
+                    'synergyPhaseIn': float(round(phase_in * 100, 1)),
+                    'y1SynergiesAfterTax': float(round(y1_synergies_at, 2)),
+                    'assetWriteUpPct': float(round(write_up_pct * 100, 1)),
+                    'amortizationPeriod': float(round(amort_period, 1)),
+                    'amortizationAnnual': float(round(amort_annual, 2)),
+                    'debtInterestAfterTax': float(round(interest_after_tax, 2)),
+                    'acquirerNI': float(round(a_ni, 2)),
+                    'targetNI': float(round(t_ni, 2)),
+                    'proFormaNI': float(round(pf_ni, 2)),
+                    'breakevenSynergies': float(round(breakeven_synergies, 2)),
+                    'goodwill': float(round(premium_paid, 2)),
+                    'purchasePremium': float(round(premium * 100, 1)),
+                    'stockPercentage': float(round(stock_pc * 100, 1)),
+                    'cashPercentage': float(round(cash_pc * 100, 1))
+                }
+                logger.info(f"M&A Engine V2: {'Accretive' if pf_eps > a_eps else 'Dilutive'} by {abs(acc_dil_pc):.1f}%")
+            except Exception as e:
+                logger.error(f"Accretion/Dilution Calculation failed: {e}")
 
         # --- SENSITIVITY AUTO-RANKING (Predictive Evolution) ---
         try:
@@ -1665,7 +1897,54 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
         except Exception as e:
             logger.warning(f"Sensitivity ranking skipped: {e}")
 
-        return result
+        # --- CONSOLIDATED VALUATION SUMMARY (For Football Field) ---
+        try:
+            val_summary = []
+            a_shares = float(final_assumptions.get('sharesOutstanding', 1000000))
+            a_price = float(final_assumptions.get('sharePrice', 50.0))
+            a_eps = float(result.get('accretionDilution', {}).get('acquirerEPS', annual_net_income / a_shares if a_shares > 0 else 0))
+
+            # methodology 1: DCF
+            if 'valuation' in result:
+                dcf_price = result['valuation'].get('impliedSharePrice', 0)
+                val_summary.append({
+                    'name': 'Intrinsics (DCF)',
+                    'low': round(float(dcf_price * 0.92), 2),
+                    'high': round(float(dcf_price * 1.08), 2),
+                    'color': '#3b82f6'
+                })
+
+            # methodology 2: LBO
+            if 'lbo' in result:
+                # Use exit equity value per share
+                lbo_price = result['lbo'].get('exitEquity', 0) / a_shares if a_shares > 0 else 0
+                val_summary.append({
+                    'name': 'LBO Analysis',
+                    'low': round(float(lbo_price * 0.9), 2),
+                    'high': round(float(lbo_price * 1.1), 2),
+                    'color': '#8b5cf6'
+                })
+
+            # methodology 3: Trading Comps (P/E)
+            val_summary.append({
+                'name': 'Trading Comps',
+                'low': round(float(a_eps * 15.0), 2),
+                'high': round(float(a_eps * 25.0), 2),
+                'color': '#10b981'
+            })
+
+            # methodology 4: Precedent Transactions
+            val_summary.append({
+                'name': 'Precedent Trans',
+                'low': round(float(a_eps * 18.0), 2),
+                'high': round(float(a_eps * 32.0), 2),
+                'color': '#f59e0b'
+            })
+
+            result['valuationSummary'] = val_summary
+            result['currentPrice'] = a_price
+        except Exception as val_sum_err:
+            logger.warning(f"Valuation summary failed: {val_sum_err}")
 
         # ======================================================================
         # STEP 7: Write results to metric_cubes table

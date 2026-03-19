@@ -13,7 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts"
 import { VirtualizedTable } from "@/components/ui/virtualized-table"
 import { useChartPagination } from "@/hooks/use-chart-pagination"
-import { Download, Upload, Zap, TrendingUp, Calculator, Brain, Save, SearchIcon, Loader2, AlertCircle, Play, FileDown, FileText, HelpCircle, Pencil, Check, X, Sparkles, Plus, LineChart as LineChartIcon, CheckCircle2, ShieldCheck, Grid, ShieldAlert, Database, Activity, Target, LayoutDashboard, FileDiff, History as HistoryIcon, ArrowUpRight, ArrowDownRight, Scale } from "lucide-react"
+import { Download, Upload, Zap, TrendingUp, Calculator, Brain, Save, SearchIcon, Loader2, AlertCircle, Play, FileDown, FileText, HelpCircle, Pencil, Check, X, Sparkles, Plus, LineChart as LineChartIcon, CheckCircle2, ShieldCheck, Grid, ShieldAlert, Database, Activity, Target, LayoutDashboard, FileDiff, History as HistoryIcon, ArrowUpRight, ArrowDownRight, Scale, Flame, Clock, Landmark, Users, BarChart3, DollarSign } from "lucide-react"
 import { CreateModelForm } from "./create-model-form"
 import { toast } from "sonner"
 import { ProvenanceDrawer } from "./provenance-drawer"
@@ -44,6 +44,7 @@ import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-conf
 import { useModel } from "@/lib/model-context"
 import { useOrg } from "@/lib/org-context"
 import { BudgetWorkflow } from "./approvals/budget-workflow"
+import { FootballFieldChart } from "./valuation/football-field"
 
 interface FinancialModel {
   id: string
@@ -87,7 +88,7 @@ export function FinancialModeling() {
   const { currencySymbol, formatCurrency } = useOrg()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const currentTab = searchParams.get("tab") || "statements"
+  const currentTab = searchParams.get("tab") || "dashboard"
   const { selectedModelId: selectedModel, setSelectedModelId: setSelectedModel, orgId: contextOrgId, setOrgId: setContextOrgId } = useModel()
 
   const [models, setModels] = useState<FinancialModel[]>([])
@@ -402,7 +403,7 @@ export function FinancialModeling() {
             const topLevelMonthly = summary.monthly || {}
             const statementMonthly = summary.statements?.incomeStatement?.monthly || {}
             const allMonthKeys = Array.from(new Set([...Object.keys(topLevelMonthly), ...Object.keys(statementMonthly)]))
-            
+
             if (allMonthKeys.length > 0) {
               const mappedData = allMonthKeys.map(monthKey => {
                 const monthData = {
@@ -1120,32 +1121,42 @@ export function FinancialModeling() {
         }}
         className="space-y-4"
       >
-        <TabsList className="grid w-full grid-cols-8 min-w-[900px] h-12 bg-slate-100 p-1 border border-slate-200">
-          <TabsTrigger value="dashboard" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-2">
+        <TabsList className="grid w-full grid-cols-12 min-w-[1300px] h-12 bg-slate-100 p-1 border border-slate-200">
+          <TabsTrigger value="dashboard" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-2 font-black">
             <LayoutDashboard className="h-3.5 w-3.5" /> Dashboard
           </TabsTrigger>
-          <TabsTrigger value="ingestion" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-2">
-            <Database className="h-3.5 w-3.5" /> Data Ingestion
+          <TabsTrigger value="statements" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-2 font-black">
+            <FileText className="h-3.5 w-3.5" /> Statements
           </TabsTrigger>
-          <TabsTrigger value="drivers" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-2">
+          <TabsTrigger value="valuation" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-2 font-black text-indigo-600">
+            <Grid className="h-3.5 w-3.5" /> Valuation
+          </TabsTrigger>
+          <TabsTrigger value="manual" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-2 font-black text-amber-600">
+            <Calculator className="h-3.5 w-3.5" /> Manual Overrides
+          </TabsTrigger>
+          <TabsTrigger value="ingestion" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-2 font-black">
+            <Database className="h-3.5 w-3.5" /> Ingestion
+          </TabsTrigger>
+          <TabsTrigger value="drivers" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-2 font-black">
             <Activity className="h-3.5 w-3.5" /> Drivers
           </TabsTrigger>
-          <TabsTrigger value="scenarios" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-2">
+          <TabsTrigger value="scenarios" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-2 font-black">
             <FileDiff className="h-3.5 w-3.5" /> Scenarios
           </TabsTrigger>
-          <TabsTrigger value="ai-assist" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-1.5">
-            <Sparkles className="h-3.5 w-3.5 text-purple-500" />
-            AI Assist
+          <TabsTrigger value="ai-assist" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-1.5 font-black text-purple-600">
+            <Sparkles className="h-3.5 w-3.5" /> AI Assist
           </TabsTrigger>
-          <TabsTrigger value="forecasting" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-2">
-            <BarChart className="h-3.5 w-3.5" /> Forecasting
+          <TabsTrigger value="forecasting" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-2 font-black text-blue-600">
+            <BarChart3 className="h-3.5 w-3.5" /> Forecasting
           </TabsTrigger>
-          <TabsTrigger value="explainability" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-2">
+          <TabsTrigger value="risk" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-2 font-black text-rose-500">
+            <ShieldAlert className="h-3.5 w-3.5" /> Risk Hub
+          </TabsTrigger>
+          <TabsTrigger value="explainability" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-2 font-black">
             <HistoryIcon className="h-3.5 w-3.5" /> Audit Trace
           </TabsTrigger>
-          <TabsTrigger value="governance" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-1.5">
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-            Policy Hub
+          <TabsTrigger value="governance" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-1.5 font-black text-emerald-600">
+            <ShieldCheck className="h-3.5 w-3.5" /> Policy Hub
           </TabsTrigger>
         </TabsList>
 
@@ -1165,7 +1176,15 @@ export function FinancialModeling() {
               </h3>
               <div className="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-emerald-600">
                 <ArrowUpRight className="h-3 w-3" />
-                +14.2% VS PEER AVG
+                {(() => {
+                  if (financialData.length >= 2) {
+                    const first = financialData[0]?.revenue || 1;
+                    const last = financialData[financialData.length - 1]?.revenue || 0;
+                    const growth = ((last - first) / Math.abs(first)) * 100;
+                    return `${growth >= 0 ? '+' : ''}${growth.toFixed(1)}% TOTAL GROWTH`;
+                  }
+                  return 'FORECAST';
+                })()}
               </div>
             </Card>
 
@@ -1220,11 +1239,482 @@ export function FinancialModeling() {
               </h3>
               <div className="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-amber-600">
                 <AlertCircle className="h-3 w-3" />
-                -2.1% VS BUDGET
+                {(() => {
+                  const totalRev = financialData.reduce((sum, m) => sum + (m.revenue || 0), 0) || 1;
+                  const totalGP = financialData.reduce((sum, m) => sum + (m.grossProfit || (m.revenue - (m.cogs || 0))), 0);
+                  const margin = (totalGP / totalRev) * 100;
+                  return margin >= 70 ? 'HEALTHY MARGIN' : margin >= 50 ? 'MODERATE' : 'NEEDS ATTENTION';
+                })()}
               </div>
             </Card>
           </div>
 
+          {/* ═══════════════════════════════════════════════════════
+              CONSOLIDATED VALUATION — FOOTBALL FIELD
+          ═══════════════════════════════════════════════════════ */}
+          {(currentRun?.summaryJson as any)?.valuationSummary && (
+            <Card className="border-2 shadow-xl overflow-hidden bg-slate-50/30">
+              <CardHeader className="bg-white border-b border-slate-100 flex flex-row items-center justify-between py-4">
+                <div>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Grid className="h-5 w-5 text-indigo-600" />
+                    Consolidated Valuation Summary
+                  </CardTitle>
+                  <CardDescription className="text-slate-400 font-medium">Multi-methodology valuation range Comparison</CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  <Badge variant="outline" className="bg-indigo-50 border-indigo-200 text-indigo-700 font-bold px-3 py-1">
+                    Institutional Standard
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="p-8">
+                <div className="h-[450px]">
+                  <FootballFieldChart
+                    ranges={(currentRun?.summaryJson as any)?.valuationSummary}
+                    currentPrice={(currentRun?.summaryJson as any)?.currentPrice}
+                    currency={currencySymbol || "$"}
+                  />
+                </div>
+                <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+                  <div className="space-y-4">
+                    <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
+                      <Zap className="h-3 w-3" /> Market Implications
+                    </h4>
+                    <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                      The current market price of <span className="font-black text-slate-900">{formatCurrency((currentRun?.summaryJson as any)?.currentPrice)}</span>
+                      {((currentRun?.summaryJson as any)?.currentPrice || 0) < (((currentRun?.summaryJson as any)?.valuationSummary?.[0]?.low || 0))
+                        ? " represents a significant discount to model-implied intrinsic value, suggesting substantial upside potential if the forecast materializes."
+                        : " is within the valuation range of most methodologies, suggesting the asset is fairly valued based on current assumptions."
+                      }
+                    </p>
+                  </div>
+                  {(currentRun?.summaryJson as any)?.sensitivities && (
+                    <div className="space-y-4">
+                      <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
+                        <Target className="h-3 w-3" /> Top Sensitivity Drivers
+                      </h4>
+                      <div className="space-y-2">
+                        {(currentRun?.summaryJson as any)?.sensitivities?.slice(0, 3).map((s: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-100 italic">
+                            <span className="text-[10px] font-bold text-slate-700 capitalize">{s.parameter.replace(/([A-Z])/g, ' $1').trim()}</span>
+                            <Badge className={s.impact > 0.05 ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-blue-50 text-blue-700 border-blue-100"}>
+                              {(s.impact * 100).toFixed(1)}% Sensitivity
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ═══════════════════════════════════════════════════════
+              DCF VALUATION DASHBOARD — only when modelType === 'dcf'
+          ═══════════════════════════════════════════════════════ */}
+          {(currentRun?.summaryJson as any)?.valuation && (
+            <Card className="border-2 border-blue-100 shadow-lg overflow-hidden">
+              <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white pb-4">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Target className="h-5 w-5" />
+                  DCF Valuation Summary
+                </CardTitle>
+                <CardDescription className="text-blue-100">Discounted Cash Flow Analysis Results</CardDescription>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  {[
+                    { label: 'Enterprise Value', value: formatCurrency((currentRun?.summaryJson as any)?.valuation?.enterpriseValue || 0), color: 'blue' },
+                    { label: 'Equity Value', value: formatCurrency((currentRun?.summaryJson as any)?.valuation?.equityValue || 0), color: 'emerald' },
+                    { label: 'Implied Share Price', value: formatCurrency((currentRun?.summaryJson as any)?.valuation?.impliedSharePrice || 0), color: 'indigo' },
+                    { label: 'WACC', value: (((currentRun?.summaryJson as any)?.valuation?.wacc || 0) * 100).toFixed(2) + '%', color: 'amber' },
+                  ].map((item, i) => (
+                    <div key={i} className="p-4 rounded-xl bg-slate-50 border border-slate-100">
+                      <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">{item.label}</p>
+                      <p className="text-xl font-black text-slate-900 mt-1">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="p-3 border rounded-lg bg-white">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">PV of FCFs</p>
+                    <p className="text-sm font-bold text-slate-800">{formatCurrency((currentRun?.summaryJson as any)?.valuation?.presentValueFlows || 0)}</p>
+                  </div>
+                  <div className="p-3 border rounded-lg bg-white">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">PV of Terminal</p>
+                    <p className="text-sm font-bold text-slate-800">{formatCurrency((currentRun?.summaryJson as any)?.valuation?.presentValueTerminal || 0)}</p>
+                  </div>
+                  <div className="p-3 border rounded-lg bg-white">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Terminal Value</p>
+                    <p className="text-sm font-bold text-slate-800">{formatCurrency((currentRun?.summaryJson as any)?.valuation?.terminalValue || 0)}</p>
+                  </div>
+                  <div className="p-3 border rounded-lg bg-white">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Terminal Method</p>
+                    <p className="text-sm font-bold text-slate-800 capitalize">{(currentRun?.summaryJson as any)?.valuation?.terminalMethodUsed || 'Perpetuity'}</p>
+                  </div>
+                </div>
+
+                {/* Sensitivity Matrix */}
+                {(currentRun?.summaryJson as any)?.valuation?.sensitivityMatrix && (
+                  <div className="mt-8 pt-6 border-t border-slate-100">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Grid className="h-4 w-4 text-blue-600" />
+                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-tighter">Valuation Sensitivity Matrix (WACC vs Terminal Growth)</h4>
+                    </div>
+                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                      <Table className="text-[10px]">
+                        <TableHeader className="bg-slate-50">
+                          <TableRow>
+                            <TableHead className="font-black text-slate-500 border-r text-center w-24">WACC \ Growth</TableHead>
+                            {(currentRun?.summaryJson as any)?.valuation?.sensitivityMatrix?.growthSteps?.map((g: number, i: number) => (
+                              <TableHead key={i} className="text-center font-bold text-blue-700">{g}%</TableHead>
+                            ))}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {(currentRun?.summaryJson as any)?.valuation?.sensitivityMatrix?.matrix?.map((row: any[], i: number) => (
+                            <TableRow key={i}>
+                              <TableCell className="font-bold text-blue-700 bg-slate-50 border-r text-center">
+                                {(currentRun?.summaryJson as any)?.valuation?.sensitivityMatrix?.waccSteps?.[i]}%
+                              </TableCell>
+                              {row.map((cell: number, j: number) => (
+                                <TableCell key={j} className={`text-center font-medium ${cell === 0 ? 'text-slate-300' : 'text-slate-800'}`}>
+                                  {cell === 0 ? 'N/M' : formatCurrency(cell)}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    <p className="text-[9px] text-slate-400 mt-2 italic">* Matrix shows implied share price. 'N/M' indicates mathematically invalid territory (WACC ≤ Growth).</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ═══════════════════════════════════════════════════════
+              LBO RETURNS DASHBOARD — only when modelType === 'lbo'
+          ═══════════════════════════════════════════════════════ */}
+          {(currentRun?.summaryJson as any)?.lbo && (
+            <Card className="border-2 border-purple-100 shadow-lg overflow-hidden">
+              <CardHeader className="bg-gradient-to-r from-purple-700 to-indigo-800 text-white pb-4">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Landmark className="h-5 w-5" />
+                  LBO Returns Analysis
+                </CardTitle>
+                <CardDescription className="text-purple-200">Leveraged Buyout Investment Returns</CardDescription>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  {[
+                    { label: 'MOIC', value: ((currentRun?.summaryJson as any)?.lbo?.moic || 0).toFixed(2) + 'x', sub: 'Multiple on Invested Capital' },
+                    { label: 'IRR', value: (((currentRun?.summaryJson as any)?.lbo?.irr || 0) * 100).toFixed(1) + '%', sub: 'Internal Rate of Return' },
+                    { label: 'Entry Equity', value: formatCurrency((currentRun?.summaryJson as any)?.lbo?.entryEquity || 0), sub: `Entry @ ${(currentRun?.summaryJson as any)?.lbo?.entryMultiple || 0}x` },
+                    { label: 'Exit Equity', value: formatCurrency((currentRun?.summaryJson as any)?.lbo?.exitEquity || 0), sub: `Exit @ ${(currentRun?.summaryJson as any)?.lbo?.exitMultiple || 0}x` },
+                  ].map((item, i) => (
+                    <div key={i} className="p-4 rounded-xl bg-gradient-to-br from-slate-50 to-white border border-slate-100">
+                      <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">{item.label}</p>
+                      <p className="text-2xl font-black text-slate-900 mt-1">{item.value}</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">{item.sub}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="p-3 border rounded-lg bg-white">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Total Debt Paydown</p>
+                    <p className="text-sm font-bold text-emerald-600">{formatCurrency((currentRun?.summaryJson as any)?.lbo?.totalDebtPaydown || 0)}</p>
+                  </div>
+                  <div className="p-3 border rounded-lg bg-white">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Ending Debt</p>
+                    <p className="text-sm font-bold text-amber-600">{formatCurrency((currentRun?.summaryJson as any)?.lbo?.endingDebt || 0)}</p>
+                  </div>
+                  <div className="p-3 border rounded-lg bg-white">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">EBITDA Growth (CAGR)</p>
+                    <p className="text-sm font-bold text-blue-600">{(((currentRun?.summaryJson as any)?.lbo?.ebitdaGrowth || 0) * 100).toFixed(1)}%</p>
+                  </div>
+                </div>
+
+                {/* LBO Debt Schedule */}
+                {(currentRun?.summaryJson as any)?.lbo?.debtSchedule && (
+                  <div className="mt-8 pt-6 border-t border-purple-100">
+                    <div className="flex items-center gap-2 mb-4">
+                      <HistoryIcon className="h-4 w-4 text-purple-600" />
+                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-tighter">Deleveraging Schedule & Cash Sweep Trace</h4>
+                    </div>
+                    <div className="overflow-x-auto rounded-xl border border-purple-100">
+                      <Table className="text-[10px]">
+                        <TableHeader className="bg-purple-50">
+                          <TableRow>
+                            <TableHead className="font-bold">Year</TableHead>
+                            <TableHead className="text-right">EBITDA</TableHead>
+                            <TableHead className="text-right">CFADS</TableHead>
+                            <TableHead className="text-right text-purple-700">Senior Paydown</TableHead>
+                            <TableHead className="text-right text-indigo-700">Sub Paydown</TableHead>
+                            <TableHead className="text-right font-black">Ending Debt</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {(currentRun?.summaryJson as any)?.lbo?.debtSchedule?.map((row: any, i: number) => (
+                            <TableRow key={i}>
+                              <TableCell className="font-black text-slate-500">{row.year}</TableCell>
+                              <TableCell className="text-right font-medium">{formatCurrency(row.ebitda)}</TableCell>
+                              <TableCell className="text-right font-medium text-blue-600">{formatCurrency(row.cfads)}</TableCell>
+                              <TableCell className="text-right text-emerald-600 font-bold">-{formatCurrency(row.seniorPaydown)}</TableCell>
+                              <TableCell className="text-right text-emerald-600 font-bold">-{formatCurrency(row.subPaydown)}</TableCell>
+                              <TableCell className="text-right font-black">{formatCurrency(row.remainingDebt)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    {/* Institutional Sources & Uses */}
+                    {(currentRun?.summaryJson as any)?.lbo?.sourcesUses && (
+                      <div className="mt-8 pt-6 border-t border-purple-100">
+                        <div className="flex items-center gap-2 mb-4">
+                          <DollarSign className="h-4 w-4 text-purple-600" />
+                          <h4 className="text-xs font-black text-slate-900 uppercase tracking-tighter">Institutional Sources & Uses</h4>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Sources of Funds</p>
+                            <Table className="text-[11px] border rounded-lg overflow-hidden">
+                              <TableBody>
+                                {Object.entries((currentRun?.summaryJson as any)?.lbo?.sourcesUses?.sources || {}).map(([key, val]: [string, any]) => (
+                                  <TableRow key={key} className="h-8">
+                                    <TableCell className="py-1 font-medium">{key}</TableCell>
+                                    <TableCell className="py-1 text-right font-bold text-indigo-600">{formatCurrency(val as number)}</TableCell>
+                                  </TableRow>
+                                ))}
+                                <TableRow className="bg-slate-50 h-8 font-black">
+                                  <TableCell className="py-1">Total Sources</TableCell>
+                                  <TableCell className="py-1 text-right">{formatCurrency(Object.values((currentRun?.summaryJson as any)?.lbo?.sourcesUses?.sources || {}).reduce((a: any, b: any) => a + b, 0) as number)}</TableCell>
+                                </TableRow>
+                              </TableBody>
+                            </Table>
+                          </div>
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Uses of Funds</p>
+                            <Table className="text-[11px] border rounded-lg overflow-hidden">
+                              <TableBody>
+                                {Object.entries((currentRun?.summaryJson as any)?.lbo?.sourcesUses?.uses || {}).map(([key, val]: [string, any]) => (
+                                  <TableRow key={key} className="h-8">
+                                    <TableCell className="py-1 font-medium">{key}</TableCell>
+                                    <TableCell className="py-1 text-right font-bold text-rose-600">{formatCurrency(val as number)}</TableCell>
+                                  </TableRow>
+                                ))}
+                                <TableRow className="bg-slate-50 h-8 font-black">
+                                  <TableCell className="py-1">Total Uses</TableCell>
+                                  <TableCell className="py-1 text-right">{formatCurrency(Object.values((currentRun?.summaryJson as any)?.lbo?.sourcesUses?.uses || {}).reduce((a: any, b: any) => a + b, 0) as number)}</TableCell>
+                                </TableRow>
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <p className="text-[9px] text-slate-400 mt-2 italic">* CFADS = EBITDA - Taxes - CapEx - ΔNWC. Mandatory amortization + Excess Cash Sweep implemented.</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ═══════════════════════════════════════════════════════
+              SAAS KPI ROW — Unit Economics from computed data
+          ═══════════════════════════════════════════════════════ */}
+          {(currentRun?.summaryJson as any)?.arr > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+              {[
+                { label: 'ARR', value: formatCurrency((currentRun?.summaryJson as any)?.arr || 0), icon: TrendingUp, color: 'blue' },
+                { label: 'CAC', value: formatCurrency((currentRun?.summaryJson as any)?.cac || 0), icon: Users, color: 'purple' },
+                { label: 'LTV', value: formatCurrency((currentRun?.summaryJson as any)?.ltv || 0), icon: Target, color: 'emerald' },
+                { label: 'Payback', value: ((currentRun?.summaryJson as any)?.paybackPeriod || 0).toFixed(1) + ' mo', icon: Clock, color: 'indigo' },
+                { label: 'Rule of 40', value: ((currentRun?.summaryJson as any)?.ruleOf40 || 0).toFixed(1) + '%', icon: Zap, color: 'amber' },
+                { label: 'Burn Rate', value: formatCurrency((currentRun?.summaryJson as any)?.burnRate || 0) + '/mo', icon: Flame, color: 'rose' },
+                { label: 'Runway', value: ((currentRun?.summaryJson as any)?.runway || 0).toFixed(0) + ' mo', icon: Clock, color: 'slate' },
+                { label: 'Net Retention', value: ((currentRun?.summaryJson as any)?.nrr || 0).toFixed(1) + '%', icon: TrendingUp, color: 'teal' },
+              ].map((kpi, i) => {
+                const Icon = kpi.icon;
+                return (
+                  <Card key={i} className="p-3 border hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <Icon className="h-3.5 w-3.5 text-slate-400" />
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">{kpi.label}</span>
+                    </div>
+                    <p className="text-base font-black text-slate-900">{kpi.value}</p>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ═══════════════════════════════════════════════════════
+              ACCRETION/DILUTION M&A DASHBOARD
+          ═══════════════════════════════════════════════════════ */}
+          {(currentRun?.summaryJson as any)?.accretionDilution && (
+            <Card className="border-2 shadow-lg overflow-hidden" style={{ borderColor: (currentRun?.summaryJson as any)?.accretionDilution?.isAccretive ? '#10b981' : '#ef4444' }}>
+              <CardHeader className={`text-white pb-4 ${(currentRun?.summaryJson as any)?.accretionDilution?.isAccretive ? 'bg-gradient-to-r from-emerald-600 to-teal-700' : 'bg-gradient-to-r from-red-600 to-rose-700'}`}>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Scale className="h-5 w-5" />
+                  M&A Accretion / Dilution Analysis
+                </CardTitle>
+                <CardDescription className="text-white/80">
+                  Deal is{' '}
+                  <span className="font-black text-white">
+                    {(currentRun?.summaryJson as any)?.accretionDilution?.isAccretive ? 'ACCRETIVE' : 'DILUTIVE'} by {Math.abs((currentRun?.summaryJson as any)?.accretionDilution?.accretionDilutionPct || 0).toFixed(1)}%
+                  </span>
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  {[
+                    { label: 'Standalone EPS', value: '$' + ((currentRun?.summaryJson as any)?.accretionDilution?.acquirerEPS || 0).toFixed(2) },
+                    { label: 'Pro Forma EPS', value: '$' + ((currentRun?.summaryJson as any)?.accretionDilution?.proFormaEPS || 0).toFixed(2) },
+                    { label: 'EPS Change', value: '$' + ((currentRun?.summaryJson as any)?.accretionDilution?.epsChange || 0).toFixed(4) },
+                    { label: 'Purchase Price', value: formatCurrency((currentRun?.summaryJson as any)?.accretionDilution?.purchasePrice || 0) },
+                  ].map((item, i) => (
+                    <div key={i} className="p-4 rounded-xl bg-slate-50 border border-slate-100">
+                      <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">{item.label}</p>
+                      <p className="text-xl font-black text-slate-900 mt-1">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                  <div className="p-3 border rounded-lg bg-white">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Premium Paid</p>
+                    <p className="text-sm font-bold text-slate-800">{(currentRun?.summaryJson as any)?.accretionDilution?.purchasePremium || 0}%</p>
+                  </div>
+                  <div className="p-3 border rounded-lg bg-white">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Stock %</p>
+                    <p className="text-sm font-bold text-blue-600">{(currentRun?.summaryJson as any)?.accretionDilution?.stockPercentage || 0}%</p>
+                  </div>
+                  <div className="p-3 border rounded-lg bg-white">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Cash %</p>
+                    <p className="text-sm font-bold text-emerald-600">{(currentRun?.summaryJson as any)?.accretionDilution?.cashPercentage || 0}%</p>
+                  </div>
+                  <div className="p-3 border rounded-lg bg-white">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Goodwill</p>
+                    <p className="text-sm font-bold text-slate-800">{formatCurrency((currentRun?.summaryJson as any)?.accretionDilution?.goodwill || 0)}</p>
+                  </div>
+                  <div className="p-3 border rounded-lg bg-indigo-50 border-indigo-100 flex flex-col justify-center">
+                    <p className="text-[10px] font-black text-indigo-400 uppercase">Breakeven Synergies</p>
+                    <p className="text-sm font-bold text-indigo-700">{formatCurrency((currentRun?.summaryJson as any)?.accretionDilution?.breakevenSynergies || 0)}</p>
+                    <p className="text-[8px] text-slate-400 mt-0.5">SYNERGY REQ. FOR 0% DILUTION</p>
+                  </div>
+                  <div className="p-3 border rounded-lg bg-white">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Pro Forma NI</p>
+                    <p className="text-sm font-bold text-indigo-600">{formatCurrency((currentRun?.summaryJson as any)?.accretionDilution?.proFormaNI || 0)}</p>
+                  </div>
+                </div>
+
+                {/* Synergy & Amortization Trace */}
+                <div className="mt-6 pt-6 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-widest pl-1">Synergy Realization Hub</h4>
+                    <div className="p-4 bg-slate-50 border rounded-xl space-y-2">
+                       <div className="flex justify-between text-xs">
+                          <span className="text-slate-500">Run-rate Synergies</span>
+                          <span className="font-bold">{formatCurrency((currentRun?.summaryJson as any)?.accretionDilution?.costSynergies || 0)}</span>
+                       </div>
+                       <div className="flex justify-between text-xs">
+                          <span className="text-slate-500">Year 1 Phase-in</span>
+                          <span className="font-bold text-blue-600">{(currentRun?.summaryJson as any)?.accretionDilution?.synergyPhaseIn || 70}%</span>
+                       </div>
+                       <div className="flex justify-between text-xs">
+                          <span className="text-slate-500">Post-Tax Benefit (Y1)</span>
+                          <span className="font-bold text-emerald-600">{formatCurrency((currentRun?.summaryJson as any)?.accretionDilution?.y1SynergiesAfterTax || 0)}</span>
+                       </div>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-widest pl-1">Asset Write-Up Schedule</h4>
+                    <div className="p-4 bg-slate-50 border rounded-xl space-y-2">
+                       <div className="flex justify-between text-xs">
+                          <span className="text-slate-500">Identifiable Intangibles</span>
+                          <span className="font-bold">{(currentRun?.summaryJson as any)?.accretionDilution?.assetWriteUpPct || 20}%</span>
+                       </div>
+                       <div className="flex justify-between text-xs">
+                          <span className="text-slate-500">Amortization Period</span>
+                          <span className="font-bold text-blue-600">{(currentRun?.summaryJson as any)?.accretionDilution?.amortizationPeriod || 10} Years</span>
+                       </div>
+                       <div className="flex justify-between text-xs">
+                          <span className="text-slate-500">Annual Non-Cash Exp.</span>
+                          <span className="font-bold text-rose-600">({formatCurrency((currentRun?.summaryJson as any)?.accretionDilution?.amortizationAnnual || 0)})</span>
+                       </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ═══════════════════════════════════════════════════════
+              SAAS HEALTH INDICATORS — NRR, GRR, Rule of 40, etc.
+          ═══════════════════════════════════════════════════════ */}
+          {((currentRun?.summaryJson as any)?.nrr > 0 || (currentRun?.summaryJson as any)?.metrics?.nrr > 0) && (
+            <Card className="border shadow-sm">
+              <CardHeader className="bg-slate-50/50 border-b pb-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-indigo-500" />
+                  SaaS Health Indicators
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {[
+                    {
+                      label: 'NRR',
+                      value: ((currentRun?.summaryJson as any)?.nrr || (currentRun?.summaryJson as any)?.metrics?.nrr || 0).toFixed(1) + '%',
+                      status: ((currentRun?.summaryJson as any)?.nrr || 0) >= 100 ? 'text-emerald-600' : 'text-amber-600',
+                      bench: '≥100% good'
+                    },
+                    {
+                      label: 'GRR',
+                      value: ((currentRun?.summaryJson as any)?.grr || (currentRun?.summaryJson as any)?.metrics?.grr || 0).toFixed(1) + '%',
+                      status: ((currentRun?.summaryJson as any)?.grr || 0) >= 90 ? 'text-emerald-600' : 'text-amber-600',
+                      bench: '≥90% good'
+                    },
+                    {
+                      label: 'Rule of 40',
+                      value: ((currentRun?.summaryJson as any)?.ruleOf40 || (currentRun?.summaryJson as any)?.metrics?.ruleOf40 || 0).toFixed(0) + '%',
+                      status: ((currentRun?.summaryJson as any)?.ruleOf40 || 0) >= 40 ? 'text-emerald-600' : 'text-amber-600',
+                      bench: '≥40% good'
+                    },
+                    {
+                      label: 'Burn Multiple',
+                      value: ((currentRun?.summaryJson as any)?.burnMultiple || (currentRun?.summaryJson as any)?.metrics?.burnMultiple || 0).toFixed(1) + 'x',
+                      status: ((currentRun?.summaryJson as any)?.burnMultiple || 0) <= 2 ? 'text-emerald-600' : 'text-red-600',
+                      bench: '<2x good'
+                    },
+                    {
+                      label: 'Magic Number',
+                      value: ((currentRun?.summaryJson as any)?.magicNumber || (currentRun?.summaryJson as any)?.metrics?.magicNumber || 0).toFixed(2),
+                      status: ((currentRun?.summaryJson as any)?.magicNumber || 0) >= 0.75 ? 'text-emerald-600' : 'text-amber-600',
+                      bench: '≥0.75 good'
+                    },
+                    {
+                      label: 'LTV:CAC',
+                      value: ((currentRun?.summaryJson as any)?.ltvCacRatio || (currentRun?.summaryJson as any)?.metrics?.ltvCac || 0).toFixed(1) + 'x',
+                      status: ((currentRun?.summaryJson as any)?.ltvCacRatio || 0) >= 3 ? 'text-emerald-600' : 'text-amber-600',
+                      bench: '≥3x good'
+                    },
+                  ].map((metric, i) => (
+                    <div key={i} className="p-3 rounded-lg bg-white border hover:shadow-sm transition-shadow">
+                      <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">{metric.label}</p>
+                      <p className={`text-lg font-black mt-1 ${metric.status}`}>{metric.value}</p>
+                      <p className="text-[9px] text-slate-400 mt-0.5">{metric.bench}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+        <TabsContent value="statements" className="space-y-6">
           <ThreeStatementViewer
             orgId={orgId}
             modelId={selectedModel}
@@ -1236,6 +1726,58 @@ export function FinancialModeling() {
               setProvenanceModalOpen(true)
             }}
           />
+        </TabsContent>
+
+        <TabsContent value="valuation" className="space-y-6">
+          <Card className="border-2 shadow-xl overflow-hidden bg-slate-50/30">
+            <CardHeader className="bg-white border-b border-slate-100 flex flex-row items-center justify-between py-4">
+              <div>
+                <CardTitle className="text-xl flex items-center gap-2">
+                  <Grid className="h-6 w-6 text-indigo-600" />
+                  Valuation Football Field
+                </CardTitle>
+                <CardDescription className="text-slate-500 font-bold">Multi-methodology valuation range comparison based on mid-year convention and Exit Multiple fallbacks.</CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Badge variant="outline" className="bg-indigo-50 border-indigo-200 text-indigo-700 font-black px-4 py-1.5">
+                  INSTITUTIONAL PRECISION
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="p-10">
+              <div className="h-[550px]">
+                <FootballFieldChart
+                  ranges={(currentRun?.summaryJson as any)?.valuationSummary || [
+                    { name: 'DCF (Exit Multiple)', low: (currentRun?.summaryJson as any)?.dcf?.impliedEquityValue * 0.9 || 0, high: (currentRun?.summaryJson as any)?.dcf?.impliedEquityValue * 1.1 || 0, color: '#4f46e5' },
+                    { name: 'DCF (Perpetuity)', low: (currentRun?.summaryJson as any)?.dcf?.impliedEquityValue * 0.85 || 0, high: (currentRun?.summaryJson as any)?.dcf?.impliedEquityValue * 1.15 || 0, color: '#6366f1' },
+                    { name: 'LBO (Exit MOIC)', low: (currentRun?.summaryJson as any)?.lbo?.exitEquity * 0.9 || 0, high: (currentRun?.summaryJson as any)?.lbo?.exitEquity * 1.1 || 0, color: '#8b5cf6' },
+                    { name: 'Market Multiples (Comps)', low: (currentRun?.summaryJson as any)?.revenue * 4 || 0, high: (currentRun?.summaryJson as any)?.revenue * 6 || 0, color: '#10b981' }
+                  ]}
+                  currentPrice={(currentRun?.summaryJson as any)?.currentPrice}
+                  currency={currencySymbol || "$"}
+                />
+              </div>
+              
+              <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-6">
+                 <div className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">DCF Implied Value</p>
+                    <p className="text-2xl font-black text-slate-900">{formatCurrency((currentRun?.summaryJson as any)?.dcf?.impliedEquityValue || 0)}</p>
+                    <div className="mt-2 text-[11px] font-bold text-slate-500">WACC: {((currentRun?.summaryJson as any)?.dcf?.wacc * 100 || 0).toFixed(1)}% | TGR: {((currentRun?.summaryJson as any)?.dcf?.terminalGrowthRate * 100 || 0).toFixed(1)}%</div>
+                 </div>
+                 <div className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">LBO Exit Equity</p>
+                    <p className="text-2xl font-black text-indigo-600">{formatCurrency((currentRun?.summaryJson as any)?.lbo?.exitEquity || 0)}</p>
+                    <div className="mt-2 text-[11px] font-bold text-slate-500">MOIC: {((currentRun?.summaryJson as any)?.lbo?.moic || 0).toFixed(2)}x | IRR: {((currentRun?.summaryJson as any)?.lbo?.irr * 100 || 0).toFixed(1)}%</div>
+                 </div>
+                 <div className="p-5 rounded-2xl bg-indigo-600 text-white shadow-xl shadow-indigo-200">
+                    <p className="text-[10px] font-black text-indigo-200 uppercase tracking-widest mb-3">Blended Target Price</p>
+                    <p className="text-2xl font-black">{formatCurrency((currentRun?.summaryJson as any)?.blendedTargetPrice || 0)}</p>
+                    <div className="mt-2 text-[11px] font-medium text-indigo-100">Weighted Average of Multi-Methodology Samples</div>
+                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card className="border shadow-sm">
@@ -1553,9 +2095,13 @@ export function FinancialModeling() {
           </Card>
         </TabsContent>
 
-        {/* --- GOVERNANCE TAB --- */}
         <TabsContent value="governance" className="space-y-8 animate-in fade-in duration-500">
           <BudgetWorkflow orgId={orgId} modelId={selectedModel} />
+        </TabsContent>
+
+        {/* --- RISK ANALYSIS TAB --- */}
+        <TabsContent value="risk" className="space-y-4 animate-in fade-in duration-500">
+          <RiskAnalysisHub orgId={orgId} modelId={selectedModel} />
         </TabsContent>
 
         <TabsContent value="drivers" className="space-y-4">
@@ -1577,10 +2123,10 @@ export function FinancialModeling() {
               // CRITICAL: Update local state with recompute results for immediate reactivity
               if (data.results) {
                 const results = data.results;
-                const existingSummary = typeof currentRun?.summaryJson === 'string' 
-                   ? JSON.parse(currentRun.summaryJson) 
-                   : currentRun?.summaryJson;
-                
+                const existingSummary = typeof currentRun?.summaryJson === 'string'
+                  ? JSON.parse(currentRun.summaryJson)
+                  : currentRun?.summaryJson;
+
                 // Seed monthsMap from existing monthly data if it exists to maintain consistency for untouched metrics
                 const monthsMap: Record<string, any> = {};
                 // Seed from both top-level and nested structures to prevent data wipe in 3-statement models
@@ -1589,13 +2135,13 @@ export function FinancialModeling() {
                   existingSummary?.statements?.incomeStatement?.monthly,
                   existingSummary?.incomeStatement?.monthly
                 ];
-                
+
                 seedSources.forEach(source => {
                   if (source) {
                     Object.keys(source).forEach(m => {
-                      monthsMap[m] = { 
-                        month: m, 
-                        monthKey: m, 
+                      monthsMap[m] = {
+                        month: m,
+                        monthKey: m,
                         ...source[m]
                       };
                     });
@@ -1609,12 +2155,12 @@ export function FinancialModeling() {
                     records.forEach((record: any) => {
                       const m = record.month;
                       if (!monthsMap[m]) monthsMap[m] = { month: m, monthKey: m };
-                      
+
                       // Map specific metrics by their category or name
                       const driver = currentModel?.drivers?.find((d: any) => d.id === nodeId);
                       const name = driver?.name?.toLowerCase() || '';
                       const category = driver?.category?.toLowerCase() || '';
-                      
+
                       // 1. Map by Explicit name (Priority)
                       if (name === 'revenue' || name === 'total revenue' || name.includes('income_total') || name.includes('total_revenue')) monthsMap[m].revenue = record.value;
                       else if (name === 'cogs' || name === 'total cogs' || name.includes('cost_of_sales') || name.includes('total_cogs')) monthsMap[m].cogs = record.value;
@@ -1626,7 +2172,7 @@ export function FinancialModeling() {
                       else if (name === 'interest' || name === 'interest expense' || name === 'interest_cost') monthsMap[m].interestExpense = record.value;
                       else if (name === 'taxes' || name === 'tax' || name === 'taxation') monthsMap[m].taxExpense = record.value;
                       else if (name === 'cash' || name === 'ending cash' || name === 'cash balance' || name.includes('liquidity')) monthsMap[m].endingCash = record.value;
-                      
+
                       // 2. Map by Category (Aggregate if not specific) - Ensures all drivers affect the totals
                       const isRevenue = category === 'revenue' || driver?.type === 'revenue' || name.includes('revenue') || name.includes('price') || name.includes('sales') || name.includes('units') || name.includes('subscription');
                       const isCogs = category === 'cogs' || driver?.type === 'cogs' || category === 'direct' || name.includes('cogs') || name.includes('material') || name.includes('labor') || name.includes('shipping');
@@ -1669,10 +2215,10 @@ export function FinancialModeling() {
 
                 // Update current run summary locally so other tabs (Statements) update
                 if (currentRun) {
-                  const existingSummary = typeof currentRun.summaryJson === 'string' 
-                    ? JSON.parse(currentRun.summaryJson) 
+                  const existingSummary = typeof currentRun.summaryJson === 'string'
+                    ? JSON.parse(currentRun.summaryJson)
                     : currentRun.summaryJson;
-                  
+
                   const updatedSummary = {
                     ...existingSummary,
                     incomeStatement: {
@@ -1708,7 +2254,7 @@ export function FinancialModeling() {
                       }
                     }
                   }
-                  
+
                   // Recalculate summary metrics from the updated monthly data
                   const allMonths = Object.values(updatedSummary.monthly)
                   updatedSummary.totalRevenue = allMonths.reduce((sum: number, m: any) => sum + (m.revenue || 0), 0)
@@ -1716,14 +2262,14 @@ export function FinancialModeling() {
                   updatedSummary.netIncome = allMonths.reduce((sum: number, m: any) => sum + (m.netIncome || 0), 0)
                   updatedSummary.expenses = allMonths.reduce((sum: number, m: any) => sum + (m.expenses || m.operatingExpenses || 0), 0)
                   updatedSummary.totalExpenses = updatedSummary.expenses
-                  
+
                   setCurrentRun({
                     ...currentRun,
                     summaryJson: updatedSummary
                   });
 
                   if (currentRun.id && orgId && selectedModel) {
-                     await fetch(`${API_BASE_URL}/models/${selectedModel}/runs/${currentRun.id}/scratch`, {
+                    await fetch(`${API_BASE_URL}/models/${selectedModel}/runs/${currentRun.id}/scratch`, {
                       method: 'PATCH',
                       headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
                       credentials: "include",
@@ -1742,10 +2288,14 @@ export function FinancialModeling() {
           />
         </TabsContent>
 
+        <TabsContent value="manual" className="space-y-4">
+          <ManualInputForm orgId={orgId} modelId={selectedModel} />
+        </TabsContent>
+
         <TabsContent value="scenarios" className="space-y-4">
-          <ScenarioManagement 
-            orgId={orgId} 
-            modelId={selectedModel} 
+          <ScenarioManagement
+            orgId={orgId}
+            modelId={selectedModel}
             onRefresh={() => {
               if (orgId && selectedModel) fetchModelRuns(orgId, selectedModel);
             }}
@@ -1764,10 +2314,10 @@ export function FinancialModeling() {
         </TabsContent>
 
         <TabsContent value="forecasting" className="space-y-6">
-          <IndustrialForecasting 
-            orgId={orgId} 
-            modelId={selectedModel} 
-            currentRunId={currentRun?.id} 
+          <IndustrialForecasting
+            orgId={orgId}
+            modelId={selectedModel}
+            currentRunId={currentRun?.id}
             refreshKey={recomputeCounter}
           />
         </TabsContent>

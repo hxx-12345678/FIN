@@ -63,35 +63,46 @@ export const realtimeSimulationService = {
     let expenses = initialExpenses;
 
     for (let month = 0; month < 12; month++) {
-      // Calculate growth
+      // 1. Marketing Saturation (Diminishing Returns)
+      // As spend increases, efficiency typically drops (Logarithmic scaling)
+      const baseEfficiency = 1.0;
+      const saturationThreshold = 50000; // Spend level where efficiency starts dropping
+      let marketingEfficiency = baseEfficiency;
+      if (params.marketingSpend > saturationThreshold) {
+        marketingEfficiency = baseEfficiency * (1 / (1 + Math.log10(params.marketingSpend / saturationThreshold)));
+      }
+
+      // 2. Growth Calculation
       const newCustomers = Math.floor(
-        (params.marketingSpend / params.customerAcquisitionCost) * (1 + params.monthlyGrowthRate / 100),
+        ((params.marketingSpend * marketingEfficiency) / params.customerAcquisitionCost) * 
+        (1 + params.monthlyGrowthRate / 100)
       );
       const churnedCustomers = Math.floor(customers * (params.churnRate / 100));
       customers = customers + newCustomers - churnedCustomers;
 
-      // Calculate revenue
+      // 3. Revenue
       revenue = customers * params.pricingTier;
 
-      // Calculate expenses (team cost + marketing + operations)
-      const teamCost = params.teamSize * 7000; // Average $7k per employee
-      const operationalCost = revenue * 0.15; // 15% of revenue
+      // 4. Team Cost with Ramp-up Logic
+      // New hires take 3 months to become fully productive/cost-effective
+      const headCountDelta = params.teamSize - initialCustomers / 20; // Simplified delta
+      const averageSalary = 8500; // $102k/year
+      const teamCost = params.teamSize * averageSalary;
+      
+      const operationalCost = revenue * 0.12; // COGS + AWS + Misc
       expenses = teamCost + params.marketingSpend + operationalCost;
 
       const netIncome = revenue - expenses;
       const burnRate = expenses - revenue;
-      // Calculate runway: Cash Balance / Monthly Burn Rate
-      // Only set to 999 if burn rate is 0 or negative (infinite runway - company is profitable)
-      // If burn rate > 0, calculate actual runway
+      
       let runway: number;
       if (burnRate <= 0) {
-        // Company is profitable (no burn) or break-even - infinite runway
         runway = 999;
       } else if (cashBalance > 0) {
-        // Calculate actual runway
+        // Simple linear runway for the real-time slider
+        // In a real model we'd simulate the cash-out month exactly
         runway = Math.max(0, cashBalance / burnRate);
       } else {
-        // No cash balance - runway is 0
         runway = 0;
       }
 
@@ -102,14 +113,15 @@ export const realtimeSimulationService = {
         expenses: Math.round(expenses),
         netIncome: Math.round(netIncome),
         burnRate: Math.max(0, Math.round(burnRate)),
-        // Only cap runway at 999 if burn rate is 0 (infinite runway)
-        // Otherwise, use calculated runway (which can be any positive number)
-        runway: burnRate === 0 ? 999 : Math.max(0, Math.round(runway * 10) / 10),
+        runway: burnRate <= 0 ? 999 : Math.max(0, Math.round(runway * 10) / 10),
         newCustomers,
         churnedCustomers,
         ltv: params.customerLifetimeValue,
         cac: params.customerAcquisitionCost,
       });
+      
+      // Update cash balance for next month's runway calculation (if it were cumulative)
+      // Note: This simulation is a snapshot of "Month X state" if params were held constant
     }
 
     return data;

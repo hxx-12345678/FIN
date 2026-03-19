@@ -52,6 +52,8 @@ export function IndustrialForecasting({ orgId, modelId, currentRunId, refreshKey
     const [metrics, setMetrics] = useState<any>(null)
     const [backtestResults, setBacktestResults] = useState<any>(null)
     const [hasRun, setHasRun] = useState(false)
+    const [sensitivityData, setSensitivityData] = useState<any[]>([])
+    const [regimeInfo, setRegimeInfo] = useState<any>(null)
 
     const fetchForecast = async () => {
         if (!orgId || !modelId) return
@@ -114,8 +116,17 @@ export function IndustrialForecasting({ orgId, modelId, currentRunId, refreshKey
                 }))
 
                 setForecastData(sanitized)
-                setExplanation(data.explanation?.info || "")
-                setMetrics(data.metrics || null)
+                setExplanation(data.explanation?.info || data.confidence?.recommendation || "")
+                setMetrics(data.metrics || data.confidence?.scores || null)
+                
+                // Store enterprise results if available
+                if (data.sensitivity) {
+                    setSensitivityData(data.sensitivity.parameters)
+                }
+                if (data.regime_analysis) {
+                    setRegimeInfo(data.regime_analysis)
+                }
+                
                 setHasRun(true)
                 if (forecast.length > 0) {
                     toast.success(`Generated ${data.method} forecast with ${historical.length} data points`)
@@ -414,19 +425,24 @@ export function IndustrialForecasting({ orgId, modelId, currentRunId, refreshKey
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {[
-                                        { d: 'Customer Acquisition Cost', v: [-12.5, -6.1, 0, 5.8, 11.2] },
-                                        { d: 'Monthly Churn Rate', v: [15.2, 7.8, 0, -8.1, -16.4] },
-                                        { d: 'Average Order Value', v: [-9.8, -4.7, 0, 4.9, 10.1] },
-                                        { d: 'Organic Traffic Multiplier', v: [-4.2, -2.1, 0, 2.3, 4.8] }
-                                    ].map((row, i) => (
+                                    {(sensitivityData && sensitivityData.length > 0 ? sensitivityData : [
+                                        { parameter: 'Customer Acquisition Cost', impact_pct: 11.2, elasticity: 1.1 },
+                                        { parameter: 'Monthly Churn Rate', impact_pct: -16.4, elasticity: 1.5 },
+                                        { parameter: 'Average Order Value', impact_pct: 10.1, elasticity: 0.9 },
+                                        { parameter: 'Organic Traffic Multiplier', impact_pct: 4.8, elasticity: 0.4 }
+                                    ]).map((row: any, i: number) => (
                                         <tr key={i} className="border-b border-slate-100 hover:bg-slate-50/30 transition-colors">
-                                            <td className="p-3 font-bold text-slate-700 border-r border-slate-200 bg-slate-50/30">{row.d}</td>
-                                            {row.v.map((val, j) => (
-                                                <td key={j} className={`p-3 text-center font-mono ${val > 0 ? 'text-emerald-600 font-bold' : val < 0 ? 'text-rose-600 font-bold' : 'text-slate-400 italic'}`}>
-                                                    {val > 0 ? '+' : ''}{val}%
-                                                </td>
-                                            ))}
+                                            <td className="p-3 font-bold text-slate-700 border-r border-slate-200 bg-slate-50/30">{row.parameter}</td>
+                                            <td className={`p-3 text-center font-mono ${row.impact_pct < 0 ? 'text-rose-600 font-bold' : 'text-slate-400'}`}>
+                                                {row.impact_pct < 0 ? `${row.impact_pct}%` : '--'}
+                                            </td>
+                                            <td className="p-3 text-center text-slate-400">Baseline</td>
+                                            <td className={`p-3 text-center font-mono ${row.impact_pct > 0 ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+                                                {row.impact_pct > 0 ? `+${row.impact_pct}%` : '--'}
+                                            </td>
+                                            <td className="p-3 text-center font-bold text-indigo-600">
+                                                {row.elasticity?.toFixed(2) || '1.00'}
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>

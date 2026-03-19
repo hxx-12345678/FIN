@@ -21,13 +21,13 @@ export const forecastingController = {
             // 1. Get historical data first (we'll return it to the frontend)
             const history = await forecastingService.getHistoricalMetricData(orgId, modelId, metricName);
 
-            // 2. Run forecast
-            const result = await forecastingService.generateForecast(orgId, modelId, {
+            // 2. Run enterprise forecast (includes regime detection, sensitivity, etc)
+            const result = await forecastingService.generateEnterpriseForecast(orgId, modelId, {
                 metricName,
                 steps: steps || 12,
-                method,
-                period,
-                runId
+                // Add default placeholders for drivers if needed, or pass from body
+                drivers: req.body.drivers || {},
+                assumptions: req.body.assumptions || {}
             });
 
             // Include the historical data in the response so the frontend 

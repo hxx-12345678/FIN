@@ -73,6 +73,42 @@ export const forecastingService = {
     },
 
     /**
+     * Generate an enterprise-grade forecast with regime detection and feature awareness
+     */
+    generateEnterpriseForecast: async (orgId: string, modelId: string, params: {
+        metricName: string;
+        steps: number;
+        features?: Record<string, number[]>;
+        featuresForecast?: Record<string, number[]>;
+        drivers?: Record<string, any>;
+        assumptions?: Record<string, number>;
+        industryBenchmarks?: Record<string, number[]>;
+    }) => {
+        try {
+            const history = await forecastingService.getHistoricalMetricData(orgId, modelId, params.metricName);
+
+            if (history.length === 0) {
+                return { error: 'Insufficient historical data' };
+            }
+
+            const response = await workerClient.post('/compute/forecast/enterprise', {
+                history,
+                steps: params.steps,
+                features: params.features,
+                featuresForecast: params.featuresForecast,
+                drivers: params.drivers,
+                assumptions: params.assumptions,
+                industryBenchmarks: params.industryBenchmarks
+            });
+
+            return response.data.result;
+        } catch (error: any) {
+            console.error('Enterprise forecasting error:', error.message);
+            throw error;
+        }
+    },
+
+    /**
      * Run backtesting to validate accuracy
      */
     runBacktest: async (history: number[], window: number = 12) => {

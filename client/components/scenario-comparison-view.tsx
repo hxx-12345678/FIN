@@ -25,50 +25,6 @@ interface ComparisonData {
   }
 }
 
-const mockComparisons: ComparisonData[] = [
-  {
-    id: "snap-1",
-    name: "Q3 Base Forecast",
-    tag: "base-case",
-    data: {
-      revenue: 804000,
-      expenses: 528000,
-      runway: 13,
-      cash: 6864000,
-      burnRate: 44000,
-      arr: 9648000,
-    },
-  },
-  {
-    id: "snap-2",
-    name: "Aggressive Hiring Plan",
-    tag: "best-case",
-    data: {
-      revenue: 950000,
-      expenses: 720000,
-      runway: 9,
-      cash: 6480000,
-      burnRate: 60000,
-      arr: 11400000,
-    },
-  },
-  {
-    id: "snap-3",
-    name: "Market Downturn Scenario",
-    tag: "worst-case",
-    data: {
-      revenue: 600000,
-      expenses: 450000,
-      runway: 11,
-      cash: 4950000,
-      burnRate: 37500,
-      arr: 7200000,
-    },
-  },
-]
-
-// Monthly data will be generated from scenario summaries if available
-
 interface ScenarioComparisonViewProps {
   modelId?: string
   orgId?: string | null
@@ -83,7 +39,6 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
 
   useEffect(() => {
     if (propScenarios && propScenarios.length > 0) {
-      // Transform scenarios from props
       const transformed = propScenarios
         .filter((s: any) => s.status === "done" && s.summary)
         .map((s: any) => {
@@ -98,14 +53,13 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
               runway: (() => {
                 const burnRate = summary.burnRate || summary.monthlyBurnRate || 0;
                 const runway = summary.runwayMonths || summary.runway || 0;
-                // If burn rate is negative (profitable), runway is infinite
                 if (burnRate < 0) return 999;
                 return runway;
               })(),
               cash: summary.cashBalance || summary.cash || 0,
               burnRate: summary.burnRate || summary.monthlyBurnRate || 0,
               arr: summary.arr || (summary.mrr || summary.revenue || 0) * 12,
-  },
+            },
           }
         })
       setScenarios(transformed)
@@ -150,14 +104,13 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
                   runway: (() => {
                     const burnRate = summary.burnRate || summary.monthlyBurnRate || 0;
                     const runway = summary.runwayMonths || summary.runway || 0;
-                    // If burn rate is negative (profitable), runway is infinite
                     if (burnRate < 0) return 999;
                     return runway;
                   })(),
                   cash: summary.cashBalance || summary.cash || 0,
                   burnRate: summary.burnRate || summary.monthlyBurnRate || 0,
                   arr: summary.arr || (summary.mrr || summary.revenue || 0) * 12,
-  },
+                },
               }
             })
           setScenarios(transformed)
@@ -175,7 +128,7 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
 
   const calculateDelta = (value1: number, value2: number) => {
     const delta = value1 - value2
-    const percentage = ((delta / value2) * 100).toFixed(1)
+    const percentage = value2 !== 0 ? ((delta / value2) * 100).toFixed(1) : "0"
     return { delta, percentage }
   }
 
@@ -214,33 +167,31 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
       if (response.ok) {
         const result = await response.json()
         setComparisonData(result)
-        toast.success("Comparison data loaded. Export functionality coming soon.")
+        toast.success("Comparison data loaded for Key Insights.")
       } else {
         throw new Error("Failed to fetch comparison")
       }
     } catch (error) {
-      console.error("Failed to export comparison:", error)
-      toast.error("Failed to export comparison")
+      console.error("Failed to fetch comparison:", error)
+      toast.error("Failed to load comparison data")
     }
   }
 
   const base = scenarios.find((s) => s.id === baseScenario)
 
-  // Generate monthly data from scenarios if available
   const generateMonthlyData = () => {
     if (scenarios.length === 0) return []
     
-    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
     const monthlyData: any[] = []
     
-    // Generate 6 months of data based on scenario projections
     for (let i = 0; i < 6; i++) {
       const monthData: any = { month: monthNames[i] }
       
       scenarios.forEach((scenario) => {
         const monthlyRevenue = scenario.data.revenue / 12
         const monthlyExpenses = scenario.data.expenses / 12
-        const growthFactor = 1.02 // 2% monthly growth
+        const growthFactor = 1.02
         
         monthData[`${scenario.id}_revenue`] = monthlyRevenue * Math.pow(growthFactor, i)
         monthData[`${scenario.id}_cash`] = scenario.data.cash - (monthlyExpenses * i)
@@ -253,6 +204,7 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
   }
 
   const monthlyData = generateMonthlyData()
+  const insights = comparisonData?.insights || []
 
   if (loading) {
     return (
@@ -307,11 +259,11 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
               ))}
             </SelectContent>
           </Select>
-        <Button onClick={handleExportComparison} className="w-full sm:w-auto">
-          <Download className="mr-2 h-4 w-4" />
-          <span className="hidden sm:inline">Export to PDF</span>
-          <span className="sm:hidden">Export</span>
-        </Button>
+          <Button onClick={handleExportComparison} className="w-full sm:w-auto">
+            <Download className="mr-2 h-4 w-4" />
+            <span className="hidden sm:inline">Refresh Insights</span>
+            <span className="sm:hidden">Refresh</span>
+          </Button>
         </div>
       </div>
 
@@ -324,13 +276,13 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
           </CardHeader>
           <CardContent>
             {monthlyData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
-              <LineChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip formatter={(value) => `$${Number(value).toLocaleString()}`} />
-                <Legend />
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={monthlyData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip formatter={(value) => `$${Number(value).toLocaleString()}`} />
+                  <Legend />
                   {scenarios.map((scenario, index) => {
                     const colors = ["#3b82f6", "#10b981", "#ef4444", "#f59e0b", "#8b5cf6"]
                     return (
@@ -344,10 +296,10 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
                       />
                     )
                   })}
-              </LineChart>
-            </ResponsiveContainer>
+                </LineChart>
+              </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground text-sm px-4 text-center">
+              <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm">
                 <p>No monthly data available</p>
               </div>
             )}
@@ -357,17 +309,17 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
         <Card>
           <CardHeader>
             <CardTitle>Cash Position Comparison</CardTitle>
-            <CardDescription>Cash runway across different scenarios</CardDescription>
+            <CardDescription>Estimated cash over 6 months</CardDescription>
           </CardHeader>
           <CardContent>
             {monthlyData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
-              <LineChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip formatter={(value) => `$${(Number(value) / 1000000).toFixed(2)}M`} />
-                <Legend />
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={monthlyData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip formatter={(value) => `$${(Number(value) / 1000000).toFixed(2)}M`} />
+                  <Legend />
                   {scenarios.map((scenario, index) => {
                     const colors = ["#3b82f6", "#10b981", "#ef4444", "#f59e0b", "#8b5cf6"]
                     return (
@@ -381,10 +333,10 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
                       />
                     )
                   })}
-              </LineChart>
-            </ResponsiveContainer>
+                </LineChart>
+              </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground text-sm px-4 text-center">
+              <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm">
                 <p>No monthly data available</p>
               </div>
             )}
@@ -396,7 +348,7 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
       <Card>
         <CardHeader>
           <CardTitle>Delta Summary</CardTitle>
-          <CardDescription>Percentage and absolute differences compared to base scenario</CardDescription>
+          <CardDescription>Differences compared to base scenario</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -427,79 +379,54 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
                     <TableRow key={scenario.id} className={isBase ? "bg-muted/50" : ""}>
                       <TableCell className="font-medium">
                         {scenario.name}
-                        {isBase && (
-                          <Badge variant="secondary" className="ml-2">
-                            Base
-                          </Badge>
-                        )}
+                        {isBase && <Badge variant="secondary" className="ml-2">Base</Badge>}
                       </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{scenario.tag}</Badge>
-                      </TableCell>
+                      <TableCell><Badge variant="outline">{scenario.tag}</Badge></TableCell>
                       <TableCell className="text-right">
                         <div>${(scenario.data.revenue / 1000).toFixed(0)}K</div>
                         {!isBase && revenueDelta && (
-                          <div
-                            className={`text-xs flex items-center justify-end gap-1 ${getDeltaColor(revenueDelta.delta)}`}
-                          >
-                            {getDeltaIcon(revenueDelta.delta)}
-                            {revenueDelta.percentage}%
+                          <div className={`text-xs flex items-center justify-end gap-1 ${getDeltaColor(revenueDelta.delta)}`}>
+                            {getDeltaIcon(revenueDelta.delta)} {revenueDelta.percentage}%
                           </div>
                         )}
                       </TableCell>
                       <TableCell className="text-right">
                         <div>${(scenario.data.expenses / 1000).toFixed(0)}K</div>
                         {!isBase && expensesDelta && (
-                          <div
-                            className={`text-xs flex items-center justify-end gap-1 ${getDeltaColor(expensesDelta.delta, false)}`}
-                          >
-                            {getDeltaIcon(expensesDelta.delta)}
-                            {expensesDelta.percentage}%
+                          <div className={`text-xs flex items-center justify-end gap-1 ${getDeltaColor(expensesDelta.delta, false)}`}>
+                            {getDeltaIcon(expensesDelta.delta)} {expensesDelta.percentage}%
                           </div>
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div>{scenario.data.runway} mo</div>
+                        <div>{scenario.data.runway === 999 ? '∞' : scenario.data.runway} mo</div>
                         {!isBase && runwayDelta && (
-                          <div
-                            className={`text-xs flex items-center justify-end gap-1 ${getDeltaColor(runwayDelta.delta)}`}
-                          >
-                            {getDeltaIcon(runwayDelta.delta)}
-                            {runwayDelta.delta > 0 ? "+" : ""}
-                            {runwayDelta.delta.toFixed(0)} mo
+                          <div className={`text-xs flex items-center justify-end gap-1 ${getDeltaColor(runwayDelta.delta)}`}>
+                            {getDeltaIcon(runwayDelta.delta)} {runwayDelta.delta > 0 ? "+" : ""}{runwayDelta.delta.toFixed(0)} mo
                           </div>
                         )}
                       </TableCell>
                       <TableCell className="text-right">
                         <div>${(scenario.data.cash / 1000000).toFixed(2)}M</div>
                         {!isBase && cashDelta && (
-                          <div
-                            className={`text-xs flex items-center justify-end gap-1 ${getDeltaColor(cashDelta.delta)}`}
-                          >
-                            {getDeltaIcon(cashDelta.delta)}
-                            {cashDelta.percentage}%
+                          <div className={`text-xs flex items-center justify-end gap-1 ${getDeltaColor(cashDelta.delta)}`}>
+                            {getDeltaIcon(cashDelta.delta)} {cashDelta.percentage}%
                           </div>
                         )}
                       </TableCell>
                       <TableCell className="text-right">
                         <div>${(scenario.data.burnRate / 1000).toFixed(0)}K</div>
                         {!isBase && burnDelta && (
-                          <div
-                            className={`text-xs flex items-center justify-end gap-1 ${getDeltaColor(burnDelta.delta, false)}`}
-                          >
-                            {getDeltaIcon(burnDelta.delta)}
-                            {burnDelta.percentage}%
+                          <div className={`text-xs flex items-center justify-end gap-1 ${getDeltaColor(burnDelta.delta, false)}`}>
+                            {getDeltaIcon(burnDelta.delta)} {burnDelta.percentage}%
                           </div>
                         )}
                       </TableCell>
                       <TableCell className="text-right">
                         <div>${(scenario.data.arr / 1000000).toFixed(2)}M</div>
                         {!isBase && arrDelta && (
-                          <div
-                            className={`text-xs flex items-center justify-end gap-1 ${getDeltaColor(arrDelta.delta)}`}
-                          >
-                            {getDeltaIcon(arrDelta.delta)}
-                            {arrDelta.percentage}%
+                          <div className={`text-xs flex items-center justify-end gap-1 ${getDeltaColor(arrDelta.delta)}`}>
+                            {getDeltaIcon(arrDelta.delta)} {arrDelta.percentage}%
                           </div>
                         )}
                       </TableCell>
@@ -512,44 +439,36 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
         </CardContent>
       </Card>
 
-      {/* Key Insights */}
+      {/* Key Insights (Dynamic) */}
       <Card>
         <CardHeader>
           <CardTitle>Key Insights</CardTitle>
-          <CardDescription>Comparative analysis highlights</CardDescription>
+          <CardDescription>Strategic highlights based on comparison results</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 border rounded-lg bg-green-50">
-              <div className="flex items-center gap-2 mb-2">
-                <TrendingUp className="h-5 w-5 text-green-600" />
-                <span className="font-semibold text-green-800">Best Performer</span>
-              </div>
-              <p className="text-sm text-green-700">
-                Aggressive Hiring Plan shows +18% revenue growth but reduces runway by 4 months
-              </p>
+          {insights.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {insights.map((insight: any, idx: number) => (
+                <div key={idx} className={`p-4 border rounded-lg ${
+                  insight.sentiment === 'positive' ? 'bg-green-50' : 
+                  insight.sentiment === 'warning' ? 'bg-yellow-50' : 'bg-red-50'
+                }`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    {insight.sentiment === 'positive' ? <ArrowUpRight className="h-5 w-5 text-green-600" /> : <ArrowDownRight className="h-5 w-5 text-red-600" />}
+                    <span className={`font-semibold ${
+                      insight.sentiment === 'positive' ? 'text-green-800' : 
+                      insight.sentiment === 'warning' ? 'text-yellow-800' : 'text-red-800'
+                    }`}>{insight.title}</span>
+                  </div>
+                  <p className="text-sm opacity-90">{insight.description}</p>
+                </div>
+              ))}
             </div>
-
-            <div className="p-4 border rounded-lg bg-blue-50">
-              <div className="flex items-center gap-2 mb-2">
-                <Minus className="h-5 w-5 text-blue-600" />
-                <span className="font-semibold text-blue-800">Most Balanced</span>
-              </div>
-              <p className="text-sm text-blue-700">
-                Base Case maintains healthy 13-month runway with steady growth trajectory
-              </p>
-            </div>
-
-            <div className="p-4 border rounded-lg bg-red-50">
-              <div className="flex items-center gap-2 mb-2">
-                <TrendingDown className="h-5 w-5 text-red-600" />
-                <span className="font-semibold text-red-800">Risk Scenario</span>
-              </div>
-              <p className="text-sm text-red-700">
-                Market Downturn shows -25% revenue impact but maintains 11-month runway
-              </p>
-            </div>
-          </div>
+          ) : (
+             <div className="text-center py-8 text-muted-foreground">
+               <p>Select a scenario and click Refresh Insights to generate strategic analysis.</p>
+             </div>
+          )}
         </CardContent>
       </Card>
     </div>

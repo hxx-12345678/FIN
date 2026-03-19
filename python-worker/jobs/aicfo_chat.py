@@ -8,6 +8,7 @@ import requests
 from typing import Dict, List, Any, Optional
 from utils.db import get_db_connection
 from utils.logger import setup_logger
+from jobs.reasoning_engine import ModelReasoningEngine
 
 logger = setup_logger()
 
@@ -75,26 +76,17 @@ Each of these strategies should be measured against your current metrics to trac
         rev = calculations.get('revenue', 0)
         return f"I've analyzed your financial position: ${rev:,.0f} monthly revenue, ${burn:,.0f} monthly burn rate, and {runway:.1f} months of cash runway. Key focus areas include optimizing burn efficiency, accelerating revenue growth, and maintaining a healthy cash position for strategic flexibility."
 
-# Configuration removed from global scope to ensure fresh load from env
-# GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash-exp')
-# GEMINI_API_KEY = os.getenv('GEMINI_API_KEY') or os.getenv('GEMINI_API_KEY_1')
-
 def handle_aicfo_chat(job_id: str, org_id: str, object_id: str, logs: dict):
     """
     Handle AI CFO Chat request from Python worker for better performance and data processing.
     """
     logger.info(f"Processing AICFO Chat job {job_id} for org {org_id}")
     
-    # Fetch configuration inside the function to ensure environment variables are loaded
-    # Use gemini-2.0-flash-exp or gemini-1.5-flash for reliability in 2026
     gemini_model = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash-exp')
     
-    # Try multiple API keys - support up to 10 keys for redundancy
     api_keys = []
-    # Check primary key first
     if os.getenv('GEMINI_API_KEY'): 
         api_keys.append(os.getenv('GEMINI_API_KEY'))
-    # Check numbered keys (1-9)
     for i in range(1, 10):
         key = os.getenv(f'GEMINI_API_KEY_{i}')
         if key:
@@ -102,11 +94,8 @@ def handle_aicfo_chat(job_id: str, org_id: str, object_id: str, logs: dict):
     
     if not api_keys:
         logger.error("No Gemini API keys found in environment variables")
-        logger.error("Please set GEMINI_API_KEY or GEMINI_API_KEY_1, GEMINI_API_KEY_2, etc. in your .env file")
         raise ValueError("No Gemini API keys found in environment variables")
     
-    logger.info(f"Found {len(api_keys)} Gemini API key(s) to try")
-
     conn = None
     cursor = None
     
@@ -122,339 +111,160 @@ def handle_aicfo_chat(job_id: str, org_id: str, object_id: str, logs: dict):
         if not query:
             raise ValueError("Query is required for AI CFO chat")
             
-        # Step 1: Data Grounding (Use passed calculations and context)
         calculations = params.get('calculations', {})
         grounding_context = params.get('groundingContext', {})
         evidence = grounding_context.get('evidence', [])
         
-        # 1.2 Get Recent Model State if not fully provided
         model_state = {}
+        model_id = None
         if model_run_id:
-            cursor.execute("SELECT summary_json FROM model_runs WHERE id = %s", (model_run_id,))
+            cursor.execute("SELECT model_id, summary_json FROM model_runs WHERE id = %s", (model_run_id,))
             row = cursor.fetchone()
-            if row and row[0]:
-                model_state = row[0] if isinstance(row[0], dict) else json.loads(row[0])
+            if row:
+                model_id = str(row[0])
+                raw_summary = row[1]
+                if raw_summary is None:
+                    model_state = {}
+                elif isinstance(raw_summary, dict):
+                    model_state = raw_summary
+                else:
+                    try:
+                        model_state = json.loads(str(raw_summary))
+                    except:
+                        model_state = {}
         
-        # Step 2: Call Gemini (Stable and Fast)
-        system_prompt = """You are an elite strategic CFO with deep expertise in financial analysis and strategic planning.
-
-CORE PRINCIPLES:
-1. ANSWER THE SPECIFIC QUESTION: Read the query carefully and provide a direct, comprehensive answer. Don't give generic summaries.
-2. BE DETAILED AND ACTIONABLE: For strategy questions, provide specific, actionable strategies with clear steps. For analysis questions, provide deep insights.
-3. USE THE DATA: Ground all recommendations in the provided financial metrics and context.
-4. BE PROFESSIONAL BUT CONVERSATIONAL: Write as a trusted CFO advisor would speak to a CEO or founder.
-5. PROVIDE EXPLANATIONS: Explain WHY each recommendation matters, not just WHAT to do.
-
-RESPONSE QUALITY:
-- For "What strategies..." questions: Provide 3-5 specific strategies with clear action steps, expected impact, and reasoning
-- For "How can I..." questions: Provide step-by-step guidance with specific recommendations
-- For "Show me..." questions: Provide detailed analysis with trends, patterns, and insights
-- For "Create a plan..." questions: Provide a structured plan with phases, timelines, and expected outcomes
-
-Respond ONLY in valid JSON format."""
+        analysis_summary = "No deep model analysis available."
+        analytical_insights = []
         
-        context_text = "\n".join([f"- {e.get('content')}" for e in evidence])
+        if model_id:
+            try:
+                engine = ModelReasoningEngine(model_id)
+                cursor.execute("""
+                    SELECT d.id, d.name, d.category, f.expression 
+                    FROM drivers d
+                    LEFT JOIN driver_formulas f ON d.id = f.driver_id
+                    WHERE d.model_id = %s
+                """, (model_id,))
+                node_rows = cursor.fetchall()
+                model_nodes = [{"id": str(r[0]), "name": r[1], "category": r[2], "formula": r[3]} for r in node_rows]
+                
+                months = model_state.get('months', [])
+                metrics = model_state.get('metrics', {})
+                engine.hydrate_from_json(model_nodes, metrics, months)
+                
+                targets = ['revenue', 'netIncome', 'cashBalance', 'burnRate']
+                for target in targets:
+                    res = engine.analyze_drivers(target)
+                    if 'drivers' in res:
+                        analytical_insights.append({
+                            "target": target,
+                            "top_drivers": res['drivers'][:3]
+                        })
+                
+                weak_points = engine.detect_weak_assumptions()
+                if weak_points:
+                    analytical_insights.append({"weak_assumptions": weak_points})
+                
+                analysis_summary = json.dumps(analytical_insights, indent=2)
+            except Exception as ae:
+                logger.warning(f"Model reasoning engine failed: {ae}")
+                analysis_summary = f"Analytical engine error: {str(ae)}"
+        
+        system_prompt = """You are an elite strategic CFO. Respond ONLY in valid JSON format.
+        Structure:
+        {
+          "recommendations": [...],
+          "naturalLanguage": "..."
+        }"""
+        
+        context_text = "\n".join([f"- {str(e.get('content', ''))}" for e in evidence])
         
         user_prompt = f"""
-        USER QUERY: "{query}"
-        
-        IMPORTANT: Answer the user's question directly and comprehensively. If they ask "What strategies can help me accelerate revenue growth?", provide specific, actionable strategies with clear steps. If they ask "How can I improve my burn rate?", provide detailed recommendations. Don't give generic summaries - give detailed, actionable answers.
-        
-        FINANCIAL METRICS:
-        {json.dumps(calculations, indent=2)}
-        
-        ADDITIONAL CONTEXT:
-        {context_text}
-        
-        MODEL SUMMARY:
-        {json.dumps(model_state, indent=2)}
-        
-        YOUR TASK:
-        1. Read the query carefully and understand what the user is asking
-        2. Provide a comprehensive, detailed answer that directly addresses their question
-        3. For strategy questions (e.g., "What strategies can help me accelerate revenue growth?"), provide 3-5 SPECIFIC strategies with:
-           - Clear numbered list (1., 2., 3., etc.)
-           - Specific action steps for each strategy
-           - Expected impact and reasoning
-           - Minimum 400-600 words total
-        4. For analysis questions, provide deep insights with trends and patterns
-        5. Ground all recommendations in the provided financial data
-        6. Explain WHY each recommendation matters
-        7. DO NOT give short, generic answers. Be detailed and comprehensive.
-        
-        CRITICAL: For "What strategies..." or "How can I..." questions, your naturalLanguage response MUST be at least 400 words and include a numbered list of specific strategies with detailed explanations.
-        
-        Respond with this exact JSON structure:
-        {{
-          "recommendations": [
-            {{ 
-              "type": "runway|burn|revenue|cost|strategy|growth", 
-              "title": "Clear action title",
-              "summary": "One sentence summary",
-              "action": "Detailed action step with specific steps", 
-              "explain": "Why this matters and how it works", 
-              "impact": {{ "runway": "+2 months", "burn": "-5%", "revenue": "+15%" }}, 
-              "priority": "high|medium|low",
-              "reasoning": "Detailed explanation of why this recommendation is important"
-            }}
-          ],
-          "naturalLanguage": "A comprehensive, detailed answer to the user's question. For strategy questions like 'What strategies can help me accelerate revenue growth?', provide a numbered list (1., 2., 3., etc.) of 3-5 specific strategies, each with clear action steps, expected impact, and reasoning. Minimum 400 words. Be detailed and actionable, not generic. Use markdown formatting with **bold** for strategy titles and bullet points for action steps."
-        }}
+        QUERY: "{query}"
+        METRICS: {json.dumps(calculations)}
+        CONTEXT: {context_text}
+        MODEL_ANALYSIS: {analysis_summary}
         """
         
-        # Try each API key and model fallback - Gemini 2.5 models as of 2026
         last_error = None
-        response = None
-        invalid_keys = set()  # Track permanently invalid keys (leaked/expired) to skip faster
-        
-        # Try Gemini 2.5 Flash (highest success rate) first, then 2.0 Flash fallback
-        # 2.5 Pro often has 0 quota on free tier, so we deprioritize it
-        models_to_try = [
-            'gemini-2.5-flash',
-            'gemini-2.0-flash',
-            'gemini-1.5-flash' # Final stable fallback
-        ]
+        response: Optional[requests.Response] = None
+        models_to_try = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']
         api_versions = ['v1beta']
-
         
+        start_time = time.time()
         for model_name in models_to_try:
             if response: break
             for api_version in api_versions:
                 if response: break
                 for idx, api_key in enumerate(api_keys):
-                    # Skip keys that are known to be permanently invalid
-                    if (idx, api_key[:8]) in invalid_keys:
-                        continue
-                    
                     try:
-                        # Don't log API key prefixes for security - use index instead
-                        logger.info(f"Attempting Gemini with model {model_name}, version {api_version} (key #{idx + 1})")
                         url = f"https://generativelanguage.googleapis.com/{api_version}/models/{model_name}:generateContent?key={api_key}"
-                        
-                        # High compatibility generation config
-                        gen_config = {
-                            "temperature": 0.8,
-                            "topP": 0.95,
-                            "topK": 40,
-                            "maxOutputTokens": 4096,  # Increased for detailed strategy responses
-                        }
-                        
-                        # Only add response_mime_type if it's explicitly supported/required
-                        # Some v1 endpoints don't support it in the same way as v1beta
-                        if api_version == 'v1beta':
-                            gen_config["response_mime_type"] = "application/json"
-                        
-                        payload = {
+                        payload: Dict[str, Any] = {
                             "contents": [{"parts": [{"text": f"{system_prompt}\n\n{user_prompt}"}]}],
-                            "generationConfig": gen_config
+                            "generationConfig": {
+                                "temperature": 0.7,
+                                "maxOutputTokens": 4096,
+                            }
                         }
                         
-                        logger.debug(f"Payload for {model_name}: {json.dumps(gen_config)}")
-                        
-                        start_time = time.time()
-                        # CRITICAL: Increased timeout to 60s for experimental models
-                        resp = requests.post(url, json=payload, timeout=60)
+                        if api_version == 'v1beta':
+                            payload["generationConfig"]["response_mime_type"] = "application/json"
 
-                        
+                        resp = requests.post(url, json=payload, timeout=60)
                         if resp.status_code == 200:
                             response = resp
-                            gemini_model = model_name # Update for metadata
-                            logger.info(f"✅ Successfully used Gemini {model_name} with key #{idx + 1}")
+                            gemini_model = model_name
                             break
-                        elif resp.status_code == 400 and ("responseMimeType" in resp.text or "response_mime_type" in resp.text):
-                            # Retry WITHOUT response_mime_type if that was the error
-                            logger.warning(f"Retrying {model_name} without response_mime_type...")
-                            if "response_mime_type" in gen_config:
-                                del gen_config["response_mime_type"]
-                            payload["generationConfig"] = gen_config
-                            resp = requests.post(url, json=payload, timeout=60)
-
-                            if resp.status_code == 200:
-                                response = resp
-                                gemini_model = model_name
-                                logger.info(f"✅ Successfully used Gemini {model_name} with key #{idx + 1} (without response_mime_type)")
-                                break
-                        
-                        resp_text = resp.text
-                        
-                        # Check for permanently invalid keys (leaked/expired) - skip these keys for all future attempts
-                        if resp.status_code == 403 and ("leaked" in resp_text.lower() or "reported" in resp_text.lower()):
-                            invalid_keys.add((idx, api_key[:8]))
-                            logger.warning(f"[WARN] Key #{idx + 1} is LEAKED - skipping for all future attempts in this job")
-                            logger.warning(f"[INFO] To fix: Get new API key from https://makersuite.google.com/app/apikey and add to .env file")
-                        elif resp.status_code == 400 and ("expired" in resp_text.lower() or "API_KEY_INVALID" in resp_text):
-                            invalid_keys.add((idx, api_key[:8]))
-                            logger.warning(f"[WARN] Key #{idx + 1} is EXPIRED - skipping for all future attempts in this job")
-                            logger.warning(f"[INFO] To fix: Get new API key from https://makersuite.google.com/app/apikey and add to .env file")
-                        
-                        # If it's a quota error, don't spam logs with the whole thing
-                        # Also sanitize any potential API key exposure in error messages
-                        log_msg = resp_text[:300] if resp.status_code != 429 else "Quota exceeded"
-                        # Remove any potential API key strings from log messages
-                        log_msg = re.sub(r'AIzaSy[A-Za-z0-9]{35}', '[REDACTED_API_KEY]', log_msg)
-                        logger.warning(f"Gemini API ({model_name}, {api_version}) failed (status {resp.status_code}): {log_msg}")
-                        last_error = resp_text
+                        else:
+                            last_error = resp.text
                     except Exception as e:
-                        # Sanitize error messages to prevent API key exposure
-                        error_msg = str(e)
-                        error_msg = re.sub(r'AIzaSy[A-Za-z0-9]{35}', '[REDACTED_API_KEY]', error_msg)
-                        logger.warning(f"Error calling Gemini {model_name}: {error_msg}")
-                        last_error = error_msg
+                        last_error = str(e)
         
-        # Parse response if we got one, otherwise use fallback
         parsed = None
         natural_language = ''
         recommendations = []
         
-        if not response:
-            # Sanitize last_error before logging
-            if last_error:
-                last_error = re.sub(r'AIzaSy[A-Za-z0-9]{35}', '[REDACTED_API_KEY]', last_error)
-            logger.error(f"[ERROR] All Gemini models, versions and keys failed. Last error: {last_error}")
-            logger.warning("[WARN] Falling back to query-specific deterministic response")
-            logger.warning("[INFO] To fix API keys: Run 'python test_gemini_keys.py' to test keys, then add new keys to .env file")
-            # Use fallback - natural_language and recommendations will be set below
-        else:
-            # Successfully got response from Gemini - parse it
-            llm_duration = time.time() - start_time
-            logger.info(f"LLM call ({gemini_model}) took {llm_duration:.2f}s")
-            
-            result_data = response.json()
-            content = result_data['candidates'][0]['content']['parts'][0]['text']
-            
+        if response and hasattr(response, 'json'):
             try:
-                # Handle possible markdown backticks or extra whitespace
+                result_data = response.json()
+                content = result_data['candidates'][0]['content']['parts'][0]['text']
+                
+                # Simple JSON extraction
                 json_str = content.strip()
                 if '```json' in json_str:
                     json_str = json_str.split('```json')[1].split('```')[0].strip()
                 elif '```' in json_str:
                     json_str = json_str.split('```')[1].split('```')[0].strip()
                 
-                # CRITICAL FIX: Handle unterminated strings and unescaped newlines
-                # Gemini sometimes returns JSON with unescaped newlines in strings
-                # We need to fix these before parsing
-                # (re module is already imported at top level)
-                
-                # Fix unterminated strings by finding incomplete string values and completing them
-                # Pattern: "key": "value that might have newlines or be unterminated
-                # Strategy: Find all string values and ensure they're properly escaped
-                
-                # First, try to fix common issues:
-                # 1. Replace unescaped newlines in string values with \n
-                # 2. Fix unterminated strings at the end of JSON
-                # 3. Escape quotes within string values
-                
-                # More robust approach: Try to repair the JSON incrementally
                 try:
                     parsed = json.loads(json_str)
-                except json.JSONDecodeError as parse_error:
-                    logger.warning(f"Initial JSON parse failed: {parse_error}. Attempting expert repair...")
-                    
-                    # 1. Clean up common Markdown mess
-                    # Remove any text before the first {
-                    start_brace = json_str.find('{')
-                    if start_brace > 0:
-                        json_str = json_str[start_brace:]
-                    
-                    # 2. Fix Unterminated String (Truncation)
-                    if 'Unterminated string' in str(parse_error):
-                        # The string was likely cut off. We need to close it and the JSON structure.
-                        # Find the last quote
-                        last_quote = json_str.rfind('"')
-                        if last_quote > -1:
-                            # Heuristic: If the last quote is very near the end, it might be the start of the unterminated string
-                            # Or it might be the end of the last valid string.
-                            # Let's try to close the string and the object.
-                            # Just cap it off.
-                             json_str += '"}]}' 
-                             logger.info("Appended closing tag for truncated JSON")
-
-                    # 3. Fix "Expecting property name" (often due to trailing commas or unquoted keys)
-                    # Simple regex to remove trailing commas before } or ]
+                except:
+                    # Attempt simple repair
                     json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
-                    
                     try:
                         parsed = json.loads(json_str)
-                        logger.info("✅ Repair successful!")
-                    except json.JSONDecodeError as e2:
-                         logger.warning(f"Repair 2 failed: {e2}. Trying aggressive truncation...")
-                         # Last ditch: Find the last valid '}' and cut everything after
-                         last_brace = json_str.rfind('}')
-                         if last_brace > 0:
-                             trunc_str = json_str[:last_brace+1]
-                             try:
-                                 parsed = json.loads(trunc_str)
-                                 logger.info("✅ Aggressive truncation successful!")
-                             except Exception:
-                                 raise e2
-                         else:
-                             raise e2
-
+                    except:
+                        # Find last closing brace
+                        last_brace = json_str.rfind('}')
+                        if last_brace > 0:
+                            json_str_sub = json_str[0:last_brace+1]  # type: ignore
+                            parsed = json.loads(json_str_sub)
                 
-                # If we got here, parsing succeeded
-                natural_language = parsed.get('naturalLanguage', '')
-                recommendations = parsed.get('recommendations', [])
-                
-                # Validate natural_language is not JSON itself
-                if natural_language.startswith('{') or natural_language.startswith('['):
-                    logger.warning("naturalLanguage appears to be JSON, extracting from recommendations")
-                    # If naturalLanguage is JSON, generate from recommendations
-                    if recommendations and len(recommendations) > 0:
-                        natural_language = f"Based on your query '{query}', {recommendations[0].get('summary', recommendations[0].get('explain', ''))}"
-                    else:
-                        natural_language = f"Based on your query '{query}', I've analyzed your financial position and prepared recommendations."
-                        
-            except (json.JSONDecodeError, Exception) as e:
-                logger.error(f"Failed to parse LLM JSON response: {e}")
-                logger.error(f"Raw content (first 500 chars): {content[:500]}")
-                # If JSON parsing fails, try to extract natural language from raw content
-                # Sometimes Gemini returns plain text even when asked for JSON
-                # (re module is already imported at top level)
-                if 'naturalLanguage' in content or 'natural_language' in content:
-                    # Try regex extraction - handle multiline strings
-                    nl_match = re.search(r'"naturalLanguage":\s*"((?:[^"\\]|\\.|\\n)*)"', content, re.DOTALL)
-                    if not nl_match:
-                        # Try without quotes (might be unquoted)
-                        nl_match = re.search(r'"naturalLanguage":\s*([^,}\]]+)', content, re.DOTALL)
-                    if nl_match:
-                        natural_language = nl_match.group(1).strip().strip('"').replace('\\n', '\n')
-                    else:
-                        # Fallback: use first 300 chars as natural language
-                        natural_language = content[:300] if len(content) > 300 else content
-                else:
-                    # Generate from query and calculations
-                    natural_language = generateNaturalLanguageFromQuery(query, calculations)
-                recommendations = []
+                if parsed:
+                    natural_language = parsed.get('naturalLanguage', '')
+                    recommendations = parsed.get('recommendations', [])
+            except Exception as pe:
+                logger.error(f"Failed to parse LLM response: {pe}")
         
-        # If no response from Gemini, use fallback
-        if not response:
+        if not natural_language:
             natural_language = generateNaturalLanguageFromQuery(query, calculations)
-            recommendations = []
-        
-        # Ensure natural_language is not empty and is actually text (not JSON)
-        if not natural_language or natural_language.strip().startswith('{'):
-            natural_language = generateNaturalLanguageFromQuery(query, calculations)
-        
-        # Ensure recommendations have dataSources for auditability
-        for rec in recommendations:
-            if 'dataSources' not in rec or not rec.get('dataSources'):
-                # Add data sources from evidence
-                rec['dataSources'] = [
-                    {
-                        "type": "financial_metric",
-                        "id": f"metric_{idx}",
-                        "snippet": ev.get('content', str(ev))[:200]
-                    }
-                    for idx, ev in enumerate(evidence[:3])  # Limit to first 3 for brevity
-                ]
             
-        # Step 3: Update AI CFO Plan in Database
         plan_json = {
             "goal": query,
             "stagedChanges": recommendations,
             "generatedAt": datetime.now(timezone.utc).isoformat(),
             "structuredResponse": {
-                "natural_text": natural_language,  # CRITICAL: Must be actual text, not JSON
+                "natural_text": natural_language,
                 "recommendations": recommendations,
                 "calculations": calculations
             },
@@ -467,119 +277,34 @@ Respond ONLY in valid JSON format."""
         
         cursor.execute("""
             UPDATE ai_cfo_plans
-            SET plan_json = %s::jsonb, 
-                status = 'completed',
-                updated_at = NOW()
+            SET plan_json = %s::jsonb, status = 'completed', updated_at = NOW()
             WHERE id = %s
         """, (json.dumps(plan_json), plan_id))
         
-        # Step 4: Mark job as done
-        cursor.execute("""
-            UPDATE jobs
-            SET status = 'done', progress = 100, finished_at = NOW()
-            WHERE id = %s
-        """, (job_id,))
-        
+        cursor.execute("UPDATE jobs SET status = 'done', progress = 100, finished_at = NOW() WHERE id = %s", (job_id,))
         conn.commit()
-        logger.info(f"Successfully completed AICFO Chat job {job_id}")
         
     except Exception as e:
-        logger.error(f"Error in AICFO Chat job: {e}", exc_info=True)
-        
-        # CRITICAL: Even if Gemini fails, provide query-specific fallback response
-        # Don't just mark as failed - give user a helpful response
-        fallback_success = False
-        try:
-            # Safely get query and calculations (may not exist if error happened early)
-            safe_query = query if 'query' in locals() and query else logs.get('params', {}).get('query', 'your financial query')
-            safe_calculations = calculations if 'calculations' in locals() and calculations else logs.get('params', {}).get('calculations', {})
-            
-            if conn and plan_id:
-                # Generate fallback response based on query and calculations
-                query_lower = safe_query.lower() if safe_query else ''
-                fallback_text = f"Based on your query: '{safe_query}', "
-                
-                if 'runway' in query_lower or 'cash' in query_lower and 'how long' in query_lower:
-                    runway_val = safe_calculations.get('runway', safe_calculations.get('cashRunway', 0))
-                    fallback_text += f"your cash runway is approximately {runway_val:.1f} months. "
-                    fallback_text += "Consider extending runway through revenue acceleration or expense optimization to reach 12+ months for optimal flexibility."
-                elif 'burn' in query_lower or 'burn rate' in query_lower:
-                    burn_val = safe_calculations.get('burnRate', safe_calculations.get('monthlyBurnRate', 0))
-                    fallback_text += f"your monthly burn rate is ${burn_val:,.0f}. "
-                    fallback_text += "Review major expense categories (payroll, marketing, operations) to identify optimization opportunities that can extend your runway."
-                elif 'revenue' in query_lower or 'growth' in query_lower:
-                    rev_val = safe_calculations.get('revenue', safe_calculations.get('monthlyRevenue', 0))
-                    growth_val = safe_calculations.get('growth', safe_calculations.get('revenueGrowth', 0)) * 100
-                    fallback_text += f"your monthly revenue is ${rev_val:,.0f} with {growth_val:.1f}% growth. "
-                    fallback_text += "Focus on growth acceleration through customer acquisition, retention, and expansion strategies."
-                elif 'funding' in query_lower or 'raise' in query_lower:
-                    runway_val = safe_calculations.get('runway', 0)
-                    fallback_text += f"with a {runway_val:.1f}-month runway, you are in a good position to raise capital. "
-                    fallback_text += "Start fundraising 6 months before runway drops below 12 months. Target raising 18-24 months of runway at current burn rate."
-                else:
-                    # Generic but still helpful
-                    runway_val = safe_calculations.get('runway', 0)
-                    burn_val = safe_calculations.get('burnRate', 0)
-                    rev_val = safe_calculations.get('revenue', 0)
-                    fallback_text += f"I've analyzed your financial position: ${rev_val:,.0f} monthly revenue, ${burn_val:,.0f} burn rate, {runway_val:.1f} months runway. "
-                    fallback_text += "Key focus areas: optimize burn efficiency, accelerate revenue growth, and maintain healthy cash runway."
-                
-                fallback_plan = {
-                    "goal": safe_query,
-                    "stagedChanges": [],
-                    "generatedAt": datetime.now(timezone.utc).isoformat(),
-                    "structuredResponse": {
-                        "natural_text": fallback_text,
-                        "recommendations": [],
-                        "calculations": safe_calculations,
-                        "fallback": True
-                    },
-                    "metadata": {
-                        "processingTimeMs": 0,
-                        "modelUsed": "fallback-deterministic",
-                        "worker": "python",
-                        "error": str(e)[:200]
-                    }
-                }
-                
+        logger.error(f"Error in handle_aicfo_chat: {e}", exc_info=True)
+        if conn and plan_id:
+            try:
                 conn.rollback()
                 cursor = conn.cursor()
-                cursor.execute("""
-                    UPDATE ai_cfo_plans
-                    SET plan_json = %s::jsonb, 
-                        status = 'completed',
-                        updated_at = NOW()
-                    WHERE id = %s
-                """, (json.dumps(fallback_plan), plan_id))
-                
-                cursor.execute("""
-                    UPDATE jobs
-                    SET status = 'done', progress = 100, finished_at = NOW()
-                    WHERE id = %s
-                """, (job_id,))
-                
+                # Create a minimal fallback
+                fallback_text = generateNaturalLanguageFromQuery(query if 'query' in locals() else '', calculations if 'calculations' in locals() else {})
+                err_str = str(e)
+                err_sub = err_str[0:200]  # type: ignore
+                fallback_plan = {
+                    "goal": query if 'query' in locals() else 'Request',
+                    "stagedChanges": [],
+                    "structuredResponse": {"natural_text": fallback_text, "fallback": True},
+                    "metadata": {"error": err_sub}
+                }
+                cursor.execute("UPDATE ai_cfo_plans SET plan_json = %s::jsonb, status = 'completed' WHERE id = %s", (json.dumps(fallback_plan), plan_id))
+                cursor.execute("UPDATE jobs SET status = 'done', finished_at = NOW() WHERE id = %s", (job_id,))
                 conn.commit()
-                logger.info(f"✅ Created query-specific fallback response for AICFO Chat job {job_id}")
-                fallback_success = True
-                return  # Don't re-raise - we provided a response
-        except Exception as fallback_error:
-            logger.error(f"❌ Error creating fallback response: {fallback_error}", exc_info=True)
-            fallback_success = False
-        
-        # If fallback creation failed, mark job as failed
-        if not fallback_success:
-            try:
-                if conn:
-                    conn.rollback()
-                    cursor = conn.cursor()
-                    cursor.execute("UPDATE jobs SET status = 'failed', last_error = %s WHERE id = %s", (str(e)[:500], job_id))
-                    if plan_id:
-                        cursor.execute("UPDATE ai_cfo_plans SET status = 'failed' WHERE id = %s", (plan_id,))
-                    conn.commit()
             except:
                 pass
-            raise
     finally:
         if cursor: cursor.close()
         if conn: conn.close()
-

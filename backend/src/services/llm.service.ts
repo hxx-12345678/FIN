@@ -22,7 +22,7 @@ class LlmService {
         }
 
         // Use model from env or current best default
-        this.model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+        this.model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 
         console.info(`[LlmService] Initialized with model: ${this.model} and ${this.apiKeys.length} keys`);
         if (this.apiKeys.length === 0) {

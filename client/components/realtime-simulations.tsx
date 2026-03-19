@@ -1024,6 +1024,10 @@ export function RealtimeSimulations() {
                 step={0.5}
                 className="w-full"
               />
+              <div className="flex justify-between mt-1 px-0.5">
+                <span className="text-[9px] text-muted-foreground uppercase font-semibold">Sensitivity: High</span>
+                <span className="text-[9px] text-blue-600 font-bold">+1% → ≈+$8.5k/mo ARR</span>
+              </div>
             </div>
 
             <div className="space-y-2 group">

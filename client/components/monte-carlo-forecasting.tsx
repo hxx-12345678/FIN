@@ -30,6 +30,8 @@ import {
 import { Play, Save, Download, AlertTriangle, TrendingUp, Target, Zap, Info, BarChart3, Activity, ListTodo } from "lucide-react"
 import { Button as LinkButton } from "@/components/ui/button"
 import Link from "next/link"
+import { SensitivityHeatmap } from "./forecasting/sensitivity-heatmap"
+
 
 // Distribution types
 type DistributionType = "normal" | "triangular" | "lognormal"
@@ -1781,20 +1783,18 @@ export function MonteCarloForecasting({ modelId, orgId }: MonteCarloForecastingP
             </Card>
           ) : (
             <Card>
-              <CardContent className="p-12 text-center">
-                <BarChart3 className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No Sensitivity Data Available</h3>
-                <p className="text-muted-foreground mb-4">
-                  Run a Monte Carlo simulation to generate sensitivity analysis data for the tornado chart.
-                </p>
-                {forecastMode === "montecarlo" && (
-                  <Button onClick={() => handleRunSimulation()} disabled={isSimulating || !modelId || !orgId}>
-                    <Play className="mr-2 h-4 w-4" />
-                    Run Simulation
-                  </Button>
-                )}
+              <CardContent className="p-12 text-center text-muted-foreground">
+                <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No sensitivity data available. Run a simulation to see driver correlations.</p>
               </CardContent>
             </Card>
+          )}
+
+          {/* Bivariate Heatmap Section - NEW INDUSTRIAL FEATURE */}
+          {monteCarloResults?.percentiles?.bivariate_sensitivity && (
+            <div className="mt-8">
+              <SensitivityHeatmap data={monteCarloResults.percentiles.bivariate_sensitivity} />
+            </div>
           )}
         </TabsContent>
 

@@ -592,6 +592,12 @@ class AgentOrchestratorService {
     const allRecommendations = results.flatMap(r => r.recommendations || []);
     const allCalculations = results.reduce((acc, r) => ({ ...acc, ...r.calculations }), {});
     const allVisualizations = results.flatMap(r => r.visualizations || []);
+    const allWeakAssumptions = results.flatMap(r => r.weakAssumptions || []);
+    
+    // Use the metrics from the most relevant agent (usually the one with highest confidence or the primary one)
+    const primaryResult = results.sort((a, b) => (b.confidence || 0) - (a.confidence || 0))[0];
+    const statisticalMetrics = primaryResult?.statisticalMetrics;
+    const confidenceIntervals = primaryResult?.confidenceIntervals;
 
     const q = query.toLowerCase();
     const suggestedVizKeys: string[] = [];
@@ -657,6 +663,7 @@ class AgentOrchestratorService {
       recommendations: allRecommendations,
       followUpQuestions,
       visualizations: deterministicVisualizations,
+      weakAssumptions: allWeakAssumptions,
 
       // Aggregate Enterprise Meta-Data
       varianceDrivers: results.flatMap(r => r.varianceDrivers || []),

@@ -48,6 +48,8 @@ import {
   ShieldCheck,
   Target,
   Zap,
+  TrendingDown,
+  ArrowUpRight,
 } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -124,6 +126,16 @@ interface Message {
     issue: string
     recommendation: string
   }>
+  statisticalMetrics?: {
+    mape?: number;
+    driftStatus?: 'stable' | 'warning' | 'critical';
+  }
+  confidenceIntervals?: {
+    metric: string;
+    p10: number;
+    p50: number;
+    p90: number;
+  }
 }
 
 interface AICFOPlan {
@@ -1007,6 +1019,82 @@ export function AIAssistant() {
                                         </div>
                                       </CollapsibleContent>
                                     </Collapsible>
+                                  )}
+
+                                  {/* Institutional Grade: Statistical Metrics */}
+                                  {message.statisticalMetrics && (
+                                    <div className="flex flex-wrap gap-2 mt-2">
+                                      {message.statisticalMetrics.mape !== undefined && (
+                                        <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 rounded text-[10px] font-medium border">
+                                          <TrendingDown className="h-3 w-3 text-slate-500" />
+                                          <span>MAPE: <strong>{message.statisticalMetrics.mape}%</strong></span>
+                                        </div>
+                                      )}
+                                      {message.statisticalMetrics.driftStatus && (
+                                        <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-medium border ${
+                                          message.statisticalMetrics.driftStatus === 'stable' ? 'bg-green-100 border-green-200 text-green-700' :
+                                          message.statisticalMetrics.driftStatus === 'warning' ? 'bg-yellow-100 border-yellow-200 text-yellow-700' :
+                                          'bg-red-100 border-red-200 text-red-700'
+                                        }`}>
+                                          <ShieldCheck className="h-3 w-3" />
+                                          <span>DRIFT: <strong>{(message.statisticalMetrics.driftStatus as string).toUpperCase()}</strong></span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Institutional Grade: Confidence Intervals (P10/P50/P90) */}
+                                  {message.confidenceIntervals && (
+                                    <div className="mt-3 p-3 bg-gradient-to-br from-slate-900 to-slate-800 rounded-lg shadow-inner overflow-hidden relative">
+                                      <div className="absolute top-0 right-0 p-1 opacity-10">
+                                        <BarChart3 className="h-12 w-12 text-white" />
+                                      </div>
+                                      <div className="flex items-center justify-between mb-2">
+                                        <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Confidence Band: {message.confidenceIntervals.metric}</span>
+                                        <Badge variant="outline" className="text-[9px] h-4 border-slate-700 text-slate-300 bg-transparent">Stochastically Derived</Badge>
+                                      </div>
+                                      <div className="grid grid-cols-3 gap-1">
+                                        <div className="flex flex-col">
+                                          <span className="text-[9px] text-slate-400 font-medium">P10 (Worst)</span>
+                                          <span className="text-sm font-bold text-red-300">${(message.confidenceIntervals.p10 / 1000).toFixed(1)}k</span>
+                                        </div>
+                                        <div className="flex flex-col border-x border-slate-700 px-2 items-center">
+                                          <span className="text-[9px] text-slate-400 font-medium">P50 (Median)</span>
+                                          <span className="text-sm font-bold text-white">${(message.confidenceIntervals.p50 / 1000).toFixed(1)}k</span>
+                                        </div>
+                                        <div className="flex flex-col items-end">
+                                          <span className="text-[9px] text-slate-400 font-medium">P90 (Best)</span>
+                                          <span className="text-sm font-bold text-green-300">${(message.confidenceIntervals.p90 / 1000).toFixed(1)}k</span>
+                                        </div>
+                                      </div>
+                                      <div className="mt-2 w-full h-1 bg-slate-700 rounded-full overflow-hidden flex">
+                                        <div className="h-full bg-red-400" style={{ width: '30%' }}></div>
+                                        <div className="h-full bg-blue-400" style={{ width: '40%' }}></div>
+                                        <div className="h-full bg-green-400" style={{ width: '30%' }}></div>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Weak Assumptions - HIGH PRIORITY WARNING */}
+                                  {message.weakAssumptions && message.weakAssumptions.length > 0 && (
+                                    <div className="mt-3 space-y-2">
+                                      <div className="flex items-center gap-1.5 text-xs font-bold text-amber-600">
+                                        <AlertTriangle className="h-3.5 w-3.5" />
+                                        <span>MODEL RISK: WEAK ASSUMPTIONS DETECTED</span>
+                                      </div>
+                                      <div className="space-y-1">
+                                        {message.weakAssumptions.map((wa: any, i: number) => (
+                                          <div key={i} className="p-2 bg-amber-50 border border-amber-100 rounded text-xs">
+                                            <div className="font-semibold text-amber-800">{wa.name}</div>
+                                            <p className="text-amber-700 text-[11px] mt-0.5">{wa.issue}</p>
+                                            <div className="mt-1 flex items-center gap-1 text-[11px] font-medium text-amber-900 border-t border-amber-200/50 pt-1">
+                                              <ArrowUpRight className="h-3 w-3" />
+                                              Recommendation: {wa.recommendation}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
                                   )}
 
                                   {/* Recommendations Preview */}

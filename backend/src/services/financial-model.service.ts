@@ -304,6 +304,9 @@ export const financialModelService = {
           hiringPlan: request.hiring_plan,
           // Include manual assumptions if provided
           assumptions: request.assumptions,
+          // Forward control params
+          useCache: (request as any).useCache,
+          modelType: request.model_type,
         },
       });
       jobId = job.id;
