@@ -4,41 +4,52 @@
 
 @layer base {
   :root {
-    /* Updated color palette for premium fintech branding */
-    --background: 0 0% 100%;
+    /* Refined Premium Palette */
+    --background: 210 40% 98%;
     --foreground: 222 47% 11%;
+    
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
+    
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
-    --primary: 222 47% 11%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 188 94% 43%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 188 94% 43%;
-    --radius: 0.75rem;
-    --chart-1: 188 94% 43%;
-    --chart-2: 173 80% 40%;
-    --chart-3: 24 95% 53%;
-    --chart-4: 262 83% 58%;
-    --chart-5: 346 77% 50%;
+    
+    --primary: 222 47% 11%; /* Deep Space Navy */
+    --primary-foreground: 210 40% 98%;
+    
+    --secondary: 215 25% 27%; /* Professional Slate */
+    --secondary-foreground: 210 40% 98%;
+    
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    
+    --accent: 142 71% 45%; /* Success Emerald */
+    --accent-foreground: 0 0% 100%;
+    
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
 
-    --sidebar-background: 222 47% 11%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    
+    --radius: 0.75rem;
+
+    /* Chart Colors - Premium & Harmonic */
+    --chart-1: 222.2 47.4% 11.2%; /* Deep Navy */
+    --chart-2: 142.1 70.6% 45.3%; /* Emerald */
+    --chart-3: 199 89% 48%;     /* Sky Blue */
+    --chart-4: 47 95% 53%;      /* Goldenrod */
+    --chart-5: 262 83% 58%;      /* Purple */
+
+    --sidebar-background: 222.2 47.4% 11.2%;
     --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 188 94% 43%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 217 33% 17%;
+    --sidebar-primary: 142.1 70.6% 45.3%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217.2 32.6% 17.5%;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 217 33% 17%;
-    --sidebar-ring: 188 94% 43%;
+    --sidebar-border: 217.2 32.6% 17.5%;
+    --sidebar-ring: 222.2 84% 4.9%;
   }
 
   .dark {

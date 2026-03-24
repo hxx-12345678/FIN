@@ -1,11 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { LoginForm } from "./login-form"
 import { SignupForm } from "./signup-form"
-import { Gauge, X } from "lucide-react"
+import { X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface AuthModalProps {
@@ -17,6 +17,12 @@ interface AuthModalProps {
 
 export function AuthModal({ open, onOpenChange, defaultMode = "login", onSuccess }: AuthModalProps) {
   const [mode, setMode] = useState<"login" | "signup">(defaultMode)
+
+  useEffect(() => {
+    if (open) {
+      setMode(defaultMode)
+    }
+  }, [open, defaultMode])
 
   const handleSuccess = () => {
     onSuccess?.()
@@ -37,12 +43,8 @@ export function AuthModal({ open, onOpenChange, defaultMode = "login", onSuccess
         <div className="relative p-8 border-b border-white/10 bg-gradient-to-br from-white/[0.03] to-transparent">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(255,255,255,0.1)]">
-                <Gauge className="w-6 h-6 text-[#020617]" />
-              </div>
-              <span className="text-xl font-black tracking-tight uppercase italic text-white">
-                Fina<span className="text-indigo-500 not-italic">Pilot</span>
-              </span>
+               <img src="/icon.svg" alt="FinaPilot Logo" className="w-8 h-8 rounded-lg shadow-lg" />
+               <span className="text-xl font-bold tracking-tight text-white">FinaPilot</span>
             </div>
             <Button
               variant="ghost"

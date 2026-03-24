@@ -1,0 +1,234 @@
+================================================================================
+FINAPILOT: FULL STACK AGENTIC FP&A PLATFORM - COMPLETE TECHNICAL ANALYSIS
+================================================================================
+
+This document provides a deep-dive analysis of the FinaPilot project, covering 
+every component, API endpoint, and background job across the client, backend, 
+and python-worker directories.
+
+--------------------------------------------------------------------------------
+1. PROJECT OVERVIEW
+--------------------------------------------------------------------------------
+- What is FinaPilot? 
+  FinaPilot is an enterprise-grade Agentic Financial Planning and Analysis (FP&A) 
+  platform. It moves beyond static spreadsheets by providing real-time AI-driven 
+  modeling, automated variance analysis, and "explainable" financial intelligence.
+
+- Core Purpose:
+  To automate the manual workflows of CFOs and Finance teams—specifically data 
+  ingestion, model balancing (P&L/BS/CF), risk simulation (Monte Carlo), and 
+  strategic decision-making via a multi-agent AI CFO assistant.
+
+- Type of Application:
+  Institutional Fintech SaaS / AI-Driven Analytics Platform.
+
+- High-Level Architecture:
+  1. Frontend (Client): Next.js (App Router/TypeScript) for a high-fidelity, 
+     interactive dashboard experience.
+  2. Backend (Server): Node.js/Express with Prisma ORM for API orchestration, 
+     security (SOC 2 hardening), and job queuing.
+  3. Worker (Python): FastAPI/Pandas/NumPy worker for heavy-duty financial 
+     computations, ML-based forecasting, and LLM-based reasoning.
+  4. Database: PostgreSQL for persistent storage of models, ledger data, 
+     jobs, and audit trails.
+
+--------------------------------------------------------------------------------
+2. ARCHITECTURE BREAKDOWN
+--------------------------------------------------------------------------------
+- Communication Pattern:
+  - Client ↔ Backend: RESTful API (JSON) over HTTPS.
+  - Backend ↔ Python Worker: The backend inserts jobs into the `jobs` table 
+    (PostgreSQL) and the Python worker polls this table. For low-latency AI 
+    chats, the backend can also proxy requests directly to the Python FastAPI 
+    service.
+  - Real-time Updates: The frontend uses a recursive polling pattern (`use-job-status` hook) 
+    to track the progress of background computations.
+
+- Data Flow:
+  1. User Action: A user tweaks a growth driver in the UI.
+  2. Frontend: Dispatches a PATCH/POST request to the backend.
+  3. Backend: Validates the request, updates the model metadata, and creates a 
+     `model_run` job in the database.
+  4. Python Worker: Detects the job, pulls the latest model state and ledger 
+     data, executes the financial logic (Hyperblock), and saves the resulting 
+     `summaryJson` to the `ModelRun` record.
+  5. Backend: Updates the job status to `completed`.
+  6. Frontend: The poller detects completion and triggers a data refresh, 
+     updating the Recharts visualizations.
+
+--------------------------------------------------------------------------------
+3. FRONTEND (CLIENT) ANALYSIS
+--------------------------------------------------------------------------------
+The frontend is a single-page dashboard application housed within a modular 
+`DashboardLayout` component.
+
+Core Navigation & Views (ActiveView State):
+1. Overview Dashboard (`overview`):
+   - Purpose: Executive summary of burn, runway, and key KPIs.
+   - UI: Metric tiles, interactive "Strategic Pulse" ticker, anomaly alerts.
+2. Financial Modeling (`modeling`):
+   - Purpose: The central hub for model configuration and statement viewing.
+   - Features: Multi-tab layout (Dashboard, Statements, Valuation, Forecasting, Audit).
+3. Budget vs Actual (`budget-actual`):
+   - Purpose: Automatic variance analysis.
+   - UI: Comparison tables highlighting deltas between "Budgeted" and "Realized" figures.
+4. Scenario Planning (`scenarios`):
+   - Purpose: What-if analysis.
+   - UI: Side-by-side comparison of different financial simulations.
+5. Real-time Simulations (`simulations`):
+   - Purpose: Meeting-ready interactive cockpit.
+   - UI: Drivers/Sliders (Growth, CAC, Churn, etc.) with instant graph updates.
+6. AI CFO Assistant (`assistant`):
+   - Purpose: Multi-agent chat for financial forensics.
+   - UI: Chat interface, "Agent Thought" process steps, and Staged Changes panel.
+7. Semantic Ledger (`ledger`):
+   - Purpose: Transparent view of all normalized financial transactions.
+   - UI: Searchable data grid with "Provenance" (lineage) tracking.
+8. Board Reporting (`board-reporting`):
+   - Purpose: Automated generation of board packs.
+   - UI: Report templates, schedule manager, and export status tracking.
+9. Compliance & Security (`compliance`):
+   - Purpose: Transparency into SOC 2 controls, data retention, and AI ethics.
+10. Integrations (`integrations`):
+    - Purpose: OAuth flow for QuickBooks, Stripe, Xero, etc.
+
+Key Frontend Utilities:
+- `lib/api-config.ts`: Centralized Axios-like fetch wrapper with JWT handling.
+- `hooks/use-job-status.ts`: Specialized hook for polling job progress.
+- `lib/demo-data-generator.ts`: Logic for creating "Seed" data for trial users.
+
+--------------------------------------------------------------------------------
+4. BACKEND (API) ANALYSIS
+--------------------------------------------------------------------------------
+Built with Express.js, the backend is designed for SOC 2 Type II compliance 
+(strictly enforced in `src/app.ts`).
+
+Critical Endpoint Groups:
+1. /api/v1/auth:
+   - POST `/login`, `/signup`: JWT-based authentication.
+   - POST `/logout`, `/mfa/setup`: Security lifecycle management.
+2. /api/v1/orgs/:orgId/models:
+   - CRUD for model metadata and parameters.
+   - POST `/run`: Triggers the Python worker for a full re-calculation.
+3. /api/v1/orgs/:orgId/ai-cfo/query:
+   - Entry point for the AI assistant. Proxies context to the reasoning engine.
+4. /api/v1/jobs/:jobId:
+   - Status polling endpoint for all background tasks.
+5. /api/v1/provenance:
+   - Logic for tracing cell-level outputs back to raw transaction source IDs.
+6. /api/v1/connectors:
+   - Encrypted storage and management of third-party API keys.
+
+Database Schema Highlights (Prisma):
+- `User` & `Org`: Multi-tenant identity.
+- `Model`: Stores the "Model JSON" (the math structure).
+- `RawTransaction`: The landing zone for all ingested financial data.
+- `ChartOfAccount`: Maps `RawTransaction` items to `Model` drivers.
+- `ModelRun`: Stores the immutable snapshots of high-density result data.
+- `Job`: Central queue for task distribution.
+
+Security Middlewares:
+- `auth.ts`: JWT verification and RBAC (Role-Based Access Control) injection.
+- `rateLimit.ts`: API throttling to prevent brute-force/DoS attacks.
+- `audit-logger.ts`: Records every mutation (POST/PUT/DELETE) to a per-org audit trail.
+
+--------------------------------------------------------------------------------
+5. PYTHON-WORKER ANALYSIS
+--------------------------------------------------------------------------------
+A high-performance calculation and reasoning engine using FastAPI.
+
+Job Handlers (in `jobs/`):
+1. `hyperblock_engine.py`:
+   - Sparse-tensor math engine. Handles multi-dimensional dependencies without 
+     spreadsheet circular reference failures.
+2. `three_statement_engine.py`:
+   - The accounting "Truth Engine". Enforces double-entry logic interlinking 
+     P&L, Balance Sheet, and Cash Flow.
+3. `monte_carlo_enhanced.py`:
+   - Stochastic risk simulation. Runs 10k+ iterations of models with noise 
+     to generate P10/P90 confidence intervals.
+4. `reasoning_engine.py` (AI CFO):
+   - Specialized agent roles. Interrogates the ledger using SQL queries to 
+     find "reasons" for variances.
+5. `forecasting_engine_v2.py`:
+   - Time-series prediction using Prophet and ensemble statistical models.
+6. `export_pptx.py` / `export_pdf.py`:
+   - Translates model data into branded, institutional-grade documents.
+
+Connectors (in `connectors/`):
+- Modules to normalize data from Stripe, QuickBooks, NetSuite, and Sage into 
+  the platform's "Unified Schema".
+
+--------------------------------------------------------------------------------
+6. FEATURE-BY-FEATURE BREAKDOWN
+--------------------------------------------------------------------------------
+
+Feature: AI CFO Agentic Assistant
+- Flow: User asks "Why did opex increase in Q3?"
+- Data Path: React -> Express -> Python Reasoning Engine -> SQL Ledger Query -> 
+  Reasoning Chain -> React (Message + Chart).
+- Core Value: Natural language interrogation of hard financial data.
+
+Feature: Real-time "What-If" Simulation
+- Flow: User drags "Marketing Spend" slider.
+- Data Path: React -> Express -> Python Hyperblock -> React (Live Update).
+- Core Value: Instant visualization of cash runway impact for board meetings.
+
+Feature: Automated Variance Analysis (BvA)
+- Flow: Backend automatically compares current "Actuals" (via connectors) 
+  against the "Budget" model.
+- Data Path: Ledger + Model -> Python Analyst Agent -> React (Variance Dashboard).
+- Core Value: Eliminates manual Excel comparison of GL reports.
+
+Feature: Hyper-Trace™ Provenance
+- Flow: User clicks a cell in the 3-Statement viewer.
+- Data Path: React -> Express -> Provenance Service -> Original Transaction ID.
+- Core Value: Institutional-grade auditability; trust but verify every number.
+
+--------------------------------------------------------------------------------
+7. DATA FLOW EXPLANATION (End-to-End)
+--------------------------------------------------------------------------------
+Scenario: Syncing QuickBooks Data
+1. User: Clicks "Sync Now" in Integrations.
+2. Backend: Verifies OAuth tokens, creates a `connector_sync` job.
+3. Python Worker: Consumes job, pulls data from QuickBooks API, transforms it to 
+   the platform's Unified Schema, and inserts it into `RawTransaction`.
+4. Logic: Automatically maps transactions to the Chart of Accounts using 
+   AI heuristics.
+5. Notification: Jobs completes, user is notified that the "Overview" is now 
+   updated with real-time data.
+
+--------------------------------------------------------------------------------
+8. KEY LOGIC & COMPLEX PARTS
+--------------------------------------------------------------------------------
+- Hyperblock DAG: Unlike Excel, which is cell-based, FinaPilot uses a Directed 
+  Acyclic Graph of dimensions. This allows "Cell-Level Versioning" where every 
+  change is traceable and immutable.
+- Three-Statement Reconciliation: A closed-loop algorithm that forces the 
+  Balance Sheet to balance based on the Cash Flow delta. If it drifts by 
+  even $0.01, the system flags a "Integrity Error".
+- Multi-Agent Orchestration: The AI assistant manages separate agents for 
+  "Forensics" (looking back), "Projection" (looking forward), and "Governance" 
+  (compliance checks).
+
+--------------------------------------------------------------------------------
+9. DEPENDENCIES & TECHNOLOGIES
+--------------------------------------------------------------------------------
+- Frontend: React 18, Next.js 14, Tailwind CSS, Lucide Icons, Recharts, Framer Motion.
+- Backend: Express, Prisma (Postgres), Zod (Validation), Jose (JWT Security).
+- Worker: Python 3.11, FastAPI, Pandas, NumPy, Prophet (Forecasting), 
+  OpenAI/Anthropic (via LangChain-like structures).
+- Infrastructure: PostgreSQL, Redis (Caching), S3 (File storage for exports).
+
+--------------------------------------------------------------------------------
+10. SUMMARY
+--------------------------------------------------------------------------------
+FinaPilot is an industrial-strength architectural solution for the "Excel Hell" 
+problem in mid-market finance. Its strength lies in its **Data Lineage** (provenance) 
+and **Structural Rigidity** (three-statement balancing). By offloading heavy math 
+to a dedicated Python worker and exposing it through a high-fidelity Next.js 
+interface, it provides CFOs with the transparency of a ledger and the 
+flexibility of a simulator.
+================================================================================
+END OF ANALYSIS
+================================================================================
