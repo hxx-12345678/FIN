@@ -91,17 +91,34 @@ def handle_auto_model(job_id: str, org_id: str, object_id: str, logs: dict):
         # STEP 1: Fetch transaction data
         logger.info(f"Fetching transactions for org {org_id}, data source: {data_source_type}")
         
-        cursor.execute("""
-            SELECT 
-                date,
-                amount,
-                category,
-                description
-            FROM raw_transactions
-            WHERE "orgId" = %s
-              AND is_duplicate = false
-            ORDER BY date ASC
-        """, (org_id,))
+        import_batch_id = params.get('importBatchId')
+        
+        if import_batch_id:
+            logger.info(f"Filtering transactions by batch ID: {import_batch_id}")
+            cursor.execute("""
+                SELECT 
+                    date,
+                    amount,
+                    category,
+                    description
+                FROM raw_transactions
+                WHERE "orgId" = %s
+                  AND import_batch_id = %s
+                  AND is_duplicate = false
+                ORDER BY date ASC
+            """, (org_id, import_batch_id))
+        else:
+            cursor.execute("""
+                SELECT 
+                    date,
+                    amount,
+                    category,
+                    description
+                FROM raw_transactions
+                WHERE "orgId" = %s
+                  AND is_duplicate = false
+                ORDER BY date ASC
+            """, (org_id,))
         
         transactions = cursor.fetchall()
         logger.info(f"Found {len(transactions)} transactions")

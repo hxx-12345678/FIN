@@ -94,26 +94,34 @@ class RiskEngine:
         for i, (node_id, config) in enumerate(proportions.items()):
             actual_node_id = node_id
             
+            # Defensive check: ensure data exists in engine for this specific node/variant
+            # First, check if node_id itself is in engine.data
+            # If not, try to find it by name in nodes_meta
             if node_id not in engine.data:
-                found = False
+                found_by_name = False
                 for nid, meta in engine.nodes_meta.items():
                     if meta.get('name') == node_id:
                         actual_node_id = nid
-                        found = True
+                        found_by_name = True
                         break
                 
-                if not found:
+                if not found_by_name:
+                    # If still not found, add as placeholder to avoid KeyError later
                     engine.add_metric(node_id, node_id, "operational", ["_simulation"])
                     actual_node_id = node_id
             
-            dist = config.get('dist', 'normal')
+            if actual_node_id not in engine.data:
+                logger.warning(f"Engine data missing for {actual_node_id}, skipping simulation for this driver.")
+                continue
+                
+            target_shape = engine.data[actual_node_id].shape
             params = config.get('params', {})
             
             # Helper to get parameter from 'params' or 'config' directly (frontend compatibility)
             def get_p(key, default):
                 return params.get(key, config.get(key, default))
 
-            target_shape = engine.data[actual_node_id].shape
+            dist = config.get('dist', 'normal')
             
             # Use the correlated uniform variable for this driver
             u = correlated_uniforms[:, i]
@@ -128,7 +136,7 @@ class RiskEngine:
             
             if dist == 'normal':
                 mu = get_p('mu', get_p('mean', 0.0))
-                sigma = get_p('sigma', get_p('std', 0.1))
+                sigma = max(1e-9, get_p('sigma', get_p('std', 0.1))) # Guard against zero/negative sigma
                 samples = stats.norm.ppf(u_broadcasts, loc=mu, scale=sigma)
             elif dist == 't': # Fat-tail T-Distribution
                 df = get_p('df', 3.0) 
@@ -137,11 +145,11 @@ class RiskEngine:
                 samples = stats.t.ppf(u_broadcasts, df=df, loc=loc, scale=scale)
             elif dist == 'lognormal':
                 mu = get_p('mu', get_p('mean', 0.0))
-                sigma = get_p('sigma', get_p('std', 0.1))
+                sigma = max(1e-9, get_p('sigma', get_p('std', 0.1))) # Guard
                 samples = stats.lognorm.ppf(u_broadcasts, s=sigma, scale=np.exp(mu))
             elif dist == 'uniform':
                 low = get_p('min', -0.1)
-                high = get_p('max', 0.1)
+                high = max(low + 1e-9, get_p('max', 0.1)) # Guard against zero-width
                 samples = stats.uniform.ppf(u_broadcasts, loc=low, scale=high-low)
             elif dist == 'triangular':
                 left = get_p('min', -0.1)

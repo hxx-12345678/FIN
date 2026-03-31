@@ -35,6 +35,7 @@ class ThreeStatementEngine:
             'cashFlow': {},
             'balanceSheet': {}
         }
+        self.nol_balance = 0.0
         
     def compute_statements(
         self,
@@ -42,7 +43,8 @@ class ThreeStatementEngine:
         horizon_months: int,
         initial_values: Dict[str, float],
         growth_assumptions: Dict[str, float],
-        monthly_overrides: Dict[str, Dict[str, float]] = None
+        monthly_overrides: Dict[str, Dict[str, float]] = None,
+        headcount_costs: Dict[str, float] = None
     ) -> Dict[str, Any]:
         """
         Compute all three statements for the given projection period.
@@ -180,7 +182,14 @@ class ThreeStatementEngine:
             elif 'operatingExpenses' in override:
                 operating_expenses = float(override['operatingExpenses'])
             else:
-                operating_expenses = round((revenue / proration_factor if proration_factor > 0 else 0) * opex_percentage * proration_factor, 2)
+                # Integrate Headcount Costs if available
+                payroll_cost = float(headcount_costs.get(month_key, 0)) if headcount_costs else 0
+                
+                # Standard OPEX (Marketing, G&A, etc.) - traditionally 40% of revenue in SaaS if not specified
+                standard_opex = round((revenue / proration_factor if proration_factor > 0 else 0) * opex_percentage * proration_factor, 2)
+                
+                # Combine headcount costs with standard OPEX
+                operating_expenses = round(standard_opex + payroll_cost, 2)
                 
             # Stock-Based Compensation
             sbc = float(override.get('sbc', 0))
@@ -214,7 +223,8 @@ class ThreeStatementEngine:
             ebt = round(ebit - interest_expense, 2)
             
             # --- Net Operating Loss (NOL) Carryforward Engine ---
-            if not hasattr(self, 'nol_balance'): self.nol_balance = initial_values.get('nolBalance', 0)
+            if not hasattr(self, 'nol_balance') or self.nol_balance == 0: 
+                self.nol_balance = initial_values.get('nolBalance', 0.0)
             if ebt < 0:
                 self.nol_balance += abs(ebt)
                 income_tax = 0.0
@@ -573,7 +583,8 @@ def compute_three_statements(
     horizon_months: int,
     initial_values: Dict[str, float],
     growth_assumptions: Dict[str, float],
-    monthly_overrides: Dict[str, Dict[str, float]] = None
+    monthly_overrides: Dict[str, Dict[str, float]] = None,
+    headcount_costs: Dict[str, float] = None
 ) -> Dict[str, Any]:
     """
     Convenience function to compute 3-statement model.
@@ -593,7 +604,8 @@ def compute_three_statements(
         horizon_months=horizon_months,
         initial_values=initial_values,
         growth_assumptions=growth_assumptions,
-        monthly_overrides=monthly_overrides
+        monthly_overrides=monthly_overrides,
+        headcount_costs=headcount_costs
     )
     
     # Validate
@@ -639,9 +651,10 @@ class ConsolidationEngine:
             
         all_month_keys = sorted(list(self.entities[0]['incomeStatement']['monthly'].keys()))
         consolidated = {
-            'incomeStatement': {'monthly': {}},
-            'cashFlow': {'monthly': {}},
-            'balanceSheet': {'monthly': {}},
+            'incomeStatement': {'monthly': {}, 'annual': {}},
+            'cashFlow': {'monthly': {}, 'annual': {}},
+            'balanceSheet': {'monthly': {}, 'annual': {}},
+            'eliminationJournals': [],
             'metadata': {
                 'entitiesConsolidated': len(self.entities),
                 'cta_tracking': {}
@@ -724,6 +737,7 @@ class ConsolidationEngine:
             month_bs['equity']['minorityInterest'] = self.cumulative_mi_equity
             
             # ELIMINATIONS
+            ic_rev = ic_cogs = ic_ar = ic_ap = ic_interest = ic_dividends = ic_unrealized_profit = 0
             if intercompany_map and month_key in intercompany_map:
                 data = intercompany_map[month_key]
                 ic_rev = data.get('revenue', 0)
@@ -732,26 +746,45 @@ class ConsolidationEngine:
                 ic_ap = data.get('ap', ic_ar)
                 ic_interest = data.get('interest', 0)
                 ic_dividends = data.get('dividends', 0)
-                # Unrealized profit in inventory
                 ic_unrealized_profit = data.get('unrealizedProfit', 0)
-            else:
-                ic_rev = ic_cogs = ic_ar = ic_ap = ic_interest = ic_dividends = ic_unrealized_profit = 0
+                
+            if ic_rev > 0:
+                consolidated['eliminationJournals'].append({
+                    'month': month_key, 'account': 'Revenue/COGS', 'action': 'IC Sales Elimination', 'amount': ic_rev, 'debit': 'Intercompany Revenue', 'credit': 'Intercompany COGS'
+                })
+
+            if ic_ar > 0:
+                month_bs['assets']['ar'] -= ic_ar
+                month_bs['liabilities']['ap'] -= ic_ap
+                consolidated['eliminationJournals'].append({
+                    'month': month_key, 'account': 'AR/AP', 'action': 'IC Balance Elimination', 'amount': ic_ar, 'debit': 'Accounts Payable', 'credit': 'Accounts Receivable'
+                })
+
+            # Intercompany Fixed Asset Profit Elimination & Depreciation Unwind
+            ic_data = intercompany_map.get(month_key, {}) if intercompany_map else {}
+            ic_fa_profit = ic_data.get('fixedAssetProfit', 0)
             
-            # APPLICATION OF ELIMINATIONS
+            if not hasattr(self, 'accumulated_ic_fa_profit'): self.accumulated_ic_fa_profit = 0
+            if ic_fa_profit > 0:
+                self.accumulated_ic_fa_profit += ic_fa_profit
+                consolidated['eliminationJournals'].append({
+                    'month': month_key, 'account': 'Fixed Assets', 'action': 'IC Profit Elimination', 'amount': ic_fa_profit, 'debit': 'Profit (P&L)', 'credit': 'Fixed Assets (BS)'
+                })
+
             month_pl['revenue'] -= ic_rev
             month_pl['cogs'] -= ic_cogs
             month_pl['interestExpense'] -= ic_interest
             
-            # Intercompany Fixed Asset Profit Elimination & Depreciation Unwind
-            ic_fa_profit = intercompany_map.get(month_key, {}).get('fixedAssetProfit', 0) if intercompany_map else 0
             # If a profit was eliminated in a prior month, we must reverse the "excess" depreciation
             # taken by the purchaser (who sees a higher cost basis than the group)
-            if not hasattr(self, 'accumulated_ic_fa_profit'): self.accumulated_ic_fa_profit = 0
-            self.accumulated_ic_fa_profit += ic_fa_profit
-            
             # Simplified unwind: 1/60th of total eliminated profit per month (5-year useful life)
             depreciation_unwind = self.accumulated_ic_fa_profit / 60.0 if self.accumulated_ic_fa_profit > 0 else 0
-            month_pl['depreciation'] -= depreciation_unwind
+            if depreciation_unwind > 0:
+                month_pl['depreciation'] -= depreciation_unwind
+                # We also need an entry for the unwind
+                consolidated['eliminationJournals'].append({
+                    'month': month_key, 'account': 'Depreciation', 'action': 'Profit Unwind', 'amount': depreciation_unwind, 'debit': 'Accum Dep (BS)', 'credit': 'Depreciation Exp (P&L)'
+                })
             
             # Net Income Adjustment for Unrealized Profit & Adjustments
             month_pl['grossProfit'] = month_pl['revenue'] - month_pl['cogs']
@@ -819,5 +852,35 @@ class ConsolidationEngine:
             
             consolidated['incomeStatement']['monthly'][month_key] = month_pl
             consolidated['balanceSheet']['monthly'][month_key] = month_bs
+            consolidated['cashFlow']['monthly'][month_key] = {} # CF not fully modeled in basic engine but added for structure
             
+        # AGGREGATE TO ANNUAL (For Frontend Summary)
+        if all_month_keys:
+            # IS
+            annual_is = {}
+            annual_bs = {}
+            annual_cf = {}
+            
+            for m_key, m_data in consolidated['incomeStatement']['monthly'].items():
+                yr = m_key.split('-')[0]
+                if yr not in annual_is:
+                    annual_is[yr] = {k: 0.0 for k in ['revenue', 'cogs', 'grossProfit', 'operatingExpenses', 'ebitda', 'depreciation', 'ebit', 'netIncome']}
+                for k in annual_is[yr]:
+                    annual_is[yr][k] += m_data.get(k, 0)
+            
+            for yr, y_data in annual_is.items():
+                consolidated['incomeStatement']['annual'][yr] = {k: round(v, 2) for k, v in y_data.items()}
+                
+                # BS (Last month of year)
+                yr_months = sorted([m for m in all_month_keys if m.startswith(yr)])
+                if yr_months:
+                    last_m = yr_months[-1]
+                    consolidated['balanceSheet']['annual'][yr] = consolidated['balanceSheet']['monthly'][last_m]
+                    
+                    # CF (Summary)
+                    consolidated['cashFlow']['annual'][yr] = {
+                        'operatingCashFlow': round(annual_is[yr]['netIncome'] + annual_is[yr]['depreciation'], 2),
+                        'endingCash': consolidated['balanceSheet']['monthly'][last_m]['assets'].get('cash', 0)
+                    }
+
         return consolidated

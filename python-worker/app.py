@@ -469,8 +469,137 @@ def compute_scenario(req: ScenarioRequest):
 
 
 # =============================================================================
+# FINANCIAL CONSOLIDATION ENDPOINT
+# =============================================================================
+
+from jobs.three_statement_engine import ThreeStatementEngine, ConsolidationEngine, compute_three_statements
+
+class ConsolidationRequest(BaseModel):
+    entities: List[Dict[str, Any]]
+    fxRates: Optional[Dict[str, float]] = None
+    avgFxRates: Optional[Dict[str, float]] = None
+    regionalTaxRates: Optional[Dict[str, float]] = None
+    minorityInterests: Optional[Dict[str, float]] = None
+    startMonth: str = "2025-01"
+    horizonMonths: int = 12
+    accountingStandard: str = "IFRS"  # IFRS or GAAP
+
+@app.post("/compute/consolidation", dependencies=[Depends(verify_worker_secret)])
+def compute_consolidation(req: ConsolidationRequest):
+    """
+    Run multi-entity financial consolidation.
+    1. Generate 3-statement model for each entity
+    2. Consolidate with FX translation, IC eliminations, NCI
+    """
+    try:
+        from datetime import datetime
+        from dateutil.parser import parse as date_parse
+
+        entity_results = []
+        start_dt = date_parse(req.startMonth + "-01")
+
+        for entity_config in req.entities:
+            entity_id = entity_config.get('entityId', 'UNKNOWN')
+            currency = entity_config.get('currency', 'USD')
+            fin_data = entity_config.get('financialData', {})
+
+            # Use entity's financial data or generate defaults
+            initial_values = fin_data.get('initialValues', {
+                'cash': 500000,
+                'revenue': 50000,
+                'equity': 500000,
+            })
+            growth_assumptions = fin_data.get('growthAssumptions', {
+                'revenueGrowth': 0.08,
+                'cogsPercentage': 0.30,
+                'opexPercentage': 0.40,
+                'taxRate': float(entity_config.get('taxRate', 0.25) or 0.25),
+            })
+
+            # Compute 3-statement model for this entity
+            statements = compute_three_statements(
+                start_month=req.startMonth + "-01",
+                horizon_months=req.horizonMonths,
+                initial_values=initial_values,
+                growth_assumptions=growth_assumptions,
+            )
+
+            # Add entity metadata
+            statements['metadata'] = statements.get('metadata', {})
+            statements['metadata']['entityId'] = entity_id
+            statements['metadata']['currency'] = currency
+            statements['metadata']['entityName'] = entity_config.get('name', entity_id)
+
+            entity_results.append(statements)
+
+        # Run consolidation if multiple entities
+        if len(entity_results) > 1:
+            consolidation_engine = ConsolidationEngine(
+                entities=entity_results,
+                fx_rates=req.fxRates or {},
+                avg_fx_rates=req.avgFxRates,
+                regional_tax_rates=req.regionalTaxRates or {},
+                minority_interests=req.minorityInterests or {},
+            )
+
+            # Build intercompany map from entity configs
+            ic_map = {}
+            for entity_config in req.entities:
+                ic_data = entity_config.get('intercompanyMap', {})
+                for month_key, ic_values in ic_data.items():
+                    if month_key not in ic_map:
+                        ic_map[month_key] = {}
+                    for k, v in ic_values.items():
+                        ic_map[month_key][k] = ic_map[month_key].get(k, 0) + v
+
+            consolidated = consolidation_engine.consolidate(
+                intercompany_map=ic_map if ic_map else None
+            )
+
+            return {
+                "status": "success",
+                "result": {
+                    "consolidated": consolidated,
+                    "entityResults": [{
+                        "entityId": er.get('metadata', {}).get('entityId', 'UNKNOWN'),
+                        "entityName": er.get('metadata', {}).get('entityName', 'Unknown'),
+                        "currency": er.get('metadata', {}).get('currency', 'USD'),
+                        "incomeStatement": er.get('incomeStatement', {}),
+                        "cashFlow": er.get('cashFlow', {}),
+                        "balanceSheet": er.get('balanceSheet', {}),
+                    } for er in entity_results],
+                    "accountingStandard": req.accountingStandard,
+                }
+            }
+        elif len(entity_results) == 1:
+            # Single entity - return as-is
+            return {
+                "status": "success",
+                "result": {
+                    "consolidated": entity_results[0],
+                    "entityResults": [{
+                        "entityId": entity_results[0].get('metadata', {}).get('entityId', 'UNKNOWN'),
+                        "entityName": entity_results[0].get('metadata', {}).get('entityName', 'Unknown'),
+                        "currency": entity_results[0].get('metadata', {}).get('currency', 'USD'),
+                        "incomeStatement": entity_results[0].get('incomeStatement', {}),
+                        "cashFlow": entity_results[0].get('cashFlow', {}),
+                        "balanceSheet": entity_results[0].get('balanceSheet', {}),
+                    }],
+                    "accountingStandard": req.accountingStandard,
+                }
+            }
+        else:
+            return {"status": "error", "detail": "No entities provided"}
+
+    except Exception as e:
+        logger.error(f"Consolidation failed: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
 # ENTERPRISE FINANCIAL CONTROL LAYER ENDPOINTS
 # =============================================================================
+
 
 from jobs.financial_control_layer import (
     DebtScheduleEngine, EquityDilutionEngine, TaxLogicEngine,
