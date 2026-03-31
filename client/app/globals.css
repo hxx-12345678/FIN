@@ -183,3 +183,20 @@ html {
   transform: translateY(-8px);
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
 }
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+.tab-nav-premium {
+  @apply flex items-center gap-1 p-1 bg-slate-100/50 backdrop-blur-md rounded-xl border border-slate-200/60 overflow-x-auto scrollbar-hide;
+}
+
+.tab-trigger-premium {
+  @apply px-4 py-2 text-xs font-bold transition-all duration-300 rounded-lg whitespace-nowrap;
+}

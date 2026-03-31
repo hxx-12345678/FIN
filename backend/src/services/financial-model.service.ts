@@ -307,6 +307,7 @@ export const financialModelService = {
           // Forward control params
           useCache: (request as any).useCache,
           modelType: request.model_type,
+          importBatchId: request.init_metadata?.uploaded_file_id,
         },
       });
       jobId = job.id;
@@ -321,7 +322,8 @@ export const financialModelService = {
   generateAssumptionsFromData: async (
     orgId: string,
     modelId: string,
-    dataSourceType: DataSourceType
+    dataSourceType: DataSourceType,
+    importBatchId?: string
   ): Promise<AssumptionStructure> => {
     const assumptions: AssumptionStructure = {
       revenue: {},
@@ -356,25 +358,30 @@ export const financialModelService = {
       };
     }
 
-    // Fetch transactions from raw_transactions
     // CRITICAL: Use most recent transactions available (prefer last 12 months, but use all if needed)
     const twelveMonthsAgo = new Date();
     twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
 
-    // Try to get recent transactions first
-    let transactions = await prisma.$queryRaw`
-      SELECT 
-        date,
-        amount,
-        category,
-        description
-      FROM raw_transactions
-      WHERE "orgId" = ${orgId}::uuid
-        AND date >= ${twelveMonthsAgo}
-      ORDER BY date ASC
-    ` as Array<{ date: Date; amount: number; category: string | null; description: string | null }>;
+    let transactions;
+    if (importBatchId) {
+      transactions = await prisma.$queryRaw`
+        SELECT date, amount, category, description
+        FROM raw_transactions
+        WHERE "orgId" = ${orgId}::uuid
+          AND "import_batch_id" = ${importBatchId}::uuid
+        ORDER BY date ASC
+      ` as Array<{ date: Date; amount: number; category: string | null; description: string | null }>;
+    } else {
+      transactions = await prisma.$queryRaw`
+        SELECT date, amount, category, description
+        FROM raw_transactions
+        WHERE "orgId" = ${orgId}::uuid
+          AND date >= ${twelveMonthsAgo}
+        ORDER BY date ASC
+      ` as Array<{ date: Date; amount: number; category: string | null; description: string | null }>;
+    }
 
-    if (transactions.length === 0) {
+    if (transactions.length === 0 && !importBatchId) {
       logger.warn(`No recent transactions found for org ${orgId} (last 12 months), trying all available transactions`);
       // Get all transactions as fallback (even if old)
       transactions = await prisma.$queryRaw`
@@ -387,21 +394,28 @@ export const financialModelService = {
         WHERE "orgId" = ${orgId}::uuid
         ORDER BY date DESC
       ` as Array<{ date: Date; amount: number; category: string | null; description: string | null }>;
+    }
 
-      if (transactions.length === 0) {
+    if (transactions.length === 0) {
+      if (importBatchId) {
+        logger.error(`No transactions found for import batch ${importBatchId}. Falling back to default baseline.`);
+      } else {
         logger.warn(`No transactions found at all for org ${orgId}, using defaults`);
-        return financialModelService.generateAssumptionsFromData(orgId, modelId, 'blank');
       }
+      return financialModelService.generateAssumptionsFromData(orgId, modelId, 'blank');
+    }
 
-      // Warn about old data
-      const oldestDate = transactions[transactions.length - 1].date;
+    if (!importBatchId) {
+      // Logic for logging when no importBatchId but found data
       const newestDate = transactions[0].date;
       const daysOld = Math.floor((new Date().getTime() - newestDate.getTime()) / (1000 * 60 * 60 * 24));
-      logger.warn(`Using older transactions (${transactions.length} found, ${daysOld} days old)`);
-      logger.warn(`Transaction date range: ${oldestDate.toISOString().split('T')[0]} to ${newestDate.toISOString().split('T')[0]}`);
-      logger.warn(`⚠️ Consider importing recent transaction data for accurate assumptions`);
+      if (daysOld > 45) {
+         logger.warn(`Using older transactions (${transactions.length} found, ${daysOld} days old)`);
+      } else {
+         logger.info(`Using ${transactions.length} recent transactions (last 12 months) for assumptions`);
+      }
     } else {
-      logger.info(`Using ${transactions.length} recent transactions (last 12 months) for assumptions`);
+      logger.info(`Using ${transactions.length} transactions from import batch ${importBatchId} for assumptions`);
     }
 
     // Calculate revenue and expenses

@@ -13,6 +13,25 @@ export const headcountPlanningController = {
       res.status(201).json({ ok: true, plan });
     } catch (error) { next(error); }
   },
+
+  updatePlan: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) throw new ValidationError('User not authenticated');
+      const { orgId, planId } = req.params;
+      const plan = await headcountPlanningService.updatePlan(orgId, planId, req.user.id, req.body);
+      res.json({ ok: true, plan });
+    } catch (error) { next(error); }
+  },
+
+  deletePlan: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) throw new ValidationError('User not authenticated');
+      const { orgId, planId } = req.params;
+      await headcountPlanningService.deletePlan(orgId, planId, req.user.id);
+      res.json({ ok: true, message: 'Plan deleted' });
+    } catch (error) { next(error); }
+  },
+
   getForecast: async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.user) throw new ValidationError('User not authenticated');
@@ -22,6 +41,7 @@ export const headcountPlanningController = {
       res.json({ ok: true, forecast });
     } catch (error) { next(error); }
   },
+
   getPlans: async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.user) throw new ValidationError('User not authenticated');
@@ -30,5 +50,13 @@ export const headcountPlanningController = {
       res.json({ ok: true, plans });
     } catch (error) { next(error); }
   },
-};
 
+  getDepartmentSummary: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) throw new ValidationError('User not authenticated');
+      const { orgId } = req.params;
+      const summary = await headcountPlanningService.getDepartmentSummary(orgId, req.user.id);
+      res.json({ ok: true, departments: summary });
+    } catch (error) { next(error); }
+  },
+};

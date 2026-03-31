@@ -34,6 +34,7 @@ model User {
   roles                       UserOrgRole[]
   preferences                 UserPreferences?
   usageRecords                UserUsage[]
+  aiCFOConversations          AICFOConversation[]
 
   @@map("users")
 }
@@ -84,6 +85,9 @@ model Org {
   shareTokens          ShareToken[]
   roles                UserOrgRole[]
   usageRecords         UserUsage[]
+  headcountPlans       HeadcountPlan[]
+  consolidationEntities ConsolidationEntity[]
+  aiCFOConversations          AICFOConversation[]
 
   @@map("orgs")
 }
@@ -650,6 +654,43 @@ model AICFOPlan {
   @@map("ai_cfo_plans")
 }
 
+model AICFOConversation {
+  id        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId     String         @db.Uuid
+  userId    String         @db.Uuid
+  title     String?
+  status    String         @default("active") // active, archived
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  messages  AICFOMessage[]
+  org       Org            @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([userId])
+  @@map("ai_cfo_conversations")
+}
+
+model AICFOMessage {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId  String            @db.Uuid
+  role            String            // user, assistant
+  content         String            // @db.Text is implied for String in Postgres if needed
+  agentType       String?
+  confidence      Decimal?          @db.Decimal(5, 4)
+  thoughts        Json?             // Array of AgentThought
+  dataSources     Json?             // Array of DataSource
+  recommendations Json?             // Array of AgentRecommendation
+  calculations    Json?             // Map of calculations
+  visualizations  Json?             // Array of AgentVisualization
+  metadata        Json?
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  conversation    AICFOConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@map("ai_cfo_messages")
+}
+
 model ComputationTrace {
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orgId         String   @db.Uuid
@@ -796,6 +837,58 @@ model LocalizationSettings {
 
   @@index([orgId])
   @@map("localization_settings")
+}
+
+model HeadcountPlan {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId           String    @map("org_id") @db.Uuid
+  name            String
+  department      String    @default("General")
+  role            String
+  level           String?   // e.g. "Junior", "Mid", "Senior", "Lead", "Director"
+  quantity        Int       @default(1)
+  salary          Decimal?  @db.Decimal(20, 4) // Annual salary per head
+  benefitsMultiplier Decimal? @default(1.3) @map("benefits_multiplier") @db.Decimal(5, 2) // 1.3 = 30% benefits on top
+  totalAnnualCost Decimal?  @map("total_annual_cost") @db.Decimal(20, 4)
+  startDate       DateTime  @map("start_date") @db.Date
+  endDate         DateTime? @map("end_date") @db.Date
+  rampMonths      Int       @default(3) @map("ramp_months") // months to full productivity
+  status          String    @default("planned") // planned | approved | hiring | filled | cancelled
+  hiringStage     String?   @default("open") @map("hiring_stage") // open | sourcing | interview | offer | onboarding | active
+  notes           String?
+  createdById     String?   @map("created_by_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  org             Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([department])
+  @@index([status])
+  @@index([orgId, department])
+  @@map("headcount_plans")
+}
+
+model ConsolidationEntity {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId           String    @map("org_id") @db.Uuid
+  name            String
+  code            String?   // e.g. "US-HQ", "EU-SUB", "APAC-JV"
+  entityType      String    @default("subsidiary") @map("entity_type") // parent | subsidiary | joint_venture | associate
+  currency        String    @default("USD")
+  ownershipPct    Decimal   @default(100) @map("ownership_pct") @db.Decimal(5, 2) // 100 = fully owned
+  country         String?
+  taxRate         Decimal?  @map("tax_rate") @db.Decimal(5, 4) // e.g. 0.2100 = 21%
+  isActive        Boolean   @default(true) @map("is_active")
+  financialData   Json?     @map("financial_data") // cached 3-statement results
+  intercompanyMap Json?     @map("intercompany_map") // IC transaction definitions
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  org             Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, code])
+  @@index([orgId])
+  @@index([entityType])
+  @@map("consolidation_entities")
 }
 
 model Budget {

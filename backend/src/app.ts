@@ -61,6 +61,7 @@ import decisionEngineRoutes from './routes/decision-engine.routes';
 import approvalRoutes from './routes/approval.routes';
 import semanticLayerRoutes from './routes/semantic-layer.routes';
 import computeRoutes from './routes/compute.routes';
+import consolidationRoutes from './routes/consolidation.routes';
 
 dotenv.config();
 
@@ -326,6 +327,7 @@ app.use('/api/v1', decisionEngineRoutes);
 app.use('/api/v1', approvalRoutes);
 app.use('/api/v1', semanticLayerRoutes);
 app.use('/api/v1/compute', computeRoutes);
+app.use('/api/v1', consolidationRoutes);
 app.use('/api/v1/debug', debugRoutes);
 
 // 404 handler

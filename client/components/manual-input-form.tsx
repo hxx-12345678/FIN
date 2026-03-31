@@ -56,11 +56,13 @@ export function ManualInputForm({ orgId, modelId }: ManualInputFormProps) {
 
             if (res.ok) {
                 const data = await res.json()
-                if (data.ok && data.inputs && Object.keys(data.inputs).length > 0) {
-                    setInputs({
-                        ...inputs,
-                        ...data.inputs
-                    })
+                if (data.ok && data.inputs) {
+                    // Deep merge or specific field merge to avoid losing nested structure
+                    const newInputs = { ...inputs };
+                    if (data.inputs.revenue) newInputs.revenue = { ...newInputs.revenue, ...data.inputs.revenue };
+                    if (data.inputs.costs) newInputs.costs = { ...newInputs.costs, ...data.inputs.costs };
+                    if (data.inputs.metrics) newInputs.metrics = { ...newInputs.metrics, ...data.inputs.metrics };
+                    setInputs(newInputs);
                 }
             }
         } catch (error) {

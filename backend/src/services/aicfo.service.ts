@@ -428,15 +428,65 @@ export const aicfoService = {
 
     const sanitizedQuery = sanitizeString(query.trim(), 500);
     const startTime = Date.now();
+    const threadId = context?.threadId || context?.conversationId;
 
     try {
-      // Use the new agent orchestrator for proper multi-agent workflow
+      // 1. Manage Conversation Persistence
+      let conversation;
+      if (threadId && /^[0-9a-f]{8}-[0-9a-f]{4}-[12345][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(threadId)) {
+        conversation = await prisma.aICFOConversation.findUnique({
+          where: { id: threadId },
+        });
+      }
+
+      if (!conversation) {
+        conversation = await prisma.aICFOConversation.create({
+          data: {
+            orgId,
+            userId,
+            title: sanitizedQuery.substring(0, 50),
+          },
+        });
+      }
+
+      // 2. Save User Message
+      await prisma.aICFOMessage.create({
+        data: {
+          conversationId: conversation.id,
+          role: 'user',
+          content: sanitizedQuery,
+        },
+      });
+
+      // 3. Process Query through multi-agent orchestration
       const agentResponse = await agentOrchestrator.processQuery(
         orgId,
         userId,
         sanitizedQuery,
         context
       );
+
+      // 4. Save Assistant Message
+      await prisma.aICFOMessage.create({
+        data: {
+          conversationId: conversation.id,
+          role: 'assistant',
+          content: agentResponse.answer,
+          agentType: agentResponse.agentType,
+          confidence: agentResponse.confidence,
+          thoughts: agentResponse.thoughts as any,
+          dataSources: agentResponse.dataSources as any,
+          recommendations: agentResponse.recommendations as any,
+          calculations: agentResponse.calculations as any,
+          visualizations: agentResponse.visualizations as any,
+        },
+      });
+
+      // Update conversation timestamp
+      await prisma.aICFOConversation.update({
+        where: { id: conversation.id },
+        data: { updatedAt: new Date() },
+      });
 
       // Save to database for history (serialize to JSON-compatible format)
       const plan = await prisma.aICFOPlan.create({
@@ -481,6 +531,7 @@ export const aicfoService = {
       });
 
       return {
+        conversationId: conversation.id,
         planId: plan.id,
         response: agentResponse,
         processingTimeMs: Date.now() - startTime,
@@ -541,6 +592,135 @@ export const aicfoService = {
       return null;
     }
     return prisma.prompt.findUnique({ where: { id: promptId } });
+  },
+
+  /**
+   * Conversation History Methods
+   */
+  listConversations: async (orgId: string, userId: string) => {
+    return prisma.aICFOConversation.findMany({
+      where: { orgId, userId },
+      orderBy: { updatedAt: 'desc' },
+      take: 50,
+    });
+  },
+
+  getConversation: async (conversationId: string, userId: string) => {
+    const conversation = await prisma.aICFOConversation.findUnique({
+      where: { id: conversationId },
+      include: {
+        messages: {
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    if (!conversation) throw new NotFoundError('Conversation not found');
+    if (conversation.userId !== userId) throw new ForbiddenError('Access denied to conversation');
+
+    return conversation;
+  },
+
+  deleteConversation: async (conversationId: string, userId: string) => {
+    const conversation = await prisma.aICFOConversation.findUnique({
+      where: { id: conversationId },
+    });
+
+    if (!conversation) throw new NotFoundError('Conversation not found');
+    if (conversation.userId !== userId) throw new ForbiddenError('Access denied');
+
+    return prisma.aICFOConversation.delete({
+      where: { id: conversationId },
+    });
+  },
+
+  /**
+   * Process Agentic Query with Streaming
+   */
+  processAgenticQueryStream: async (
+    orgId: string,
+    userId: string,
+    query: string,
+    context?: Record<string, any>,
+    onStep?: (step: any) => void
+  ) => {
+    const sanitizedQuery = sanitizeString(query.trim(), 500);
+    const startTime = Date.now();
+    const threadId = context?.threadId || context?.conversationId;
+
+    try {
+      // 1. Manage Conversation Persistence
+      let conversation;
+      if (threadId && /^[0-9a-f]{8}-[0-9a-f]{4}-[12345][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(threadId)) {
+        conversation = await prisma.aICFOConversation.findUnique({
+          where: { id: threadId },
+        });
+      }
+
+      if (!conversation) {
+        conversation = await prisma.aICFOConversation.create({
+          data: {
+            orgId,
+            userId,
+            title: sanitizedQuery.substring(0, 50),
+          },
+        });
+      }
+
+      // 2. Save User Message
+      await prisma.aICFOMessage.create({
+        data: {
+          conversationId: conversation.id,
+          role: 'user',
+          content: sanitizedQuery,
+        },
+      });
+
+      // Notify UI of conversation ID
+      if (onStep) {
+        onStep({ type: 'conversation_id', payload: { conversationId: conversation.id } });
+      }
+
+      // 3. Process with Orchestrator (Streaming)
+      const agentResponse = await agentOrchestrator.processQueryStream(
+        orgId,
+        userId,
+        sanitizedQuery,
+        context,
+        onStep
+      );
+
+      // 4. Save Assistant Message
+      await prisma.aICFOMessage.create({
+        data: {
+          conversationId: conversation.id,
+          role: 'assistant',
+          content: agentResponse.answer,
+          agentType: agentResponse.agentType,
+          confidence: agentResponse.confidence,
+          thoughts: agentResponse.thoughts as any,
+          dataSources: agentResponse.dataSources as any,
+          recommendations: agentResponse.recommendations as any,
+          calculations: agentResponse.calculations as any,
+          visualizations: agentResponse.visualizations as any,
+        },
+      });
+
+      // Update conversation timestamp
+      await prisma.aICFOConversation.update({
+        where: { id: conversation.id },
+        data: { updatedAt: new Date() },
+      });
+
+      return {
+        conversationId: conversation.id,
+        response: agentResponse,
+        processingTimeMs: Date.now() - startTime,
+      };
+    } catch (error) {
+      console.error('[AICFOService] Error in processAgenticQueryStream:', error);
+      throw error;
+    }
   },
 };
 

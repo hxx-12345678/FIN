@@ -13,7 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts"
 import { VirtualizedTable } from "@/components/ui/virtualized-table"
 import { useChartPagination } from "@/hooks/use-chart-pagination"
-import { Download, Upload, Zap, TrendingUp, Calculator, Brain, Save, SearchIcon, Loader2, AlertCircle, Play, FileDown, FileText, HelpCircle, Pencil, Check, X, Sparkles, Plus, LineChart as LineChartIcon, CheckCircle2, ShieldCheck, Grid, ShieldAlert, Database, Activity, Target, LayoutDashboard, FileDiff, History as HistoryIcon, ArrowUpRight, ArrowDownRight, Scale, Flame, Clock, Landmark, Users, BarChart3, DollarSign } from "lucide-react"
+import { Download, Upload, Zap, TrendingUp, Calculator, Brain, Save, SearchIcon, Loader2, AlertCircle, Play, FileDown, FileText, HelpCircle, Pencil, Check, X, Sparkles, Plus, LineChart as LineChartIcon, CheckCircle2, ShieldCheck, Grid, ShieldAlert, Database, Activity, Target, LayoutDashboard, FileDiff, History as HistoryIcon, ArrowUpRight, ArrowDownRight, Scale, Flame, Clock, Landmark, Users, BarChart3, DollarSign, Combine } from "lucide-react"
 import { CreateModelForm } from "./create-model-form"
 import { toast } from "sonner"
 import { ProvenanceDrawer } from "./provenance-drawer"
@@ -45,6 +45,8 @@ import { useModel } from "@/lib/model-context"
 import { useOrg } from "@/lib/org-context"
 import { BudgetWorkflow } from "./approvals/budget-workflow"
 import { FootballFieldChart } from "./valuation/football-field"
+import { ConsolidationPage } from "./consolidation-page"
+import { HeadcountPlanningPage } from "./headcount-planning-page"
 
 interface FinancialModel {
   id: string
@@ -1121,7 +1123,7 @@ export function FinancialModeling() {
         }}
         className="space-y-4"
       >
-        <TabsList className="grid w-full grid-cols-12 min-w-[1300px] h-12 bg-slate-100 p-1 border border-slate-200">
+        <TabsList className="bg-slate-900/5 p-1 mb-6 border border-slate-200/50 flex-nowrap overflow-x-auto scrollbar-hide tab-nav-premium w-full justify-start h-auto">
           <TabsTrigger value="dashboard" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-2 font-black">
             <LayoutDashboard className="h-3.5 w-3.5" /> Dashboard
           </TabsTrigger>
@@ -1142,6 +1144,12 @@ export function FinancialModeling() {
           </TabsTrigger>
           <TabsTrigger value="scenarios" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-2 font-black">
             <FileDiff className="h-3.5 w-3.5" /> Scenarios
+          </TabsTrigger>
+          <TabsTrigger value="consolidation" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-2 font-black whitespace-nowrap">
+            <Combine className="h-3.5 w-3.5" /> Consolidation
+          </TabsTrigger>
+          <TabsTrigger value="headcount" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-2 font-black whitespace-nowrap text-teal-600">
+            <Users className="h-3.5 w-3.5" /> Headcount
           </TabsTrigger>
           <TabsTrigger value="ai-assist" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-1.5 font-black text-purple-600">
             <Sparkles className="h-3.5 w-3.5" /> AI Assist
@@ -1714,71 +1722,6 @@ export function FinancialModeling() {
             </Card>
           )}
 
-        <TabsContent value="statements" className="space-y-6">
-          <ThreeStatementViewer
-            orgId={orgId}
-            modelId={selectedModel}
-            runId={currentRun?.id || null}
-            statements={currentRun?.summaryJson as any}
-            modelRuns={modelRuns}
-            onCellClick={(cellId, value) => {
-              setSelectedCellData({ cellId, value: String(value) } as any)
-              setProvenanceModalOpen(true)
-            }}
-          />
-        </TabsContent>
-
-        <TabsContent value="valuation" className="space-y-6">
-          <Card className="border-2 shadow-xl overflow-hidden bg-slate-50/30">
-            <CardHeader className="bg-white border-b border-slate-100 flex flex-row items-center justify-between py-4">
-              <div>
-                <CardTitle className="text-xl flex items-center gap-2">
-                  <Grid className="h-6 w-6 text-indigo-600" />
-                  Valuation Football Field
-                </CardTitle>
-                <CardDescription className="text-slate-500 font-bold">Multi-methodology valuation range comparison based on mid-year convention and Exit Multiple fallbacks.</CardDescription>
-              </div>
-              <div className="flex gap-2">
-                <Badge variant="outline" className="bg-indigo-50 border-indigo-200 text-indigo-700 font-black px-4 py-1.5">
-                  INSTITUTIONAL PRECISION
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="p-10">
-              <div className="h-[550px]">
-                <FootballFieldChart
-                  ranges={(currentRun?.summaryJson as any)?.valuationSummary || [
-                    { name: 'DCF (Exit Multiple)', low: (currentRun?.summaryJson as any)?.dcf?.impliedEquityValue * 0.9 || 0, high: (currentRun?.summaryJson as any)?.dcf?.impliedEquityValue * 1.1 || 0, color: '#4f46e5' },
-                    { name: 'DCF (Perpetuity)', low: (currentRun?.summaryJson as any)?.dcf?.impliedEquityValue * 0.85 || 0, high: (currentRun?.summaryJson as any)?.dcf?.impliedEquityValue * 1.15 || 0, color: '#6366f1' },
-                    { name: 'LBO (Exit MOIC)', low: (currentRun?.summaryJson as any)?.lbo?.exitEquity * 0.9 || 0, high: (currentRun?.summaryJson as any)?.lbo?.exitEquity * 1.1 || 0, color: '#8b5cf6' },
-                    { name: 'Market Multiples (Comps)', low: (currentRun?.summaryJson as any)?.revenue * 4 || 0, high: (currentRun?.summaryJson as any)?.revenue * 6 || 0, color: '#10b981' }
-                  ]}
-                  currentPrice={(currentRun?.summaryJson as any)?.currentPrice}
-                  currency={currencySymbol || "$"}
-                />
-              </div>
-              
-              <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-6">
-                 <div className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">DCF Implied Value</p>
-                    <p className="text-2xl font-black text-slate-900">{formatCurrency((currentRun?.summaryJson as any)?.dcf?.impliedEquityValue || 0)}</p>
-                    <div className="mt-2 text-[11px] font-bold text-slate-500">WACC: {((currentRun?.summaryJson as any)?.dcf?.wacc * 100 || 0).toFixed(1)}% | TGR: {((currentRun?.summaryJson as any)?.dcf?.terminalGrowthRate * 100 || 0).toFixed(1)}%</div>
-                 </div>
-                 <div className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">LBO Exit Equity</p>
-                    <p className="text-2xl font-black text-indigo-600">{formatCurrency((currentRun?.summaryJson as any)?.lbo?.exitEquity || 0)}</p>
-                    <div className="mt-2 text-[11px] font-bold text-slate-500">MOIC: {((currentRun?.summaryJson as any)?.lbo?.moic || 0).toFixed(2)}x | IRR: {((currentRun?.summaryJson as any)?.lbo?.irr * 100 || 0).toFixed(1)}%</div>
-                 </div>
-                 <div className="p-5 rounded-2xl bg-indigo-600 text-white shadow-xl shadow-indigo-200">
-                    <p className="text-[10px] font-black text-indigo-200 uppercase tracking-widest mb-3">Blended Target Price</p>
-                    <p className="text-2xl font-black">{formatCurrency((currentRun?.summaryJson as any)?.blendedTargetPrice || 0)}</p>
-                    <div className="mt-2 text-[11px] font-medium text-indigo-100">Weighted Average of Multi-Methodology Samples</div>
-                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card className="border shadow-sm">
               <CardHeader className="bg-slate-50/50 border-b pb-4">
@@ -1947,6 +1890,71 @@ export function FinancialModeling() {
               </div>
             </div>
           </div>
+        </TabsContent>
+
+        <TabsContent value="statements" className="space-y-6">
+          <ThreeStatementViewer
+            orgId={orgId}
+            modelId={selectedModel}
+            runId={currentRun?.id || null}
+            statements={currentRun?.summaryJson as any}
+            modelRuns={modelRuns}
+            onCellClick={(cellId, value) => {
+              setSelectedCellData({ cellId, value: String(value) } as any)
+              setProvenanceModalOpen(true)
+            }}
+          />
+        </TabsContent>
+
+        <TabsContent value="valuation" className="space-y-6">
+          <Card className="border-2 shadow-xl overflow-hidden bg-slate-50/30">
+            <CardHeader className="bg-white border-b border-slate-100 flex flex-row items-center justify-between py-4">
+              <div>
+                <CardTitle className="text-xl flex items-center gap-2">
+                  <Grid className="h-6 w-6 text-indigo-600" />
+                  Valuation Football Field
+                </CardTitle>
+                <CardDescription className="text-slate-500 font-bold">Multi-methodology valuation range comparison based on mid-year convention and Exit Multiple fallbacks.</CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Badge variant="outline" className="bg-indigo-50 border-indigo-200 text-indigo-700 font-black px-4 py-1.5">
+                  INSTITUTIONAL PRECISION
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="p-10">
+              <div className="h-[550px]">
+                <FootballFieldChart
+                  ranges={(currentRun?.summaryJson as any)?.valuationSummary || [
+                    { name: 'DCF (Exit Multiple)', low: (currentRun?.summaryJson as any)?.dcf?.impliedEquityValue * 0.9 || 0, high: (currentRun?.summaryJson as any)?.dcf?.impliedEquityValue * 1.1 || 0, color: '#4f46e5' },
+                    { name: 'DCF (Perpetuity)', low: (currentRun?.summaryJson as any)?.dcf?.impliedEquityValue * 0.85 || 0, high: (currentRun?.summaryJson as any)?.dcf?.impliedEquityValue * 1.15 || 0, color: '#6366f1' },
+                    { name: 'LBO (Exit MOIC)', low: (currentRun?.summaryJson as any)?.lbo?.exitEquity * 0.9 || 0, high: (currentRun?.summaryJson as any)?.lbo?.exitEquity * 1.1 || 0, color: '#8b5cf6' },
+                    { name: 'Market Multiples (Comps)', low: (currentRun?.summaryJson as any)?.revenue * 4 || 0, high: (currentRun?.summaryJson as any)?.revenue * 6 || 0, color: '#10b981' }
+                  ]}
+                  currentPrice={(currentRun?.summaryJson as any)?.currentPrice}
+                  currency={currencySymbol || "$"}
+                />
+              </div>
+              
+              <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-6">
+                 <div className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">DCF Implied Value</p>
+                    <p className="text-2xl font-black text-slate-900">{formatCurrency((currentRun?.summaryJson as any)?.dcf?.impliedEquityValue || 0)}</p>
+                    <div className="mt-2 text-[11px] font-bold text-slate-500">WACC: {((currentRun?.summaryJson as any)?.dcf?.wacc * 100 || 0).toFixed(1)}% | TGR: {((currentRun?.summaryJson as any)?.dcf?.terminalGrowthRate * 100 || 0).toFixed(1)}%</div>
+                 </div>
+                 <div className="p-5 rounded-2xl bg-white border border-slate-100 shadow-sm">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">LBO Exit Equity</p>
+                    <p className="text-2xl font-black text-indigo-600">{formatCurrency((currentRun?.summaryJson as any)?.lbo?.exitEquity || 0)}</p>
+                    <div className="mt-2 text-[11px] font-bold text-slate-500">MOIC: {((currentRun?.summaryJson as any)?.lbo?.moic || 0).toFixed(2)}x | IRR: {((currentRun?.summaryJson as any)?.lbo?.irr * 100 || 0).toFixed(1)}%</div>
+                 </div>
+                 <div className="p-5 rounded-2xl bg-indigo-600 text-white shadow-xl shadow-indigo-200">
+                    <p className="text-[10px] font-black text-indigo-200 uppercase tracking-widest mb-3">Blended Target Price</p>
+                    <p className="text-2xl font-black">{formatCurrency((currentRun?.summaryJson as any)?.blendedTargetPrice || 0)}</p>
+                    <div className="mt-2 text-[11px] font-medium text-indigo-100">Weighted Average of Multi-Methodology Samples</div>
+                 </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="ingestion" className="space-y-6">
@@ -2349,6 +2357,14 @@ export function FinancialModeling() {
               <TraceViewer traces={computationTraces} isLoading={loading} />
             </div>
           </div>
+        </TabsContent>
+
+        <TabsContent value="consolidation" className="space-y-6">
+          <ConsolidationPage />
+        </TabsContent>
+
+        <TabsContent value="headcount" className="space-y-6">
+          <HeadcountPlanningPage />
         </TabsContent>
       </Tabs>
 

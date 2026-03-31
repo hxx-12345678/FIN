@@ -116,7 +116,10 @@ export function RiskAnalysisHub({ orgId, modelId }: { orgId: string | null, mode
                 }
             }
         }
-        return riskData.months.map((m: string, i: number) => ({
+        const months = Array.isArray(riskData.months) ? riskData.months : []
+        if (!metric || months.length === 0) return []
+        
+        return months.map((m: string, i: number) => ({
             name: m,
             p5: metric.p5?.[i] ?? 0,
             p10: metric.p10?.[i] ?? 0,

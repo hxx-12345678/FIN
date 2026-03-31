@@ -9,6 +9,7 @@ const router = Router();
 
 // NEW: Multi-agent orchestration endpoint for proper agentic AI CFO
 router.post('/orgs/:orgId/ai-cfo/query', authenticate, rateLimit(), orgRateLimit, requireOrgAccess('orgId'), auditLogger, aicfoController.processAgenticQuery);
+router.post('/orgs/:orgId/ai-cfo/query/stream', authenticate, orgRateLimit, requireOrgAccess('orgId'), aicfoController.streamAgenticQuery);
 
 // Generate AI-CFO plan (with rate limiting and audit logging)
 // Note: Rate limiting might be too strict for board reporting, but we keep it for now
@@ -31,6 +32,11 @@ router.delete('/ai-plans/:planId', authenticate, requirePlanOwnership('planId'),
 
 // Get prompt details (AUDITABILITY)
 router.get('/prompts/:promptId', authenticate, requirePromptOwnership('promptId'), aicfoController.getPrompt);
+
+// Conversation History
+router.get('/orgs/:orgId/ai-cfo/conversations', authenticate, requireOrgAccess('orgId'), aicfoController.listConversations);
+router.get('/orgs/:orgId/ai-cfo/conversations/:conversationId', authenticate, requireOrgAccess('orgId'), aicfoController.getConversation);
+router.delete('/orgs/:orgId/ai-cfo/conversations/:conversationId', authenticate, requireOrgAccess('orgId'), aicfoController.deleteConversation);
 
 export default router;
 

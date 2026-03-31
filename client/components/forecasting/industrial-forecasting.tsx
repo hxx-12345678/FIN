@@ -98,7 +98,8 @@ export function IndustrialForecasting({ orgId, modelId, currentRunId, refreshKey
                     })
                 }
 
-                forecast.forEach((val: number, i: number) => {
+                const forecastArray = Array.isArray(forecast) ? forecast : []
+                forecastArray.forEach((val: number, i: number) => {
                     combined.push({
                         name: `F+${i + 1}`,
                         forecast: val,
@@ -255,9 +256,9 @@ export function IndustrialForecasting({ orgId, modelId, currentRunId, refreshKey
                             </Badge>
                         </div>
                     </CardHeader>
-                    <CardContent className="pt-6 h-[400px]">
+                    <CardContent className="pt-6 h-[400px] min-h-[400px]">
                         <div className="h-full w-full min-h-[350px]">
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="100%" height={350}>
                                 <AreaChart data={forecastData}>
                                     <defs>
                                         <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">

@@ -254,6 +254,84 @@ export const aicfoController = {
       next(error);
     }
   },
+
+  /**
+   * SSE Stream for Agentic Query
+   * POST /api/v1/orgs/:orgId/ai-cfo/query/stream
+   */
+  streamAgenticQuery: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) throw new ValidationError('User not authenticated');
+      const { orgId } = req.params;
+      const { query, context } = req.body;
+
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+
+      await aicfoService.processAgenticQueryStream(
+        orgId,
+        req.user.id,
+        query,
+        context,
+        (step) => {
+          res.write(`data: ${JSON.stringify(step)}\n\n`);
+        }
+      );
+
+      res.end();
+    } catch (error) {
+      if (!res.headersSent) {
+        next(error);
+      } else {
+        res.write(`data: ${JSON.stringify({ type: 'error', payload: { message: (error as Error).message } })}\n\n`);
+        res.end();
+      }
+    }
+  },
+
+  /**
+   * GET /api/v1/orgs/:orgId/ai-cfo/conversations - List chat history
+   */
+  listConversations: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) throw new ValidationError('User not authenticated');
+      const { orgId } = req.params;
+      const conversations = await aicfoService.listConversations(orgId, req.user.id);
+      res.json({ ok: true, conversations });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  /**
+   * GET /api/v1/orgs/:orgId/ai-cfo/conversations/:conversationId - Get conversation details
+   */
+  getConversation: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) throw new ValidationError('User not authenticated');
+      const { conversationId } = req.params;
+      const conversation = await aicfoService.getConversation(conversationId, req.user.id);
+      res.json({ ok: true, conversation });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  /**
+   * DELETE /api/v1/orgs/:orgId/ai-cfo/conversations/:conversationId - Delete conversation
+   */
+  deleteConversation: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) throw new ValidationError('User not authenticated');
+      const { conversationId } = req.params;
+      await aicfoService.deleteConversation(conversationId, req.user.id);
+      res.json({ ok: true, message: 'Conversation deleted' });
+    } catch (error) {
+      next(error);
+    }
+  },
 };
 
 

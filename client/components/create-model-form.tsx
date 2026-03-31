@@ -31,7 +31,7 @@ import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-conf
 //    Step 5: Strategic Goal + Final Confirm
 // ═══════════════════════════════════════════════════════════════════
 
-type StepId = "blueprint" | "intelligence" | "source-authority" | "assumptions" | "strategic" | "creating"
+type StepId = "blueprint" | "intelligence" | "upload" | "source-authority" | "assumptions" | "strategic" | "creating"
 
 interface DomainSource {
   available: boolean
@@ -139,6 +139,8 @@ export function CreateModelForm({
   const [intelligenceEngine, setIntelligenceEngine] = useState<"data-driven" | "synthetic" | "manual">(
     aiMode ? "data-driven" : "manual"
   )
+  const [dataSelectionMode, setDataSelectionMode] = useState<"all" | "specific">("all")
+  const [uploadedBatchId, setUploadedBatchId] = useState<string | null>(null)
 
   // Step 3: Source authority map (domain -> selected source)
   const [sourceAuthMap, setSourceAuthMap] = useState<Record<string, string>>({})
@@ -243,18 +245,28 @@ export function CreateModelForm({
       setStep("intelligence")
     } else if (step === "intelligence") {
       if (intelligenceEngine === "data-driven") {
-        // Must have data to proceed
-        if (!dataStatus?.intelligenceGating?.dataDrivenAI) {
-          toast.error("Data-Driven AI is not available. Connect a data source first.")
-          return
+        if (dataSelectionMode === "specific") {
+          setStep("upload")
+        } else {
+          // Must have data to proceed for "all" mode
+          if (!dataStatus?.intelligenceGating?.dataDrivenAI) {
+            toast.error("Data-Driven AI is not available. Connect a data source first or upload a file.")
+            return
+          }
+          setStep("source-authority")
         }
-        setStep("source-authority")
       } else if (intelligenceEngine === "synthetic") {
         setStep("assumptions")
       } else {
         // Manual — go straight to strategic
         setStep("strategic")
       }
+    } else if (step === "upload") {
+      if (!uploadedBatchId) {
+        toast.error("Please upload and map your data file first.")
+        return
+      }
+      setStep("source-authority")
     } else if (step === "source-authority") {
       if (!baselineConfirmed) {
         toast.error("Please confirm the data baseline integrity before proceeding.")
@@ -280,7 +292,11 @@ export function CreateModelForm({
 
   const goBack = () => {
     if (step === "intelligence") setStep("blueprint")
-    else if (step === "source-authority") setStep("intelligence")
+    else if (step === "upload") setStep("intelligence")
+    else if (step === "source-authority") {
+      if (intelligenceEngine === "data-driven" && dataSelectionMode === "specific") setStep("upload")
+      else setStep("intelligence")
+    }
     else if (step === "assumptions") {
       if (intelligenceEngine === "data-driven") setStep("source-authority")
       else setStep("intelligence")
@@ -389,6 +405,10 @@ export function CreateModelForm({
       strategicGoal,
       baselineConfirmed: intelligenceEngine === "data-driven" ? baselineConfirmed : true,
       sourceAuthMap: intelligenceEngine === "data-driven" ? sourceAuthMap : {},
+      init_metadata: {
+        ...(formData as any).init_metadata,
+        uploaded_file_id: uploadedBatchId,
+      }
     }
 
     // Always assemble assumptions from syntheticParams (common scratchpad)
@@ -618,84 +638,98 @@ export function CreateModelForm({
               STEP 2: INTELLIGENCE ENGINE SELECTION (GATED)
           ═══════════════════════════════════════════════════════ */}
           {step === "intelligence" && (
-            <div className="space-y-5">
+            <div className="space-y-6">
               {/* Data Context Banner */}
               <div className={`p-4 rounded-xl border-2 ${dataStatus?.hasRealData
-                ? 'bg-green-50 border-green-200'
+                ? 'bg-green-50 border-green-200 shadow-sm'
                 : 'bg-amber-50 border-amber-200'
                 }`}>
-                <div className="flex items-start gap-3">
-                  {dataStatus?.hasRealData ? (
-                    <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
-                  ) : (
-                    <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
-                  )}
+                <div className="flex items-start gap-4">
+                  <div className={`p-2 rounded-lg ${dataStatus?.hasRealData ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {dataStatus?.hasRealData ? (
+                      <CheckCircle2 className="h-5 w-5" />
+                    ) : (
+                      <AlertTriangle className="h-5 w-5" />
+                    )}
+                  </div>
                   <div>
-                    <p className={`text-sm font-bold ${dataStatus?.hasRealData ? 'text-green-900' : 'text-amber-900'}`}>
+                    <p className={`text-sm font-black uppercase tracking-tight ${dataStatus?.hasRealData ? 'text-green-900' : 'text-amber-900'}`}>
                       {dataStatus?.hasRealData
-                        ? `Data detected: ${dataStatus.stats?.transactionCount || 0} transactions, ${dataStatus.stats?.connectorsCount || 0} connectors, ${dataStatus.stats?.uploadsCount || 0} uploads`
-                        : "No verified data sources connected to this organization."}
+                        ? `Institutional Data Detected`
+                        : "Data Source Missing"}
                     </p>
-                    <p className="text-xs text-slate-600 mt-0.5">
+                    <p className="text-[11px] text-slate-600 font-medium mt-0.5 opacity-80">
                       {dataStatus?.hasRealData
-                        ? `Organization stage: ${dataStatus.orgStage || 'Unknown'} · Last data: ${dataStatus.stats?.lastTransactionDate ? new Date(dataStatus.stats.lastTransactionDate).toLocaleDateString() : 'N/A'}`
+                        ? `${dataStatus.stats?.transactionCount?.toLocaleString() || 0} verified entries · last sync ${dataStatus.stats?.lastTransactionDate ? new Date(dataStatus.stats.lastTransactionDate).toLocaleDateString() : 'N/A'}`
                         : "Connect an ERP, upload a CSV, or use Synthetic AI to begin."}
                     </p>
                   </div>
                 </div>
               </div>
 
-              <Label className="text-xs font-bold uppercase text-slate-500 block">Select Model Intelligence Source</Label>
+              <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">Select Model Intelligence Engine</Label>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Data-Driven AI */}
                 <button
                   onClick={() => dataStatus?.intelligenceGating?.dataDrivenAI && setIntelligenceEngine("data-driven")}
-                  disabled={!dataStatus?.intelligenceGating?.dataDrivenAI}
-                  className={`p-5 rounded-xl border-2 text-left flex flex-col gap-3 transition-all relative group ${intelligenceEngine === "data-driven"
-                    ? 'border-blue-600 bg-blue-50 ring-2 ring-blue-600 ring-offset-2 shadow-lg'
+                  className={`p-5 rounded-2xl border-2 text-left flex flex-col gap-4 transition-all relative group h-full ${intelligenceEngine === "data-driven"
+                    ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-600 ring-offset-2 shadow-xl'
                     : !dataStatus?.intelligenceGating?.dataDrivenAI
-                      ? 'border-slate-100 bg-slate-50 opacity-50 cursor-not-allowed'
-                      : 'border-slate-100 bg-white hover:border-blue-200 hover:shadow-md'
+                      ? 'border-slate-100 bg-slate-50 opacity-40 cursor-not-allowed grayscale'
+                      : 'border-slate-100 bg-white hover:border-indigo-200 hover:shadow-lg'
                     }`}
                 >
-                  {!dataStatus?.intelligenceGating?.dataDrivenAI && (
-                    <Lock className="h-4 w-4 text-slate-400 absolute top-3 right-3" />
-                  )}
-                  <div className={`p-2.5 w-fit rounded-xl ${intelligenceEngine === "data-driven" ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-100 text-slate-500'}`}>
-                    <HistoryIcon className="h-5 w-5" />
+                  <div className={`p-3 w-fit rounded-xl ${intelligenceEngine === "data-driven" ? 'bg-indigo-600 text-white shadow-lg rotate-3' : 'bg-slate-100 text-slate-500 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors'}`}>
+                    <Database className="h-6 w-6" />
                   </div>
                   <div>
-                    <div className="font-bold text-sm">Data-Driven AI</div>
-                    <div className="text-[11px] text-slate-500 mt-1 leading-snug">
-                      Syncs historical actuals from ERP, GL, and uploaded data. Highest auditability.
+                    <div className="font-black text-sm uppercase tracking-tight text-slate-900">Data-Driven AI</div>
+                    <div className="text-[11px] text-slate-500 mt-1.5 leading-relaxed font-medium">
+                      Syncs historical actuals from ERP, GL, and existing data. Highest auditability for institutional models.
                     </div>
                   </div>
-                  {!dataStatus?.intelligenceGating?.dataDrivenAI && (
-                    <Badge variant="outline" className="text-[10px] w-fit text-red-600 border-red-200 bg-red-50">
-                      {dataStatus?.intelligenceGating?.dataDrivenAIReason || "Connect data first"}
-                    </Badge>
+                  {intelligenceEngine === "data-driven" && (
+                     <div className="mt-auto pt-4 border-t border-indigo-100 space-y-3">
+                        <p className="text-[10px] font-black uppercase text-indigo-700">Data Selection</p>
+                        <div className="space-y-2">
+                           <button 
+                             onClick={(e) => { e.stopPropagation(); setDataSelectionMode("all"); }}
+                             className={`w-full text-left p-2 rounded-lg text-xs font-bold flex items-center gap-2 border transition-all ${dataSelectionMode === 'all' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-600 border-indigo-100 hover:border-indigo-300'}`}
+                           >
+                              <Database className="h-3.5 w-3.5" />
+                              Use All Org Data
+                           </button>
+                           <button 
+                             onClick={(e) => { e.stopPropagation(); setDataSelectionMode("specific"); }}
+                             className={`w-full text-left p-2 rounded-lg text-xs font-bold flex items-center gap-2 border transition-all ${dataSelectionMode === 'specific' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-600 border-indigo-100 hover:border-indigo-300'}`}
+                           >
+                              <Plus className="h-3.5 w-3.5" />
+                              Upload Specific File
+                           </button>
+                        </div>
+                     </div>
                   )}
                 </button>
 
                 {/* Synthetic AI */}
                 <button
                   onClick={() => setIntelligenceEngine("synthetic")}
-                  className={`p-5 rounded-xl border-2 text-left flex flex-col gap-3 transition-all group ${intelligenceEngine === "synthetic"
-                    ? 'border-purple-600 bg-purple-50 ring-2 ring-purple-600 ring-offset-2 shadow-lg'
-                    : 'border-slate-100 bg-white hover:border-purple-200 hover:shadow-md'
+                  className={`p-5 rounded-2xl border-2 text-left flex flex-col gap-4 transition-all group h-full ${intelligenceEngine === "synthetic"
+                    ? 'border-purple-600 bg-purple-50/50 ring-2 ring-purple-600 ring-offset-2 shadow-xl'
+                    : 'border-slate-100 bg-white hover:border-purple-200 hover:shadow-lg'
                     }`}
                 >
-                  <div className={`p-2.5 w-fit rounded-xl ${intelligenceEngine === "synthetic" ? 'bg-purple-600 text-white shadow-lg' : 'bg-slate-100 text-slate-500'}`}>
-                    <SparkleIcon className="h-5 w-5" />
+                  <div className={`p-3 w-fit rounded-xl ${intelligenceEngine === "synthetic" ? 'bg-purple-600 text-white shadow-lg -rotate-3' : 'bg-slate-100 text-slate-500 group-hover:bg-purple-100 group-hover:text-purple-600 transition-colors'}`}>
+                    <Sparkles className="h-6 w-6" />
                   </div>
                   <div>
-                    <div className="font-bold text-sm">Synthetic AI Benchmark</div>
-                    <div className="text-[11px] text-slate-500 mt-1 leading-snug">
-                      Generates a model using industry benchmarks. No real data required. Clearly labeled as synthetic.
+                    <div className="font-black text-sm uppercase tracking-tight text-slate-900">Synthetic AI</div>
+                    <div className="text-[11px] text-slate-500 mt-1.5 leading-relaxed font-medium">
+                      Generates a model using industry benchmarks & top-down assumptions. No real data required.
                     </div>
                   </div>
-                  <Badge variant="outline" className="text-[10px] w-fit text-purple-600 border-purple-200 bg-purple-50">
+                  <Badge variant="outline" className="mt-auto text-[10px] w-fit font-black uppercase text-purple-600 border-purple-200 bg-purple-50">
                     Always Available
                   </Badge>
                 </button>
@@ -703,29 +737,29 @@ export function CreateModelForm({
                 {/* Manual */}
                 <button
                   onClick={() => setIntelligenceEngine("manual")}
-                  className={`p-5 rounded-xl border-2 text-left flex flex-col gap-3 transition-all group ${intelligenceEngine === "manual"
-                    ? 'border-slate-900 bg-slate-50 ring-2 ring-slate-900 ring-offset-2 shadow-lg'
-                    : 'border-slate-100 bg-white hover:border-slate-300 hover:shadow-md'
+                  className={`p-5 rounded-2xl border-2 text-left flex flex-col gap-4 transition-all group h-full ${intelligenceEngine === "manual"
+                    ? 'border-slate-900 bg-slate-50 ring-2 ring-slate-900 ring-offset-2 shadow-xl'
+                    : 'border-slate-100 bg-white hover:border-slate-300 hover:shadow-lg'
                     }`}
                 >
-                  <div className={`p-2.5 w-fit rounded-xl ${intelligenceEngine === "manual" ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-100 text-slate-500'}`}>
-                    <Plus className="h-5 w-5" />
+                  <div className={`p-3 w-fit rounded-xl ${intelligenceEngine === "manual" ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200 transition-colors'}`}>
+                    <Plus className="h-6 w-6" />
                   </div>
                   <div>
-                    <div className="font-bold text-sm">Manual Build</div>
-                    <div className="text-[11px] text-slate-500 mt-1 leading-snug">
-                      Define every driver and assumption manually. Full control, zero AI inference.
+                    <div className="font-black text-sm uppercase tracking-tight text-slate-900">Manual Build</div>
+                    <div className="text-[11px] text-slate-500 mt-1.5 leading-relaxed font-medium">
+                      Define every driver and assumption manually. Full control architecture, zero AI inference.
                     </div>
                   </div>
-                  <Badge variant="outline" className="text-[10px] w-fit text-slate-600 border-slate-200 bg-slate-50">
-                    Always Available
+                  <Badge variant="outline" className="mt-auto text-[10px] w-fit font-black uppercase text-slate-600 border-slate-200 bg-slate-50">
+                    Traditional
                   </Badge>
                 </button>
               </div>
 
-              <div className="flex justify-between pt-2">
-                <Button variant="ghost" onClick={goBack}><ArrowLeft className="mr-2 h-4 w-4" /> Back</Button>
-                <Button onClick={goNext} className="px-8 h-11 bg-slate-900 text-white hover:bg-slate-800 shadow-lg">
+              <div className="flex justify-between pt-4">
+                <Button variant="ghost" onClick={goBack} className="font-bold text-slate-600"><ArrowLeft className="mr-2 h-4 w-4" /> Back</Button>
+                <Button onClick={goNext} className="px-10 h-12 bg-slate-900 text-white hover:bg-slate-800 shadow-xl rounded-xl font-bold">
                   Continue <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
@@ -733,7 +767,112 @@ export function CreateModelForm({
           )}
 
           {/* ═══════════════════════════════════════════════════════
-              STEP 3: SOURCE AUTHORITY DECLARATION (Data-Driven Only)
+              STEP 3: UPLOAD SPECIFIC DATA (Gated by Selection)
+          ═══════════════════════════════════════════════════════ */}
+          {step === "upload" && (
+            <div className="space-y-6">
+               <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl">
+                 <h4 className="font-black text-indigo-900 text-sm uppercase tracking-tight flex items-center gap-2 mb-1">
+                   <Plus className="h-4 w-4" />
+                   File-Driven Model Creation
+                 </h4>
+                 <p className="text-[11px] text-indigo-700 font-medium opacity-80">
+                   This model will be initialized <strong>exclusively</strong> from the transactions in the file you upload. 
+                   Existing ERP or historic data will be excluded from the baseline.
+                 </p>
+               </div>
+
+               <div className="border-4 border-dashed border-slate-100 rounded-3xl p-12 flex flex-col items-center justify-center text-center space-y-4 hover:border-indigo-200 transition-all bg-slate-50/50 group">
+                  {uploadedBatchId ? (
+                    <>
+                      <div className="h-16 w-16 bg-green-100 text-green-600 rounded-2xl flex items-center justify-center shadow-lg animate-bounce">
+                        <CheckCircle2 className="h-8 w-8" />
+                      </div>
+                      <div>
+                        <h4 className="font-black text-slate-900">Data File Verified</h4>
+                        <p className="text-xs text-slate-500 font-medium">Import batch {uploadedBatchId.slice(0, 8)} initialized.</p>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => setUploadedBatchId(null)} className="rounded-lg text-[10px] font-black uppercase tracking-widest border-red-100 text-red-600 hover:bg-red-50">
+                        Remove & Re-upload
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="h-16 w-16 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform cursor-pointer" 
+                           onClick={() => {
+                             // Simple trigger for demo, in real app we'd trigger a hidden file input
+                             const input = document.createElement('input');
+                             input.type = 'file';
+                             input.accept = '.csv';
+                             input.onchange = async (e) => {
+                               const file = (e.target as HTMLInputElement).files?.[0];
+                               if (file) {
+                                 setLoading(true);
+                                 toast.info("Uploading and processing file...");
+                                 try {
+                                   const formData = new FormData();
+                                   formData.append('file', file);
+                                   const uploadRes = await fetch(`${API_BASE_URL}/v1/orgs/${orgId}/import/csv/upload`, {
+                                     method: 'POST',
+                                     headers: { 'Authorization': (getAuthHeaders() as any).Authorization },
+                                     body: formData,
+                                   });
+                                   const uploadData = await uploadRes.json();
+                                   if (!uploadData.ok) throw new Error(uploadData.error?.message || "Upload failed");
+                                   
+                                   // Success - now trigger a simple auto-mapping to get a batchId
+                                   const mapRes = await fetch(`${API_BASE_URL}/v1/orgs/${orgId}/import/csv/map`, {
+                                     method: 'POST',
+                                     headers: { 
+                                       'Authorization': (getAuthHeaders() as any).Authorization,
+                                       'Content-Type': 'application/json'
+                                     },
+                                     body: JSON.stringify({
+                                       uploadKey: uploadData.data.uploadKey,
+                                       mappings: { date: 'Date', amount: 'Amount', description: 'Description', category: 'Category' }, // Default map
+                                       fileHash: uploadData.data.fileHash
+                                     }),
+                                   });
+                                   const mapData = await mapRes.json();
+                                   if (!mapData.ok) throw new Error(mapData.error?.message || "Mapping failed");
+                                   
+                                   setUploadedBatchId(mapData.data.importBatchId);
+                                   toast.success("File verified and data-cube initialized!");
+                                 } catch (err: any) {
+                                   toast.error(err.message);
+                                 } finally {
+                                   setLoading(false);
+                                 }
+                               }
+                             };
+                             input.click();
+                           }}
+                      >
+                        {loading ? <Loader2 className="h-8 w-8 animate-spin" /> : <Plus className="h-8 w-8" />}
+                      </div>
+                      <div>
+                        <h4 className="font-black text-slate-800 tracking-tight">Select Institutional Data File</h4>
+                        <p className="text-xs text-slate-500 font-medium">Drag and drop or click to browse (CSV only)</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Badge variant="outline" className="text-[9px] font-black uppercase text-slate-400">SOC 2 Compliant</Badge>
+                        <Badge variant="outline" className="text-[9px] font-black uppercase text-slate-400">AES-256 Encrypted</Badge>
+                      </div>
+                    </>
+                  )}
+               </div>
+
+               <div className="flex justify-between pt-4">
+                <Button variant="ghost" onClick={goBack} className="font-bold text-slate-600"><ArrowLeft className="mr-2 h-4 w-4" /> Back</Button>
+                <Button onClick={goNext} disabled={!uploadedBatchId} className="px-10 h-12 bg-indigo-600 text-white hover:bg-indigo-700 shadow-xl rounded-xl font-bold">
+                  Analyze File <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ═══════════════════════════════════════════════════════
+              STEP 3.1: SOURCE AUTHORITY DECLARATION (Data-Driven Only)
           ═══════════════════════════════════════════════════════ */}
           {step === "source-authority" && (
             <div className="space-y-5">

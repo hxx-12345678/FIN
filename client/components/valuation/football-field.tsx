@@ -10,7 +10,8 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
-  LabelList
+  LabelList,
+  ReferenceLine
 } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
@@ -127,11 +128,12 @@ export function FootballFieldChart({ ranges, currentPrice, currency = "$" }: Foo
 
           {/* Current Price Reference Line (Marker) */}
           {currentPrice !== undefined && (
-            <path
-              d={`M ${currentPrice} 0 L ${currentPrice} 1000`}
-              stroke="#000"
-              strokeWidth={2}
+            <ReferenceLine 
+              x={currentPrice} 
+              stroke="#0f172a" 
+              strokeWidth={2} 
               strokeDasharray="4 4"
+              label={{ position: 'top', value: 'Current', fontSize: 10, fill: '#0f172a', fontWeight: 'bold' }}
             />
           )}
 

@@ -447,7 +447,7 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-2">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden p-2">
             <div className="mb-6">
               <h3 className="text-sm font-medium text-muted-foreground mb-2 px-2">Core Features</h3>
               <div className="space-y-1">

@@ -24,6 +24,8 @@ import { OnboardingPage } from "@/components/onboarding-page"
 import { CollaborationPage } from "@/components/collaboration-page"
 import { ApprovalManagement } from "@/components/approval-management"
 import { SemanticLedger } from "@/components/semantic-ledger"
+import { ConsolidationPage } from "@/components/consolidation-page"
+import { HeadcountPlanningPage } from "@/components/headcount-planning-page"
 import { DemoModeOnboarding } from "@/components/demo-mode-onboarding"
 import { DemoModeBanner } from "@/components/demo-mode-banner"
 import { UpgradeToRealModal } from "@/components/upgrade-to-real-modal"
@@ -104,7 +106,7 @@ function HomePageContent() {
       "forecasting", "assistant", "reports", "board-reporting", "investor",
       "users", "integrations", "notifications", "compliance",
       "settings", "onboarding", "collaboration", "job-queue", "export-queue",
-      "approvals", "ledger"
+      "approvals", "ledger", "consolidation", "headcount"
     ]
 
     // If user has auth token, NEVER show landing page
@@ -155,7 +157,7 @@ function HomePageContent() {
         "forecasting", "assistant", "reports", "board-reporting", "investor",
         "users", "integrations", "notifications", "compliance", "pricing",
         "settings", "onboarding", "collaboration", "job-queue", "export-queue",
-        "approvals", "ledger"
+        "approvals", "ledger", "consolidation", "headcount"
       ]
 
       // Determine the effective view from hash, tab param, or localStorage
@@ -241,7 +243,7 @@ function HomePageContent() {
             "forecasting", "assistant", "reports", "board-reporting", "investor",
             "users", "integrations", "notifications", "compliance", "pricing",
             "settings", "onboarding", "collaboration", "job-queue", "export-queue",
-            "approvals", "ledger"
+            "approvals", "ledger", "consolidation", "headcount"
           ]
           if (validViews.includes(currentHash)) {
             setActiveView(currentHash || effectiveView || "overview")
@@ -303,7 +305,7 @@ function HomePageContent() {
           "forecasting", "assistant", "reports", "board-reporting", "investor",
           "users", "integrations", "notifications", "compliance", "pricing",
           "settings", "onboarding", "collaboration", "job-queue", "export-queue",
-          "approvals", "ledger"
+          "approvals", "ledger", "consolidation", "headcount"
         ]
         if (validViews.includes(hash)) {
           setActiveView(hash)
@@ -422,6 +424,10 @@ function HomePageContent() {
           return <ApprovalManagement />
         case "ledger":
           return <SemanticLedger />
+        case "consolidation":
+          return <ConsolidationPage />
+        case "headcount":
+          return <HeadcountPlanningPage />
         case "job-queue":
           return <JobQueue />
         case "export-queue":

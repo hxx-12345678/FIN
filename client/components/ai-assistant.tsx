@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -50,6 +50,14 @@ import {
   Zap,
   TrendingDown,
   ArrowUpRight,
+  Copy,
+  Check,
+  History,
+  RefreshCw,
+  FileText,
+  Image as ImageIcon,
+  X,
+  Paperclip,
 } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -57,6 +65,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { StagedChangesPanel } from "./ai-assistant/staged-changes-panel"
 import { useStagedChanges } from "@/hooks/use-staged-changes"
+import { AgenticResponse } from "./ai-assistant/agentic-response"
 import { toast } from "sonner"
 import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, XAxis, YAxis } from "recharts"
@@ -265,6 +274,17 @@ export function AIAssistant() {
   })
   const { changes: stagedChanges } = useStagedChanges("pending_approval")
   const pendingCount = stagedChanges.filter((c) => c.status === "pending_approval").length
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
+  const [conversations, setConversations] = useState<any[]>([])
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
+  const [loadingHistory, setLoadingHistory] = useState(false)
+  const [historySheetOpen, setHistorySheetOpen] = useState(false)
+  
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  
+  // File upload state for chat
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const getRecommendedVizKeys = useMemo(() => {
     return (query: string | undefined): string[] => {
@@ -312,20 +332,22 @@ export function AIAssistant() {
   }
 
   useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, isTyping])
+
+  useEffect(() => {
     fetchOrgId().then((fetchedOrgId) => {
-      // Only fetch plans after orgId is confirmed
       if (fetchedOrgId) {
         fetchPlans()
+        fetchConversations(fetchedOrgId)
       }
     })
   }, [])
 
-  // Refetch when orgId changes
   useEffect(() => {
     if (orgId) {
       fetchPlans()
     } else {
-      // Clear data if no orgId
       setPlans([])
       setTasks([])
     }
@@ -384,15 +406,7 @@ export function AIAssistant() {
         const result = await response.json()
         if (result.ok && result.plans) {
           setPlans(result.plans)
-          // Convert plans to tasks
           const planTasks: Task[] = result.plans.flatMap((plan: AICFOPlan) => {
-            const metadata = plan.planJson?.metadata || {}
-            const fallbackUsed =
-              metadata.fallbackUsed ||
-              metadata.recommendationsSource === "fallback" ||
-              (metadata.modelUsed && String(metadata.modelUsed).toLowerCase().includes("fallback"))
-
-            // Keep staged changes even for fallback plans (fallback can still be actionable)
             if (!plan.planJson?.stagedChanges) return []
 
             return plan.planJson.stagedChanges.map((change: any, idx: number) => ({
@@ -416,15 +430,71 @@ export function AIAssistant() {
     }
   }
 
-  const handleSendMessage = async (content: string) => {
-    if (!content.trim()) return
+  const fetchConversations = async (orgIdToUse?: string) => {
+    const targetOrgId = orgIdToUse || orgId
+    if (!targetOrgId) return
 
-    if (!orgId) {
-      const fetchedOrgId = await fetchOrgId()
-      if (!fetchedOrgId) {
-        toast.error("Please log in to use AI CFO Assistant")
-        return
+    setLoadingHistory(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${targetOrgId}/ai-cfo/conversations`, {
+        headers: getAuthHeaders(),
+      })
+      if (response.ok) {
+        const data = await response.json()
+        if (data.ok) setConversations(data.conversations)
       }
+    } catch (e) {
+      console.error("Failed to fetch history:", e)
+    } finally {
+      setLoadingHistory(false)
+    }
+  }
+
+  const loadConversation = async (conversationId: string) => {
+    if (!orgId) return
+    setIsTyping(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/ai-cfo/conversations/${conversationId}`, {
+        headers: getAuthHeaders(),
+      })
+      if (response.ok) {
+        const data = await response.json()
+        if (data.ok && data.conversation) {
+          setCurrentConversationId(conversationId)
+          const transformedMessages: Message[] = data.conversation.messages.map((m: any) => ({
+            id: m.id,
+            type: m.role,
+            content: m.content,
+            timestamp: new Date(m.createdAt),
+            agentType: m.agentType,
+            agentThoughts: m.thoughts || [],
+            dataSources: m.dataSources || [],
+            recommendations: m.recommendations || [],
+            calculations: m.calculations || {},
+            visualizations: m.visualizations || [],
+            confidence: m.confidence,
+          }))
+          setMessages(transformedMessages)
+        }
+      }
+    } catch (e) {
+      toast.error("Failed to load conversation")
+    } finally {
+      setIsTyping(false)
+    }
+  }
+
+  const startNewChat = () => {
+    setMessages(initialMessages)
+    setCurrentConversationId(null)
+  }
+
+  const handleSendMessage = async (content: string, regenerate = false) => {
+    if (!content.trim()) return
+    const currentOrgId = orgId || (await fetchOrgId())
+    if (!currentOrgId) {
+      toast.error("Please log in to use AI CFO Assistant")
+      return
     }
 
     const userMessage: Message = {
@@ -434,223 +504,121 @@ export function AIAssistant() {
       timestamp: new Date(),
     }
 
-    setMessages((prev) => [...prev, userMessage])
+    if (!regenerate) {
+      setMessages((prev) => [...prev, userMessage])
+    }
     setInputValue("")
     setIsTyping(true)
     setError(null)
 
-    try {
-      const currentOrgId = orgId || (await fetchOrgId())
-      if (!currentOrgId) {
-        throw new Error("Organization ID not found")
-      }
+    // Current assistant message placeholder for streaming
+    const assistantMessageId = (Date.now() + 1).toString()
+    let currentAssistantMessage: Message = {
+      id: assistantMessageId,
+      type: "assistant",
+      content: "",
+      timestamp: new Date(),
+      agentThoughts: [],
+    }
 
-      // Call AI CFO Agentic API (new multi-agent orchestration)
-      const response = await fetch(`${API_BASE_URL}/orgs/${currentOrgId}/ai-cfo/query`, {
+    setMessages((prev) => [...prev, currentAssistantMessage])
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${currentOrgId}/ai-cfo/query/stream`, {
         method: "POST",
-        headers: getAuthHeaders(),
-        credentials: "include",
+        headers: {
+          ...getAuthHeaders(),
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           query: content,
+          context: { conversationId: currentConversationId },
         }),
       })
 
-      if (response.status === 401) {
-        handleUnauthorized()
-        throw new Error("Your session has expired. Please log in again.")
-      }
+      if (!response.ok) throw new Error("Failed to start streaming")
+      if (!response.body) throw new Error("Response body is empty")
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error?.message || `Failed to generate AI plan: ${response.statusText}`)
-      }
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
 
-      const result = await response.json()
-      if (result.ok && result.response) {
-        const agentResponse = result.response
-        const planId = result.planId
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
 
-        // Extract agentic workflow data
-        const thoughts = agentResponse.thoughts || []
-        const dataSources = agentResponse.dataSources || []
-        const recommendations = agentResponse.recommendations || []
-        const calculations = agentResponse.calculations || {}
-        const confidence = agentResponse.confidence || 0
-        const requiresApproval = agentResponse.requiresApproval || false
-        const escalationReason = agentResponse.escalationReason
-        const followUpQuestions = agentResponse.followUpQuestions || []
-        const agentType = agentResponse.agentType
-        const weakAssumptions = agentResponse.weakAssumptions || []
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split("\n")
+        buffer = lines.pop() || ""
 
-        // Build response text
-        let responseText = agentResponse.answer || ""
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue
+          const data = JSON.parse(line.slice(6))
 
-        // Add confidence indicator
-        if (confidence > 0.8) {
-          responseText += `\n\n✅ *Confidence: ${Math.round(confidence * 100)}%*`
-        } else if (confidence > 0.6) {
-          responseText += `\n\n⚠️ *Confidence: ${Math.round(confidence * 100)}% - Consider verifying with additional data*`
+          if (data.type === "conversation_id") {
+            setCurrentConversationId(data.payload.conversationId)
+            fetchConversations(currentOrgId)
+          } else if (data.type === "thought") {
+            currentAssistantMessage = {
+              ...currentAssistantMessage,
+              agentThoughts: [...(currentAssistantMessage.agentThoughts || []), data.payload],
+            }
+          } else if (data.type === "response") {
+            const res = data.payload
+            currentAssistantMessage = {
+              ...currentAssistantMessage,
+              content: res.answer,
+              agentType: res.agentType,
+              confidence: res.confidence,
+              dataSources: res.dataSources,
+              recommendations: res.recommendations,
+              calculations: res.calculations,
+              visualizations: res.visualizations,
+              suggestions: res.followUpQuestions,
+            }
+          }
+
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantMessageId ? currentAssistantMessage : m))
+          )
         }
-
-        // If requires approval, add notice
-        if (requiresApproval && escalationReason) {
-          responseText = `⏳ **Approval Required**\n\n${escalationReason}\n\n---\n\n` + responseText
-        }
-
-        // Create rich message with agentic data
-        const aiResponse: Message = {
-          id: (Date.now() + 1).toString(),
-          type: "assistant",
-          content: responseText,
-          timestamp: new Date(),
-          sourceQuery: content,
-          suggestions: followUpQuestions.length > 0
-            ? followUpQuestions
-            : [
-              "Tell me more about this",
-              "What are the key risks?",
-              "What should I focus on?",
-            ],
-          actionable: recommendations.length > 0,
-          recommendation: recommendations[0]?.title,
-          planId,
-          // New agentic workflow fields
-          agentThoughts: thoughts,
-          dataSources,
-          recommendations,
-          calculations,
-          visualizations: agentResponse.visualizations || [],
-          confidence,
-          requiresApproval,
-          escalationReason,
-          agentType,
-          weakAssumptions,
-        }
-
-        setMessages((prev) => [...prev, aiResponse])
-
-        // Refresh plans and insights
-        await fetchPlans()
-
-        toast.success(
-          recommendations.length > 0
-            ? `AI CFO analysis complete (${agentType} agent)`
-            : "Analysis complete"
-        )
-      } else if (result.ok && result.plan) {
-        // Fallback: Handle legacy response format
-        const plan = result.plan
-        const planJson = plan.planJson || {}
-        const structuredResponse = planJson.structuredResponse || {}
-        const responseText = structuredResponse.natural_text || "Analysis completed."
-
-        const aiResponse: Message = {
-          id: (Date.now() + 1).toString(),
-          type: "assistant",
-          content: responseText,
-          timestamp: new Date(),
-          suggestions: ["Ask another question"],
-          planId: plan.id,
-        }
-
-        setMessages((prev) => [...prev, aiResponse])
-        await fetchPlans()
-        toast.success("AI CFO analysis completed")
-      } else {
-        throw new Error("Invalid response from server")
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to generate AI response"
-      setError(errorMessage)
-
-      const errorResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        type: "assistant",
-        content: `I apologize, but I encountered an error: ${errorMessage}. Please try again or rephrase your question.`,
-        timestamp: new Date(),
-      }
-      setMessages((prev) => [...prev, errorResponse])
-      toast.error(errorMessage)
+      toast.error("Error streaming response")
+      console.error(err)
     } finally {
       setIsTyping(false)
+      fetchPlans()
     }
   }
 
   const handleCreateTask = (recommendation: string, planId?: string) => {
-    // Only create tasks from actual recommendations, not from user questions
-    if (!recommendation || recommendation.length < 10) {
-      toast.error("Please select a valid recommendation to create a task")
-      return
-    }
-
-    // Find the actual recommendation from plans
-    let taskDescription = ""
-    let taskPriority: Task["priority"] = "medium"
-
-    if (planId) {
-      const plan = plans.find((p) => p.id === planId)
-      if (plan?.planJson?.stagedChanges) {
-        const change = plan.planJson.stagedChanges.find((c: any) => c.action === recommendation)
-        if (change) {
-          taskDescription = change.explain || change.reasoning || ""
-          taskPriority = (change.priority || "medium") as Task["priority"]
-        }
-      }
-    }
-
+    if (!recommendation) return
     setCurrentRecommendation(recommendation)
     setTaskForm({
       title: recommendation,
-      description: taskDescription,
+      description: "",
       integration: "internal",
-      priority: taskPriority,
+      priority: "medium",
       dueDate: "",
     })
     setShowTaskDialog(true)
   }
 
   const handleSaveTask = () => {
-    // Validate task title
-    if (!taskForm.title || taskForm.title.trim().length < 5) {
-      toast.error("Task title must be at least 5 characters")
-      return
-    }
-
-    // Don't create tasks from generic user questions
-    const lowerTitle = taskForm.title.toLowerCase()
-    const isQuestion = lowerTitle.includes("what") || lowerTitle.includes("how") ||
-      lowerTitle.includes("when") || lowerTitle.includes("why") ||
-      lowerTitle.includes("predict") || lowerTitle.includes("feel")
-
-    if (isQuestion && !taskForm.description) {
-      toast.error("Please provide a proper task description. Questions cannot be converted to tasks directly.")
-      return
-    }
-
     const newTask: Task = {
       id: Date.now().toString(),
       title: taskForm.title,
-      description: taskForm.description || "AI CFO recommendation",
+      description: taskForm.description,
       status: "pending",
       priority: taskForm.priority,
       integration: taskForm.integration,
-      scenarioLink: "/scenarios/runway-extension",
-      assumptions: ["AI-generated recommendation from CFO analysis"],
       createdAt: new Date(),
       dueDate: taskForm.dueDate ? new Date(taskForm.dueDate) : undefined,
     }
 
     setTasks((prev) => [newTask, ...prev])
     setShowTaskDialog(false)
-
-    const confirmMessage: Message = {
-      id: (Date.now() + 2).toString(),
-      type: "assistant",
-      content: `✅ Task created successfully! I've added "${taskForm.title}" to your task list${taskForm.integration !== "internal" ? ` and exported it to ${taskForm.integration}` : ""
-        }. You can track its progress in the Tasks tab.`,
-      timestamp: new Date(),
-    }
-    setMessages((prev) => [...prev, confirmMessage])
     toast.success("Task created successfully")
   }
 
@@ -666,20 +634,6 @@ export function AIAssistant() {
           : task,
       ),
     )
-
-    const task = tasks.find((t) => t.id === taskId)
-    if (task) {
-      const auditMessage: Message = {
-        id: Date.now().toString(),
-        type: "assistant",
-        content: `📋 Task "${task.title}" status updated to ${newStatus}. ${newStatus === "completed"
-          ? "Great work! This recommendation has been executed and will be reflected in your next AI report."
-          : ""
-          }`,
-        timestamp: new Date(),
-      }
-      setMessages((prev) => [...prev, auditMessage])
-    }
   }
 
   const handleQuickAction = (action: (typeof quickActions)[0]) => {
@@ -688,49 +642,35 @@ export function AIAssistant() {
 
   const getStatusIcon = (status: Task["status"]) => {
     switch (status) {
-      case "completed":
-        return <CheckCircle2 className="h-4 w-4 text-green-600" />
-      case "in-progress":
-        return <Clock className="h-4 w-4 text-blue-600" />
-      case "cancelled":
-        return <XCircle className="h-4 w-4 text-red-600" />
-      default:
-        return <Clock className="h-4 w-4 text-gray-400" />
+      case "completed": return <CheckCircle2 className="h-4 w-4 text-green-600" />
+      case "in-progress": return <Clock className="h-4 w-4 text-blue-600" />
+      case "cancelled": return <XCircle className="h-4 w-4 text-red-600" />
+      default: return <Clock className="h-4 w-4 text-gray-400" />
     }
   }
 
   const getPriorityColor = (priority: Task["priority"]) => {
     switch (priority) {
-      case "high":
-        return "bg-red-100 text-red-800 border-red-200"
-      case "medium":
-        return "bg-yellow-100 text-yellow-800 border-yellow-200"
-      case "low":
-        return "bg-green-100 text-green-800 border-green-200"
+      case "high": return "bg-red-100 text-red-800 border-red-200"
+      case "medium": return "bg-yellow-100 text-yellow-800 border-yellow-200"
+      case "low": return "bg-green-100 text-green-800 border-green-200"
     }
   }
 
   return (
     <TooltipProvider>
       <div className="space-y-6">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                 AI CFO
               </h1>
-              <Badge
-                variant="secondary"
-                className="flex items-center gap-1 bg-gradient-to-r from-blue-100 to-purple-100 text-blue-700 border-blue-200"
-              >
+              <Badge variant="secondary" className="flex items-center gap-1 bg-gradient-to-r from-blue-100 to-purple-100 text-blue-700 border-blue-200">
                 <Cpu className="h-3 w-3" />
                 Multi-Agent System
               </Badge>
-              <Badge
-                variant="outline"
-                className="flex items-center gap-1 text-xs"
-              >
+              <Badge variant="outline" className="flex items-center gap-1 text-xs">
                 <ShieldCheck className="h-3 w-3" />
                 Explainable AI
               </Badge>
@@ -748,25 +688,8 @@ export function AIAssistant() {
           </Alert>
         )}
 
-        {/* Help Section */}
-        <Card className="bg-blue-50/50 border-blue-200">
-          <CardContent className="pt-6">
-            <div className="flex items-start gap-3">
-              <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-              <div className="space-y-2 text-sm">
-                <p className="font-semibold text-blue-900">How AI CFO Assistant Works:</p>
-                <div className="space-y-1 text-blue-800">
-                  <p><strong>💬 Chat Tab:</strong> Ask financial questions and get AI-powered insights. Example: "What's my runway?" or "How can I reduce burn rate?"</p>
-                  <p><strong>✅ Staged Changes Tab:</strong> Review detailed AI recommendations before implementing. Each recommendation shows impact, reasoning, and data sources. Approve or reject changes here.</p>
-                  <p><strong>📋 Tasks Tab:</strong> Actionable tasks created from approved recommendations. Track your financial action items and mark them complete as you implement them.</p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
         <Tabs defaultValue="chat" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="chat">
               <MessageSquare className="h-4 w-4 mr-2" />
               Chat
@@ -789,582 +712,329 @@ export function AIAssistant() {
                 </Badge>
               )}
             </TabsTrigger>
+            <TabsTrigger value="missions" className="opacity-60 cursor-not-allowed">
+              <Target className="h-4 w-4 mr-2" />
+              Missions
+              <Badge variant="outline" className="ml-2 py-0 h-4 text-[8px] uppercase">Alpha</Badge>
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="chat" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Chat Interface */}
               <div className="lg:col-span-2">
-                <Card className="h-[400px] sm:h-[500px] lg:h-[600px] flex flex-col overflow-hidden">
-                  <CardHeader className="border-b flex-shrink-0">
-                    <CardTitle className="flex items-center gap-2">
-                      <MessageSquare className="h-5 w-5" />
-                      Chat with AI CFO
-                    </CardTitle>
-                    <CardDescription>Ask questions or request financial analysis plans</CardDescription>
+                <Card className="h-[600px] sm:h-[700px] lg:h-[800px] flex flex-col overflow-hidden border-border/40 shadow-xl bg-background/50 backdrop-blur-md">
+                  <CardHeader className="border-b border-border/30 flex-shrink-0 py-4 bg-muted/20">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg transform hover:rotate-12 transition-transform">
+                          <Sparkles className="h-5 w-5 text-white" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-base font-bold tracking-tight">AI CFO Orchestrator</CardTitle>
+                          <CardDescription className="text-[11px] font-medium text-muted-foreground/70 flex items-center gap-1.5">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            Multi-agent digital coworker active
+                          </CardDescription>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-full"
+                          onClick={startNewChat}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-full"
+                              onClick={() => {
+                                fetchConversations()
+                                setHistorySheetOpen(true)
+                              }}
+                            >
+                              <History className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Chat History</TooltipContent>
+                        </Tooltip>
+                        <Badge variant="outline" className="text-[10px] h-6 bg-background/50 border-border/50 text-foreground/70 font-mono">
+                          v4.2-PRO
+                        </Badge>
+                      </div>
+                    </div>
                   </CardHeader>
                   <CardContent className="flex-1 flex flex-col p-0 overflow-hidden min-h-0">
-                    <ScrollArea className="flex-1 min-h-0">
-                      <div className="space-y-4 p-4">
+                    <ScrollArea className="flex-1 min-h-0 scrollbar-none">
+                      <div className="space-y-0 p-0">
                         {messages.length === 0 && (
                           <div className="flex flex-col items-center justify-center min-h-[400px] py-8 text-center space-y-8 animate-in fade-in zoom-in duration-500">
-                            <div className="relative">
-                              <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-blue-600 to-primary blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
-                              <div className="relative bg-white dark:bg-slate-950 p-6 rounded-full border shadow-xl">
-                                <Brain className="h-16 w-16 text-primary" />
-                              </div>
-                              <div className="absolute -top-2 -right-2 bg-primary text-primary-foreground text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg flex items-center gap-1">
-                                <Zap className="h-2 w-2" />
-                                AGENTIC
-                              </div>
-                            </div>
-
-                            <div className="max-w-md space-y-2">
-                              <h2 className="text-3xl font-bold tracking-tight">Welcome to Your AI CFO</h2>
-                              <p className="text-muted-foreground">
-                                I'm your agentic financial assistant, powered by advanced reasoning and deep integration across your data architecture.
-                              </p>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full px-2 max-w-2xl">
-                              <div className="bg-muted/50 p-4 rounded-xl border border-dashed flex items-start gap-4 text-left hover:bg-muted/80 transition-colors">
-                                <Cpu className="h-8 w-8 text-blue-500 mt-1 flex-shrink-0" />
-                                <div>
-                                  <h4 className="font-semibold text-sm">Reasoning Engine</h4>
-                                  <p className="text-xs text-muted-foreground leading-relaxed">Multi-step chain-of-thought analysis for complex financial scenarios.</p>
-                                </div>
-                              </div>
-                              <div className="bg-muted/50 p-4 rounded-xl border border-dashed flex items-start gap-4 text-left hover:bg-muted/80 transition-colors">
-                                <Database className="h-8 w-8 text-green-500 mt-1 flex-shrink-0" />
-                                <div>
-                                  <h4 className="font-semibold text-sm">Deep Grounding</h4>
-                                  <p className="text-xs text-muted-foreground leading-relaxed">Direct read access to your ledger, budgets, and historical performance.</p>
-                                </div>
-                              </div>
-                              <div className="bg-muted/50 p-4 rounded-xl border border-dashed flex items-start gap-4 text-left hover:bg-muted/80 transition-colors">
-                                <Sparkles className="h-8 w-8 text-purple-500 mt-1 flex-shrink-0" />
-                                <div>
-                                  <h4 className="font-semibold text-sm">Staged Changes</h4>
-                                  <p className="text-xs text-muted-foreground leading-relaxed">Actionable insights move to a review loop before they impact your models.</p>
-                                </div>
-                              </div>
-                              <div className="bg-muted/50 p-4 rounded-xl border border-dashed flex items-start gap-4 text-left hover:bg-muted/80 transition-colors">
-                                <ShieldCheck className="h-8 w-8 text-amber-500 mt-1 flex-shrink-0" />
-                                <div>
-                                  <h4 className="font-semibold text-sm">Full Governance</h4>
-                                  <p className="text-xs text-muted-foreground leading-relaxed">Transparent audit trails for every AI-proposed ledger adjustment.</p>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="pt-4 space-y-3">
-                              <p className="text-sm font-medium text-muted-foreground">Try asking me:</p>
-                              <div className="flex flex-wrap justify-center gap-2">
-                                <Button variant="outline" size="sm" className="rounded-full text-xs shadow-sm hover:bg-primary hover:text-primary-foreground transition-all" onClick={() => handleSendMessage("What's my current cash runway?")}>
-                                  What's my current cash runway?
-                                </Button>
-                                <Button variant="outline" size="sm" className="rounded-full text-xs shadow-sm hover:bg-primary hover:text-primary-foreground transition-all" onClick={() => handleSendMessage("Why did we miss our budget last month?")}>
-                                  Why did we miss our budget last month?
-                                </Button>
-                                <Button variant="outline" size="sm" className="rounded-full text-xs shadow-sm hover:bg-primary hover:text-primary-foreground transition-all" onClick={() => handleSendMessage("Are there any anomalies in payments?")}>
-                                  Are there any anomalies in payments?
-                                </Button>
-                              </div>
-                            </div>
+                             <Brain className="h-16 w-16 text-primary animate-pulse" />
+                             <h2 className="text-2xl font-bold">How can I help your finance team today?</h2>
                           </div>
                         )}
                         {messages.map((message) => (
                           <div
                             key={message.id}
-                            className={`flex gap-3 ${message.type === "user" ? "justify-end" : "justify-start"}`}
+                            className={`group w-full py-10 transition-colors border-b border-border/10 last:border-0 ${
+                              message.type === "user" ? "bg-muted/5" : "bg-transparent hover:bg-muted/5"
+                            } animate-in fade-in slide-in-from-bottom-2 duration-500`}
                           >
-                            {message.type === "assistant" && (
-                              <Avatar className="h-8 w-8">
-                                <AvatarFallback className="bg-primary text-primary-foreground">
-                                  <Brain className="h-4 w-4" />
-                                </AvatarFallback>
-                              </Avatar>
-                            )}
-                            <div
-                              className={`max-w-[80%] rounded-lg p-3 ${message.type === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
-                                }`}
-                            >
-                              <div className="text-sm whitespace-pre-wrap">
-                                {message.content.split('\n').map((line, idx) => {
-                                  // Process markdown formatting
-                                  const renderLine = (text: string): (string | JSX.Element)[] => {
-                                    const parts: (string | JSX.Element)[] = [];
-                                    let lastIndex = 0;
-
-                                    // Process bold **text**
-                                    const boldRegex = /\*\*(.*?)\*\*/g;
-                                    let match;
-                                    const matches: Array<{ start: number, end: number, text: string }> = [];
-
-                                    while ((match = boldRegex.exec(text)) !== null) {
-                                      matches.push({
-                                        start: match.index,
-                                        end: match.index + match[0].length,
-                                        text: match[1]
-                                      });
-                                    }
-
-                                    matches.forEach((boldMatch, matchIdx) => {
-                                      if (boldMatch.start > lastIndex) {
-                                        parts.push(text.substring(lastIndex, boldMatch.start));
-                                      }
-                                      parts.push(<strong key={`bold-${idx}-${matchIdx}`}>{boldMatch.text}</strong>);
-                                      lastIndex = boldMatch.end;
-                                    });
-
-                                    if (lastIndex < text.length) {
-                                      parts.push(text.substring(lastIndex));
-                                    }
-
-                                    return parts.length > 0 ? parts : [text];
-                                  };
-
-                                  const renderedContent = renderLine(line);
-
-                                  // Headers
-                                  if (line.trim().startsWith('## ')) {
-                                    return <h3 key={idx} className="font-bold text-base mt-4 mb-2">{line.replace('## ', '')}</h3>;
-                                  }
-                                  if (line.trim().startsWith('### ')) {
-                                    return <h4 key={idx} className="font-semibold text-sm mt-3 mb-1">{line.replace('### ', '')}</h4>;
-                                  }
-
-                                  // Bullet points
-                                  if (line.trim().startsWith('•') || line.trim().startsWith('-')) {
-                                    return <div key={idx} className="ml-4 my-1">{renderedContent}</div>;
-                                  }
-
-                                  // Regular line
-                                  if (line.trim()) {
-                                    return <p key={idx} className="my-1">{renderedContent}</p>;
-                                  }
-
-                                  return <br key={idx} />;
-                                })}
+                            <div className="max-w-3xl mx-auto px-6 flex gap-8">
+                              <div className="flex-shrink-0 mt-1">
+                                {message.type === "user" ? (
+                                  <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-800 border border-border flex items-center justify-center text-[10px] font-bold text-slate-500 shadow-sm">
+                                    ME
+                                  </div>
+                                ) : (
+                                  <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-[#4f46e5] to-[#7c3aed] flex items-center justify-center shadow-lg transform group-hover:scale-110 transition-transform ring-1 ring-white/10">
+                                    <Sparkles className="h-4 w-4 text-white" />
+                                  </div>
+                                )}
                               </div>
-                              {/* Agent Workflow Display */}
-                              {message.type === "assistant" && (message.agentThoughts?.length || message.dataSources?.length) && (
-                                <div className="mt-3 space-y-2">
-                                  {/* Agent Type Badge */}
-                                  {message.agentType && (
-                                    <div className="flex items-center gap-2">
-                                      <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
-                                        <Cpu className="h-3 w-3 mr-1" />
-                                        {message.agentType.charAt(0).toUpperCase() + message.agentType.slice(1)} Agent
-                                      </Badge>
+                              <div className="flex-1 min-w-0">
+                                {message.type === "assistant" && message.agentType && (
+                                  <div className="flex items-center gap-2 mb-4">
+                                    <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest bg-indigo-50 dark:bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-200/20 shadow-sm">
+                                      {message.agentType}
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground/30 font-light">—</span>
+                                    <span className="text-[11px] font-semibold text-muted-foreground tracking-tight">Financial Intelligence Network</span>
+                                  </div>
+                                )}
+                                <div className={message.type === "user" ? "text-[15px] font-medium text-foreground leading-relaxed antialiased" : "antialiased"}>
+                                  <AgenticResponse content={message.content} isUser={message.type === "user"} />
+                                </div>
+
+                                {message.type === "assistant" && (
+                                  <div className="flex items-center gap-5 mt-8 opacity-0 group-hover:opacity-100 transition-all transform translate-y-1 group-hover:translate-y-0">
+                                    <button
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(message.content)
+                                        setCopiedMessageId(message.id)
+                                        setTimeout(() => setCopiedMessageId(null), 2000)
+                                      }}
+                                      className="inline-flex items-center gap-2 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors group/btn"
+                                    >
+                                      {copiedMessageId === message.id ? (
+                                        <><Check className="h-3 w-3 text-emerald-500" /> Copied</>
+                                      ) : (
+                                        <><Copy className="h-3 w-3 group-hover/btn:scale-110 transition-transform" /> Copy</>
+                                      )}
+                                    </button>
+                                    <button
+                                      onClick={() => handleSendMessage(message.sourceQuery || message.content, true)}
+                                      className="inline-flex items-center gap-2 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors group/btn"
+                                    >
+                                      <RefreshCw className="h-3 w-3 group-hover/btn:rotate-180 transition-transform duration-500" /> Regenerate
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setActiveVizKey('insititutional_report');
+                                        setSheetOpen(true);
+                                      }}
+                                      className="inline-flex items-center gap-2 text-[11px] font-bold text-indigo-600 hover:text-indigo-700 transition-colors px-2 py-0.5 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-950/20"
+                                    >
+                                      <FileText className="h-3 w-3" /> Report View
+                                    </button>
+                                  </div>
+                                )}
+
+                                {message.type === "assistant" && (message.agentThoughts?.length || message.dataSources?.length) && (
+                                  <div className="mt-10 pt-6 border-t border-border/10 space-y-4">
+                                    <div className="flex items-center gap-4">
                                       {message.confidence && (
-                                        <Badge variant="outline" className={`text-xs ${message.confidence > 0.8 ? 'bg-green-50 text-green-700 border-green-200' :
-                                          message.confidence > 0.6 ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                                            'bg-red-50 text-red-700 border-red-200'
+                                        <div className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-[10px] font-extrabold border shadow-sm ${
+                                          message.confidence > 0.8 ? 'bg-emerald-50/50 text-emerald-700 border-emerald-200/50' :
+                                          message.confidence > 0.6 ? 'bg-amber-50/50 text-amber-700 border-amber-200/50' :
+                                            'bg-red-50/50 text-red-700 border-red-200/50'
                                           }`}>
-                                          <Target className="h-3 w-3 mr-1" />
-                                          {Math.round(message.confidence * 100)}% confident
-                                        </Badge>
-                                      )}
-                                    </div>
-                                  )}
-
-                                  {/* Thinking Steps (Collapsible) */}
-                                  {message.agentThoughts && message.agentThoughts.length > 0 && (
-                                    <Collapsible>
-                                      <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                                        <Zap className="h-3 w-3" />
-                                        View reasoning ({message.agentThoughts.length} steps)
-                                        <ChevronDown className="h-3 w-3" />
-                                      </CollapsibleTrigger>
-                                      <CollapsibleContent className="mt-2">
-                                        <div className="bg-slate-50 rounded-md p-2 text-xs space-y-1 border">
-                                          {message.agentThoughts.map((thought, idx) => (
-                                            <div key={idx} className="flex items-start gap-2">
-                                              <span className="text-muted-foreground font-mono">{thought.step}.</span>
-                                              <div>
-                                                <span className="text-slate-700">{thought.thought}</span>
-                                                {thought.observation && (
-                                                  <span className="text-green-600 ml-1">→ {thought.observation}</span>
-                                                )}
-                                              </div>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </CollapsibleContent>
-                                    </Collapsible>
-                                  )}
-
-                                  {/* Data Sources (Collapsible) */}
-                                  {message.dataSources && message.dataSources.length > 0 && (
-                                    <Collapsible>
-                                      <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                                        <Database className="h-3 w-3" />
-                                        Data sources ({message.dataSources.length})
-                                        <ChevronDown className="h-3 w-3" />
-                                      </CollapsibleTrigger>
-                                      <CollapsibleContent className="mt-2">
-                                        <div className="bg-slate-50 rounded-md p-2 text-xs space-y-1 border">
-                                          {message.dataSources.map((source, idx) => (
-                                            <div key={idx} className="flex items-center gap-2">
-                                              <Badge variant="outline" className="text-[10px] px-1 py-0">
-                                                {source.type}
-                                              </Badge>
-                                              <span className="text-slate-600">{source.name}</span>
-                                              {source.confidence && (
-                                                <span className="text-green-600">({Math.round(source.confidence * 100)}%)</span>
-                                              )}
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </CollapsibleContent>
-                                    </Collapsible>
-                                  )}
-
-                                  {/* Institutional Grade: Statistical Metrics */}
-                                  {message.statisticalMetrics && (
-                                    <div className="flex flex-wrap gap-2 mt-2">
-                                      {message.statisticalMetrics.mape !== undefined && (
-                                        <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 rounded text-[10px] font-medium border">
-                                          <TrendingDown className="h-3 w-3 text-slate-500" />
-                                          <span>MAPE: <strong>{message.statisticalMetrics.mape}%</strong></span>
+                                          <div className={`w-1.5 h-1.5 rounded-full ${message.confidence > 0.8 ? 'bg-emerald-500' : message.confidence > 0.6 ? 'bg-amber-500' : 'bg-red-500'} animate-pulse`} />
+                                          VERIFIED: {Math.round(message.confidence * 100)}%
                                         </div>
                                       )}
-                                      {message.statisticalMetrics.driftStatus && (
-                                        <div className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-medium border ${
-                                          message.statisticalMetrics.driftStatus === 'stable' ? 'bg-green-100 border-green-200 text-green-700' :
-                                          message.statisticalMetrics.driftStatus === 'warning' ? 'bg-yellow-100 border-yellow-200 text-yellow-700' :
-                                          'bg-red-100 border-red-200 text-red-700'
-                                        }`}>
-                                          <ShieldCheck className="h-3 w-3" />
-                                          <span>DRIFT: <strong>{(message.statisticalMetrics.driftStatus as string).toUpperCase()}</strong></span>
-                                        </div>
+
+                                      {message.agentThoughts && message.agentThoughts.length > 0 && (
+                                        <Collapsible>
+                                          <CollapsibleTrigger className="group flex items-center gap-2 text-[10px] text-muted-foreground/70 hover:text-foreground transition-colors font-bold uppercase tracking-[0.1em]">
+                                            Audit Trail
+                                            <ChevronDown className="h-3 w-3 group-data-[state=open]:rotate-180 transition-transform" />
+                                          </CollapsibleTrigger>
+                                          <CollapsibleContent className="mt-5">
+                                            <div className="bg-muted/20 rounded-2xl p-6 text-[12.5px] space-y-4 border border-border/10 shadow-inner backdrop-blur-sm">
+                                              {message.agentThoughts.map((thought, idx) => (
+                                                <div key={idx} className="flex items-start gap-5">
+                                                  <div className="w-7 h-7 rounded-lg bg-background border border-border/50 flex items-center justify-center text-[10px] font-mono font-bold flex-shrink-0 mt-0.5 shadow-sm text-foreground/40">{thought.step}</div>
+                                                  <div className="leading-6 flex-1">
+                                                    <span className="text-foreground/80 font-medium">{thought.thought}</span>
+                                                    {thought.observation && (
+                                                      <div className="text-emerald-700 dark:text-emerald-400 mt-2 font-semibold bg-emerald-500/10 px-3 py-1 rounded-lg border border-emerald-500/20 inline-flex items-center gap-2 text-[11.5px] animate-in fade-in slide-in-from-left-1">
+                                                        <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                                                        {thought.observation}
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </CollapsibleContent>
+                                        </Collapsible>
                                       )}
                                     </div>
-                                  )}
+                                  </div>
+                                )}
 
-                                  {/* Institutional Grade: Confidence Intervals (P10/P50/P90) */}
-                                  {message.confidenceIntervals && (
-                                    <div className="mt-3 p-3 bg-gradient-to-br from-slate-900 to-slate-800 rounded-lg shadow-inner overflow-hidden relative">
-                                      <div className="absolute top-0 right-0 p-1 opacity-10">
-                                        <BarChart3 className="h-12 w-12 text-white" />
-                                      </div>
-                                      <div className="flex items-center justify-between mb-2">
-                                        <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Confidence Band: {message.confidenceIntervals.metric}</span>
-                                        <Badge variant="outline" className="text-[9px] h-4 border-slate-700 text-slate-300 bg-transparent">Stochastically Derived</Badge>
-                                      </div>
-                                      <div className="grid grid-cols-3 gap-1">
-                                        <div className="flex flex-col">
-                                          <span className="text-[9px] text-slate-400 font-medium">P10 (Worst)</span>
-                                          <span className="text-sm font-bold text-red-300">${(message.confidenceIntervals.p10 / 1000).toFixed(1)}k</span>
-                                        </div>
-                                        <div className="flex flex-col border-x border-slate-700 px-2 items-center">
-                                          <span className="text-[9px] text-slate-400 font-medium">P50 (Median)</span>
-                                          <span className="text-sm font-bold text-white">${(message.confidenceIntervals.p50 / 1000).toFixed(1)}k</span>
-                                        </div>
-                                        <div className="flex flex-col items-end">
-                                          <span className="text-[9px] text-slate-400 font-medium">P90 (Best)</span>
-                                          <span className="text-sm font-bold text-green-300">${(message.confidenceIntervals.p90 / 1000).toFixed(1)}k</span>
-                                        </div>
-                                      </div>
-                                      <div className="mt-2 w-full h-1 bg-slate-700 rounded-full overflow-hidden flex">
-                                        <div className="h-full bg-red-400" style={{ width: '30%' }}></div>
-                                        <div className="h-full bg-blue-400" style={{ width: '40%' }}></div>
-                                        <div className="h-full bg-green-400" style={{ width: '30%' }}></div>
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {/* Weak Assumptions - HIGH PRIORITY WARNING */}
-                                  {message.weakAssumptions && message.weakAssumptions.length > 0 && (
-                                    <div className="mt-3 space-y-2">
-                                      <div className="flex items-center gap-1.5 text-xs font-bold text-amber-600">
-                                        <AlertTriangle className="h-3.5 w-3.5" />
-                                        <span>MODEL RISK: WEAK ASSUMPTIONS DETECTED</span>
-                                      </div>
-                                      <div className="space-y-1">
-                                        {message.weakAssumptions.map((wa: any, i: number) => (
-                                          <div key={i} className="p-2 bg-amber-50 border border-amber-100 rounded text-xs">
-                                            <div className="font-semibold text-amber-800">{wa.name}</div>
-                                            <p className="text-amber-700 text-[11px] mt-0.5">{wa.issue}</p>
-                                            <div className="mt-1 flex items-center gap-1 text-[11px] font-medium text-amber-900 border-t border-amber-200/50 pt-1">
-                                              <ArrowUpRight className="h-3 w-3" />
-                                              Recommendation: {wa.recommendation}
-                                            </div>
-                                          </div>
+                                {message.suggestions && message.suggestions.length > 0 && (
+                                    <div className="mt-10 flex flex-wrap gap-2.5">
+                                        {message.suggestions.map((suggestion, idx) => (
+                                            <Button 
+                                                key={idx} 
+                                                variant="outline" 
+                                                size="sm" 
+                                                className="text-[11.5px] font-semibold h-8 rounded-xl bg-background border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all shadow-sm"
+                                                onClick={() => handleSendMessage(suggestion)}
+                                            >
+                                                {suggestion}
+                                            </Button>
                                         ))}
-                                      </div>
                                     </div>
-                                  )}
-
-                                  {/* Recommendations Preview */}
-                                  {message.recommendations && message.recommendations.length > 0 && (
-                                    <div className="bg-amber-50 border border-amber-200 rounded-md p-2 mt-2">
-                                      <div className="flex items-center gap-1 text-xs text-amber-800 font-medium mb-1">
-                                        <Lightbulb className="h-3 w-3" />
-                                        {message.recommendations.length} Recommendation{message.recommendations.length > 1 ? 's' : ''}
-                                      </div>
-                                      {message.recommendations.slice(0, 2).map((rec, idx) => (
-                                        <div key={idx} className="text-xs text-amber-700">
-                                          • {rec.title}
-                                        </div>
-                                      ))}
-                                      {message.recommendations.length > 2 && (
-                                        <div className="text-xs text-amber-600 mt-1">
-                                          +{message.recommendations.length - 2} more...
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-
-                              {message.type === "assistant" && (
-                                (() => {
-                                  const keysFromBackend = (message.visualizations || [])
-                                    .map((v) => (v?.config as any)?.key || v.title)
-                                    .filter(Boolean)
-                                  const recommendedKeys = keysFromBackend.length > 0
-                                    ? keysFromBackend.slice(0, 3)
-                                    : getRecommendedVizKeys(message.sourceQuery)
-
-                                  if (recommendedKeys.length === 0) return null
-
-                                  const keyToLabel: Record<string, string> = {
-                                    burn_runway: 'Burn rate & runway',
-                                    revenue_forecast: 'Revenue vs forecast',
-                                    expense_breakdown: 'Expense breakdown',
-                                    montecarlo_placeholder: 'Monte Carlo distribution',
-                                  }
-
-                                  const isDataAvailableForKey = (key: string) => {
-                                    if (!overviewData) return true
-                                    if (key === 'revenue_forecast') return Array.isArray(overviewData.revenueData) && overviewData.revenueData.length > 0
-                                    if (key === 'burn_runway') return Array.isArray(overviewData.burnRateData) && overviewData.burnRateData.length > 0
-                                    if (key === 'expense_breakdown') return Array.isArray(overviewData.expenseBreakdown) && overviewData.expenseBreakdown.length > 0
-                                    return true
-                                  }
-
-                                  const gatedRecommendedKeys = recommendedKeys.filter(isDataAvailableForKey)
-
-                                  if (gatedRecommendedKeys.length === 0) return null
-
-                                  const renderPreview = (key: string) => {
-                                    if (!overviewData || overviewLoading) {
-                                      return (
-                                        <div className="w-[260px] h-[140px] flex items-center justify-center text-xs text-muted-foreground">
-                                          {overviewLoading ? 'Loading data…' : 'Preview unavailable'}
-                                        </div>
-                                      )
-                                    }
-
-                                    if (key === 'revenue_forecast') {
-                                      const data = (overviewData.revenueData || []).map((d: any) => ({
-                                        month: d.month,
-                                        revenue: d.revenue,
-                                        forecast: d.forecast,
-                                      }))
-                                      return (
-                                        <div className="w-[260px] h-[140px]">
-                                          <ResponsiveContainer width="100%" height="100%">
-                                            <LineChart data={data}>
-                                              <CartesianGrid strokeDasharray="3 3" />
-                                              <XAxis dataKey="month" tick={{ fontSize: 9 }} />
-                                              <YAxis tick={{ fontSize: 9 }} />
-                                              <Line type="monotone" dataKey="revenue" stroke="#6366f1" strokeWidth={1.5} dot={false} />
-                                              <Line type="monotone" dataKey="forecast" stroke="#22c55e" strokeWidth={1.5} dot={false} strokeDasharray="4 4" />
-                                            </LineChart>
-                                          </ResponsiveContainer>
-                                        </div>
-                                      )
-                                    }
-
-                                    if (key === 'burn_runway') {
-                                      const data = (overviewData.burnRateData || []).map((d: any) => ({
-                                        month: d.month,
-                                        burn: d.burn,
-                                        runway: d.runway,
-                                      }))
-                                      return (
-                                        <div className="w-[260px] h-[140px]">
-                                          <ResponsiveContainer width="100%" height="100%">
-                                            <AreaChart data={data}>
-                                              <CartesianGrid strokeDasharray="3 3" />
-                                              <XAxis dataKey="month" tick={{ fontSize: 9 }} />
-                                              <YAxis tick={{ fontSize: 9 }} />
-                                              <Area type="monotone" dataKey="burn" stroke="#f97316" fill="#fed7aa" fillOpacity={0.8} dot={false} />
-                                            </AreaChart>
-                                          </ResponsiveContainer>
-                                        </div>
-                                      )
-                                    }
-
-                                    if (key === 'expense_breakdown') {
-                                      const data = (overviewData.expenseBreakdown || []).map((d: any) => ({
-                                        name: d.name,
-                                        value: d.value,
-                                      }))
-                                      return (
-                                        <div className="w-[260px] h-[140px]">
-                                          <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={data}>
-                                              <CartesianGrid strokeDasharray="3 3" />
-                                              <XAxis dataKey="name" tick={{ fontSize: 9 }} />
-                                              <YAxis tick={{ fontSize: 9 }} />
-                                              <Bar dataKey="value" fill="#6366f1" />
-                                            </BarChart>
-                                          </ResponsiveContainer>
-                                        </div>
-                                      )
-                                    }
-
-                                    return (
-                                      <div className="w-[260px] h-[120px] flex items-center justify-center text-xs text-muted-foreground">
-                                        Preview unavailable
-                                      </div>
-                                    )
-                                  }
-
-                                  return (
-                                    <div className="mt-3 space-y-2">
-                                      <div className="flex items-center gap-2 text-sm font-semibold text-black">
-                                        <BarChart3 className="h-4 w-4" />
-                                        <span>Recommended visuals</span>
-                                      </div>
-                                      <div className="flex flex-wrap gap-2">
-                                        {gatedRecommendedKeys.map((key) => (
-                                          <Tooltip key={key}>
-                                            <TooltipTrigger asChild>
-                                              <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="text-xs h-7 bg-transparent"
-                                                onMouseEnter={() => {
-                                                  if (orgId && !overviewData) fetchOverviewData(orgId)
-                                                }}
-                                                onClick={() => {
-                                                  if (orgId && !overviewData) fetchOverviewData(orgId)
-                                                  setActiveVizKey(key)
-                                                  setActiveVizMode('primary')
-                                                  setSheetOpen(true)
-                                                }}
-                                              >
-                                                {keyToLabel[key] || key}
-                                              </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent side="top" className="p-2">
-                                              {renderPreview(key)}
-                                            </TooltipContent>
-                                          </Tooltip>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )
-                                })()
-                              )}
-
-                              {/* Weak Assumptions Section */}
-                              {message.type === "assistant" && message.weakAssumptions && message.weakAssumptions.length > 0 && (
-                                <div className="mt-3 bg-red-50 border border-red-200 rounded-md p-2">
-                                  <div className="flex items-center gap-1 text-xs text-red-800 font-medium mb-1">
-                                    <AlertTriangle className="h-3 w-3" />
-                                    AI Flagged {message.weakAssumptions.length} Weak Assumption{message.weakAssumptions.length > 1 ? 's' : ''}
-                                  </div>
-                                  <div className="space-y-1">
-                                    {message.weakAssumptions.map((wa, idx) => (
-                                      <div key={idx} className="text-xs text-red-700">
-                                        • <strong>{wa.name}:</strong> {wa.issue}. {wa.recommendation}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-
-                              {message.actionable && message.recommendation && (
-                                <Button
-                                  size="sm"
-                                  className="mt-3 w-full"
-                                  onClick={() => handleCreateTask(message.recommendation || "", message.planId)}
-                                >
-                                  <Plus className="h-3 w-3 mr-2" />
-                                  Create Task from Recommendation
-                                </Button>
-                              )}
-                              {message.suggestions && (
-                                <div className="mt-3 space-y-2">
-                                  <p className="text-xs opacity-70">Suggested follow-ups:</p>
-                                  <div className="flex flex-wrap gap-2">
-                                    {message.suggestions.map((suggestion, index) => (
-                                      <Button
-                                        key={index}
-                                        variant="outline"
-                                        size="sm"
-                                        className="text-xs h-6 bg-transparent"
-                                        onClick={() => handleSendMessage(suggestion)}
-                                      >
-                                        {suggestion}
-                                      </Button>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
+                                )}
+                              </div>
                             </div>
-                            {message.type === "user" && (
-                              <Avatar className="h-8 w-8">
-                                <AvatarFallback>U</AvatarFallback>
-                              </Avatar>
-                            )}
                           </div>
                         ))}
                         {isTyping && (
-                          <div className="flex gap-3 justify-start">
-                            <Avatar className="h-8 w-8">
-                              <AvatarFallback className="bg-primary text-primary-foreground">
-                                <Brain className="h-4 w-4" />
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="bg-muted rounded-lg p-3">
-                              <div className="flex items-center gap-2">
-                                <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                                <div>
-                                  <span className="text-sm font-medium">AI CFO Agents Working...</span>
-                                  <div className="text-xs text-muted-foreground mt-1">
-                                    Classifying intent → Gathering data → Analyzing → Synthesizing
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
+                          <div className="w-full py-16 bg-transparent animate-in fade-in slide-in-from-bottom-4 duration-700">
+                             <div className="max-w-3xl mx-auto px-6 flex gap-8">
+                               <div className="flex-shrink-0">
+                                 <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg animate-pulse ring-4 ring-indigo-500/10">
+                                   <Sparkles className="h-4 w-4 text-white" />
+                                 </div>
+                               </div>
+                               <div className="flex-1 space-y-6">
+                                 <div className="flex items-center gap-4">
+                                   <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-indigo-50 border border-indigo-100 shadow-sm">
+                                      <Loader2 className="h-3 w-3 text-indigo-600 animate-spin" />
+                                      <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">
+                                         Orchestrator: Routing to Specialists...
+                                      </span>
+                                   </div>
+                                   <div className="flex gap-2">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                                      <div className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '200ms' }} />
+                                      <div className="w-1.5 h-1.5 rounded-full bg-pink-400 animate-bounce" style={{ animationDelay: '400ms' }} />
+                                   </div>
+                                 </div>
+                                 <div className="flex flex-wrap gap-2 animate-in fade-in duration-1000">
+                                    {['Gathering Base Snapshot', 'Cross-Agent Validation', 'Monte Carlo Simulation', 'Synthesizing Insight'].map((step, i) => (
+                                      <div key={i} className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-tighter flex items-center gap-1">
+                                        <CheckCircle2 className="h-2.5 w-2.5" />
+                                        {step}
+                                      </div>
+                                    ))}
+                                 </div>
+                                 <div className="space-y-3 max-w-lg">
+                                    <div className="h-2 bg-muted/60 rounded-full w-full animate-pulse shadow-sm" />
+                                    <div className="h-2 bg-muted/60 rounded-full w-5/6 animate-pulse shadow-sm" style={{ animationDelay: '200ms' }} />
+                                    <div className="h-2 bg-muted/60 rounded-full w-3/4 animate-pulse shadow-sm" style={{ animationDelay: '400ms' }} />
+                                 </div>
+                               </div>
+                             </div>
                           </div>
                         )}
                       </div>
+                      <div ref={messagesEndRef} />
                     </ScrollArea>
-                    <div className="border-t p-4 flex-shrink-0">
-                      <div className="flex gap-2">
-                        <Input
-                          placeholder="Ask me anything about your finances..."
-                          value={inputValue}
-                          onChange={(e) => setInputValue(e.target.value)}
-                          onKeyPress={(e) => {
-                            if (e.key === "Enter" && !e.shiftKey) {
-                              e.preventDefault()
+
+                    <div className="border-t bg-background/80 backdrop-blur-xl p-6 flex-shrink-0">
+                      <div className="max-w-3xl mx-auto relative group-input">
+                        {attachedFiles.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mb-3 animate-in fade-in slide-in-from-bottom-2">
+                            {attachedFiles.map((file, idx) => (
+                              <div key={idx} className="relative group/file bg-muted/50 rounded-lg p-2 pr-8 border border-border/50 text-[11px] font-medium flex items-center gap-2 max-w-[200px] truncate shadow-sm">
+                                {file.type.startsWith('image/') ? <ImageIcon className="h-3 w-3 text-indigo-500" /> : <Paperclip className="h-3 w-3 text-slate-500" />}
+                                {file.name}
+                                <button 
+                                  onClick={() => setAttachedFiles(prev => prev.filter((_, i) => i !== idx))}
+                                  className="absolute right-1 top-1/2 -translate-y-1/2 h-5 w-5 rounded-md hover:bg-red-50 hover:text-red-500 transition-colors opacity-0 group-hover/file:opacity-100 flex items-center justify-center"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flex items-end gap-3 bg-muted/30 rounded-[24px] border border-border/60 px-5 py-4 focus-within:border-primary/50 focus-within:ring-4 focus-within:ring-primary/5 focus-within:bg-background transition-all shadow-xl shadow-black/5 ring-1 ring-white/10">
+                            <input 
+                              type="file" 
+                              ref={fileInputRef} 
+                              className="hidden" 
+                              multiple 
+                              onChange={(e) => {
+                                const files = Array.from(e.target.files || [])
+                                setAttachedFiles(prev => [...prev, ...files])
+                              }}
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-full text-muted-foreground/60 hover:text-primary hover:bg-primary/5 flex-shrink-0 transition-colors"
+                              onClick={() => fileInputRef.current?.click()}
+                            >
+                                <Paperclip className="h-4 w-4" />
+                            </Button>
+                            <textarea
+                            placeholder="Message AI CFO..."
+                            value={inputValue}
+                            onChange={(e) => {
+                                setInputValue(e.target.value)
+                                e.target.style.height = 'auto'
+                                e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault()
+                                handleSendMessage(inputValue)
+                                ;(e.target as HTMLTextAreaElement).style.height = 'auto'
+                                }
+                            }}
+                            className="flex-1 bg-transparent border-none outline-none resize-none text-[15px] placeholder:text-muted-foreground/50 min-h-[28px] max-h-[200px] leading-relaxed py-1 antialiased"
+                            rows={1}
+                            disabled={isTyping}
+                            />
+                            <Button
+                            size="sm"
+                            onClick={() => {
                               handleSendMessage(inputValue)
-                            }
-                          }}
-                          className="flex-1"
-                          disabled={isTyping}
-                        />
-                        <Button onClick={() => handleSendMessage(inputValue)} disabled={!inputValue.trim() || isTyping}>
-                          {isTyping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                        </Button>
+                              setAttachedFiles([])
+                            }}
+                            disabled={(!inputValue.trim() && attachedFiles.length === 0) || isTyping}
+                            className="h-8 w-8 rounded-xl flex-shrink-0 bg-primary hover:bg-primary/90 shadow-md transition-all active:scale-95"
+                            >
+                            {isTyping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                            </Button>
+                        </div>
+                        <div className="flex items-center justify-between mt-3 px-1">
+                            <span className="text-[10px] text-muted-foreground/40 font-medium tracking-tight">Shift + Enter for new line • Advanced Multi-Agent Orchestrator v4.2</span>
+                            <div className="flex items-center gap-4">
+                              {attachedFiles.length > 0 && (
+                                <span className="text-[10px] font-bold text-indigo-600/60 uppercase tracking-widest">{attachedFiles.length} File(s) Staged</span>
+                              )}
+                              <span className="text-[10px] text-muted-foreground/40 font-mono tracking-tighter">{inputValue.length > 0 ? `${inputValue.length}/500` : ''}</span>
+                            </div>
+                        </div>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
               </div>
 
-              {/* Quick Actions */}
               <div className="space-y-4">
-                <Card>
+                <Card className="shadow-lg border-border/40">
                   <CardHeader>
                     <CardTitle className="text-lg">Quick Actions</CardTitle>
                     <CardDescription>Common financial analysis tasks</CardDescription>
@@ -1374,18 +1044,39 @@ export function AIAssistant() {
                       <Button
                         key={index}
                         variant="outline"
-                        className="w-full justify-start h-auto p-3 bg-transparent"
+                        className="w-full justify-start h-auto p-3 bg-transparent hover:bg-muted/50 transition-all border-border/30"
                         onClick={() => handleQuickAction(action)}
                         disabled={isTyping}
                       >
-                        <action.icon className="h-4 w-4 mr-3 flex-shrink-0" />
+                        <action.icon className="h-4 w-4 mr-3 flex-shrink-0 text-primary" />
                         <div className="text-left">
-                          <div className="font-medium text-sm">{action.title}</div>
-                          <div className="text-xs text-muted-foreground">{action.description}</div>
+                          <div className="font-semibold text-sm">{action.title}</div>
+                          <div className="text-[11px] text-muted-foreground">{action.description}</div>
                         </div>
                       </Button>
                     ))}
                   </CardContent>
+                </Card>
+
+                <Card className="bg-gradient-to-br from-indigo-600 to-purple-700 text-white shadow-xl border-none">
+                    <CardHeader>
+                        <CardTitle className="text-white flex items-center gap-2">
+                            <Zap className="h-4 w-4 text-amber-300" />
+                            Proactive Alerts
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4 pt-0">
+                        <div className="bg-white/10 p-3 rounded-lg backdrop-blur-sm border border-white/10">
+                            <div className="text-[11px] font-bold uppercase tracking-wider opacity-70">Runway Threshold</div>
+                            <div className="text-sm font-medium mt-1">Alert if runway drops below 6 months</div>
+                            <div className="mt-2 text-[10px] bg-emerald-500/20 text-emerald-300 inline-block px-2 py-0.5 rounded font-bold uppercase">Active Monitoring</div>
+                        </div>
+                        <div className="bg-white/10 p-3 rounded-lg backdrop-blur-sm border border-white/10">
+                            <div className="text-[11px] font-bold uppercase tracking-wider opacity-70">Anomaly Detection</div>
+                            <div className="text-sm font-medium mt-1">Monitor for duplicate vendor payments</div>
+                            <div className="mt-2 text-[10px] bg-emerald-500/20 text-emerald-300 inline-block px-2 py-0.5 rounded font-bold uppercase">Active Monitoring</div>
+                        </div>
+                    </CardContent>
                 </Card>
               </div>
             </div>
@@ -1396,20 +1087,7 @@ export function AIAssistant() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="flex items-center gap-2">
-                      AI-Generated Tasks
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <Info className="h-4 w-4 text-muted-foreground" />
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-md">
-                          <p className="font-semibold mb-2">What are AI-Generated Tasks?</p>
-                          <p className="text-sm mb-2">When AI CFO provides actionable recommendations (like "Reduce burn rate by 10%"), they automatically become tasks here.</p>
-                          <p className="text-sm mb-2"><strong>Why use this?</strong> Track and manage your financial action items in one place. Mark tasks as complete as you implement them.</p>
-                          <p className="text-sm"><strong>Tip:</strong> Ask specific questions like "Create a plan to extend runway" to get actionable tasks.</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </CardTitle>
+                    <CardTitle>AI-Generated Tasks</CardTitle>
                     <CardDescription>Actionable tasks created from AI CFO recommendations</CardDescription>
                   </div>
                   <Button onClick={() => setShowTaskDialog(true)}>
@@ -1420,106 +1098,36 @@ export function AIAssistant() {
               </CardHeader>
               <CardContent>
                 {loadingPlans ? (
-                  <div className="space-y-2">
-                    {[1, 2, 3].map((i) => (
-                      <Skeleton key={i} className="h-24 w-full" />
-                    ))}
-                  </div>
+                  <Skeleton className="h-48 w-full" />
                 ) : tasks.length === 0 ? (
                   <div className="text-center py-12">
                     <Brain className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                    <h3 className="text-lg font-medium mb-2">No tasks yet</h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Start chatting with AI CFO to get strategic recommendations. Tasks are created from actionable AI recommendations, not from general questions.
-                    </p>
-                    <div className="space-y-2 mb-4">
-                      <p className="text-xs text-muted-foreground">💡 <strong>Tip:</strong> Ask questions like:</p>
-                      <ul className="text-xs text-muted-foreground list-disc list-inside space-y-1">
-                        <li>"What's my current cash runway?"</li>
-                        <li>"How can I reduce my burn rate?"</li>
-                        <li>"Create a plan to extend runway by 6 months"</li>
-                      </ul>
-                    </div>
-                    <Button
-                      variant="outline"
-                      onClick={() => document.querySelector<HTMLElement>('[value="chat"]')?.click()}
-                    >
-                      Go to Chat
-                    </Button>
+                    <h3 className="text-lg font-medium">No tasks yet</h3>
+                    <p className="text-sm text-muted-foreground">Ask AI CFO for strategic recommendations to generate tasks.</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          {tasks.length} total task{tasks.length !== 1 ? "s" : ""} • {" "}
-                          {tasks.filter((t) => t.status === "pending").length} pending • {" "}
-                          {tasks.filter((t) => t.status === "in-progress").length} in progress • {" "}
-                          {tasks.filter((t) => t.status === "completed").length} completed
-                        </p>
-                      </div>
-                    </div>
                     {tasks.map((task) => (
-                      <Card key={task.id} className={`border-l-4 ${task.status === "completed" ? "border-l-green-500 bg-green-50/30" :
-                        task.status === "in-progress" ? "border-l-blue-500 bg-blue-50/30" :
-                          task.status === "cancelled" ? "border-l-red-500 bg-red-50/30" :
-                            "border-l-yellow-500"
-                        }`}>
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1 space-y-2">
-                              <div className="flex items-center gap-2">
+                      <Card key={task.id} className={`border-l-4 ${task.status === "completed" ? "border-l-green-500" : "border-l-yellow-500"}`}>
+                        <CardContent className="p-4 flex items-start justify-between gap-4">
+                          <div className="space-y-2">
+                             <div className="flex items-center gap-2">
                                 {getStatusIcon(task.status)}
                                 <h4 className="font-medium">{task.title}</h4>
-                                {task.planId && (
-                                  <Badge variant="outline" className="text-xs">
-                                    From AI Plan
-                                  </Badge>
-                                )}
-                              </div>
-                              {task.description && (
-                                <p className="text-sm text-muted-foreground whitespace-pre-line">{task.description}</p>
-                              )}
-                              <div className="flex flex-wrap gap-2">
-                                <Badge variant="outline" className={getPriorityColor(task.priority)}>
-                                  {task.priority} priority
-                                </Badge>
-                                <Badge variant="outline" className="text-xs">
-                                  {task.integration}
-                                </Badge>
-                                {task.scenarioLink && (
-                                  <Button variant="ghost" size="sm" className="h-6 px-2">
-                                    <LinkIcon className="h-3 w-3 mr-1" />
-                                    View Scenario
-                                  </Button>
-                                )}
-                              </div>
-                              {task.assumptions && task.assumptions.length > 0 && (
-                                <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
-                                  <span className="font-medium">Context:</span> {task.assumptions.join(", ")}
-                                </div>
-                              )}
-                              <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                                <span>📅 Created {task.createdAt.toLocaleDateString()}</span>
-                                {task.dueDate && <span>⏰ Due {task.dueDate.toLocaleDateString()}</span>}
-                                {task.completedAt && <span>✅ Completed {task.completedAt.toLocaleDateString()}</span>}
-                              </div>
-                            </div>
-                            <Select
-                              value={task.status}
-                              onValueChange={(value) => handleTaskStatusChange(task.id, value as Task["status"])}
-                            >
-                              <SelectTrigger className="w-[140px]">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
+                             </div>
+                             <p className="text-sm text-muted-foreground">{task.description}</p>
+                             <div className="flex gap-2">
+                                <Badge variant="outline" className={getPriorityColor(task.priority)}>{task.priority}</Badge>
+                             </div>
+                          </div>
+                          <Select value={task.status} onValueChange={(val) => handleTaskStatusChange(task.id, val as Task["status"])}>
+                             <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+                             <SelectContent>
                                 <SelectItem value="pending">Pending</SelectItem>
                                 <SelectItem value="in-progress">In Progress</SelectItem>
                                 <SelectItem value="completed">Completed</SelectItem>
-                                <SelectItem value="cancelled">Cancelled</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
+                             </SelectContent>
+                          </Select>
                         </CardContent>
                       </Card>
                     ))}
@@ -1530,360 +1138,181 @@ export function AIAssistant() {
           </TabsContent>
 
           <TabsContent value="staged-changes" className="space-y-4">
-            <Card className="bg-muted/30 border-dashed">
-              <CardContent className="pt-6">
-                <div className="flex items-start gap-3">
-                  <Info className="h-5 w-5 text-muted-foreground mt-0.5 flex-shrink-0" />
-                  <div className="space-y-2 text-sm">
-                    <p className="font-semibold">What are Staged Changes?</p>
-                    <p className="text-muted-foreground">
-                      Staged Changes are detailed AI recommendations that you can review before implementing. Each recommendation includes:
-                    </p>
-                    <ul className="list-disc list-inside space-y-1 text-muted-foreground ml-2">
-                      <li><strong>Action:</strong> What to do (e.g., "Reduce burn rate by 10%")</li>
-                      <li><strong>Impact:</strong> Expected financial impact (e.g., "+2 months runway")</li>
-                      <li><strong>Reasoning:</strong> Why this recommendation matters</li>
-                      <li><strong>Data Sources:</strong> What financial data supports this (auditability)</li>
-                    </ul>
-                    <p className="text-muted-foreground mt-2">
-                      <strong>Workflow:</strong> Review → Approve → Tasks are created → Implement → Mark tasks complete
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
             <StagedChangesPanel />
           </TabsContent>
+          
+          <TabsContent value="missions" className="space-y-6">
+             <div className="flex items-center justify-between">
+                <div>
+                   <h3 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 to-purple-600">Missions Control</h3>
+                   <p className="text-sm text-muted-foreground">Autonomous financial workflows running in the background.</p>
+                </div>
+                <Button variant="outline" className="gap-2 border-indigo-200 text-indigo-600 hover:bg-indigo-50">
+                   <Target className="h-4 w-4" /> Deploy Mission
+                </Button>
+             </div>
 
+             <div className="grid md:grid-cols-2 gap-4">
+                <Card className="border-l-4 border-l-emerald-500 overflow-hidden group hover:shadow-xl transition-all">
+                   <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between mb-2">
+                        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none">ACTIVE</Badge>
+                        <span className="text-[10px] font-mono text-muted-foreground">ID: M-8492</span>
+                      </div>
+                      <CardTitle className="text-base group-hover:text-primary transition-colors">Daily Anomaly Guardian</CardTitle>
+                      <CardDescription>Monitors accounts payable for duplicates and fraudulent spend.</CardDescription>
+                   </CardHeader>
+                   <CardContent>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between text-xs">
+                           <span className="text-muted-foreground">Success Rate</span>
+                           <span className="font-bold">99.2%</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                           <div className="h-full bg-emerald-500 w-[92%]" />
+                        </div>
+                        <div className="flex items-center gap-2 pt-2">
+                           <div className="flex -space-x-2">
+                              {['Treasury', 'Anomaly', 'Analytics'].map((agent, i) => (
+                                <Tooltip key={i}>
+                                  <TooltipTrigger>
+                                    <div className="h-6 w-6 rounded-full border-2 border-background bg-slate-100 flex items-center justify-center text-[8px] font-bold">{agent[0]}</div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>{agent} Agent</TooltipContent>
+                                </Tooltip>
+                              ))}
+                           </div>
+                           <span className="text-[10px] text-muted-foreground font-medium">+ 3 Agents Collaborating</span>
+                        </div>
+                      </div>
+                   </CardContent>
+                </Card>
+
+                <Card className="border-l-4 border-l-indigo-500 overflow-hidden group hover:shadow-xl transition-all">
+                   <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between mb-2">
+                        <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 border-none">SCHEDULED</Badge>
+                        <span className="text-[10px] font-mono text-muted-foreground">ID: M-1029</span>
+                      </div>
+                      <CardTitle className="text-base group-hover:text-primary transition-colors">Strategic Runway Forecaster</CardTitle>
+                      <CardDescription>Generates weekly P10/P50/P90 cash flow projections.</CardDescription>
+                   </CardHeader>
+                   <CardContent>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between text-xs">
+                           <span className="text-muted-foreground">Next Execution</span>
+                           <span className="font-bold text-indigo-600">Tonight, 02:00 AM</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                           <div className="h-full bg-indigo-500 w-[45%] opacity-30" />
+                        </div>
+                        <div className="flex items-center gap-4 pt-2">
+                           <button className="text-[10px] font-bold text-muted-foreground hover:text-foreground">View Trace</button>
+                           <button className="text-[10px] font-bold text-indigo-600">Run Now</button>
+                        </div>
+                      </div>
+                   </CardContent>
+                </Card>
+             </div>
+          </TabsContent>
         </Tabs>
 
-        {/* Task Creation Dialog */}
         <Dialog open={showTaskDialog} onOpenChange={setShowTaskDialog}>
-          <DialogContent className="max-w-[95vw] sm:max-w-[500px]">
+          <DialogContent>
             <DialogHeader>
-              <DialogTitle className="text-lg sm:text-xl">Create Task from AI Recommendation</DialogTitle>
-              <DialogDescription className="text-xs sm:text-sm">
-                Convert this AI CFO insight into an actionable task and optionally export to your tools
-              </DialogDescription>
+              <DialogTitle>Create Task</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="title" className="text-sm">Task Title</Label>
-                <Input
-                  id="title"
-                  value={taskForm.title}
-                  onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
-                  placeholder="Enter task title"
-                  className="w-full"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="description" className="text-sm">Description</Label>
-                <Textarea
-                  id="description"
-                  value={taskForm.description}
-                  onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
-                  placeholder="Add task details and context"
-                  rows={3}
-                  className="w-full"
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="priority">Priority</Label>
-                  <Select
-                    value={taskForm.priority}
-                    onValueChange={(value) => setTaskForm({ ...taskForm, priority: value as Task["priority"] })}
-                  >
-                    <SelectTrigger id="priority">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="low">Low</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="high">High</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="dueDate">Due Date</Label>
-                  <Input
-                    id="dueDate"
-                    type="date"
-                    value={taskForm.dueDate}
-                    onChange={(e) => setTaskForm({ ...taskForm, dueDate: e.target.value })}
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="integration">Export To</Label>
-                <Select
-                  value={taskForm.integration}
-                  onValueChange={(value) => setTaskForm({ ...taskForm, integration: value as Task["integration"] })}
-                >
-                  <SelectTrigger id="integration">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="internal">Internal Task List Only</SelectItem>
-                    <SelectItem value="slack">Slack</SelectItem>
-                    <SelectItem value="asana">Asana</SelectItem>
-                    <SelectItem value="calendar">Google Calendar</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {taskForm.integration === "slack" && "Task will be posted to your chosen Slack channel"}
-                  {taskForm.integration === "asana" && "Task will be created in your Asana project"}
-                  {taskForm.integration === "calendar" && "Event will be created in Google Calendar"}
-                  {taskForm.integration === "internal" && "Task will only appear in FinaPilot"}
-                </p>
-              </div>
+            <div className="space-y-4 py-2">
+               <div className="space-y-2">
+                 <Label>Title</Label>
+                 <Input value={taskForm.title} onChange={(e) => setTaskForm({...taskForm, title: e.target.value})} />
+               </div>
+               <div className="space-y-2">
+                 <Label>Description</Label>
+                 <Textarea value={taskForm.description} onChange={(e) => setTaskForm({...taskForm, description: e.target.value})} />
+               </div>
+               <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Priority</Label>
+                    <Select value={taskForm.priority} onValueChange={(val) => setTaskForm({...taskForm, priority: val as Task["priority"]})}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="low">Low</SelectItem>
+                            <SelectItem value="medium">Medium</SelectItem>
+                            <SelectItem value="high">High</SelectItem>
+                        </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Due Date</Label>
+                    <Input type="date" value={taskForm.dueDate} onChange={(e) => setTaskForm({...taskForm, dueDate: e.target.value})} />
+                  </div>
+               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowTaskDialog(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleSaveTask} disabled={!taskForm.title.trim()}>
-                Create Task
-              </Button>
+               <Button onClick={handleSaveTask}>Save Task</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetContent side="right" className="w-[95vw] sm:w-[520px] sm:max-w-none overflow-y-auto">
+          <SheetContent side="right" className="w-[95vw] sm:w-[520px]">
             <SheetHeader>
-              <SheetTitle>
-                {activeVizKey === 'revenue_forecast' && 'Revenue insight'}
-                {activeVizKey === 'burn_runway' && 'Liquidity insight'}
-                {activeVizKey === 'expense_breakdown' && 'Expense insight'}
-                {activeVizKey === 'montecarlo_placeholder' && 'Risk insight'}
-                {!activeVizKey && 'Chart'}
-              </SheetTitle>
-              <SheetDescription>
-                Visual explanation of your AI CFO answer. Switch views using the controls below.
-              </SheetDescription>
+              <SheetTitle>Institutional Analysis Report</SheetTitle>
+              <SheetDescription>Deep-dive data visualization and audit trail.</SheetDescription>
             </SheetHeader>
-
-            <div className="mt-4">
-              {!activeVizKey ? (
-                <div className="text-sm text-muted-foreground">Select a visualization from a chat response.</div>
-              ) : !overviewData ? (
-                <div className="text-sm text-muted-foreground">Loading data…</div>
-              ) : (
-                (() => {
-                  if (activeVizKey === 'revenue_forecast') {
-                    const data = (overviewData.revenueData || []).map((d: any) => ({
-                      month: d.month,
-                      revenue: d.revenue,
-                      forecast: d.forecast,
-                    }))
-                    return (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>Revenue vs Forecast</CardTitle>
-                          <CardDescription>Actual revenue compared to forecast</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="flex justify-between items-center mb-3 text-xs text-muted-foreground">
-                            <span>View</span>
-                            <div className="inline-flex rounded-md border bg-background p-0.5">
-                              <button
-                                type="button"
-                                className={`px-2 py-1 rounded-sm ${activeVizMode === 'primary' ? 'bg-muted font-medium' : ''}`}
-                                onClick={() => setActiveVizMode('primary')}
-                              >
-                                Line
-                              </button>
-                              <button
-                                type="button"
-                                className={`px-2 py-1 rounded-sm ${activeVizMode === 'alternate' ? 'bg-muted font-medium' : ''}`}
-                                onClick={() => setActiveVizMode('alternate')}
-                              >
-                                Bar
-                              </button>
-                            </div>
-                          </div>
-                          <ChartContainer
-                            config={{
-                              revenue: { label: 'Actual', color: '#8884d8' },
-                              forecast: { label: 'Forecast', color: '#82ca9d' },
-                            }}
-                          >
-                            {activeVizMode === 'primary' ? (
-                              <LineChart data={data}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="month" />
-                                <YAxis />
-                                <ChartTooltip content={<ChartTooltipContent />} />
-                                <Legend />
-                                <Line type="monotone" dataKey="revenue" stroke="var(--color-revenue)" strokeWidth={2} dot={false} />
-                                <Line type="monotone" dataKey="forecast" stroke="var(--color-forecast)" strokeWidth={2} dot={false} strokeDasharray="5 5" />
-                              </LineChart>
-                            ) : (
-                              <BarChart data={data}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="month" />
-                                <YAxis />
-                                <ChartTooltip content={<ChartTooltipContent />} />
-                                <Legend />
-                                <Bar dataKey="revenue" fill="var(--color-revenue)" />
-                                <Bar dataKey="forecast" fill="var(--color-forecast)" />
-                              </BarChart>
-                            )}
-                          </ChartContainer>
-                        </CardContent>
-                      </Card>
-                    )
-                  }
-
-                  if (activeVizKey === 'burn_runway') {
-                    const data = (overviewData.burnRateData || []).map((d: any) => ({
-                      month: d.month,
-                      burn: d.burn,
-                      runway: d.runway,
-                    }))
-                    return (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>Burn Rate & Runway</CardTitle>
-                          <CardDescription>Monthly burn and implied runway</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="flex justify-between items-center mb-3 text-xs text-muted-foreground">
-                            <span>View</span>
-                            <div className="inline-flex rounded-md border bg-background p-0.5">
-                              <button
-                                type="button"
-                                className={`px-2 py-1 rounded-sm ${activeVizMode === 'primary' ? 'bg-muted font-medium' : ''}`}
-                                onClick={() => setActiveVizMode('primary')}
-                              >
-                                Area
-                              </button>
-                              <button
-                                type="button"
-                                className={`px-2 py-1 rounded-sm ${activeVizMode === 'alternate' ? 'bg-muted font-medium' : ''}`}
-                                onClick={() => setActiveVizMode('alternate')}
-                              >
-                                Line
-                              </button>
-                            </div>
-                          </div>
-                          <ChartContainer
-                            config={{
-                              burn: { label: 'Burn', color: '#ff7300' },
-                            }}
-                          >
-                            {activeVizMode === 'primary' ? (
-                              <AreaChart data={data}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="month" />
-                                <YAxis />
-                                <ChartTooltip content={<ChartTooltipContent />} />
-                                <Area type="monotone" dataKey="burn" stroke="var(--color-burn)" fill="var(--color-burn)" fillOpacity={0.35} dot={false} />
-                              </AreaChart>
-                            ) : (
-                              <LineChart data={data}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="month" />
-                                <YAxis />
-                                <ChartTooltip content={<ChartTooltipContent />} />
-                                <Line type="monotone" dataKey="burn" stroke="var(--color-burn)" strokeWidth={2} dot={false} />
-                              </LineChart>
-                            )}
-                          </ChartContainer>
-                        </CardContent>
-                      </Card>
-                    )
-                  }
-
-                  if (activeVizKey === 'expense_breakdown') {
-                    const data = (overviewData.expenseBreakdown || []).map((d: any) => ({
-                      name: d.name,
-                      value: d.value,
-                    }))
-                    return (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>Expense Breakdown</CardTitle>
-                          <CardDescription>Category distribution (current period)</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="flex justify-between items-center mb-3 text-xs text-muted-foreground">
-                            <span>View</span>
-                            <div className="inline-flex rounded-md border bg-background p-0.5">
-                              <button
-                                type="button"
-                                className={`px-2 py-1 rounded-sm ${activeVizMode === 'primary' ? 'bg-muted font-medium' : ''}`}
-                                onClick={() => setActiveVizMode('primary')}
-                              >
-                                Bar
-                              </button>
-                              <button
-                                type="button"
-                                className={`px-2 py-1 rounded-sm ${activeVizMode === 'alternate' ? 'bg-muted font-medium' : ''}`}
-                                onClick={() => setActiveVizMode('alternate')}
-                              >
-                                Table
-                              </button>
-                            </div>
-                          </div>
-                          <ChartContainer
-                            config={{
-                              value: { label: 'Spend', color: '#8884d8' },
-                            }}
-                          >
-                            {activeVizMode === 'primary' ? (
-                              <BarChart data={data}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="name" />
-                                <YAxis />
-                                <ChartTooltip content={<ChartTooltipContent />} />
-                                <Bar dataKey="value" fill="var(--color-value)" />
-                              </BarChart>
-                            ) : (
-                              <div className="text-xs">
-                                <div className="grid grid-cols-[2fr_1fr] gap-2 mb-1 font-medium text-muted-foreground">
-                                  <span>Category</span>
-                                  <span className="text-right">Amount</span>
-                                </div>
-                                <div className="space-y-1 max-h-64 overflow-y-auto">
-                                  {data.map((row: any) => (
-                                    <div key={row.name} className="grid grid-cols-[2fr_1fr] gap-2">
-                                      <span className="truncate" title={row.name}>{row.name}</span>
-                                      <span className="text-right">{row.value.toLocaleString()}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </ChartContainer>
-                        </CardContent>
-                      </Card>
-                    )
-                  }
-
-                  if (activeVizKey === 'montecarlo_placeholder') {
-                    return (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>Monte Carlo Distribution</CardTitle>
-                          <CardDescription>Not yet wired in the chat panel</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="text-sm text-muted-foreground">
-                            This visualization requires a specific Monte Carlo job reference. Ask for Monte Carlo distribution and I will surface it once the UI is wired to a concrete jobId/paramsHash.
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )
-                  }
-
-                  return (
-                    <div className="text-sm text-muted-foreground">No visualization available.</div>
-                  )
-                })()
-              )}
+            <div className="mt-8 space-y-6">
+                <div className="p-12 text-center border-2 border-dashed rounded-xl">
+                    <BarChart3 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="font-medium text-muted-foreground">Detailed view for "{activeVizKey}" coming soon.</p>
+                </div>
+            </div>
+          </SheetContent>
+        </Sheet>
+        <Sheet open={historySheetOpen} onOpenChange={setHistorySheetOpen}>
+          <SheetContent side="left" className="w-[300px] sm:w-[400px]">
+            <SheetHeader>
+              <SheetTitle>Chat History</SheetTitle>
+              <SheetDescription>Access your previous AI CFO strategic sessions.</SheetDescription>
+            </SheetHeader>
+            <div className="mt-8 space-y-4">
+              <Button onClick={() => { startNewChat(); setHistorySheetOpen(false); }} className="w-full justify-start gap-2" variant="outline">
+                <Plus className="h-4 w-4" /> New Strategic Session
+              </Button>
+              <ScrollArea className="h-[calc(100vh-250px)]">
+                <div className="space-y-2">
+                  {conversations.length === 0 && !loadingHistory && (
+                    <p className="text-center text-sm text-muted-foreground py-8">No past sessions found.</p>
+                  )}
+                  {loadingHistory && (
+                    <div className="space-y-2">
+                      <Skeleton className="h-12 w-full" />
+                      <Skeleton className="h-12 w-full" />
+                      <Skeleton className="h-12 w-full" />
+                    </div>
+                  )}
+                  {conversations.map((conv) => (
+                    <button
+                      key={conv.id}
+                      onClick={() => {
+                        loadConversation(conv.id)
+                        setHistorySheetOpen(false)
+                      }}
+                      className={`w-full text-left p-3 rounded-xl transition-all border ${
+                        currentConversationId === conv.id
+                          ? "bg-primary/10 border-primary text-primary"
+                          : "bg-background border-border hover:bg-muted"
+                      }`}
+                    >
+                      <div className="font-bold text-sm truncate">{conv.title || "New Session"}</div>
+                      <div className="text-[10px] opacity-60 mt-1 flex items-center justify-between">
+                        <span>{new Date(conv.updatedAt).toLocaleDateString()}</span>
+                        <span>{conv._count?.messages || 0} messages</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </ScrollArea>
             </div>
           </SheetContent>
         </Sheet>
