@@ -106,6 +106,76 @@ class LlmService {
     /**
      * Synthesize multiple agent outputs into a professional CFO report
      */
+    
+    async streamComplete(systemPrompt: string, userPrompt: string, onChunk: (chunk: string) => void): Promise<string> {
+        if (this.apiKeys.length === 0) throw new Error('No Gemini API keys');
+        let lastError: any = null;
+
+        for (const key of this.apiKeys) {
+            try {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:streamGenerateContent?key=${key}`;
+                const payload = {
+                    contents: [{ parts: [{ text: `${systemPrompt}\n\nUser Request: ${userPrompt}` }] }],
+                    generationConfig: { temperature: 0.1, topP: 0.95, topK: 40, maxOutputTokens: 8192 }
+                };
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    lastError = await response.text();
+                    continue;
+                }
+                
+                // Read streaming response (it's a JSON array, but effectively we can just parse the chunks if we use alt=sse, wait no, without alt=sse it streams chunks as an array)
+                // Let's use alt=sse to get proper SSE stream
+                const sseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:streamGenerateContent?alt=sse&key=${key}`;
+                
+                const sseResponse = await fetch(sseUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!sseResponse.ok) continue;
+                
+                const reader = sseResponse.body!.getReader();
+                const decoder = new TextDecoder("utf-8");
+                let fullText = "";
+                let buffer = "";
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split("\n");
+                    buffer = lines.pop() || "";
+                    
+                    for (const line of lines) {
+                        if (line.startsWith("data: ") && line.trim() !== "data: [DONE]") {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                const textChunk = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                                if (textChunk) {
+                                    fullText += textChunk;
+                                    onChunk(textChunk);
+                                }
+                            } catch(e) {}
+                        }
+                    }
+                }
+                return fullText;
+            } catch (error: any) {
+                lastError = error.message;
+            }
+        }
+        throw new Error(`LLM stream failed: ${lastError}`);
+    }
+
     async synthesizeCfoReport(
         query: string,
         agentOutputs: string[],

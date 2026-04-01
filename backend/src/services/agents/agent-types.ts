@@ -37,7 +37,7 @@ export type AgentActionType =
 
 // Data source types for explainability
 export interface DataSource {
-  type: 'transaction' | 'connector' | 'model_run' | 'budget' | 'manual_input' | 'calculation' | 'reasoning_engine';
+  type: 'transaction' | 'connector' | 'model_run' | 'budget' | 'manual_input' | 'calculation' | 'reasoning_engine' | 'user_upload';
   id: string;
   name: string;
   timestamp: Date;

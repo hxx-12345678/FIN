@@ -30,9 +30,25 @@ export const aicfoController = {
         context
       );
 
+      // Flatten the response so all agent data is top-level accessible
+      const agentResponse: any = result.response || {};
       res.json({
         ok: true,
-        ...result,
+        conversationId: result.conversationId,
+        planId: result.planId,
+        processingTimeMs: result.processingTimeMs,
+        // Top-level agent response fields for easy access
+        answer: agentResponse.answer,
+        agentType: agentResponse.agentType,
+        confidence: agentResponse.confidence,
+        thoughts: agentResponse.thoughts || [],
+        dataSources: agentResponse.dataSources || [],
+        calculations: agentResponse.calculations || {},
+        recommendations: agentResponse.recommendations || [],
+        visualizations: agentResponse.visualizations || [],
+        followUpQuestions: agentResponse.followUpQuestions || [],
+        // Also keep the nested response for backward compat
+        response: agentResponse,
       });
     } catch (error) {
       next(error);
@@ -306,7 +322,7 @@ export const aicfoController = {
   },
 
   /**
-   * GET /api/v1/orgs/:orgId/ai-cfo/conversations/:conversationId - Get conversation details
+   * GET /api/v1/orgs/:orgId/ai-cfo/conversations/:conversationId - Get conversation with messages
    */
   getConversation: async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
@@ -332,6 +348,22 @@ export const aicfoController = {
       next(error);
     }
   },
+
+  /**
+   * POST /api/v1/orgs/:orgId/ai-cfo/upload - Upload file attachment for chat
+   */
+  uploadAttachment: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) throw new ValidationError('User not authenticated');
+      const { orgId } = req.params;
+      const file = req.file;
+
+      if (!file) throw new ValidationError('No file uploaded');
+
+      const attachment = await aicfoService.uploadAttachment(orgId, req.user.id, file);
+      res.status(201).json({ ok: true, attachment });
+    } catch (error) {
+      next(error);
+    }
+  },
 };
-
-

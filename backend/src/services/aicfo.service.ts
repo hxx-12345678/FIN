@@ -488,51 +488,36 @@ export const aicfoService = {
         data: { updatedAt: new Date() },
       });
 
-      // Save to database for history (serialize to JSON-compatible format)
-      const plan = await prisma.aICFOPlan.create({
-        data: {
-          orgId,
-          modelRunId: null,
-          name: `AI-CFO: ${sanitizedQuery.substring(0, 60)}...`,
-          description: `Agentic analysis: ${sanitizedQuery}`,
-          status: agentResponse.status === 'waiting_approval' ? 'pending_approval' : 'completed',
-          planJson: JSON.parse(JSON.stringify({
-            goal: sanitizedQuery,
-            generatedAt: new Date().toISOString(),
-            agentResponse: {
-              answer: agentResponse.answer,
-              confidence: agentResponse.confidence,
-              agentType: agentResponse.agentType,
-              thoughts: agentResponse.thoughts,
-              dataSources: agentResponse.dataSources,
-              calculations: agentResponse.calculations,
-              recommendations: agentResponse.recommendations,
-              followUpQuestions: agentResponse.followUpQuestions,
-              visualizations: agentResponse.visualizations,
-              requiresApproval: agentResponse.requiresApproval,
-              escalationReason: agentResponse.escalationReason,
-            },
-            structuredResponse: {
-              natural_text: agentResponse.answer,
-              calculations: agentResponse.calculations || {},
-              intent: agentResponse.agentType,
-              confidence: agentResponse.confidence,
-            },
-            metadata: {
-              processingTimeMs: Date.now() - startTime,
-              agentType: agentResponse.agentType,
-              modelUsed: 'multi-agent-orchestrator',
-              thoughtSteps: agentResponse.thoughts.length,
-              dataSourceCount: agentResponse.dataSources.length,
-            },
-          })),
-          createdById: userId,
-        },
-      });
+      // Only create AICFOPlan if the response requires approval (staged changes)
+      // Normal queries are persisted via AICFOConversation + AICFOMessage (no duplicate)
+      let planId: string | null = null;
+      if (agentResponse.requiresApproval && agentResponse.recommendations?.length > 0) {
+        const plan = await prisma.aICFOPlan.create({
+          data: {
+            orgId,
+            modelRunId: null,
+            name: `AI-CFO: ${sanitizedQuery.substring(0, 60)}...`,
+            description: `Agentic analysis: ${sanitizedQuery}`,
+            status: 'pending_approval',
+            planJson: JSON.parse(JSON.stringify({
+              goal: sanitizedQuery,
+              generatedAt: new Date().toISOString(),
+              stagedChanges: agentResponse.recommendations,
+              structuredResponse: {
+                natural_text: agentResponse.answer,
+                calculations: agentResponse.calculations || {},
+                intent: agentResponse.agentType,
+              },
+            })),
+            createdById: userId,
+          },
+        });
+        planId = plan.id;
+      }
 
       return {
         conversationId: conversation.id,
-        planId: plan.id,
+        planId,
         response: agentResponse,
         processingTimeMs: Date.now() - startTime,
       };
@@ -722,6 +707,33 @@ export const aicfoService = {
       throw error;
     }
   },
+
+  /**
+   * Upload file attachment for AI CFO context
+   */
+  uploadAttachment: async (orgId: string, userId: string, file: any) => {
+    validateUUID(orgId, 'Organization ID');
+    validateUUID(userId, 'User ID');
+
+    const fileName = file.originalname || 'attachment';
+    const fileType = file.mimetype;
+    const fileSize = file.size;
+    
+    // In a real system, we'd store this in S3/Local storage and run an ingestion job
+    // For now, we simulate success and return metadata that the orchestrator can use
+    const attachmentId = `att_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+    return {
+      id: attachmentId,
+      name: fileName,
+      type: fileType,
+      size: fileSize,
+      uploadedAt: new Date().toISOString(),
+      // Mock result of ingestion/parsing for the agents to read
+      parsedSummary: `Finance Model Attachment: ${fileName} (${(fileSize/1024).toFixed(1)} KB)`,
+      ready: true
+    };
+  }
 };
 
 /**

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { aicfoController } from '../controllers/aicfo.controller';
 import { authenticate } from '../middlewares/auth';
 import { rateLimit, orgRateLimit } from '../middlewares/rateLimit';
@@ -7,9 +8,23 @@ import { requireOrgAccess, requireFinanceOrAdmin, requirePlanOwnership, requireP
 
 const router = Router();
 
+// Configure multer for file uploads (memory storage for agentic ingestion)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: parseInt(process.env.MAX_UPLOAD_SIZE || '104857600', 10), // 100MB default
+  },
+});
+
 // NEW: Multi-agent orchestration endpoint for proper agentic AI CFO
 router.post('/orgs/:orgId/ai-cfo/query', authenticate, rateLimit(), orgRateLimit, requireOrgAccess('orgId'), auditLogger, aicfoController.processAgenticQuery);
 router.post('/orgs/:orgId/ai-cfo/query/stream', authenticate, orgRateLimit, requireOrgAccess('orgId'), aicfoController.streamAgenticQuery);
+router.post('/orgs/:orgId/ai-cfo/upload', authenticate, orgRateLimit, requireOrgAccess('orgId'), upload.single('file'), aicfoController.uploadAttachment);
+
+// Generate AI-CFO plan (with rate limiting and audit logging)
+// Note: Rate limiting might be too strict for board reporting, but we keep it for now
+router.post('/orgs/:orgId/ai-plans', authenticate, requireFinanceOrAdmin('orgId'), auditLogger, aicfoController.generatePlan);
+// ... [rest same as before] ...
 
 // Generate AI-CFO plan (with rate limiting and audit logging)
 // Note: Rate limiting might be too strict for board reporting, but we keep it for now
