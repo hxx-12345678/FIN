@@ -62,13 +62,13 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
+// ChartContainer removed — using native Recharts Tooltip to avoid context crash
 import { StagedChangesPanel } from "./ai-assistant/staged-changes-panel"
 import { useStagedChanges } from "@/hooks/use-staged-changes"
 import { AgenticResponse } from "./ai-assistant/agentic-response"
 import { toast } from "sonner"
 import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, XAxis, YAxis } from "recharts"
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis } from "recharts"
 
 interface AgentThought {
   step: number
@@ -264,6 +264,7 @@ export function AIAssistant() {
   const [overviewLoading, setOverviewLoading] = useState(false)
   const [activeVizKey, setActiveVizKey] = useState<string | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [reportViewContent, setReportViewContent] = useState<string>("")
   const [activeVizMode, setActiveVizMode] = useState<'primary' | 'alternate'>('primary')
   const [taskForm, setTaskForm] = useState({
     title: "",
@@ -281,6 +282,7 @@ export function AIAssistant() {
   const [historySheetOpen, setHistorySheetOpen] = useState(false)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
   
   // File upload state for chat
   const [attachedFiles, setAttachedFiles] = useState<File[]>([])
@@ -487,14 +489,40 @@ export function AIAssistant() {
   const startNewChat = () => {
     setMessages(initialMessages)
     setCurrentConversationId(null)
+    setAttachedFiles([])
   }
 
   const handleSendMessage = async (content: string, regenerate = false) => {
-    if (!content.trim()) return
+    if (!content.trim() && attachedFiles.length === 0) return
     const currentOrgId = orgId || (await fetchOrgId())
     if (!currentOrgId) {
       toast.error("Please log in to use AI CFO Assistant")
       return
+    }
+
+    // Step 0: Upload attachments if any
+    const attachments: any[] = []
+    if (attachedFiles.length > 0) {
+      setIsTyping(true)
+      for (const file of attachedFiles) {
+        const formData = new FormData()
+        formData.append("file", file)
+        try {
+          const res = await fetch(`${API_BASE_URL}/orgs/${currentOrgId}/ai-cfo/upload`, {
+            method: "POST",
+            headers: getAuthHeaders(),
+            body: formData,
+          })
+          if (res.ok) {
+            const data = await res.json()
+            if (data.ok && data.attachment) {
+              attachments.push(data.attachment)
+            }
+          }
+        } catch (e) {
+          console.error("Failed to upload attachment:", file.name)
+        }
+      }
     }
 
     const userMessage: Message = {
@@ -502,12 +530,20 @@ export function AIAssistant() {
       type: "user",
       content,
       timestamp: new Date(),
+      // Attachments are kept in the first user message for reference
+      dataSources: attachments.map(a => ({
+        type: 'user_upload',
+        id: a.id,
+        name: a.name,
+        snippet: a.parsedSummary
+      }))
     }
 
     if (!regenerate) {
       setMessages((prev) => [...prev, userMessage])
     }
     setInputValue("")
+    setAttachedFiles([])
     setIsTyping(true)
     setError(null)
 
@@ -523,8 +559,12 @@ export function AIAssistant() {
 
     setMessages((prev) => [...prev, currentAssistantMessage])
 
+    if (abortControllerRef.current) abortControllerRef.current.abort()
+    abortControllerRef.current = new AbortController()
+
     try {
       const response = await fetch(`${API_BASE_URL}/orgs/${currentOrgId}/ai-cfo/query/stream`, {
+        signal: abortControllerRef.current.signal,
         method: "POST",
         headers: {
           ...getAuthHeaders(),
@@ -532,7 +572,10 @@ export function AIAssistant() {
         },
         body: JSON.stringify({
           query: content,
-          context: { conversationId: currentConversationId },
+          context: { 
+            conversationId: currentConversationId,
+            attachments: attachments.length > 0 ? attachments : undefined
+          },
         }),
       })
 
@@ -542,6 +585,7 @@ export function AIAssistant() {
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ""
+      let planCreated = false
 
       while (true) {
         const { done, value } = await reader.read()
@@ -565,6 +609,7 @@ export function AIAssistant() {
             }
           } else if (data.type === "response") {
             const res = data.payload
+            if (res.planId) planCreated = true
             currentAssistantMessage = {
               ...currentAssistantMessage,
               content: res.answer,
@@ -583,12 +628,20 @@ export function AIAssistant() {
           )
         }
       }
-    } catch (err) {
-      toast.error("Error streaming response")
-      console.error(err)
+
+      // ONLY refetch plans if a plan was actually created (optimization)
+      if (planCreated) {
+        fetchPlans()
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        console.log('Stream aborted')
+      } else {
+        toast.error("Error streaming response")
+        console.error(err)
+      }
     } finally {
       setIsTyping(false)
-      fetchPlans()
     }
   }
 
@@ -806,9 +859,118 @@ export function AIAssistant() {
                                     <span className="text-[11px] font-semibold text-muted-foreground tracking-tight">Financial Intelligence Network</span>
                                   </div>
                                 )}
-                                <div className={message.type === "user" ? "text-[15px] font-medium text-foreground leading-relaxed antialiased" : "antialiased"}>
-                                  <AgenticResponse content={message.content} isUser={message.type === "user"} />
-                                </div>
+
+                                {/* AGENTIC THINKING UX: Show live thoughts DURING streaming before content arrives */}
+                                {message.type === "assistant" && !message.content && message.agentThoughts && message.agentThoughts.length > 0 && (
+                                  <div className="space-y-3 mb-6 animate-in fade-in duration-300">
+                                    {message.agentThoughts.map((thought, idx) => (
+                                      <div key={idx} className="flex items-start gap-3 animate-in slide-in-from-left-2 duration-500" style={{ animationDelay: `${idx * 150}ms` }}>
+                                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 text-[9px] font-mono font-black shadow-sm ${
+                                          idx === message.agentThoughts!.length - 1 
+                                            ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 animate-pulse' 
+                                            : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                        }`}>
+                                          {idx === message.agentThoughts!.length - 1 ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <span className="text-[12px] font-semibold text-foreground/70">{thought.thought}</span>
+                                          {thought.action && (
+                                            <span className="ml-2 text-[10px] font-bold text-indigo-500/60 uppercase tracking-wider">
+                                              [{thought.action}]
+                                            </span>
+                                          )}
+                                          {thought.observation && (
+                                            <div className="text-[11px] text-emerald-500 mt-1 font-medium flex items-center gap-1.5">
+                                              <CheckCircle2 className="h-2.5 w-2.5" />
+                                              {thought.observation}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
+                                    {/* Skeleton loader for content that's about to arrive */}
+                                    <div className="mt-4 space-y-2.5 opacity-40">
+                                      <div className="h-2 bg-muted/60 rounded-full w-full animate-pulse" />
+                                      <div className="h-2 bg-muted/60 rounded-full w-5/6 animate-pulse" style={{ animationDelay: '150ms' }} />
+                                      <div className="h-2 bg-muted/60 rounded-full w-3/4 animate-pulse" style={{ animationDelay: '300ms' }} />
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Render actual content when available */}
+                                {message.content && (
+                                  <div className={message.type === "user" ? "text-[15px] font-medium text-foreground leading-relaxed antialiased" : "antialiased"}>
+                                    <AgenticResponse content={message.content} isUser={message.type === "user"} />
+                                  </div>
+                                )}
+                                {message.visualizations && message.visualizations.length > 0 && (
+                                    <div className="mt-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                                        {message.visualizations.map((viz: any, idx: number) => (
+                                            <div key={idx} className="p-6 rounded-2xl border border-white/[0.06] bg-[#0f0f1a] shadow-2xl overflow-hidden relative group">
+                                                <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-cyan-400/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                                                <h4 className="text-[13px] uppercase tracking-[0.15em] font-black text-white/80 mb-6 flex items-center gap-2.5">
+                                                  <BarChart3 className="h-4 w-4 text-cyan-400" />
+                                                  {viz.title}
+                                                </h4>
+                                                <div className="h-[380px] w-full">
+                                                    <ResponsiveContainer width="100%" height="100%">
+                                                        {viz.type === 'bar' || viz.type === 'chart' ? (
+                                                            <BarChart data={viz.data} margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                                                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                                                                <XAxis
+                                                                  dataKey="name" fontSize={12} tickMargin={12}
+                                                                  stroke="#94a3b8" tick={{ fill: '#cbd5e1', fontWeight: 600 }}
+                                                                  axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+                                                                />
+                                                                <YAxis
+                                                                  fontSize={11} tickFormatter={(value: number) => `$${(value/1000).toFixed(0)}k`}
+                                                                  stroke="#94a3b8" tick={{ fill: '#cbd5e1', fontWeight: 500 }}
+                                                                  axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+                                                                />
+                                                                <RechartsTooltip
+                                                                  contentStyle={{ background: '#1a1a2e', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '12px', fontSize: '12px', color: '#f1f5f9', padding: '10px 14px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
+                                                                  labelStyle={{ color: '#94a3b8', fontWeight: 700, marginBottom: '4px' }}
+                                                                  itemStyle={{ color: '#e2e8f0' }}
+                                                                  formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
+                                                                  cursor={{ fill: 'rgba(99,102,241,0.06)' }}
+                                                                />
+                                                                <Legend wrapperStyle={{ color: '#cbd5e1', fontSize: '12px', fontWeight: 600, paddingTop: '16px' }} />
+                                                                <Bar dataKey="value" fill="#22d3ee" radius={[6, 6, 0, 0]} name="Actual" />
+                                                                {(viz.data[0] && viz.data[0].target) && <Bar dataKey="target" fill="#34d399" radius={[6, 6, 0, 0]} name="Target" opacity={0.7} />}
+                                                                {(viz.data[0] && viz.data[0].baseline) && <Bar dataKey="baseline" fill="#fbbf24" radius={[6, 6, 0, 0]} name="Baseline" opacity={0.6} />}
+                                                            </BarChart>
+                                                        ) : (
+                                                            <LineChart data={viz.data} margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                                                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                                                                <XAxis
+                                                                  dataKey="name" fontSize={12} tickMargin={12}
+                                                                  stroke="#94a3b8" tick={{ fill: '#cbd5e1', fontWeight: 600 }}
+                                                                  axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+                                                                />
+                                                                <YAxis
+                                                                  fontSize={11} tickFormatter={(value: number) => `$${(value/1000).toFixed(0)}k`}
+                                                                  stroke="#94a3b8" tick={{ fill: '#cbd5e1', fontWeight: 500 }}
+                                                                  axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+                                                                />
+                                                                <RechartsTooltip
+                                                                  contentStyle={{ background: '#1a1a2e', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '12px', fontSize: '12px', color: '#f1f5f9', padding: '10px 14px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
+                                                                  labelStyle={{ color: '#94a3b8', fontWeight: 700, marginBottom: '4px' }}
+                                                                  itemStyle={{ color: '#e2e8f0' }}
+                                                                  formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
+                                                                />
+                                                                <Legend wrapperStyle={{ color: '#cbd5e1', fontSize: '12px', fontWeight: 600, paddingTop: '16px' }} />
+                                                                <Line type="monotone" dataKey="value" stroke="#22d3ee" strokeWidth={3} dot={{ r: 5, fill: '#22d3ee', strokeWidth: 2, stroke: '#0f0f1a' }} activeDot={{ r: 7, fill: '#22d3ee', stroke: '#fff', strokeWidth: 2 }} name="Actual" />
+                                                                {(viz.data[0] && viz.data[0].baseline) && <Line type="monotone" dataKey="baseline" stroke="#f472b6" strokeDasharray="6 4" strokeWidth={2.5} dot={{ r: 4, fill: '#f472b6' }} name="Baseline" />}
+                                                                {(viz.data[0] && viz.data[0].target) && <Line type="monotone" dataKey="target" stroke="#34d399" strokeWidth={2} dot={{ r: 4, fill: '#34d399' }} name="Target" />}
+                                                            </LineChart>
+                                                        )}
+                                                    </ResponsiveContainer>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
 
                                 {message.type === "assistant" && (
                                   <div className="flex items-center gap-5 mt-8 opacity-0 group-hover:opacity-100 transition-all transform translate-y-1 group-hover:translate-y-0">
@@ -827,14 +989,17 @@ export function AIAssistant() {
                                       )}
                                     </button>
                                     <button
-                                      onClick={() => handleSendMessage(message.sourceQuery || message.content, true)}
+                                      onClick={() => {
+                                        const prevUserMsg = messages.slice(0, messages.findIndex(m => m.id === message.id)).reverse().find(m => m.type === 'user');
+                                        if (prevUserMsg) handleSendMessage(prevUserMsg.content, true);
+                                      }}
                                       className="inline-flex items-center gap-2 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors group/btn"
                                     >
                                       <RefreshCw className="h-3 w-3 group-hover/btn:rotate-180 transition-transform duration-500" /> Regenerate
                                     </button>
                                     <button
                                       onClick={() => {
-                                        setActiveVizKey('insititutional_report');
+                                        setReportViewContent(message.content);
                                         setSheetOpen(true);
                                       }}
                                       className="inline-flex items-center gap-2 text-[11px] font-bold text-indigo-600 hover:text-indigo-700 transition-colors px-2 py-0.5 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-950/20"
@@ -907,45 +1072,37 @@ export function AIAssistant() {
                             </div>
                           </div>
                         ))}
-                        {isTyping && (
-                          <div className="w-full py-16 bg-transparent animate-in fade-in slide-in-from-bottom-4 duration-700">
-                             <div className="max-w-3xl mx-auto px-6 flex gap-8">
-                               <div className="flex-shrink-0">
-                                 <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg animate-pulse ring-4 ring-indigo-500/10">
-                                   <Sparkles className="h-4 w-4 text-white" />
-                                 </div>
-                               </div>
-                               <div className="flex-1 space-y-6">
-                                 <div className="flex items-center gap-4">
-                                   <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-indigo-50 border border-indigo-100 shadow-sm">
-                                      <Loader2 className="h-3 w-3 text-indigo-600 animate-spin" />
-                                      <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">
-                                         Orchestrator: Routing to Specialists...
+                        {isTyping && (() => {
+                          // Check if the latest assistant message already has thoughts rendering
+                          const lastMsg = messages[messages.length - 1];
+                          const hasLiveThoughts = lastMsg?.type === 'assistant' && !lastMsg.content && lastMsg.agentThoughts && lastMsg.agentThoughts.length > 0;
+                          if (hasLiveThoughts) return null; // Thoughts are rendering inside the message bubble
+                          return (
+                            <div className="w-full py-10 bg-transparent animate-in fade-in slide-in-from-bottom-4 duration-500">
+                              <div className="max-w-3xl mx-auto px-6 flex gap-8">
+                                <div className="flex-shrink-0">
+                                  <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg ring-4 ring-indigo-500/10">
+                                    <Loader2 className="h-4 w-4 text-white animate-spin" />
+                                  </div>
+                                </div>
+                                <div className="flex-1 space-y-4">
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200/20 dark:border-indigo-500/20 shadow-sm">
+                                      <Loader2 className="h-3 w-3 text-indigo-600 dark:text-indigo-400 animate-spin" />
+                                      <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">
+                                        Initializing Agent Network...
                                       </span>
-                                   </div>
-                                   <div className="flex gap-2">
-                                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-                                      <div className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '200ms' }} />
-                                      <div className="w-1.5 h-1.5 rounded-full bg-pink-400 animate-bounce" style={{ animationDelay: '400ms' }} />
-                                   </div>
-                                 </div>
-                                 <div className="flex flex-wrap gap-2 animate-in fade-in duration-1000">
-                                    {['Gathering Base Snapshot', 'Cross-Agent Validation', 'Monte Carlo Simulation', 'Synthesizing Insight'].map((step, i) => (
-                                      <div key={i} className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-tighter flex items-center gap-1">
-                                        <CheckCircle2 className="h-2.5 w-2.5" />
-                                        {step}
-                                      </div>
-                                    ))}
-                                 </div>
-                                 <div className="space-y-3 max-w-lg">
-                                    <div className="h-2 bg-muted/60 rounded-full w-full animate-pulse shadow-sm" />
-                                    <div className="h-2 bg-muted/60 rounded-full w-5/6 animate-pulse shadow-sm" style={{ animationDelay: '200ms' }} />
-                                    <div className="h-2 bg-muted/60 rounded-full w-3/4 animate-pulse shadow-sm" style={{ animationDelay: '400ms' }} />
-                                 </div>
-                               </div>
-                             </div>
-                          </div>
-                        )}
+                                    </div>
+                                  </div>
+                                  <div className="space-y-2 max-w-xs opacity-30">
+                                    <div className="h-1.5 bg-muted/60 rounded-full w-full animate-pulse" />
+                                    <div className="h-1.5 bg-muted/60 rounded-full w-4/5 animate-pulse" style={{ animationDelay: '200ms' }} />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                       <div ref={messagesEndRef} />
                     </ScrollArea>
@@ -1006,17 +1163,32 @@ export function AIAssistant() {
                             rows={1}
                             disabled={isTyping}
                             />
-                            <Button
-                            size="sm"
-                            onClick={() => {
-                              handleSendMessage(inputValue)
-                              setAttachedFiles([])
-                            }}
-                            disabled={(!inputValue.trim() && attachedFiles.length === 0) || isTyping}
-                            className="h-8 w-8 rounded-xl flex-shrink-0 bg-primary hover:bg-primary/90 shadow-md transition-all active:scale-95"
-                            >
-                            {isTyping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                            </Button>
+                            {isTyping ? (
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  if (abortControllerRef.current) abortControllerRef.current.abort();
+                                  setIsTyping(false);
+                                }}
+                                className="h-8 px-3 rounded-xl flex-shrink-0 bg-red-500 hover:bg-red-600 shadow-md transition-all active:scale-95 text-xs font-bold text-white"
+                              >
+                                <div className="flex items-center gap-1.5">
+                                  <Loader2 className="h-3 w-3 animate-spin" /> Stop
+                                </div>
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  handleSendMessage(inputValue)
+                                  setAttachedFiles([])
+                                }}
+                                disabled={!inputValue.trim() && attachedFiles.length === 0}
+                                className="h-8 w-8 rounded-xl flex-shrink-0 bg-primary hover:bg-primary/90 shadow-md transition-all active:scale-95"
+                              >
+                                <Send className="h-4 w-4" />
+                              </Button>
+                            )}
                         </div>
                         <div className="flex items-center justify-between mt-3 px-1">
                             <span className="text-[10px] text-muted-foreground/40 font-medium tracking-tight">Shift + Enter for new line • Advanced Multi-Agent Orchestrator v4.2</span>
@@ -1313,6 +1485,24 @@ export function AIAssistant() {
                   ))}
                 </div>
               </ScrollArea>
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        {/* Report View Sheet */}
+        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+          <SheetContent side="right" className="w-[90vw] sm:w-[75vw] lg:w-[60vw] xl:w-[50vw] bg-background overflow-y-auto">
+            <SheetHeader className="mb-6 border-b pb-4">
+              <SheetTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-indigo-500" />
+                Institutional Report View
+              </SheetTitle>
+              <SheetDescription>
+                Full-width report view for board-ready presentation
+              </SheetDescription>
+            </SheetHeader>
+            <div className="prose prose-sm dark:prose-invert max-w-none">
+              <AgenticResponse content={reportViewContent} isUser={false} />
             </div>
           </SheetContent>
         </Sheet>

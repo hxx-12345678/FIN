@@ -5,7 +5,30 @@ import { useState, Fragment } from 'react'
 import Markdown, { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
-import rehypeSanitize from 'rehype-sanitize'
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
+
+// Custom sanitize schema: allow our specific artifact classes through
+const customSchema = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    div: [...(defaultSchema.attributes?.div || []), 'className', 'class'],
+    span: [...(defaultSchema.attributes?.span || []), 'className', 'class'],
+    p: [...(defaultSchema.attributes?.p || []), 'className', 'class'],
+    table: [...(defaultSchema.attributes?.table || []), 'className', 'class'],
+    td: [...(defaultSchema.attributes?.td || []), 'className', 'class'],
+    th: [...(defaultSchema.attributes?.th || []), 'className', 'class'],
+    a: [...(defaultSchema.attributes?.a || []), 'className', 'class', 'href', 'target', 'rel'],
+    code: [...(defaultSchema.attributes?.code || []), 'className', 'class'],
+    pre: [...(defaultSchema.attributes?.pre || []), 'className', 'class'],
+    svg: ['viewBox', 'fill', 'stroke', 'className', 'class', 'width', 'height', 'xmlns'],
+    path: ['d', 'fill', 'stroke', 'strokeWidth', 'strokeLinecap', 'strokeLinejoin'],
+  },
+  tagNames: [
+    ...(defaultSchema.tagNames || []),
+    'div', 'span', 'svg', 'path',
+  ],
+}
 
 interface AgenticResponseProps {
   content: string
@@ -204,7 +227,7 @@ export function AgenticResponse({ content, isUser = false }: AgenticResponseProp
   return (
     <Markdown
       remarkPlugins={[remarkGfm]}
-      rehypePlugins={[rehypeRaw, rehypeSanitize]}
+      rehypePlugins={[rehypeRaw, [rehypeSanitize, customSchema]]}
       components={markdownComponents}
     >
       {content}
