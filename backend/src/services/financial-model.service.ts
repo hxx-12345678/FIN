@@ -6,6 +6,7 @@
 
 import prisma from '../config/database';
 import { ValidationError, NotFoundError, ForbiddenError } from '../utils/errors';
+import { isValidUUID } from '../utils/validation';
 import { jobService } from './job.service';
 import { auditService } from './audit.service';
 import { logger } from '../utils/logger';
@@ -120,9 +121,19 @@ export const financialModelService = {
     orgId: string,
     request: CreateModelRequest
   ): Promise<{ model: any; jobId?: string }> => {
-    // Validate required fields
-    if (!request.model_name || typeof request.model_name !== 'string' || request.model_name.trim().length === 0) {
-      throw new ValidationError('model_name is required and must be a non-empty string');
+    // Validate required fields (support both model_name and name)
+    const modelName = request.model_name || (request as any).name;
+    if (!modelName || typeof modelName !== 'string' || modelName.trim().length === 0) {
+      throw new ValidationError('model_name (or name) is required and must be a non-empty string');
+    }
+    request.model_name = modelName; // Canonicalize
+
+    if (!orgId || typeof orgId !== 'string') {
+      throw new ForbiddenError('Organization ID required');
+    }
+
+    if (!isValidUUID(orgId)) {
+      throw new ValidationError('Invalid Organization ID format');
     }
 
     if (!request.industry || typeof request.industry !== 'string') {
@@ -279,39 +290,37 @@ export const financialModelService = {
       },
     });
 
-    // Queue auto-model job to ingest data and generate assumptions
+    // Queue auto-model job to ingest data and generate assumptions (Always queue for scenarios/baseline)
     let jobId: string | undefined;
-    if (request.data_source_type !== 'blank' || request.business_type) {
-      const job = await jobService.createJob({
-        jobType: 'auto_model',
-        orgId,
-        objectId: model.id,
-        createdByUserId: userId,
-        params: {
-          modelId: model.id,
-          triggerType: 'model_creation',
-          dataSourceType: request.data_source_type,
-          // Include AI fields if provided
-          businessType: request.business_type,
-          startingCustomers: request.starting_customers,
-          startingRevenue: request.starting_revenue,
-          startingMrr: request.starting_mrr,
-          startingAov: request.starting_aov,
-          majorCosts: request.major_costs,
-          cashOnHand: request.cash_on_hand,
-          retentionRate: request.retention_rate,
-          acquisitionEfficiency: request.acquisition_efficiency,
-          hiringPlan: request.hiring_plan,
-          // Include manual assumptions if provided
-          assumptions: request.assumptions,
-          // Forward control params
-          useCache: (request as any).useCache,
-          modelType: request.model_type,
-          importBatchId: request.init_metadata?.uploaded_file_id,
-        },
-      });
-      jobId = job.id;
-    }
+    const job = await jobService.createJob({
+      jobType: 'auto_model',
+      orgId,
+      objectId: model.id,
+      createdByUserId: userId,
+      params: {
+        modelId: model.id,
+        triggerType: 'model_creation',
+        dataSourceType: request.data_source_type,
+        // Include AI fields if provided
+        businessType: request.business_type,
+        startingCustomers: request.starting_customers,
+        startingRevenue: request.starting_revenue,
+        startingMrr: request.starting_mrr,
+        startingAov: request.starting_aov,
+        majorCosts: request.major_costs,
+        cashOnHand: request.cash_on_hand,
+        retentionRate: request.retention_rate,
+        acquisitionEfficiency: request.acquisition_efficiency,
+        hiringPlan: request.hiring_plan,
+        // Include manual assumptions if provided
+        assumptions: request.assumptions,
+        // Forward control params
+        useCache: (request as any).useCache,
+        modelType: request.model_type,
+        importBatchId: request.init_metadata?.uploaded_file_id,
+      },
+    });
+    jobId = job.id;
 
     return { model, jobId };
   },

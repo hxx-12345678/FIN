@@ -70,6 +70,13 @@ export const overviewDashboardService = {
           lte: endDate,
         },
       } as any,
+      select: {
+        date: true,
+        amount: true,
+        category: true,
+        description: true,
+        rawPayload: true,
+      },
       orderBy: {
         date: 'desc',
       },
@@ -83,10 +90,17 @@ export const overviewDashboardService = {
           orgId,
           isDuplicate: false,
         } as any,
+        select: {
+          date: true,
+          amount: true,
+          category: true,
+          description: true,
+          rawPayload: true,
+        },
         orderBy: {
           date: 'desc',
         },
-        take: 1000, // Limit to prevent performance issues
+        take: 1000,
       });
     }
 
@@ -94,13 +108,28 @@ export const overviewDashboardService = {
     const monthlyRevenueMap = new Map<string, number>();
     const monthlyExpenseMap = new Map<string, number>();
 
+    // Helper to determine if a category is revenue or expense
+    const revenueKeywords = ['revenue', 'sales', 'income', 'earning', 'subscription', 'fee'];
+    const expenseKeywords = ['cogs', 'payroll', 'marketing', 'ads', 'rent', 'expense', 'hardware', 'software', 'cost', 'utilities', 'insurance', 'tax', 'interest', 'commission', 'bonus', 'salary', 'vendor', 'payment'];
+
     for (const tx of transactions) {
       const month = String(tx.date.getMonth() + 1).padStart(2, '0');
       const period = `${tx.date.getFullYear()}-${month}`;
       const amount = Number(tx.amount);
+      const category = (tx.category || '').toLowerCase();
 
-      if (amount > 0) {
-        monthlyRevenueMap.set(period, (monthlyRevenueMap.get(period) || 0) + amount);
+      // Determine if revenue or expense based on category keywords + sign
+      let isRevenue = amount > 0;
+      
+      // If we have explicit keywords, they take priority for ambiguous positive values
+      if (revenueKeywords.some(k => category.includes(k))) {
+        isRevenue = true;
+      } else if (expenseKeywords.some(k => category.includes(k))) {
+        isRevenue = false;
+      }
+
+      if (isRevenue) {
+        monthlyRevenueMap.set(period, (monthlyRevenueMap.get(period) || 0) + Math.abs(amount));
       } else {
         monthlyExpenseMap.set(period, (monthlyExpenseMap.get(period) || 0) + Math.abs(amount));
       }
@@ -438,8 +467,18 @@ export const overviewDashboardService = {
 
     for (const tx of transactions) {
       const amount = Number(tx.amount);
-      if (amount < 0 && tx.category) {
-        const category = tx.category;
+      const category = tx.category || 'Uncategorized';
+      const categoryLower = category.toLowerCase();
+
+      // Determine if revenue or expense based on category keywords + sign
+      let isTxRevenue = amount > 0;
+      if (revenueKeywords.some(k => categoryLower.includes(k))) {
+        isTxRevenue = true;
+      } else if (expenseKeywords.some(k => categoryLower.includes(k))) {
+        isTxRevenue = false;
+      }
+
+      if (!isTxRevenue) {
         expenseBreakdownMap.set(category, (expenseBreakdownMap.get(category) || 0) + Math.abs(amount));
       }
     }

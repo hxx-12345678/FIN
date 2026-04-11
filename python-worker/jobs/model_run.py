@@ -252,10 +252,19 @@ def generate_summary_json(result: Dict[str, Any], model_json: Dict, params_json:
             'burnRate': float(burn_rate),
             'monthlyBurn': float(burn_rate),
             'runwayMonths': float(runway_months),
+            'runway': float(runway_months),
             'arr': float(result.get('arr', total_revenue)),
             'mrr': float(result.get('mrr', total_revenue / 12)),
             'ltv': float(result.get('ltv', 0)),
             'cac': float(result.get('cac', 0)),
+            'paybackPeriod': float(result.get('paybackPeriod', 0)),
+            'nrr': float(result.get('nrr', result.get('metrics', {}).get('nrr', 0))),
+            'grr': float(result.get('grr', result.get('metrics', {}).get('grr', 0))),
+            'ruleOf40': float(result.get('ruleOf40', result.get('metrics', {}).get('ruleOf40', 0))),
+            'burnMultiple': float(result.get('burnMultiple', result.get('metrics', {}).get('burnMultiple', 0))),
+            'magicNumber': float(result.get('magicNumber', result.get('metrics', {}).get('magicNumber', 0))),
+            'ebitda': float(total_revenue - total_expenses),
+            'ebitdaMargin': float(((total_revenue - total_expenses) / total_revenue) if total_revenue > 0 else 0),
             'generatedAt': datetime.now(timezone.utc).isoformat(),
             'modelVersion': model_json.get('version', 1) if isinstance(model_json, dict) else 1,
             'metadata': {
@@ -274,6 +283,14 @@ def generate_summary_json(result: Dict[str, Any], model_json: Dict, params_json:
             'accretionDilution': result.get('accretionDilution'),
             'valuationSummary': result.get('valuationSummary'),
             'sensitivities': result.get('sensitivities'),
+            'marketImplications': result.get('marketImplications', []),
+            'varianceBridge': result.get('varianceBridge', [
+                {'label': 'Baseline', 'value': 100},
+                {'label': 'Volume', 'value': params_json.get('overrides', {}).get('revenue', {}).get('growth', 0) * 80},
+                {'label': 'Pricing', 'value': params_json.get('overrides', {}).get('revenue', {}).get('pricing', 0) * 15},
+                {'label': 'Churn', 'value': -params_json.get('overrides', {}).get('revenue', {}).get('churn', 0) * 40},
+                {'label': 'Operating', 'value': -params_json.get('overrides', {}).get('costs', {}).get('growth', 0) * 30}
+            ]) if params_json.get('runType') == 'scenario' else [],
         }
         
         return summary
@@ -799,6 +816,7 @@ def handle_model_run(job_id: str, org_id: str, object_id: str, logs: dict):
         # Mark as failed
         if conn and cursor:
             try:
+                conn.rollback() # Clear aborted transaction state
                 error_logs = {**logs, 'error': str(e), 'failed_at': datetime.now(timezone.utc).isoformat()}
                 cursor.execute("""
                     UPDATE model_runs
@@ -1069,7 +1087,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             scenario_row = cursor.fetchone()
             if scenario_row:
                 scenario_id = scenario_row[0]
-                cursor.execute("SELECT driver_id, month, value FROM driver_values WHERE scenario_id = %s", (scenario_id,))
+                cursor.execute('SELECT "driverId", month, value FROM driver_values WHERE "scenarioId" = %s', (scenario_id,))
                 values = cursor.fetchall()
                 # Group values by driver
                 d_values = {}
@@ -1527,37 +1545,50 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             cac = marketing_spend / new_customers
             logger.info(f"Derived CAC from drivers: {cac}")
         
-        # Industry Standard: LTV = (ARPU * Gross Margin %) / Churn Rate
+        # Industry Standard: LTV = (Monthly ARPU * Gross Margin %) / Monthly Churn Rate
         # ARPU = Average Revenue Per User
-        # Using annual ARPU for LTV
-        annual_arpu = arpu * 12
-        gross_margin_pct = (annual_revenue - annual_cogs) / annual_revenue if annual_revenue > 0 else 0.8
+        monthly_gp_per_customer = arpu * gross_margin
         
-        ltv = (annual_arpu * gross_margin_pct) / churn_rate if churn_rate > 0 else (annual_arpu * 5)
+        # Monthly churn rate (ensure it's not zero to avoid division by zero)
+        ltv_unbounded = (monthly_gp_per_customer / churn_rate) if churn_rate > 0.001 else (monthly_gp_per_customer * 60)
+        ltv = min(ltv_unbounded, monthly_gp_per_customer * 60) # Cap at 5 years
         
         # Override with assumptions if provided and non-zero
         assumed_ltv = float(final_assumptions.get('ltv', 0))
         if assumed_ltv > 0: ltv = assumed_ltv
         
         # Industry Standard: LTV:CAC Ratio = LTV / CAC
-        ltv_cac_ratio = ltv / cac if cac > 0 else 0
+        ltv_cac_ratio = ltv / cac if cac > 1 else (ltv / 1.0)
         
         # Industry Standard: Payback Period = CAC / (Monthly Gross Profit per customer)
         # Monthly Gross Profit per customer = (ARPU * Gross Margin %)
-        monthly_gp_per_customer = arpu * gross_margin_pct
+        monthly_gp_per_customer = arpu * gross_margin
         payback_period = cac / monthly_gp_per_customer if monthly_gp_per_customer > 0 else 0
         
         confidence_pct = float(model_profile['confidence'])
         
-        # NEW: SaaS Magic Number calculation
-        # Magic Number = (Current Quater Revenue - Previous Quarter Revenue) * 4 / (Quarterly S&M Spend)
-        # Simplified to monthly for now: (Current Month Rev - Previous Month Rev) * 12 / (Current Month S&M)
+        # Magic Number = (Current Quarter Revenue - Previous Quarter Revenue) * 4 / (Quarterly S&M Spend)
+        # Standardized to monthly for precision: (Δ Revenue * 12) / S&M Spend
         magic_number = 0
-        if marketing_spend > 0:
-            prev_month_key = list(monthly_data.keys())[-2] if len(monthly_data) > 1 else None
-            if prev_month_key:
-                rev_growth_abs = latest_month_data['revenue'] - monthly_data[prev_month_key]['revenue']
-                magic_number = (rev_growth_abs * 12) / marketing_spend
+        
+        # Fallback for marketing spend: 20% of OpEx if not explicitly tagged/derived
+        effective_marketing_spend = marketing_spend if marketing_spend > 0 else (projected_opex * 0.20)
+        
+        if effective_marketing_spend > 0:
+            # Use 3-month rolling average for revenue growth to reduce noise
+            month_keys = list(monthly_data.keys())
+            if len(month_keys) >= 4:
+                # Last quarter average revenue vs previous quarter
+                curr_q_rev = sum(monthly_data[m]['revenue'] for m in month_keys[-3:]) / 3
+                prev_q_rev = sum(monthly_data[m]['revenue'] for m in month_keys[-6:-3]) / 3
+                rev_growth_abs = curr_q_rev - prev_q_rev
+                magic_number = (rev_growth_abs * 12) / effective_marketing_spend
+            else:
+                # Fallback to single month if not enough history
+                prev_month_key = month_keys[-2] if len(month_keys) > 1 else None
+                if prev_month_key:
+                    rev_growth_abs = latest_month_data['revenue'] - monthly_data[prev_month_key]['revenue']
+                    magic_number = (rev_growth_abs * 12) / effective_marketing_spend
         
         metrics = calculate_accuracy_metrics(
             baseline_monthly_revenue,
@@ -1594,9 +1625,19 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
         
         # Industry Standard: Burn Multiple = Net Burn / Net New ARR
         # Lower is better (<2x good, >4x concerning)
-        net_new_arr = max(0, arr - (starting_mrr * 12)) if starting_mrr > 0 else 0
+        # net_new_arr = Annualized Revenue Growth
+        net_new_arr = max(0, arr - (starting_revenue * 12)) if starting_revenue > 0 else max(0, arr - (avg_monthly_revenue * 12))
+        
+        # Safely calculate burn multiple with a floor on net_new_arr to avoid explosion
+        # If growth is zero/negative, burn multiple is functionally infinite (represented as 0 or 99 here)
         net_burn = max(0, monthly_burn * 12)  # Annualized burn
-        burn_multiple = net_burn / net_new_arr if net_new_arr > 0 else 0
+        if net_new_arr > 1000: # Significant growth required for meaningful multiple
+            burn_multiple = net_burn / net_new_arr
+        elif net_burn > 0:
+            burn_multiple = 99.0 # High burn with low growth
+        else:
+            burn_multiple = 0.0
+            
         metrics['burnMultiple'] = round(float(burn_multiple), 2)
         
         # Log data sources for transparency
@@ -2063,14 +2104,65 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             from jobs.forecasting_engine_v2 import SensitivityRanker
             
             def sensitivity_proxy(test_assumptions):
-                # Minimal lightweight rerun for sensitivity
-                # (Normally we'd optimize this to avoid full 3-statement loop)
-                return {'revenue': annual_revenue * (1 + test_assumptions.get('revenueGrowth', 0) - revenue_growth)}
+                # Advanced proxy accounting for efficiency (Burn) and Growth
+                # Match keys flexibly (exact or nested)
+                def get_param(name):
+                    # Check for exact key
+                    if name in test_assumptions: return test_assumptions[name]
+                    # Check for nested key (e.g., "revenue.revenueGrowth")
+                    for k, v in test_assumptions.items():
+                        if k.endswith('.' + name): return v
+                    return final_assumptions.get(name, 0)
+
+                rev_impact = 1.0
+                growth_val = get_param('revenueGrowth') or get_param('growth') or 0
+                base_growth = final_assumptions.get('revenueGrowth') or final_assumptions.get('growth', 0)
+                rev_impact += (growth_val - base_growth)
+                
+                curr_arr = get_param('arr') or get_param('mrr') or 0
+                base_arr = final_assumptions.get('arr') or final_assumptions.get('mrr', 1)
+                if curr_arr > 0: rev_impact *= (curr_arr / max(1, base_arr))
+                
+                cost_impact = 1.0
+                exp_growth = get_param('expenseGrowth') or 0
+                base_exp_growth = final_assumptions.get('expenseGrowth', 0)
+                cost_impact += (exp_growth - base_exp_growth)
+                
+                curr_burn = get_param('burnRate') or 0
+                base_burn = final_assumptions.get('burnRate', 1)
+                if curr_burn > 0: cost_impact *= (curr_burn / max(1, base_burn))
+
+                # Cash impact proxy (Stock variables)
+                cash_bonus = 0
+                if 'initialCash' in test_assumptions: cash_bonus = test_assumptions['initialCash'] - final_assumptions.get('initialCash', 0)
+                
+                target_revenue = annual_revenue * rev_impact
+                target_expenses = annual_expenses * cost_impact
+                
+                # Equity value proxy (Runrate Earnings * Multiplier + Cash)
+                valuation_impact = (target_revenue * 0.2) * 10 + cash_bonus
+                return {'revenue': target_revenue, 'netIncome': target_revenue - target_expenses, 'valuation': valuation_impact}
             
             ranker = SensitivityRanker()
-            relevant_params = {k: v for k, v in final_assumptions.items() if isinstance(v, (int, float))}
-            # Take top 5 for performance
-            top_params = {k: relevant_params[k] for k in list(relevant_params.keys())[:5]}
+            
+            # Smart deduplication: prioritize specific keys over nested ones if names overlap
+            raw_params = {k: v for k, v in final_assumptions.items() if isinstance(v, (int, float))}
+            analysis_params = {}
+            seen_base_keys = set()
+            
+            # Sort keys to process "clean" names (without dots) first for better labeling
+            sorted_keys = sorted(raw_params.keys(), key=lambda x: ('.' in x, len(x)))
+            for k in sorted_keys:
+                base_k = k.split('.')[-1]
+                if base_k not in seen_base_keys:
+                    analysis_params[k] = float(raw_params[k])
+                    seen_base_keys.add(base_k)
+
+            if 'revenueGrowth' not in seen_base_keys: analysis_params['revenueGrowth'] = float(revenue_growth)
+            if 'expenseGrowth' not in seen_base_keys: analysis_params['expenseGrowth'] = float(expense_growth)
+            if 'churnRate' not in seen_base_keys: analysis_params['churnRate'] = float(churn_rate)
+            
+            top_params = {k: analysis_params[k] for k in list(analysis_params.keys())[:10]}
             
             sensitivity_results = ranker.rank_sensitivities(top_params, sensitivity_proxy)
             result['sensitivities'] = sensitivity_results.get('parameters', [])
@@ -2085,8 +2177,10 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             a_eps = float(result.get('accretionDilution', {}).get('acquirerEPS', annual_net_income / a_shares if a_shares > 0 else 0))
 
             # methodology 1: DCF
+            dcf_upside = 0
             if 'valuation' in result:
                 dcf_price = result['valuation'].get('impliedSharePrice', 0)
+                dcf_upside = (dcf_price / a_price - 1) if a_price > 0 else 0
                 val_summary.append({
                     'name': 'Intrinsics (DCF)',
                     'low': round(float(dcf_price * 0.92), 2),
@@ -2095,7 +2189,9 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                 })
 
             # methodology 2: LBO
+            lbo_irr = 0
             if 'lbo' in result:
+                lbo_irr = result['lbo'].get('irr', 0)
                 # Use exit equity value per share
                 lbo_price = result['lbo'].get('exitEquity', 0) / a_shares if a_shares > 0 else 0
                 val_summary.append({
@@ -2123,8 +2219,26 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
 
             result['valuationSummary'] = val_summary
             result['currentPrice'] = a_price
+
+            # --- MARKET IMPLICATIONS ENGINE ---
+            implications = []
+            if dcf_upside > 0.15:
+                implications.append(f"Significant intrinsic upside ({dcf_upside*100:.1f}%) detected relative to current price. Recommend accumulation.")
+            elif dcf_upside < -0.15:
+                implications.append(f"Model suggests the asset is overvalued ({abs(dcf_upside)*100:.1f}%) on a DCF basis. High scrutiny required.")
+            
+            if lbo_irr > 0.20:
+                implications.append(f"Institutional LBO returns are attractive ({lbo_irr*100:.1f}% IRR). Strong candidate for private equity strategy.")
+            
+            if annual_net_income < 0 and runway_months < 12:
+                implications.append("Critical burn noted with sub-12 month runway. Strategic capital raise or pivot suggested.")
+            
+            if not implications:
+                implications.append("Market valuation appears aligned with fundamental performance. Maintain hold position.")
+            
+            result['marketImplications'] = implications
         except Exception as val_sum_err:
-            logger.warning(f"Valuation summary failed: {val_sum_err}")
+            logger.warning(f"Valuation summary/implications failed: {val_sum_err}")
 
         # ======================================================================
         # STEP 7: Write results to metric_cubes table

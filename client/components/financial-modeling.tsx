@@ -14,39 +14,45 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { VirtualizedTable } from "@/components/ui/virtualized-table"
 import { useChartPagination } from "@/hooks/use-chart-pagination"
 import { Download, Upload, Zap, TrendingUp, Calculator, Brain, Save, SearchIcon, Loader2, AlertCircle, Play, FileDown, FileText, HelpCircle, Pencil, Check, X, Sparkles, Plus, LineChart as LineChartIcon, CheckCircle2, ShieldCheck, Grid, ShieldAlert, Database, Activity, Target, LayoutDashboard, FileDiff, History as HistoryIcon, ArrowUpRight, ArrowDownRight, Scale, Flame, Clock, Landmark, Users, BarChart3, DollarSign, Combine } from "lucide-react"
-import { CreateModelForm } from "./create-model-form"
+import dynamic from "next/dynamic"
+
+// Dynamic imports for sub-components to optimize component chunking
+const CreateModelForm = dynamic(() => import("./create-model-form").then(mod => mod.CreateModelForm), {
+  loading: () => <div className="h-40 w-full flex items-center justify-center"><Loader2 className="animate-spin text-muted-foreground" /></div>
+})
+const ProvenanceDrawer = dynamic(() => import("./provenance-drawer").then(mod => mod.ProvenanceDrawer))
+const ProvenanceSearch = dynamic(() => import("./provenance-search").then(mod => mod.ProvenanceSearch))
+const ModelVersionRollback = dynamic(() => import("./model-version-rollback").then(mod => mod.ModelVersionRollback))
+const CSVImportWizard = dynamic(() => import("./csv-import-wizard").then(mod => mod.CSVImportWizard))
+const ExcelImportWizard = dynamic(() => import("./excel-import-wizard").then(mod => mod.ExcelImportWizard))
+const OneClickExportButton = dynamic(() => import("./one-click-export-button").then(mod => mod.OneClickExportButton))
+const DriverManagement = dynamic(() => import("./drivers/driver-management").then(mod => mod.DriverManagement))
+const ThreeStatementViewer = dynamic(() => import("./statements/three-statement-viewer").then(mod => mod.ThreeStatementViewer))
+const TraceViewer = dynamic(() => import("./hyperblock/trace-viewer").then(mod => mod.TraceViewer))
+const IndustrialForecasting = dynamic(() => import("./forecasting/industrial-forecasting").then(mod => mod.IndustrialForecasting))
+const RiskAnalysisHub = dynamic(() => import("./risk/risk-analysis-hub").then(mod => mod.RiskAnalysisHub))
+const DependencyGraph = dynamic(() => import("./hyperblock/dependency-graph").then(mod => mod.DependencyGraph))
+const MultiDimensionalViewer = dynamic(() => import("./hyperblock/multi-dimensional-viewer").then(mod => mod.MultiDimensionalViewer))
+const ModelReasoningHub = dynamic(() => import("./reasoning/model-reasoning-hub").then(mod => mod.ModelReasoningHub))
+const ManualInputForm = dynamic(() => import("./manual-input-form").then(mod => mod.ManualInputForm))
+const ScenarioManagement = dynamic(() => import("./scenarios/scenario-management").then(mod => mod.ScenarioManagement))
+const AIAssistTab = dynamic(() => import("./ai-assist/ai-assist-tab").then(mod => mod.AIAssistTab))
+const BudgetWorkflow = dynamic(() => import("./approvals/budget-workflow").then(mod => mod.BudgetWorkflow))
+const FootballFieldChart = dynamic(() => import("./valuation/football-field").then(mod => mod.FootballFieldChart))
+const ConsolidationPage = dynamic(() => import("./consolidation-page").then(mod => mod.ConsolidationPage))
+const HeadcountPlanningPage = dynamic(() => import("./headcount-planning-page").then(mod => mod.HeadcountPlanningPage))
+
 import { toast } from "sonner"
-import { ProvenanceDrawer } from "./provenance-drawer"
-import { ProvenanceSearch } from "./provenance-search"
-import { ModelVersionRollback } from "./model-version-rollback"
-import { CSVImportWizard } from "./csv-import-wizard"
-import { ExcelImportWizard } from "./excel-import-wizard"
 import { AssumptionTooltip } from "./assumption-tooltip"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { useSearchParams, useRouter } from "next/navigation"
 import { generateFinancialModelingTemplate, downloadCSV } from "@/utils/csv-template-generator"
-import { OneClickExportButton } from "./one-click-export-button"
 import { FinancialTermTooltip } from "./financial-term-tooltip"
-import { DriverManagement } from "./drivers/driver-management"
-import { ThreeStatementViewer } from "./statements/three-statement-viewer"
-import { TraceViewer } from "./hyperblock/trace-viewer"
-import { IndustrialForecasting } from "./forecasting/industrial-forecasting"
-import { RiskAnalysisHub } from "./risk/risk-analysis-hub"
-import { DependencyGraph } from "./hyperblock/dependency-graph"
-import { MultiDimensionalViewer } from "./hyperblock/multi-dimensional-viewer"
-import { ModelReasoningHub } from "./reasoning/model-reasoning-hub"
-import { ManualInputForm } from "./manual-input-form"
-import { ScenarioManagement } from "./scenarios/scenario-management"
-import { AIAssistTab } from "./ai-assist/ai-assist-tab"
 import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { useModel } from "@/lib/model-context"
 import { useOrg } from "@/lib/org-context"
-import { BudgetWorkflow } from "./approvals/budget-workflow"
-import { FootballFieldChart } from "./valuation/football-field"
-import { ConsolidationPage } from "./consolidation-page"
-import { HeadcountPlanningPage } from "./headcount-planning-page"
 
 interface FinancialModel {
   id: string
@@ -156,7 +162,7 @@ export function FinancialModeling() {
 
   // Calculate data completeness score
   const dataCompleteness = useMemo(() => {
-    if (!currentRun?.summaryJson) return 85;
+    if (!currentRun?.summaryJson) return 0;
     const summary = typeof currentRun.summaryJson === 'string'
       ? JSON.parse(currentRun.summaryJson)
       : currentRun.summaryJson;
@@ -166,7 +172,7 @@ export function FinancialModeling() {
     const hasCash = !!(summary.cashBalance || summary.cash || (summary.kpis && (summary.kpis.cashBalance || summary.kpis.cash)));
     const hasAudit = !!(summary.metadata && summary.metadata.dataIngestedAt);
 
-    return ((hasRevenue ? 25 : 0) + (hasExpenses ? 25 : 0) + (hasCash ? 25 : 0) + (hasAudit ? 25 : 0)) || 85;
+    return ((hasRevenue ? 25 : 0) + (hasExpenses ? 25 : 0) + (hasCash ? 25 : 0) + (hasAudit ? 25 : 0)) || 0;
   }, [currentRun]);
 
   useEffect(() => {
@@ -215,25 +221,8 @@ export function FinancialModeling() {
       if (result.ok || result.hasRealData !== undefined) {
         setDataStatus(result)
       } else {
-        // Use mock data if no real data status
-        setDataStatus({
-          hasRealData: true,
-          stats: {
-            uploadsCount: 3,
-            totalTransactions: 1250,
-            dataQuality: 85,
-            lastSync: new Date().toISOString(),
-          },
-          sources: {
-            connectors: [
-              { name: "Stripe", type: "payment", status: "connected" },
-              { name: "QuickBooks", type: "accounting", status: "connected" },
-              { name: "HubSpot", type: "crm", status: "connected" }
-            ]
-          }
-        })
+        setDataStatus(null)
       }
-      setDataStatus(result)
     } catch (error) {
       console.error("Error fetching data status:", error)
       setDataStatus(null)
@@ -495,12 +484,13 @@ export function FinancialModeling() {
     }
   }
 
-  const handleRunModel = async () => {
-    if (!selectedModel || !orgId) return
+  const handleRunModel = async (modelId?: string) => {
+    const targetModelId = modelId || selectedModel
+    if (!targetModelId || !orgId) return
 
     try {
       setRunningModel(true)
-      const res = await fetch(`${API_BASE_URL}/models/${selectedModel}/run`, {
+      const res = await fetch(`${API_BASE_URL}/models/${targetModelId}/run`, {
         method: "POST",
         headers: getAuthHeaders(),
         credentials: "include",
@@ -520,7 +510,7 @@ export function FinancialModeling() {
       const data = await res.json()
       if (data.ok) {
         toast.info("Model run started. Processing...")
-        await pollModelRunStatus(orgId, selectedModel, data.jobId, data.modelRun?.id)
+        await pollModelRunStatus(orgId, targetModelId, data.jobId, data.modelRun?.id)
       } else {
         toast.error(data.message || "Failed to start model run")
       }
@@ -845,7 +835,7 @@ export function FinancialModeling() {
       toast.error("Please select a model first")
       return
     }
-    toast.info("AI is synthesizing your executive narrative report...")
+    toast.info("Synthesizing your executive narrative report...")
     try {
       const res = await fetch(`${API_BASE_URL}/compute/ai-pipeline`, {
         method: "POST",
@@ -1033,7 +1023,7 @@ export function FinancialModeling() {
             </div>
             <div className="flex flex-col justify-center">
               <Button
-                onClick={handleRunModel}
+                onClick={() => handleRunModel()}
                 className="bg-primary hover:bg-primary/90 text-white font-bold h-12 shadow-lg shadow-primary/20"
                 disabled={runningModel || !selectedModel}
               >
@@ -1093,7 +1083,7 @@ export function FinancialModeling() {
                 <Brain className="h-7 w-7" />
               </div>
               <div>
-                <h3 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-pink-600">AI Precision Build</h3>
+                <h3 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-pink-600">Precision Build</h3>
                 <p className="text-sm text-muted-foreground font-medium">
                   {dataStatus?.intelligenceGating?.dataDrivenAI
                     ? "Auto-generate a 3-statement model from your verified data"
@@ -1152,7 +1142,7 @@ export function FinancialModeling() {
             <Users className="h-3.5 w-3.5" /> Headcount
           </TabsTrigger>
           <TabsTrigger value="ai-assist" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-1.5 font-black text-purple-600">
-            <Sparkles className="h-3.5 w-3.5" /> AI Assist
+            <Sparkles className="h-3.5 w-3.5" /> Modeling Assist
           </TabsTrigger>
           <TabsTrigger value="forecasting" className="data-[state=active]:bg-white data-[state=active]:shadow-sm flex items-center gap-2 font-black text-blue-600">
             <BarChart3 className="h-3.5 w-3.5" /> Forecasting
@@ -1297,21 +1287,42 @@ export function FinancialModeling() {
                       }
                     </p>
                   </div>
-                  {(currentRun?.summaryJson as any)?.sensitivities && (
+                  {(currentRun?.summaryJson as any)?.sensitivities && (currentRun?.summaryJson as any)?.sensitivities.length > 0 ? (
                     <div className="space-y-4">
                       <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
                         <Target className="h-3 w-3" /> Top Sensitivity Drivers
                       </h4>
                       <div className="space-y-2">
-                        {(currentRun?.summaryJson as any)?.sensitivities?.slice(0, 3).map((s: any, i: number) => (
-                          <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-100 italic">
-                            <span className="text-[10px] font-bold text-slate-700 capitalize">{s.parameter.replace(/([A-Z])/g, ' $1').trim()}</span>
-                            <Badge className={s.impact > 0.05 ? "bg-rose-50 text-rose-700 border-rose-100" : "bg-blue-50 text-blue-700 border-blue-100"}>
-                              {(s.impact * 100).toFixed(1)}% Sensitivity
-                            </Badge>
+                        {(currentRun?.summaryJson as any)?.sensitivities?.slice(0, 5).map((s: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl hover:border-blue-200 transition-all shadow-sm">
+                            <div className="flex items-center gap-3">
+                              <div className={`h-8 w-8 rounded-lg flex items-center justify-center font-bold text-[10px] ${s.direction === 'positive' ? 'bg-emerald-50 text-emerald-600' : s.direction === 'negative' ? 'bg-rose-50 text-rose-600' : 'bg-slate-50 text-slate-400'}`}>
+                                #{s.rank || i+1}
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{s.parameter.split('.').pop()?.replace(/([A-Z])/g, ' $1')}</p>
+                                <p className="text-[11px] font-bold text-slate-700">{s.parameter}</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className={`text-[11px] font-black ${s.direction === 'positive' ? 'text-emerald-600' : s.direction === 'negative' ? 'text-rose-600' : 'text-slate-400'}`}>
+                                {s.impact_pct > 0 ? '+' : ''}{ (s.impact_pct || (s.impact * 100) || 0).toFixed(1) }% IMPACT
+                              </p>
+                              <div className="w-16 h-1 bg-slate-100 rounded-full mt-1 overflow-hidden ml-auto">
+                                <div className={`h-full ${s.direction === 'positive' ? 'bg-emerald-500' : 'bg-rose-500'}`} style={{ width: `${Math.min(100, Math.abs(s.elasticity || s.impact) * 20)}%` }} />
+                              </div>
+                            </div>
                           </div>
                         ))}
                       </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-100 rounded-2xl bg-slate-50/50">
+                        <Activity className="h-8 w-8 text-slate-300 mb-3" />
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No Sensitivity Data</p>
+                        <p className="text-[10px] text-slate-400 mt-2 max-w-[180px] text-center leading-relaxed font-medium">
+                            Recompute the engine to identify top value drivers.
+                        </p>
                     </div>
                   )}
                 </div>
@@ -1537,14 +1548,15 @@ export function FinancialModeling() {
           {(currentRun?.summaryJson as any)?.arr > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
               {[
-                { label: 'ARR', value: formatCurrency((currentRun?.summaryJson as any)?.arr || 0), icon: TrendingUp, color: 'blue' },
-                { label: 'CAC', value: formatCurrency((currentRun?.summaryJson as any)?.cac || 0), icon: Users, color: 'purple' },
-                { label: 'LTV', value: formatCurrency((currentRun?.summaryJson as any)?.ltv || 0), icon: Target, color: 'emerald' },
-                { label: 'Payback', value: ((currentRun?.summaryJson as any)?.paybackPeriod || 0).toFixed(1) + ' mo', icon: Clock, color: 'indigo' },
-                { label: 'Rule of 40', value: ((currentRun?.summaryJson as any)?.ruleOf40 || 0).toFixed(1) + '%', icon: Zap, color: 'amber' },
-                { label: 'Burn Rate', value: formatCurrency((currentRun?.summaryJson as any)?.burnRate || 0) + '/mo', icon: Flame, color: 'rose' },
-                { label: 'Runway', value: ((currentRun?.summaryJson as any)?.runway || 0).toFixed(0) + ' mo', icon: Clock, color: 'slate' },
-                { label: 'Net Retention', value: ((currentRun?.summaryJson as any)?.nrr || 0).toFixed(1) + '%', icon: TrendingUp, color: 'teal' },
+                { label: 'ARR', value: formatCurrency((currentRun?.summaryJson as any)?.arr || ((currentRun?.summaryJson as any)?.mrr * 12) || 0), icon: TrendingUp, color: 'blue' },
+                { label: 'CAC', value: formatCurrency((currentRun?.summaryJson as any)?.cac || (currentRun?.summaryJson as any)?.kpis?.cac || 0), icon: Users, color: 'purple' },
+                { label: 'LTV', value: formatCurrency((currentRun?.summaryJson as any)?.ltv || (currentRun?.summaryJson as any)?.kpis?.ltv || 0), icon: Target, color: 'emerald' },
+                { label: 'Payback', value: ((currentRun?.summaryJson as any)?.paybackPeriod || (currentRun?.summaryJson as any)?.metrics?.paybackPeriod || (currentRun?.summaryJson as any)?.kpis?.paybackPeriod || 0).toFixed(1) + ' mo', icon: Clock, color: 'indigo' },
+                { label: 'Magic Number', value: ((currentRun?.summaryJson as any)?.magicNumber || (currentRun?.summaryJson as any)?.metrics?.magicNumber || (currentRun?.summaryJson as any)?.kpis?.magicNumber || 0).toFixed(2), icon: Zap, color: 'amber' },
+                { label: 'Burn Rate', value: formatCurrency((currentRun?.summaryJson as any)?.burnRate || (currentRun?.summaryJson as any)?.monthlyBurn || 0) + '/mo', icon: Flame, color: 'orange' },
+                { label: 'Burn Multiple', value: ((currentRun?.summaryJson as any)?.burnMultiple || (currentRun?.summaryJson as any)?.metrics?.burnMultiple || (currentRun?.summaryJson as any)?.kpis?.burnMultiple || 0).toFixed(1) + 'x', icon: Flame, color: 'rose' },
+                { label: 'Runway', value: ((currentRun?.summaryJson as any)?.runway || (currentRun?.summaryJson as any)?.runwayMonths || (currentRun?.summaryJson as any)?.kpis?.runway || 0).toFixed(0) + ' mo', icon: Clock, color: 'slate' },
+                { label: 'Net Retention', value: ((currentRun?.summaryJson as any)?.nrr || (currentRun?.summaryJson as any)?.metrics?.nrr || (currentRun?.summaryJson as any)?.kpis?.nrr || 0).toFixed(1) + '%', icon: TrendingUp, color: 'teal' },
               ].map((kpi, i) => {
                 const Icon = kpi.icon;
                 return (
@@ -1630,7 +1642,7 @@ export function FinancialModeling() {
                        </div>
                        <div className="flex justify-between text-xs">
                           <span className="text-slate-500">Year 1 Phase-in</span>
-                          <span className="font-bold text-blue-600">{(currentRun?.summaryJson as any)?.accretionDilution?.synergyPhaseIn || 70}%</span>
+                          <span className="font-bold text-blue-600">{(currentRun?.summaryJson as any)?.accretionDilution?.synergyPhaseIn || 0}%</span>
                        </div>
                        <div className="flex justify-between text-xs">
                           <span className="text-slate-500">Post-Tax Benefit (Y1)</span>
@@ -1643,11 +1655,11 @@ export function FinancialModeling() {
                     <div className="p-4 bg-slate-50 border rounded-xl space-y-2">
                        <div className="flex justify-between text-xs">
                           <span className="text-slate-500">Identifiable Intangibles</span>
-                          <span className="font-bold">{(currentRun?.summaryJson as any)?.accretionDilution?.assetWriteUpPct || 20}%</span>
+                          <span className="font-bold">{(currentRun?.summaryJson as any)?.accretionDilution?.assetWriteUpPct || 0}%</span>
                        </div>
                        <div className="flex justify-between text-xs">
                           <span className="text-slate-500">Amortization Period</span>
-                          <span className="font-bold text-blue-600">{(currentRun?.summaryJson as any)?.accretionDilution?.amortizationPeriod || 10} Years</span>
+                          <span className="font-bold text-blue-600">{(currentRun?.summaryJson as any)?.accretionDilution?.amortizationPeriod || 0} Years</span>
                        </div>
                        <div className="flex justify-between text-xs">
                           <span className="text-slate-500">Annual Non-Cash Exp.</span>
@@ -1676,8 +1688,8 @@ export function FinancialModeling() {
                   {[
                     {
                       label: 'NRR',
-                      value: ((currentRun?.summaryJson as any)?.nrr || (currentRun?.summaryJson as any)?.metrics?.nrr || 0).toFixed(1) + '%',
-                      status: ((currentRun?.summaryJson as any)?.nrr || 0) >= 100 ? 'text-emerald-600' : 'text-amber-600',
+                      value: ((currentRun?.summaryJson as any)?.nrr || (currentRun?.summaryJson as any)?.metrics?.nrr || (currentRun?.summaryJson as any)?.kpis?.nrr || 0).toFixed(1) + '%',
+                      status: ((currentRun?.summaryJson as any)?.nrr || (currentRun?.summaryJson as any)?.kpis?.nrr || 0) >= 100 ? 'text-emerald-600' : 'text-amber-600',
                       bench: '≥100% good'
                     },
                     {
@@ -1694,20 +1706,20 @@ export function FinancialModeling() {
                     },
                     {
                       label: 'Burn Multiple',
-                      value: ((currentRun?.summaryJson as any)?.burnMultiple || (currentRun?.summaryJson as any)?.metrics?.burnMultiple || 0).toFixed(1) + 'x',
-                      status: ((currentRun?.summaryJson as any)?.burnMultiple || 0) <= 2 ? 'text-emerald-600' : 'text-red-600',
+                      value: ((currentRun?.summaryJson as any)?.burnMultiple || (currentRun?.summaryJson as any)?.metrics?.burnMultiple || (currentRun?.summaryJson as any)?.kpis?.burnMultiple || 0).toFixed(1) + 'x',
+                      status: ((currentRun?.summaryJson as any)?.burnMultiple || (currentRun?.summaryJson as any)?.kpis?.burnMultiple || 0) <= 2 ? 'text-emerald-600' : 'text-red-600',
                       bench: '<2x good'
                     },
                     {
                       label: 'Magic Number',
-                      value: ((currentRun?.summaryJson as any)?.magicNumber || (currentRun?.summaryJson as any)?.metrics?.magicNumber || 0).toFixed(2),
-                      status: ((currentRun?.summaryJson as any)?.magicNumber || 0) >= 0.75 ? 'text-emerald-600' : 'text-amber-600',
+                      value: ((currentRun?.summaryJson as any)?.magicNumber || (currentRun?.summaryJson as any)?.metrics?.magicNumber || (currentRun?.summaryJson as any)?.kpis?.magicNumber || 0).toFixed(2),
+                      status: ((currentRun?.summaryJson as any)?.magicNumber || (currentRun?.summaryJson as any)?.kpis?.magicNumber || 0) >= 0.75 ? 'text-emerald-600' : 'text-amber-600',
                       bench: '≥0.75 good'
                     },
                     {
                       label: 'LTV:CAC',
-                      value: ((currentRun?.summaryJson as any)?.ltvCacRatio || (currentRun?.summaryJson as any)?.metrics?.ltvCac || 0).toFixed(1) + 'x',
-                      status: ((currentRun?.summaryJson as any)?.ltvCacRatio || 0) >= 3 ? 'text-emerald-600' : 'text-amber-600',
+                      value: ((currentRun?.summaryJson as any)?.ltvCacRatio || (currentRun?.summaryJson as any)?.metrics?.ltvCacRatio || (currentRun?.summaryJson as any)?.kpis?.ltvCac || (currentRun?.summaryJson as any)?.kpis?.ltvCacRatio || 0).toFixed(1) + 'x',
+                      status: ((currentRun?.summaryJson as any)?.ltvCacRatio || (currentRun?.summaryJson as any)?.kpis?.ltvCac || 0) >= 3 ? 'text-emerald-600' : 'text-amber-600',
                       bench: '≥3x good'
                     },
                   ].map((metric, i) => (
@@ -1794,41 +1806,7 @@ export function FinancialModeling() {
             </Card>
           </div>
 
-          <div className="flex justify-between items-center mt-4 mb-6">
-            <h3 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-3">
-              <ShieldCheck className="h-6 w-6 text-emerald-500" />
-              Institutional Planning Governance
-            </h3>
-            <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 font-black text-[10px] uppercase tracking-widest">
-              <Activity className="h-3 w-3 animate-pulse" />
-              SOC-2 CC7.1 COMPLIANT
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            {[
-              { label: 'Audit Readiness', val: dataStatus?.auditReadiness?.isEnterpriseReady ? 98 : 65, color: 'emerald' },
-              { label: 'Data Freshness', val: dataStatus?.sources?.connectors?.length > 0 ? 100 : 42, color: 'blue' },
-              { label: 'Calculative Integrity', val: currentRun?.status === 'done' ? 100 : 80, color: 'indigo' },
-              { label: 'Policy Adherence', val: (dataStatus?.auditReadiness?.isEnterpriseReady && currentModel?.version && currentModel.version > 1) ? 94 : 76, color: 'amber' }
-            ].map((stat, i) => (
-              <Card key={i} className="p-4 bg-white border-2 border-slate-50 shadow-sm border-l-4" style={{ borderLeftColor: stat.color === 'emerald' ? '#10b981' : stat.color === 'blue' ? '#3b82f6' : stat.color === 'indigo' ? '#6366f1' : '#f59e0b' }}>
-                <div className="flex justify-between items-end mb-1">
-                  <span className="text-[10px] uppercase font-black text-slate-400">{stat.label}</span>
-                  <span className={`text-xs font-black text-${stat.color}-600`}>{stat.val}%</span>
-                </div>
-                <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden mt-1">
-                  <div className={`h-full transition-all duration-1000 ease-out ${stat.color === 'emerald' ? 'bg-emerald-500' :
-                    stat.color === 'blue' ? 'bg-blue-500' :
-                      stat.color === 'indigo' ? 'bg-indigo-500' :
-                        'bg-amber-500'
-                    }`}
-                    style={{ width: `${stat.val}%` }}
-                  />
-                </div>
-              </Card>
-            ))}
-          </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-4">
@@ -1841,7 +1819,7 @@ export function FinancialModeling() {
                   <div key={i} className="group p-4 bg-white rounded-xl border border-slate-100 hover:border-primary/20 transition-all flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       <div className="h-8 w-8 rounded-full bg-slate-50 flex items-center justify-center font-bold text-slate-400 text-[10px] border border-slate-100 group-hover:bg-primary/5 transition-colors">
-                        {log.id?.slice(0, 4)}
+                        {String(log.id).slice(0, 4)}
                       </div>
                       <div>
                         <div className="text-xs font-black text-slate-800">{log.action} • {log.actorUser?.email || 'System'}</div>
@@ -1850,23 +1828,13 @@ export function FinancialModeling() {
                     </div>
                     <span className="text-[10px] text-slate-300 font-bold">{new Date(log.createdAt).toLocaleDateString()}</span>
                   </div>
-                )) : [
-                  { action: 'Driver Update', user: 'sarah.c@finance', event: 'Pricing sensitivity adjusted for expansion', hash: '8f2a1c', ts: '2h ago' },
-                  { action: 'Scenario Lock', user: 'cfo@company', event: 'Conservative H2 baseline locked for board review', hash: '3d9e4b', ts: '5h ago' }
-                ].map((log, i) => (
-                  <div key={i} className="group p-4 bg-white rounded-xl border border-slate-100 hover:border-primary/20 transition-all flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="h-8 w-8 rounded-full bg-slate-50 flex items-center justify-center font-bold text-slate-400 text-[10px] border border-slate-100 group-hover:bg-primary/5 transition-colors">
-                        {log.hash}
-                      </div>
-                      <div>
-                        <div className="text-xs font-black text-slate-800">{log.action} • {log.user}</div>
-                        <div className="text-[10px] text-slate-500">{log.event}</div>
-                      </div>
-                    </div>
-                    <span className="text-[10px] text-slate-300 font-bold">{log.ts}</span>
+                )) : (
+                  <div className="p-12 text-center bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-100">
+                    <HistoryIcon className="h-10 w-10 text-slate-200 mx-auto mb-3" />
+                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">No decision history identified</p>
+                    <p className="text-[10px] text-slate-400 mt-1 italic">Perform model adjustments or scenario locks to populate this immutable feed.</p>
                   </div>
-                ))}
+                )}
               </div>
             </div>
             <div className="space-y-4">
@@ -1874,18 +1842,36 @@ export function FinancialModeling() {
                 <Target className="h-4 w-4" />
                 Executive Narrative Synthesis
               </h4>
-              <div className="p-5 bg-gradient-to-br from-indigo-900 to-slate-900 text-white rounded-2xl shadow-xl relative overflow-hidden group">
+              <div className="p-5 bg-gradient-to-br from-indigo-900 to-slate-900 text-white rounded-2xl shadow-xl relative overflow-hidden group min-h-[160px]">
                 <div className="absolute top-0 right-0 p-4 opacity-10 transform translate-x-2 -translate-y-2 group-hover:translate-x-0 group-hover:translate-y-0 transition-transform duration-700">
                   <Sparkles className="h-20 w-20 text-indigo-400" />
                 </div>
-                <p className="text-xs leading-relaxed font-medium relative z-10 opacity-90 italic">
-                  "Our system detected a 12% drift in OpEx between 'Conservative' and 'Scaling' branches. AI has traced this to the Q3 Hiring driver, which accounts for 85% of variance."
-                </p>
+                <div className="relative z-10">
+                  {(currentRun?.summaryJson as any)?.marketImplications?.length > 0 ? (
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-indigo-300 mb-1">Executive Strategic Implications</p>
+                      {(currentRun?.summaryJson as any).marketImplications.map((imp: string, i: number) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <div className="mt-1 h-1 w-1 rounded-full bg-indigo-400 flex-shrink-0" />
+                          <p className="text-xs leading-relaxed font-medium opacity-90">{imp}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs leading-relaxed font-medium opacity-90 italic">
+                      {(currentRun?.summaryJson as any) ? (
+                        "Executive synthesis engine is analyzing your financial model performance. Click the button below to generate a comprehensive institutional narrative for your board."
+                      ) : (
+                        "Run your financial model to generate an AI-powered board report and strategic narrative synthesis."
+                      )}
+                    </p>
+                  )}
+                </div>
                 <Button
                   onClick={handleAIGenerateReport}
                   className="w-full mt-6 bg-indigo-500 hover:bg-indigo-400 font-bold text-[10px] h-9 rounded-lg shadow-lg shadow-indigo-500/20 relative z-10"
                 >
-                  GENERATE AI BOARD REPORT
+                  { (currentRun?.summaryJson as any)?.marketImplications?.length > 0 ? "GENERATE FULL BOARD REPORT" : "GENERATE BOARD REPORT" }
                 </Button>
               </div>
             </div>
@@ -2006,10 +1992,10 @@ export function FinancialModeling() {
                 <div className="space-y-2">
                   <div className="flex justify-between text-xs font-bold">
                     <span>Lineage Coverage</span>
-                    <span>{dataStatus?.auditReadiness?.isEnterpriseReady ? '98%' : '65%'}</span>
+                    <span>{dataStatus?.stats?.dataQuality ? `${dataStatus.stats.dataQuality}%` : '0%'}</span>
                   </div>
                   <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                    <div className="h-full bg-primary" style={{ width: dataStatus?.auditReadiness?.isEnterpriseReady ? '98%' : '65%' }} />
+                    <div className="h-full bg-primary" style={{ width: dataStatus?.stats?.dataQuality ? `${dataStatus.stats.dataQuality}%` : '0%' }} />
                   </div>
                 </div>
 
@@ -2297,7 +2283,7 @@ export function FinancialModeling() {
         </TabsContent>
 
         <TabsContent value="manual" className="space-y-4">
-          <ManualInputForm orgId={orgId} modelId={selectedModel} />
+          <ManualInputForm orgId={orgId} modelId={selectedModel} onSuccess={() => handleRunModel(selectedModel!)} />
         </TabsContent>
 
         <TabsContent value="scenarios" className="space-y-4">
@@ -2318,6 +2304,7 @@ export function FinancialModeling() {
             modelId={selectedModel}
             currentRunId={currentRun?.id}
             refreshKey={recomputeCounter}
+            onSuccess={() => handleRunModel(selectedModel!)}
           />
         </TabsContent>
 

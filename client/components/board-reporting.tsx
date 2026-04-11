@@ -35,8 +35,11 @@ import {
   ShieldCheck,
 } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { ExportProgressModal } from "./exports/export-progress-modal"
-import { ReportApprovalManager } from "./reports/report-approval-manager"
+import dynamic from "next/dynamic"
+
+const ExportProgressModal = dynamic(() => import("./exports/export-progress-modal").then(mod => mod.ExportProgressModal))
+const ReportApprovalManager = dynamic(() => import("./reports/report-approval-manager").then(mod => mod.ReportApprovalManager))
+
 import { toast } from "sonner"
 import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { useOrg } from "@/lib/org-context"
@@ -134,7 +137,7 @@ export function BoardReporting() {
   const [reportFormat, setReportFormat] = useState("pptx")
   const [availablePeriods, setAvailablePeriods] = useState<string[]>([])
   const [distributionMethod, setDistributionMethod] = useState("email")
-  const [recipients, setRecipients] = useState("board@company.com")
+  const [recipients, setRecipients] = useState("")
   const [emailSubject, setEmailSubject] = useState("Monthly Board Update")
   const [passwordProtect, setPasswordProtect] = useState(false)
   const [trackEngagement, setTrackEngagement] = useState(true)
@@ -304,18 +307,69 @@ export function BoardReporting() {
           const data = result.data
           const summary = data.executiveSummary || {}
           const unitEcon = data.unitEconomics || {}
+          
+          // Calculate SaaS-specific institutional metrics
+          const burnRate = summary.monthlyBurnRate || summary.burn || 0;
+          const monthlyRevenue = (summary.arr || summary.revenue || 0) / 12;
+          const burnMultiple = monthlyRevenue > 0 ? (burnRate / monthlyRevenue).toFixed(2) : "N/A";
+          const ruleOf40 = summary.arrGrowth && summary.grossMargin !== undefined 
+            ? (summary.arrGrowth + (summary.grossMargin - 60)).toFixed(1) + "%" 
+            : "N/A";
+
           const kpis = [
-            { name: "Monthly Recurring Revenue", value: `$${((summary.arr || 0) / 12).toLocaleString()}`, change: `+${summary.arrGrowth || 0}%`, trend: summary.arrGrowth > 0 ? "up" : "down" },
-            { name: "Annual Recurring Revenue", value: `$${(summary.arr || 0).toLocaleString()}`, change: `+${summary.arrGrowth || 0}%`, trend: summary.arrGrowth > 0 ? "up" : "down" },
-            { name: "Active Customers", value: (summary.activeCustomers || 0).toLocaleString(), change: `+${summary.customerGrowth || 0}%`, trend: summary.customerGrowth > 0 ? "up" : "down" },
-            { name: "Monthly Churn Rate", value: `${summary.monthlyChurn || 2.3}%`, change: `-${summary.churnChange || 0.6}%`, trend: "down" },
-            { name: "Customer Acquisition Cost", value: `$${unitEcon.cac || 125}`, change: "+8.7%", trend: "up" },
-            { name: "Customer Lifetime Value", value: `$${unitEcon.ltv || 2400}`, change: "+5.2%", trend: "up" },
-            { name: "Gross Margin", value: `${summary.grossMargin || 78}%`, change: "+2.1%", trend: "up" },
-            { name: "Cash Runway", value: `${Math.round(summary.monthsRunway || 0)} months`, change: `${summary.runwayChange || 0} month`, trend: (summary.runwayChange || 0) > 0 ? "up" : "down" },
+            { 
+              name: "Annual Recurring Revenue", 
+              value: summary.arr ? `$${(summary.arr / 1000).toFixed(0)}K` : "N/A", 
+              change: summary.arrGrowth ? `+${summary.arrGrowth}%` : "N/A", 
+              trend: summary.arrGrowth > 0 ? "up" : "down" 
+            },
+            { 
+              name: "Burn Multiple", 
+              value: burnMultiple, 
+              change: "Efficiency metric", 
+              trend: Number(burnMultiple) < 1.5 ? "up" : "down" 
+            },
+            { 
+              name: "LTV:CAC Ratio", 
+              value: unitEcon.ltvCacRatio ? `${unitEcon.ltvCacRatio.toFixed(1)}x` : "N/A", 
+              change: "Unit Economics", 
+              trend: unitEcon.ltvCacRatio > 3 ? "up" : "down" 
+            },
+            { 
+              name: "Quick Ratio", 
+              value: summary.arrGrowth && summary.monthlyChurn 
+                ? ((summary.arrGrowth / summary.monthlyChurn).toFixed(1)) 
+                : "N/A", 
+              change: "Growth vs Churn", 
+              trend: "up" 
+            },
+            { 
+              name: "Rule of 40", 
+              value: ruleOf40, 
+              change: "Growth + Profit", 
+              trend: parseFloat(ruleOf40) > 40 ? "up" : "down" 
+            },
+            { 
+              name: "Gross Margin", 
+              value: summary.grossMargin !== undefined ? `${summary.grossMargin}%` : "N/A", 
+              change: "Profitability", 
+              trend: "up" 
+            },
+            { 
+              name: "Cash Runway", 
+              value: summary.monthsRunway !== undefined ? `${Math.round(summary.monthsRunway)}mo` : "N/A", 
+              change: summary.runwayChange ? `${summary.runwayChange > 0 ? '+' : ''}${summary.runwayChange}mo` : "N/A", 
+              trend: (summary.runwayChange || 0) > 0 ? "up" : "down" 
+            },
+            { 
+              name: "Active Customers", 
+              value: summary.activeCustomers !== undefined ? (summary.activeCustomers || 0).toLocaleString() : "N/A", 
+              change: summary.customerGrowth ? `+${summary.customerGrowth}%` : "N/A", 
+              trend: summary.customerGrowth > 0 ? "up" : "down" 
+            },
           ]
           setKpiMetrics(kpis)
-          setSelectedMetrics((prev) => (prev.length ? prev : kpis.slice(0, 4).map((m) => m.name)))
+          setSelectedMetrics((prev) => (prev.length ? prev : kpis.slice(0, 6).map((m) => m.name)))
         }
 
         const chartResponse = await fetch(`${API_BASE_URL}/orgs/${orgId}/investor-dashboard`, {
@@ -1108,7 +1162,7 @@ export function BoardReporting() {
                     </div>
                   ) : selectedMetrics.length > 0 && kpiMetrics.length > 0 ? (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {selectedMetrics.slice(0, 4).map((metricName) => {
+                      {selectedMetrics.slice(0, 8).map((metricName) => {
                         const metric = kpiMetrics.find((m) => m.name === metricName)
                         return metric ? (
                           <div key={metricName} className="text-center">

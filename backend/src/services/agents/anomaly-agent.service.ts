@@ -118,7 +118,7 @@ class AnomalyAgentService {
         timestamp: new Date(),
         inputVersions: {
           ledger_snapshot: 'latest',
-          threat_patterns: 'v4.2',
+          threat_patterns: 'v1.0',
           statistical_baseline: 'trailing-90d'
         },
         datasetHash: 'sha256: anm-2b3c...4d5e',

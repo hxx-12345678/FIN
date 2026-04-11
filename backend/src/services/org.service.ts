@@ -324,11 +324,10 @@ export const orgService = {
       prisma.chartOfAccount.count({ where: { orgId } }),
       prisma.rawTransaction.findFirst({ where: { orgId, isDuplicate: false }, orderBy: { date: 'desc' }, select: { date: true } }),
       prisma.rawTransaction.findFirst({ where: { orgId, isDuplicate: false }, orderBy: { date: 'asc' }, select: { date: true } }),
-      prisma.$queryRaw`
-        SELECT COALESCE(SUM(amount), 0) as total
-        FROM raw_transactions
-        WHERE "orgId" = ${orgId}::uuid AND "is_duplicate" = false AND amount > 0
-      `.catch(() => [{ total: 0 }]) as Promise<Array<{ total: number }>>,
+      prisma.rawTransaction.aggregate({
+        where: { orgId, isDuplicate: false, amount: { gt: 0 } },
+        _sum: { amount: true }
+      }).then(res => [{ total: Number(res._sum.amount || 0) }]).catch(() => [{ total: 0 }]),
     ]);
 
     // Classify connector types
@@ -408,35 +407,43 @@ export const orgService = {
     const canUseDataDrivenAI = hasTransactions || (hasERP && hasConnectors);
     const canUseAIPrecision = hasTransactions && transactionCount > 50;
 
-    return {
-      ok: true,
-      orgId,
-      // Top-level flags for frontend gating
-      hasRealData: hasTransactions || hasUploads,
-      hasConnectors,
-      hasTransactions,
-      hasUploads,
-      orgStage,
-      // Intelligence option gating
-      intelligenceGating: {
-        dataDrivenAI: canUseDataDrivenAI,
-        dataDrivenAIReason: !canUseDataDrivenAI ? 'No transaction data or ERP connector found. Connect a data source first.' : null,
-        aiPrecisionBuild: canUseAIPrecision,
-        aiPrecisionBuildReason: !canUseAIPrecision ? 'Requires 50+ transactions for reliable AI precision modeling.' : null,
-        syntheticAI: true, // Always available
-        manualLogic: true, // Always available
-      },
-      // Granular stats
-      stats: {
-        connectorsCount: connectors.length,
-        uploadsCount: uploads.length,
-        transactionCount,
-        coaCount: coa,
-        totalRevenue,
-        lastTransactionDate,
-        firstTransactionDate,
-        dataAgeDays,
-      },
+      // Compute data quality (mapped vs raw)
+      const mappedCount = await prisma.financialLedger.count({ where: { orgId } });
+      const dataQuality = transactionCount > 0 
+        ? Math.round((mappedCount / transactionCount) * 100) 
+        : 100;
+
+      return {
+        ok: true,
+        orgId,
+        // Top-level flags for frontend gating
+        hasRealData: hasTransactions || hasUploads,
+        hasConnectors,
+        hasTransactions,
+        hasUploads,
+        orgStage,
+        // Intelligence option gating
+        intelligenceGating: {
+          dataDrivenAI: canUseDataDrivenAI,
+          dataDrivenAIReason: !canUseDataDrivenAI ? 'No transaction data or ERP connector found. Connect a data source first.' : null,
+          aiPrecisionBuild: canUseAIPrecision,
+          aiPrecisionBuildReason: !canUseAIPrecision ? 'Requires 50+ transactions for reliable AI precision modeling.' : null,
+          syntheticAI: true, // Always available
+          manualLogic: true, // Always available
+        },
+        // Granular stats
+        stats: {
+          connectorsCount: connectors.length,
+          uploadsCount: uploads.length,
+          transactionCount,
+          mappedCount,
+          dataQuality,
+          coaCount: coa,
+          totalRevenue,
+          lastTransactionDate,
+          firstTransactionDate,
+          dataAgeDays,
+        },
       // Per-connector detail
       sources: {
         erp: hasERP,

@@ -611,23 +611,58 @@ class AgentOrchestratorService {
 
       const hasModelData = snapshot.cashBalance > 0 || snapshot.monthlyRevenue > 0 || snapshot.monthlyBurn > 0;
 
-      // If model run lacks cash, try a lightweight transaction-based estimate for burn (kept intentionally simple)
+      // If model run lacks cash, try a robust transaction-based estimate based on the most recent data
       if (!hasModelData) {
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        const transactions = await prisma.rawTransaction.aggregate({
-          where: { orgId, date: { gte: thirtyDaysAgo }, isDuplicate: false },
-          _sum: { amount: true },
-          _count: true,
+        const latestTxn = await prisma.rawTransaction.findFirst({
+          where: { orgId, isDuplicate: false },
+          orderBy: { date: 'desc' }
         });
-        const txnAmount = transactions._sum.amount ? Number(transactions._sum.amount) : 0;
-        const estimatedBurn = txnAmount < 0 ? Math.abs(txnAmount) : 0;
-        return {
-          ...snapshot,
-          monthlyBurn: snapshot.monthlyBurn || estimatedBurn,
-          hasRealData: transactions._count > 0,
-          source: 'transactions_fallback',
-        };
+
+        if (latestTxn) {
+          const thirtyDaysAgo = new Date(latestTxn.date);
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          
+          const transactions = await prisma.rawTransaction.findMany({
+            where: { orgId, date: { gte: thirtyDaysAgo }, isDuplicate: false },
+            select: { amount: true, category: true }
+          });
+          
+          let monthlyRevenue = 0;
+          let monthlyBurn = 0;
+          
+          const revenueKeywords = ['revenue', 'sales', 'income', 'earning', 'subscription', 'fee'];
+          const expenseKeywords = ['cogs', 'payroll', 'marketing', 'ads', 'rent', 'expense', 'hardware', 'software', 'cost', 'utilities', 'insurance', 'tax', 'interest', 'commission', 'bonus', 'salary', 'vendor', 'payment'];
+          
+          for (const tx of transactions) {
+            const amount = Number(tx.amount);
+            const category = (tx.category || '').toLowerCase();
+            let isRevenue = amount > 0;
+            
+            if (revenueKeywords.some(k => category.includes(k))) isRevenue = true;
+            else if (expenseKeywords.some(k => category.includes(k))) isRevenue = false;
+            
+            if (isRevenue) {
+              monthlyRevenue += Math.abs(amount);
+            } else {
+              monthlyBurn += Math.abs(amount);
+            }
+          }
+
+          const allTime = await prisma.rawTransaction.aggregate({
+            where: { orgId, isDuplicate: false },
+            _sum: { amount: true }
+          });
+          const cashBalance = Number(allTime._sum.amount || 0);
+
+          return {
+            ...snapshot,
+            cashBalance: Math.max(cashBalance, 0),
+            monthlyRevenue: monthlyRevenue,
+            monthlyBurn: monthlyBurn,
+            hasRealData: true,
+            source: 'transactions_fallback',
+          };
+        }
       }
 
       return {

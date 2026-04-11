@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -99,6 +100,7 @@ const defaultExpenseBreakdown = [
 ]
 
 export function OverviewDashboard() {
+  const router = useRouter()
   const { selectedModelId, setSelectedModelId, orgId: contextOrgId, setOrgId: setContextOrgId } = useModel()
   const { currencySymbol, formatCurrency } = useOrg()
   const [data, setData] = useState<OverviewData | null>(null)
@@ -442,7 +444,7 @@ export function OverviewDashboard() {
             <span className="hidden sm:inline">Last 30 days</span>
             <span className="sm:hidden">30d</span>
           </Button>
-          <Button className="w-full sm:w-auto">
+          <Button className="w-full sm:w-auto" onClick={() => router.push('/dashboard/analytics')}>
             <Zap className="mr-2 h-4 w-4" />
             <span className="hidden sm:inline">Generate Report</span>
             <span className="sm:hidden">Report</span>
@@ -491,13 +493,13 @@ export function OverviewDashboard() {
               <div className="text-center">
                 <div className="font-medium text-green-600">Growth</div>
                 <div className="text-muted-foreground">
-                  {overviewData.revenueGrowth >= 0 ? "+" : ""}{overviewData.revenueGrowth.toFixed(1)}%
+                  {(overviewData.revenueGrowth ?? 0) >= 0 ? "+" : ""}{(overviewData.revenueGrowth ?? 0).toFixed(1)}%
                 </div>
               </div>
               <div className="text-center">
                 <div className="font-medium text-blue-600">Burn Rate</div>
                 <div className="text-muted-foreground">
-                  {overviewData.burnRateChange >= 0 ? "+" : ""}{overviewData.burnRateChange.toFixed(1)}%
+                  {(overviewData.burnRateChange ?? 0) >= 0 ? "+" : ""}{(overviewData.burnRateChange ?? 0).toFixed(1)}%
                 </div>
               </div>
               <div className="text-center">
@@ -532,9 +534,9 @@ export function OverviewDashboard() {
                 previousMonthRevenue: overviewData.monthlyRevenue / (1 + overviewData.revenueGrowth / 100)
               }}
             />
-            <div className={`flex items-center text-xs mt-2 ${overviewData.revenueGrowth >= 0 ? "text-green-600" : "text-red-600"}`}>
-              {overviewData.revenueGrowth >= 0 ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />}
-              {overviewData.revenueGrowth >= 0 ? "+" : ""}{overviewData.revenueGrowth.toFixed(1)}% from last month
+            <div className={`flex items-center text-xs mt-2 ${(overviewData.revenueGrowth ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
+              {(overviewData.revenueGrowth ?? 0) >= 0 ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />}
+              {(overviewData.revenueGrowth ?? 0) >= 0 ? "+" : ""}{(overviewData.revenueGrowth ?? 0).toFixed(1)}% from last month
             </div>
           </CardContent>
         </Card>
@@ -556,9 +558,9 @@ export function OverviewDashboard() {
                 previousMonthBurnRate: overviewData.monthlyBurnRate / (1 + overviewData.burnRateChange / 100)
               }}
             />
-            <div className={`flex items-center text-xs mt-2 ${overviewData.burnRateChange >= 0 ? "text-red-600" : "text-green-600"}`}>
-              {overviewData.burnRateChange >= 0 ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />}
-              {overviewData.burnRateChange >= 0 ? "+" : ""}{overviewData.burnRateChange.toFixed(1)}% from last month
+            <div className={`flex items-center text-xs mt-2 ${(overviewData.burnRateChange ?? 0) >= 0 ? "text-red-600" : "text-green-600"}`}>
+              {(overviewData.burnRateChange ?? 0) >= 0 ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />}
+              {(overviewData.burnRateChange ?? 0) >= 0 ? "+" : ""}{(overviewData.burnRateChange ?? 0).toFixed(1)}% from last month
             </div>
           </CardContent>
         </Card>
@@ -581,9 +583,9 @@ export function OverviewDashboard() {
                 runwayChange: overviewData.runwayChange
               }}
             />
-            <div className={`flex items-center text-xs mt-2 ${overviewData.runwayChange >= 0 ? "text-green-600" : "text-yellow-600"}`}>
-              {overviewData.runwayChange >= 0 ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />}
-              {overviewData.runwayChange >= 0 ? "+" : ""}{overviewData.runwayChange.toFixed(1)} month from last period
+            <div className={`flex items-center text-xs mt-2 ${(overviewData.runwayChange ?? 0) >= 0 ? "text-green-600" : "text-yellow-600"}`}>
+              {(overviewData.runwayChange ?? 0) >= 0 ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />}
+              {(overviewData.runwayChange ?? 0) >= 0 ? "+" : ""}{(overviewData.runwayChange ?? 0).toFixed(1)} month from last period
             </div>
           </CardContent>
         </Card>

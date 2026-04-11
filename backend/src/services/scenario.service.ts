@@ -357,11 +357,12 @@ export const scenarioService = {
       where: {
         modelId,
         orgId,
-        runType: 'scenario',
+        runType: { in: ['scenario', 'baseline'] },
       },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
+        runType: true,
         paramsJson: true,
         status: true,
         summaryJson: true,
@@ -396,9 +397,9 @@ export const scenarioService = {
       // Return in format expected by frontend
       return {
         id: s.id,
-        scenarioName: paramsJson?.scenarioName || 'Unnamed Scenario',
-        scenarioType: paramsJson?.scenarioType || 'adhoc',
-        name: paramsJson?.scenarioName || 'Unnamed Scenario', // Keep for backward compatibility
+        scenarioName: s.status === 'done' && s.runType === 'baseline' ? 'Baseline Model' : (paramsJson?.scenarioName || 'Unnamed Scenario'),
+        scenarioType: s.runType === 'baseline' ? 'base' : (paramsJson?.scenarioType || 'adhoc'),
+        name: s.status === 'done' && s.runType === 'baseline' ? 'Baseline Model' : (paramsJson?.scenarioName || 'Unnamed Scenario'),
         createdAt: s.createdAt.toISOString(),
         baseModelId: modelId,
         changes,

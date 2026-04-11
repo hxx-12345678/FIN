@@ -127,13 +127,43 @@ export function ReportApprovalManager({ orgId }: { orgId: string }) {
   const [distributionMethod, setDistributionMethod] = useState<"email" | "slack" | "download" | "share_link">("email")
   const [approvalComment, setApprovalComment] = useState("")
   const [emailInput, setEmailInput] = useState("")
+  const [modelRunId, setModelRunId] = useState<string>("")
+  const [models, setModels] = useState<any[]>([])
 
   useEffect(() => {
     if (orgId) {
       fetchReports()
       fetchUsers()
+      fetchModels()
     }
   }, [orgId])
+
+  const fetchModels = async () => {
+    if (!orgId) return
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/models`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
+      if (response.ok) {
+        const data = await response.json()
+        if (data.ok && data.models) {
+          setModels(data.models)
+          if (data.models.length > 0 && !modelRunId) {
+            // Find the most recent run
+            const latestModel = data.models[0]
+            if (latestModel.latestRunId) {
+              setModelRunId(latestModel.latestRunId)
+            } else if (latestModel.id) {
+              setModelRunId(latestModel.id)
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch models:", error)
+    }
+  }
 
   const fetchReports = async () => {
     if (!orgId) return
@@ -251,6 +281,7 @@ export function ReportApprovalManager({ orgId }: { orgId: string }) {
         headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
+          modelRunId: modelRunId || undefined,
           type: reportType,
           approvalRequired,
           approverIds: approvalRequired ? approverIds : undefined,
@@ -386,6 +417,10 @@ export function ReportApprovalManager({ orgId }: { orgId: string }) {
     setDistributionMethod("email")
     setEmailInput("")
     setApprovalComment("")
+    // Pick the first available model by default if not set
+    if (models.length > 0) {
+      setModelRunId(models[0].latestRunId || models[0].id || "")
+    }
   }
 
   const addEmail = () => {
@@ -554,6 +589,29 @@ export function ReportApprovalManager({ orgId }: { orgId: string }) {
                   <SelectItem value="memo">Memo</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div>
+              <Label>Source Model Run</Label>
+              <Select value={modelRunId} onValueChange={setModelRunId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a model run" />
+                </SelectTrigger>
+                <SelectContent>
+                  {models.length === 0 ? (
+                    <SelectItem value="none" disabled>No models available</SelectItem>
+                  ) : (
+                    models.map((model) => (
+                      <SelectItem key={model.id} value={model.latestRunId || model.id}>
+                        {model.name || "Unnamed Model"} ({new Date(model.updatedAt).toLocaleDateString()})
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                The report data will be based on the calculations from this specific model run.
+              </p>
             </div>
 
             <div className="flex items-center space-x-2">

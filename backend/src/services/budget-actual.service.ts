@@ -195,6 +195,7 @@ async function getActualFromTransactions(
   const transactions = await prisma.rawTransaction.findMany({
     where: {
       orgId,
+      isDuplicate: false,
       date: {
         gte: startDate,
         lte: endDate,
@@ -210,14 +211,27 @@ async function getActualFromTransactions(
   const revenue = new Map<string, number>();
   const expenses = new Map<string, number>();
 
+  const revenueKeywords = ['revenue', 'sales', 'income', 'earning', 'subscription', 'fee'];
+  const expenseKeywords = ['cogs', 'payroll', 'marketing', 'ads', 'rent', 'expense', 'hardware', 'software', 'cost', 'utilities', 'insurance', 'tax', 'interest', 'commission', 'bonus', 'salary', 'vendor', 'payment'];
+
   for (const tx of transactions) {
     const month = String(tx.date.getMonth() + 1).padStart(2, '0');
     const period = `${tx.date.getFullYear()}-${month}`;
     const amount = Number(tx.amount);
+    const category = (tx.category || '').toLowerCase();
 
-    // Categorize: positive = revenue, negative = expense
-    if (amount > 0) {
-      revenue.set(period, (revenue.get(period) || 0) + amount);
+    // Determine if revenue or expense based on category keywords + sign
+    let isRevenue = amount > 0;
+    
+    // Explicit keywords take priority
+    if (revenueKeywords.some(k => category.includes(k))) {
+      isRevenue = true;
+    } else if (expenseKeywords.some(k => category.includes(k))) {
+      isRevenue = false;
+    }
+
+    if (isRevenue) {
+      revenue.set(period, (revenue.get(period) || 0) + Math.abs(amount));
     } else {
       expenses.set(period, (expenses.get(period) || 0) + Math.abs(amount));
     }
@@ -338,15 +352,27 @@ async function getActualByCategory(
   const revenue = new Map<string, number>();
   const expenses = new Map<string, number>();
 
+  const revenueKeywords = ['revenue', 'sales', 'income', 'earning', 'subscription', 'fee'];
+  const expenseKeywords = ['cogs', 'payroll', 'marketing', 'ads', 'rent', 'expense', 'hardware', 'software', 'cost', 'utilities', 'insurance', 'tax', 'interest', 'commission', 'bonus', 'salary', 'vendor', 'payment'];
+
   for (const tx of transactions) {
     const amount = Number(tx.amount) || 0;
     const category = tx.category || 'Uncategorized';
+    const categoryLower = category.toLowerCase();
 
-    if (amount > 0) {
+    // Determine if revenue or expense based on category keywords + sign
+    let isRevenue = amount > 0;
+    if (revenueKeywords.some(k => categoryLower.includes(k))) {
+      isRevenue = true;
+    } else if (expenseKeywords.some(k => categoryLower.includes(k))) {
+      isRevenue = false;
+    }
+
+    if (isRevenue) {
       // Revenue
-      revenue.set(category, (revenue.get(category) || 0) + amount);
-    } else if (amount < 0) {
-      // Expenses (store as positive)
+      revenue.set(category, (revenue.get(category) || 0) + Math.abs(amount));
+    } else {
+      // Expenses
       expenses.set(category, (expenses.get(category) || 0) + Math.abs(amount));
     }
   }

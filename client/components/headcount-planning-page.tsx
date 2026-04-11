@@ -403,18 +403,18 @@ export function HeadcountPlanningPage() {
               <span className="text-xs text-slate-400 uppercase font-bold tracking-wider">Runway Impact</span>
               <p className="text-xl font-bold flex items-center gap-2 text-red-100">
                 <ArrowUpRight className="h-4 w-4 text-red-400" />
-                -1.4 months
+                N/A
               </p>
               <p className="text-xs text-slate-400">Total runway reduction based on hiring velocity</p>
             </div>
             <div className="space-y-2 border-l border-slate-700 pl-6">
               <span className="text-xs text-slate-400 uppercase font-bold tracking-wider">Efficiency Metric</span>
-              <p className="text-xl font-bold text-indigo-100">$184.2k</p>
-              <p className="text-xs text-slate-400">Projected Rev per Head (Group Target: $200k)</p>
+              <p className="text-xl font-bold text-indigo-100">N/A</p>
+              <p className="text-xs text-slate-400">Projected Rev per Head (Group Target: N/A)</p>
             </div>
             <div className="space-y-2 border-l border-slate-700 pl-6">
               <span className="text-xs text-slate-400 uppercase font-bold tracking-wider">Burn Multiplier</span>
-              <p className="text-xl font-bold text-amber-100">1.25x</p>
+              <p className="text-xl font-bold text-amber-100">N/A</p>
               <p className="text-xs text-slate-400">Total burn relative to net new ARR forecast</p>
             </div>
           </div>

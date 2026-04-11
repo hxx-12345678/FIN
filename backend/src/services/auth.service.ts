@@ -7,6 +7,7 @@ import { validateEmail, validatePassword, validateOrgName, sanitizeString } from
 import { config } from '../config/env';
 import prisma from '../config/database';
 import { logger } from '../utils/logger';
+import { auditService } from './audit.service';
 
 export const authService = {
   signup: async (email: string, password: string, orgName: string, name?: string) => {
@@ -277,6 +278,16 @@ export const authService = {
       userId: user.id,
       email: user.email,
       orgId: orgId,
+    });
+
+    // Log login event (SOC 2 CC7.1)
+    await auditService.log({
+      actorUserId: user.id,
+      orgId: orgId,
+      action: 'USER_LOGIN',
+      objectType: 'USER',
+      objectId: user.id,
+      metaJson: { email: user.email, timestamp: new Date().toISOString() }
     });
 
     // Remove sensitive data before returning

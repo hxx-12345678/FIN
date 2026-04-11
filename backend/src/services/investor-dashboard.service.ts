@@ -42,6 +42,13 @@ export interface InvestorDashboardData {
     ltvCacRatio: number;
     paybackPeriod: number;
   };
+  saasMetrics: {
+    nrr: number;
+    grr: number;
+    ruleOf40: number;
+    burnMultiple: number;
+    magicNumber: number;
+  };
 }
 
 export const investorDashboardService = {
@@ -49,20 +56,28 @@ export const investorDashboardService = {
    * Get investor dashboard data for an organization
    */
   getDashboardData: async (orgId: string): Promise<InvestorDashboardData> => {
-    // Get the latest model run for this org
-    const latestModelRun = await prisma.modelRun.findFirst({
-      where: {
-        orgId,
+    // First try to get the latest model run with actual financial data
+    let latestModelRun = await prisma.modelRun.findFirst({
+      where: { 
+        orgId, 
         status: 'done',
-        runType: 'baseline',
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-      include: {
-        model: true,
-      },
+        summaryJson: {
+          path: ['arr'],
+          not: 0
+        }
+      } as any,
+      orderBy: { createdAt: 'desc' },
+      include: { model: true }
     });
+
+    // If no run with data, just grab the absolute latest
+    if (!latestModelRun) {
+      latestModelRun = await prisma.modelRun.findFirst({
+        where: { orgId, status: 'done' },
+        orderBy: { createdAt: 'desc' },
+        include: { model: true }
+      });
+    }
 
     if (!latestModelRun || !latestModelRun.summaryJson) {
       // Fall back to transaction data if no model run exists
@@ -71,8 +86,10 @@ export const investorDashboardService = {
 
     const summary = latestModelRun.summaryJson as any;
 
-    // Extract financial metrics
-    const revenue = Number(summary.revenue || summary.mrr || 0) * 12 || 0; // Convert MRR to ARR if needed
+    // Extract financial metrics - be careful with ARR vs MRR
+    const revenue = summary.mrr 
+      ? Number(summary.mrr) * 12 
+      : Number(summary.revenue || summary.arr || 0);
     const expenses = Number(summary.expenses || 0);
     const burnRate = Number(summary.burnRate || expenses || 0);
     const cashBalance = Number(summary.cashBalance || 0);
@@ -82,22 +99,41 @@ export const investorDashboardService = {
     const runwayData = await runwayCalculationService.calculateRunway(orgId);
     const runwayMonths = runwayData.runwayMonths;
 
-    // Calculate ARR from monthly data if available
+    // Calculate ARR from monthly data if available (handling nested structures)
     let arr = revenue;
     if (summary.monthly) {
-      const monthlyData = summary.monthly as Record<string, any>;
-      const latestMonth = Object.keys(monthlyData).sort().pop();
-      if (latestMonth && monthlyData[latestMonth]) {
-        const monthlyRevenue = Number(monthlyData[latestMonth].revenue || monthlyData[latestMonth].mrr || 0);
-        arr = monthlyRevenue * 12;
+      // Handle deeply nested summary.monthly[company][entity].monthly structure
+      let monthlyData = summary.monthly;
+      while (monthlyData && !monthlyData["2023-01"] && !monthlyData["2024-01"] && !monthlyData["2025-01"] && !monthlyData["2026-01"]) {
+        const firstKey = Object.keys(monthlyData).find(k => typeof monthlyData[k] === 'object' && monthlyData[k] !== null);
+        if (!firstKey) break;
+        if (monthlyData.monthly) {
+           monthlyData = monthlyData.monthly;
+           break;
+        }
+        monthlyData = monthlyData[firstKey];
+      }
+
+      if (monthlyData && typeof monthlyData === 'object') {
+        const sortedMonths = Object.keys(monthlyData).filter(m => /^\d{4}-\d{2}$/.test(m)).sort();
+        const latestMonth = sortedMonths.pop();
+        if (latestMonth && monthlyData[latestMonth]) {
+          const monthlyRevenue = Number(monthlyData[latestMonth].revenue || monthlyData[latestMonth].mrr || 0);
+          arr = monthlyRevenue * 12;
+        }
       }
     }
 
     // Get active customers from model run, but fallback to CSV import or transaction count
     // Do this BEFORE extracting monthly metrics so we can use it there
-    let activeCustomers = Number(summary.activeCustomers || summary.customers || summary.customerCount || 0);
+    let activeCustomers = Number(summary.activeCustomers || summary.customers || summary.customerCount || summary.customer_count || 0);
 
-    // If model run shows 0 or suspiciously high customers, check CSV import first
+    // Check KPIs object if root is 0
+    if (activeCustomers === 0 && summary.kpis) {
+      activeCustomers = Number(summary.kpis.activeCustomers || summary.kpis.customers || summary.kpis.customerCount || 0);
+    }
+
+    // If still 0 or suspiciously high customers, check CSV import first
     // Model run might have calculated customers incorrectly, so prefer user-provided value
     if ((activeCustomers === 0 || activeCustomers > 1000) && arr > 0) {
       // First check data import batch mapping (most reliable - stored when CSV is mapped)
@@ -180,8 +216,12 @@ export const investorDashboardService = {
         where: {
           orgId,
           isDuplicate: false,
-          amount: { gt: 0 }, // Revenue transactions only
-        } as any,
+          amount: { gt: 0 },
+        },
+        select: {
+          description: true,
+          rawPayload: true,
+        },
         take: 1000,
       });
 
@@ -208,8 +248,9 @@ export const investorDashboardService = {
     }
 
     // Calculate unit economics - try summary first, then model assumptions, then calculate from data
-    let ltv = Number(summary.ltv || summary.customerLTV || 0);
-    let cac = Number(summary.cac || summary.customerCAC || 0);
+    let ltv = Number(summary.ltv || summary.customerLTV || summary.kpis?.ltv || 0);
+    let cac = Number(summary.cac || summary.customerCAC || summary.kpis?.cac || 0);
+    let ltvCac = Number(summary.ltvCacRatio || summary.ltvCac || summary.kpis?.ltvCac || summary.kpis?.ltvCacRatio || 0);
 
     // If not in summary, try to get from model assumptions
     if ((ltv === 0 || cac === 0) && latestModelRun.modelId) {
@@ -234,11 +275,13 @@ export const investorDashboardService = {
 
     // If still 0, try to calculate from available data
     if (ltv === 0 && arr > 0 && activeCustomers > 0) {
-      // LTV = (MRR * 12) / churnRate, or ARR / (activeCustomers * churnRate)
+      // LTV = (MRR * 12) / churnRate, capped at 5 years (60 months)
       const churnRate = Number(summary.churnRate || 0.05);
       const mrr = arr / 12;
+      const monthlyGp = mrr * Number(summary.grossMargin || 0.8);
       if (churnRate > 0) {
-        ltv = (mrr / churnRate) * 12; // Simplified LTV calculation: LTV = MRR / churnRate
+        const unboundedLtv = (monthlyGp / churnRate) * 12; // Annualized LTV
+        ltv = Math.min(unboundedLtv, monthlyGp * 60); 
       }
     }
 
@@ -254,8 +297,8 @@ export const investorDashboardService = {
     const unitEconomics = {
       ltv: Math.round(ltv),
       cac: Math.round(cac),
-      ltvCacRatio: 0,
-      paybackPeriod: 0,
+      ltvCacRatio: ltvCac || 0,
+      paybackPeriod: Number(summary.paybackPeriod || summary.kpis?.paybackPeriod || 0),
     };
     unitEconomics.ltvCacRatio = unitEconomics.ltv > 0 && unitEconomics.cac > 0
       ? unitEconomics.ltv / unitEconomics.cac
@@ -269,16 +312,23 @@ export const investorDashboardService = {
       executiveSummary: {
         arr: Math.round(arr),
         activeCustomers: activeCustomers,
-        monthsRunway: Math.round(runwayMonths * 10) / 10,
+        monthsRunway: runwayMonths > 99 ? 99 : Math.round(runwayMonths * 10) / 10,
         healthScore: Math.round(healthScore),
         arrGrowth: Math.round(arrGrowth * 10) / 10,
         customerGrowth: Math.round(customerGrowth * 10) / 10,
-        runwayChange: -1, // Could be calculated from historical data
+        runwayChange: -1, 
       },
       monthlyMetrics,
-      milestones,
-      keyUpdates,
+      milestones: getMilestones(arr, runwayMonths, unitEconomics.ltvCacRatio),
+      keyUpdates: getKeyUpdates(orgId, latestModelRun.createdAt, (latestModelRun.model as any)?.name || 'Latest Baseline'),
       unitEconomics,
+      saasMetrics: {
+        nrr: Number(summary.nrr || summary.kpis?.nrr || 0),
+        grr: Number(summary.grr || summary.kpis?.grr || 0),
+        ruleOf40: Number(summary.ruleOf40 || summary.kpis?.ruleOf40 || 0),
+        burnMultiple: Number(summary.burnMultiple || summary.kpis?.burnMultiple || 0),
+        magicNumber: Number(summary.magicNumber || summary.kpis?.magicNumber || 0),
+      },
     };
   },
 };
@@ -302,44 +352,40 @@ function extractMonthlyMetrics(summary: any, activeCustomers: number = 0): Array
   }> = [];
 
   if (summary.monthly) {
-    const monthlyData = summary.monthly as Record<string, any>;
-    const sortedMonths = Object.keys(monthlyData).sort();
+    let monthlyData = summary.monthly;
+    // Walk down the nested map if necessary
+    while (monthlyData && !monthlyData["2023-01"] && !monthlyData["2024-01"] && !monthlyData["2025-01"] && !monthlyData["2026-01"]) {
+      const firstKey = Object.keys(monthlyData).find(k => typeof monthlyData[k] === 'object' && monthlyData[k] !== null);
+      if (!firstKey) break;
+      if (monthlyData.monthly) {
+         monthlyData = monthlyData.monthly;
+         break;
+      }
+      monthlyData = monthlyData[firstKey];
+    }
 
-    sortedMonths.forEach((monthKey) => {
-      const monthData = monthlyData[monthKey];
-      const revenue = Number(monthData.revenue || monthData.mrr || 0);
-      const expenses = Number(monthData.expenses || 0);
-      // Use provided activeCustomers if monthly data doesn't have it
-      const customers = Number(monthData.customers || monthData.activeCustomers || activeCustomers || 0);
+    if (monthlyData && typeof monthlyData === 'object') {
+      const sortedMonths = Object.keys(monthlyData).filter(m => /^\d{4}-\d{2}$/.test(m)).sort();
+      sortedMonths.forEach((monthKey) => {
+        const monthData = monthlyData[monthKey];
+        const revenue = Number(monthData.revenue || monthData.mrr || 0);
+        const expenses = Number(monthData.expenses || monthData.opex || monthData.operatingExpenses || 0);
+        const customers = Number(monthData.customers || monthData.activeCustomers || activeCustomers || 0);
 
-      metrics.push({
-        month: formatMonth(monthKey),
-        revenue: Math.round(revenue),
-        customers: Math.round(customers),
-        burn: Math.round(expenses),
-        arr: Math.round(revenue * 12),
+        metrics.push({
+          month: formatMonth(monthKey),
+          revenue: Math.round(revenue),
+          customers: Math.round(customers),
+          burn: Math.round(expenses),
+          arr: Math.round(revenue * 12),
+        });
       });
-    });
+    }
   }
 
-  // If no monthly data, generate sample data from current values
+  // If no monthly data, return empty to let frontend handle it
   if (metrics.length === 0) {
-    const baseRevenue = Number(summary.revenue || summary.mrr || 45000);
-    const baseCustomers = activeCustomers || Number(summary.activeCustomers || summary.customers || 152);
-    const baseBurn = Number(summary.expenses || summary.burnRate || 35000);
-
-    // Generate last 6 months with growth
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-    months.forEach((month, index) => {
-      const growthFactor = 1 + (index * 0.05); // 5% growth per month
-      metrics.push({
-        month,
-        revenue: Math.round(baseRevenue * growthFactor),
-        customers: Math.round(baseCustomers * growthFactor),
-        burn: Math.round(baseBurn * (1 + index * 0.02)),
-        arr: Math.round(baseRevenue * growthFactor * 12),
-      });
-    });
+    return [];
   }
 
   return metrics;
@@ -403,7 +449,7 @@ function calculateHealthScore(params: {
 /**
  * Get milestones based on current metrics
  */
-function getMilestones(arr: number, runwayMonths: number): Array<{
+function getMilestones(arr: number, runwayMonths: number, ltvCac: number = 0): Array<{
   title: string;
   description: string;
   status: 'completed' | 'in-progress' | 'upcoming';
@@ -418,38 +464,45 @@ function getMilestones(arr: number, runwayMonths: number): Array<{
     progress?: number;
   }> = [];
 
+  const currentYear = new Date().getFullYear();
+  const currentQuarter = Math.floor((new Date().getMonth() + 3) / 3);
+
   // Product-Market Fit milestone
+  const pmfScore = Math.max((arr / 500000) * 100, (ltvCac / 5) * 100);
   milestones.push({
     title: 'Product-Market Fit',
-    description: 'Achieved consistent 15%+ MoM growth',
-    status: arr > 500000 ? 'completed' : 'upcoming',
-    date: 'Q1 2024',
+    description: arr > 250000 || ltvCac > 3 ? 'Demonstrated strong market demand and retention efficiency' : 'Achieve consistent 15%+ MoM growth and >3x LTV:CAC',
+    status: arr > 500000 || ltvCac > 4 ? 'completed' : arr > 100000 || ltvCac > 2 ? 'in-progress' : 'upcoming',
+    date: arr > 500000 || ltvCac > 4 ? 'Completed' : `Q${currentQuarter} ${currentYear}`,
+    progress: Math.min(100, Math.round(pmfScore))
   });
 
   // $1M ARR milestone
-  const arrProgress = Math.min(100, (arr / 1000000) * 100);
+  const arrProgress = Math.min(100, Math.round((arr / 1000000) * 100));
   milestones.push({
     title: '$1M ARR',
-    description: 'Reach $1M annual recurring revenue',
-    status: arr >= 1000000 ? 'completed' : arrProgress > 50 ? 'in-progress' : 'upcoming',
-    date: 'Q3 2024',
+    description: 'Reach $1M annual recurring revenue milestone',
+    status: arr >= 1000000 ? 'completed' : arrProgress > 30 ? 'in-progress' : 'upcoming',
+    date: arr >= 1000000 ? 'Completed' : `Q${((currentQuarter + 2) % 4) || 4} ${currentYear + (currentQuarter >= 2 ? 1 : 0)}`,
     progress: arrProgress,
   });
 
-  // Break-even milestone
+  // Break-even & Profitability
   milestones.push({
-    title: 'Break-even',
-    description: 'Achieve monthly profitability',
-    status: runwayMonths > 24 ? 'in-progress' : 'upcoming',
-    date: 'Q4 2024',
+    title: 'Operational Break-even',
+    description: 'Optimize burn to achieve monthly cash flow neutrality',
+    status: runwayMonths > 36 ? 'completed' : runwayMonths > 18 ? 'in-progress' : 'upcoming',
+    date: `FY${currentYear + 1}`,
+    progress: Math.min(100, Math.round((runwayMonths / 24) * 100))
   });
 
-  // Series A milestone
+  // Expansion & Series A
   milestones.push({
-    title: 'Series A',
-    description: 'Raise Series A funding round',
-    status: 'upcoming',
-    date: 'Q1 2025',
+    title: 'Series A Readiness',
+    description: 'Standardize reporting and governance for institutional capital',
+    status: arr > 750000 ? 'in-progress' : 'upcoming',
+    date: `FY${currentYear + 1}`,
+    progress: Math.min(100, Math.round((arr / 1500000) * 100))
   });
 
   return milestones;
@@ -458,33 +511,21 @@ function getMilestones(arr: number, runwayMonths: number): Array<{
 /**
  * Get key updates (could be fetched from database or generated)
  */
-function getKeyUpdates(orgId: string, lastUpdate: Date): Array<{
+function getKeyUpdates(orgId: string, lastUpdate: Date, modelName: string = 'Latest'): Array<{
   date: string;
   title: string;
   content: string;
   type: 'positive' | 'neutral' | 'negative';
 }> {
   // In a real implementation, this would fetch from a database
-  // For now, return sample updates
+  // For now, return actual important system events if available
   return [
     {
-      date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      title: 'Revenue Growth Acceleration',
-      content: 'Monthly revenue showing strong growth. Performance driven by enterprise customer acquisition.',
-      type: 'positive' as const,
-    },
-    {
-      date: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      title: 'Team Expansion',
-      content: 'Team growth continues. Burn rate adjusted accordingly.',
+      date: lastUpdate.toISOString().split('T')[0],
+      title: 'Baseline Model Active',
+      content: `Investor view synchronized with "${modelName}" model run results.`,
       type: 'neutral' as const,
-    },
-    {
-      date: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      title: 'Partnership Announcement',
-      content: 'Strategic partnerships signed. Expected to drive significant revenue growth.',
-      type: 'positive' as const,
-    },
+    }
   ];
 }
 
@@ -523,6 +564,13 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
         lte: endDate,
       },
     },
+    select: {
+      date: true,
+      amount: true,
+      category: true,
+      description: true,
+      rawPayload: true,
+    },
     orderBy: {
       date: 'desc',
     },
@@ -535,6 +583,13 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
         orgId,
         isDuplicate: false,
       } as any,
+      select: {
+        date: true,
+        amount: true,
+        category: true,
+        description: true,
+        rawPayload: true,
+      },
       orderBy: {
         date: 'desc',
       },
@@ -542,17 +597,39 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
     });
   }
 
-  // Calculate monthly revenue and expenses
+  // Helper to determine if a category is revenue or expense (consistent with overview)
+  const revenueKeywords = ['revenue', 'sales', 'income', 'earning', 'subscription', 'fee'];
+  const expenseKeywords = ['cogs', 'payroll', 'marketing', 'ads', 'rent', 'expense', 'hardware', 'software', 'cost', 'utilities', 'insurance', 'tax', 'interest', 'commission', 'bonus', 'salary', 'vendor', 'payment'];
+  
   const monthlyRevenueMap = new Map<string, number>();
   const monthlyExpenseMap = new Map<string, number>();
+  const monthlyCustomersMap = new Map<string, Set<string>>();
 
   for (const tx of transactions) {
     const month = String(tx.date.getMonth() + 1).padStart(2, '0');
     const period = `${tx.date.getFullYear()}-${month}`;
     const amount = Number(tx.amount);
+    const category = (tx.category || '').toLowerCase();
+    const description = (tx.description || '').toLowerCase();
 
-    if (amount > 0) {
-      monthlyRevenueMap.set(period, (monthlyRevenueMap.get(period) || 0) + amount);
+    // Determine if revenue or expense based on category/description keywords + sign
+    let isRevenue = amount > 0;
+    
+    // Explicit keywords take priority
+    if (revenueKeywords.some(k => category.includes(k) || description.includes(k))) {
+      isRevenue = true;
+    } else if (expenseKeywords.some(k => category.includes(k) || description.includes(k))) {
+      isRevenue = false;
+    }
+
+    if (isRevenue) {
+      monthlyRevenueMap.set(period, (monthlyRevenueMap.get(period) || 0) + Math.abs(amount));
+      // Extract customer for this month
+      const customer = extractVendorFromDescription(tx.description, (tx as any).rawPayload);
+      if (customer && customer !== 'Unknown') {
+        if (!monthlyCustomersMap.has(period)) monthlyCustomersMap.set(period, new Set());
+        monthlyCustomersMap.get(period)!.add(customer);
+      }
     } else {
       monthlyExpenseMap.set(period, (monthlyExpenseMap.get(period) || 0) + Math.abs(amount));
     }
@@ -569,18 +646,28 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
   let monthlyRevenue = 0;
   let monthlyBurnRate = 0;
   let arrGrowth = 0;
+  let customerGrowth = 0;
 
   if (allPeriods.length > 0) {
+    // Use last month as latest
     const latestPeriod = allPeriods[allPeriods.length - 1];
     monthlyRevenue = monthlyRevenueMap.get(latestPeriod) || 0;
-    monthlyBurnRate = monthlyExpenseMap.get(latestPeriod) || 0;
+    const latestExpenses = monthlyExpenseMap.get(latestPeriod) || 0;
+    
+    // Monthly burn is Net Burn (Expenses - Revenue), but bounded at 0
+    monthlyBurnRate = Math.max(0, latestExpenses - monthlyRevenue);
     arr = monthlyRevenue * 12;
 
     // Calculate growth from previous period
     if (allPeriods.length >= 2) {
       const prevPeriod = allPeriods[allPeriods.length - 2];
+      
       const prevRevenue = monthlyRevenueMap.get(prevPeriod) || 0;
       arrGrowth = prevRevenue > 0 ? ((monthlyRevenue - prevRevenue) / prevRevenue) * 100 : 0;
+      
+      const prevCustomers = monthlyCustomersMap.get(prevPeriod)?.size || 0;
+      const currCustomers = monthlyCustomersMap.get(latestPeriod)?.size || 0;
+      customerGrowth = prevCustomers > 0 ? ((currCustomers - prevCustomers) / prevCustomers) * 100 : 0;
     }
   }
 
@@ -709,6 +796,25 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
 
   const keyUpdates = await getKeyUpdates(orgId, new Date());
 
+  // Calculate basic unit economics if we have revenue and customers
+  let ltv = 0;
+  let cac = 0;
+
+  if (arr > 0 && activeCustomers > 0) {
+    // Basic LTV heuristic when no model exists: Assume 5% monthly churn -> 20 month lifespan
+    const mrr = arr / 12;
+    const arpa = mrr / activeCustomers;
+    ltv = arpa * 20; // Default 20 months lifespan (5% churn)
+
+    // Basic CAC heuristic: Assume 10% of revenue goes to marketing
+    const growthRate = (arrGrowth > 0 ? arrGrowth : 5) / 100;
+    cac = (arr * 0.10) / (activeCustomers * growthRate);
+  }
+
+  const ltvCacRatio = ltv > 0 && cac > 0 ? ltv / cac : 0;
+  // Payback period in months: CAC / ARPA = CAC / (MRR / Customers)
+  const paybackPeriod = ltv > 0 && cac > 0 && activeCustomers > 0 ? (cac / ((arr / 12) / activeCustomers)) : 0;
+
   return {
     executiveSummary: {
       arr: Math.round(arr),
@@ -716,17 +822,24 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
       monthsRunway: Math.round(runwayMonths * 10) / 10,
       healthScore: Math.round(healthScore),
       arrGrowth: Math.round(arrGrowth * 10) / 10,
-      customerGrowth: 0, // Can't calculate growth without historical customer data
+      customerGrowth: Math.round(customerGrowth * 10) / 10,
       runwayChange: 0,
     },
     monthlyMetrics,
     milestones,
     keyUpdates,
     unitEconomics: {
-      ltv: 0,
-      cac: 0,
-      ltvCacRatio: 0,
-      paybackPeriod: 0,
+      ltv: Math.round(ltv),
+      cac: Math.round(cac),
+      ltvCacRatio: Math.round(ltvCacRatio * 10) / 10,
+      paybackPeriod: Math.round(paybackPeriod * 10) / 10,
+    },
+    saasMetrics: {
+      nrr: 100, // Baseline NRR
+      grr: 100, // Baseline GRR
+      ruleOf40: 0,
+      burnMultiple: 0,
+      magicNumber: 0,
     },
   };
 }
@@ -745,6 +858,13 @@ function getDefaultDashboardData(): InvestorDashboardData {
       customerGrowth: 0,
       runwayChange: 0,
     },
+    saasMetrics: {
+      nrr: 0,
+      grr: 0,
+      ruleOf40: 0,
+      burnMultiple: 0,
+      magicNumber: 0,
+    },
     monthlyMetrics: [],
     milestones: [],
     keyUpdates: [],
@@ -755,6 +875,47 @@ function getDefaultDashboardData(): InvestorDashboardData {
       paybackPeriod: 0,
     },
   };
+}
+
+/**
+ * Extract vendor/customer name from transaction description or rawPayload
+ */
+function extractVendorFromDescription(description: string | null, rawPayload: any): string | null {
+  if (!description && !rawPayload) return null;
+
+  // Try to extract from description (common patterns)
+  if (description) {
+    // Remove common prefixes/suffixes
+    let vendor = description.trim();
+
+    // Remove transaction IDs, reference numbers
+    vendor = vendor.replace(/\b(REF|REF#|REFERENCE|TXN|ID|#)\s*:?\s*[A-Z0-9-]+\b/gi, '').trim();
+
+    // Remove amounts
+    vendor = vendor.replace(/\$[\d,]+\.?\d*/g, '').trim();
+
+    // Remove dates
+    vendor = vendor.replace(/\d{1,2}\/\d{1,2}\/\d{2,4}/g, '').trim();
+
+    // Take first meaningful words (usually vendor name is at the start)
+    const words = vendor.split(/\s+/).filter(w => w.length > 2);
+    if (words.length > 0) {
+      // Take first 2-3 words as vendor name
+      return words.slice(0, 3).join(' ').substring(0, 50);
+    }
+  }
+
+  // Try to extract from rawPayload
+  if (rawPayload && typeof rawPayload === 'object') {
+    const vendorFields = ['vendor', 'merchant', 'payee', 'name', 'company', 'business', 'customer'];
+    for (const field of vendorFields) {
+      if (rawPayload[field] && typeof rawPayload[field] === 'string') {
+        return rawPayload[field].substring(0, 50);
+      }
+    }
+  }
+
+  return description ? description.substring(0, 50) : null;
 }
 
 

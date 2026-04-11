@@ -5,6 +5,7 @@
 
 import { Request, Response } from 'express';
 import { csvMappingService, ColumnMapping } from '../services/csv-mapping.service';
+import { smartMappingService } from '../services/smart-mapping.service';
 import { ValidationError } from '../utils/errors';
 import { logger } from '../utils/logger';
 
@@ -206,6 +207,41 @@ export const csvMappingController = {
           code: 'INTERNAL_ERROR',
           message: 'Failed to validate mapping',
         },
+      });
+    }
+  },
+
+  /**
+   * POST /import/map/smart
+   * AI-powered mapping: analyzes headers + sample data
+   */
+  smartMap: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { headers, sampleRows } = req.body;
+
+      if (!headers || !Array.isArray(headers) || headers.length === 0) {
+        res.status(400).json({
+          ok: false,
+          error: { code: 'VALIDATION_ERROR', message: 'headers must be a non-empty array of strings' },
+        });
+        return;
+      }
+
+      const samples = Array.isArray(sampleRows) ? sampleRows : [];
+
+      const result = await smartMappingService.analyzeAndMap(headers, samples);
+
+      logger.info(`Smart-mapped ${result.mappedCount}/${result.totalColumns} columns (format=${result.formatDetected})`);
+
+      res.status(200).json({
+        ok: true,
+        data: result,
+      });
+    } catch (error: any) {
+      logger.error(`Error in smart-map: ${error.message}`, error);
+      res.status(500).json({
+        ok: false,
+        error: { code: 'INTERNAL_ERROR', message: 'Failed to perform smart mapping' },
       });
     }
   },

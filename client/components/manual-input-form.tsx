@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
 import { Save, Loader2, Calculator, Info, TrendingUp, Users, DollarSign, Zap } from "lucide-react"
 import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
@@ -13,9 +14,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 interface ManualInputFormProps {
     orgId: string | null
     modelId: string | null
+    onSuccess?: () => void
 }
 
-export function ManualInputForm({ orgId, modelId }: ManualInputFormProps) {
+export function ManualInputForm({ orgId, modelId, onSuccess }: ManualInputFormProps) {
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [inputs, setInputs] = useState<any>({
@@ -105,6 +107,7 @@ export function ManualInputForm({ orgId, modelId }: ManualInputFormProps) {
             const data = await res.json()
             if (data.ok) {
                 toast.success("Manual inputs saved successfully. Recalculating model...")
+                if (onSuccess) onSuccess()
             } else {
                 throw new Error(data.message || "Failed to save inputs")
             }
@@ -115,7 +118,38 @@ export function ManualInputForm({ orgId, modelId }: ManualInputFormProps) {
         }
     }
 
-    if (loading) return <div className="p-8 text-center text-muted-foreground"><Loader2 className="animate-spin inline mr-2" /> Loading inputs...</div>
+    if (loading) return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-64" />
+            <Skeleton className="h-4 w-96" />
+          </div>
+          <Skeleton className="h-10 w-44" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="border-t-4 border-t-slate-200">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-5 w-5 rounded-full" />
+                  <Skeleton className="h-5 w-32" />
+                </div>
+                <Skeleton className="h-4 w-40 mt-1" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {[1, 2, 3].map((j) => (
+                  <div key={j} className="space-y-2">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    )
 
     if (!orgId || !modelId) {
         return <div className="p-8 text-center text-muted-foreground">Select a model to enter manual inputs.</div>

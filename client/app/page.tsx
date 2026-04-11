@@ -4,35 +4,41 @@ import { useState, useEffect } from "react"
 import { LandingPage } from "@/components/landing-page"
 import { ModelProvider } from "@/lib/model-context"
 import { DashboardLayout } from "@/components/dashboard-layout"
-import { OverviewDashboard } from "@/components/overview-dashboard"
-import { FinancialModeling } from "@/components/financial-modeling"
-import { BudgetActual } from "@/components/budget-actual"
-import { ScenarioPlanning } from "@/components/scenario-planning"
-import { RealtimeSimulations } from "@/components/realtime-simulations"
-import { AIForecasting } from "@/components/ai-forecasting"
-import { AIAssistant } from "@/components/ai-assistant"
-import { ReportsAnalytics } from "@/components/reports-analytics"
-import { BoardReporting } from "@/components/board-reporting"
-import { InvestorDashboard } from "@/components/investor-dashboard"
-import { UserManagement } from "@/components/user-management"
-import { IntegrationsPage } from "@/components/integrations-page"
-import { NotificationsPage } from "@/components/notifications-page"
-import { CompliancePage } from "@/components/compliance-page"
+import dynamic from "next/dynamic"
 
-import { SettingsPage } from "@/components/settings-page"
-import { OnboardingPage } from "@/components/onboarding-page"
-import { CollaborationPage } from "@/components/collaboration-page"
-import { ApprovalManagement } from "@/components/approval-management"
-import { SemanticLedger } from "@/components/semantic-ledger"
-import { ConsolidationPage } from "@/components/consolidation-page"
-import { HeadcountPlanningPage } from "@/components/headcount-planning-page"
-import { DemoModeOnboarding } from "@/components/demo-mode-onboarding"
-import { DemoModeBanner } from "@/components/demo-mode-banner"
-import { UpgradeToRealModal } from "@/components/upgrade-to-real-modal"
+// Dynamic imports for major components to optimize build time and loading
+const OverviewDashboard = dynamic(() => import("@/components/overview-dashboard").then(mod => mod.OverviewDashboard), {
+  loading: () => <div className="h-full w-full flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div></div>
+})
+const FinancialModeling = dynamic(() => import("@/components/financial-modeling").then(mod => mod.FinancialModeling), {
+  loading: () => <div className="h-full w-full flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div></div>
+})
+const BudgetActual = dynamic(() => import("@/components/budget-actual").then(mod => mod.BudgetActual))
+const ScenarioPlanning = dynamic(() => import("@/components/scenario-planning").then(mod => mod.ScenarioPlanning))
+const RealtimeSimulations = dynamic(() => import("@/components/realtime-simulations").then(mod => mod.RealtimeSimulations))
+const AIForecasting = dynamic(() => import("@/components/ai-forecasting").then(mod => mod.AIForecasting))
+const AIAssistant = dynamic(() => import("@/components/ai-assistant").then(mod => mod.AIAssistant))
+const ReportsAnalytics = dynamic(() => import("@/components/reports-analytics").then(mod => mod.ReportsAnalytics))
+const BoardReporting = dynamic(() => import("@/components/board-reporting").then(mod => mod.BoardReporting))
+const InvestorDashboard = dynamic(() => import("@/components/investor-dashboard").then(mod => mod.InvestorDashboard))
+const UserManagement = dynamic(() => import("@/components/user-management").then(mod => mod.UserManagement))
+const IntegrationsPage = dynamic(() => import("@/components/integrations-page").then(mod => mod.IntegrationsPage))
+const NotificationsPage = dynamic(() => import("@/components/notifications-page").then(mod => mod.NotificationsPage))
+const CompliancePage = dynamic(() => import("@/components/compliance-page").then(mod => mod.CompliancePage))
+const SettingsPage = dynamic(() => import("@/components/settings-page").then(mod => mod.SettingsPage))
+const OnboardingPage = dynamic(() => import("@/components/onboarding-page").then(mod => mod.OnboardingPage))
+const CollaborationPage = dynamic(() => import("@/components/collaboration-page").then(mod => mod.CollaborationPage))
+const ApprovalManagement = dynamic(() => import("@/components/approval-management").then(mod => mod.ApprovalManagement))
+const SemanticLedger = dynamic(() => import("@/components/semantic-ledger").then(mod => mod.SemanticLedger))
+const ConsolidationPage = dynamic(() => import("@/components/consolidation-page").then(mod => mod.ConsolidationPage))
+const HeadcountPlanningPage = dynamic(() => import("@/components/headcount-planning-page").then(mod => mod.HeadcountPlanningPage))
+const DemoModeOnboarding = dynamic(() => import("@/components/demo-mode-onboarding").then(mod => mod.DemoModeOnboarding))
+const DemoModeBanner = dynamic(() => import("@/components/demo-mode-banner").then(mod => mod.DemoModeBanner))
+const UpgradeToRealModal = dynamic(() => import("@/components/upgrade-to-real-modal").then(mod => mod.UpgradeToRealModal))
+const JobQueue = dynamic(() => import("@/components/jobs/job-queue").then(mod => mod.JobQueue))
+const ExportJobQueue = dynamic(() => import("@/components/exports/export-job-queue").then(mod => mod.ExportJobQueue))
+
 import { isDemoMode, resetDemoDataIfNeeded } from "@/lib/demo-data-generator"
-import { JobQueue } from "@/components/jobs/job-queue"
-import { ExportJobQueue } from "@/components/exports/export-job-queue"
-
 import { checkUserHasData, getUserOrgId } from "@/lib/user-data-check"
 import { ErrorBoundary } from "@/components/error-boundary"
 

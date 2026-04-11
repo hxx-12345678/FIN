@@ -59,6 +59,10 @@ class RunJobDirectRequest(BaseModel):
     objectId: Optional[str] = None
     params: Optional[Dict[str, Any]] = None
 
+class AIMapRequest(BaseModel):
+    headers: List[str]
+    sampleRows: List[Dict[str, Any]]
+
 
 @app.get("/health", dependencies=[Depends(verify_worker_secret)])
 def health():
@@ -108,6 +112,17 @@ def queue_job(req: QueueJobRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"❌ Unexpected queue job error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/ai_map_columns", dependencies=[Depends(verify_worker_secret)])
+def ai_map_columns(req: AIMapRequest):
+    logger.info(f"📥 AI Map Columns request for {len(req.headers)} headers")
+    try:
+        from jobs.ai_column_mapper import analyze_columns_with_ai
+        result = analyze_columns_with_ai(req.headers, req.sampleRows)
+        return {"ok": True, "data": result}
+    except Exception as e:
+        logger.error(f"❌ AI mapping endpoint error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

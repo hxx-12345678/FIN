@@ -16,6 +16,7 @@ model User {
   createdAt                   DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   lastLogin                   DateTime?             @map("last_login") @db.Timestamptz(6)
   accessRequestsReviewed      AccessRequest[]       @relation("access_request_reviewer")
+  aiCFOConversations          AICFOConversation[]
   aiCFOPlans                  AICFOPlan[]           @relation("plan_createdBy")
   alertRules                  AlertRule[]           @relation("alert_createdBy")
   approvalRequestsApproved    ApprovalRequest[]     @relation("approval_approver")
@@ -34,60 +35,59 @@ model User {
   roles                       UserOrgRole[]
   preferences                 UserPreferences?
   usageRecords                UserUsage[]
-  aiCFOConversations          AICFOConversation[]
 
   @@map("users")
 }
 
 model Org {
-  id                   String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name                 String
-  timezone             String                @default("UTC")
-  currency             String                @default("USD")
-  planTier             String                @default("free") @map("plan_tier")
-  dataRegion           String                @default("global") @map("data_region")
-  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
-  accessRequests       AccessRequest[]
-  aiCFOPlans           AICFOPlan[]
-  alertRules           AlertRule[]
-  approvalRequests     ApprovalRequest[]
-  auditLogs            AuditLog[]
-  billingUsage         BillingUsage[]
-  boardReportSchedules BoardReportSchedule[]
-  budgets              Budget[]
-  chartOfAccounts      ChartOfAccount[]
-  computationTraces    ComputationTrace[]
-  connectors           Connector[]
-  dataImportBatches    DataImportBatch[]
-  driverFormulas       DriverFormula[]
-  drivers              Driver[]
-  excelMappings        ExcelMapping[]
-  excelSyncs           ExcelSync[]
-  exports              Export[]
-  financialLedger      FinancialLedger[]
-  financialScenarios   FinancialScenario[]
-  forecasts            Forecast[]
-  invitationTokens     InvitationToken[]
-  jobs                 Job[]
-  localizationSettings LocalizationSettings?
-  modelRuns            ModelRun[]
-  models               Model[]
-  monteCarloJobs       MonteCarloJob[]
-  notificationChannels NotificationChannel[]
-  notifications        Notification[]
-  details              OrgDetails?
-  quota                OrgQuota?
-  settings             OrgSettings?
-  prompts              Prompt[]
-  provenance           ProvenanceEntry[]
-  rawTransactions      RawTransaction[]
-  realtimeSimulations  RealtimeSimulation[]
-  shareTokens          ShareToken[]
-  roles                UserOrgRole[]
-  usageRecords         UserUsage[]
-  headcountPlans       HeadcountPlan[]
+  id                    String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                  String
+  timezone              String                @default("UTC")
+  currency              String                @default("USD")
+  planTier              String                @default("free") @map("plan_tier")
+  dataRegion            String                @default("global") @map("data_region")
+  createdAt             DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  accessRequests        AccessRequest[]
+  aiCFOConversations    AICFOConversation[]
+  aiCFOPlans            AICFOPlan[]
+  alertRules            AlertRule[]
+  approvalRequests      ApprovalRequest[]
+  auditLogs             AuditLog[]
+  billingUsage          BillingUsage[]
+  boardReportSchedules  BoardReportSchedule[]
+  budgets               Budget[]
+  chartOfAccounts       ChartOfAccount[]
+  computationTraces     ComputationTrace[]
+  connectors            Connector[]
   consolidationEntities ConsolidationEntity[]
-  aiCFOConversations          AICFOConversation[]
+  dataImportBatches     DataImportBatch[]
+  driverFormulas        DriverFormula[]
+  drivers               Driver[]
+  excelMappings         ExcelMapping[]
+  excelSyncs            ExcelSync[]
+  exports               Export[]
+  financialLedger       FinancialLedger[]
+  financialScenarios    FinancialScenario[]
+  forecasts             Forecast[]
+  headcountPlans        HeadcountPlan[]
+  invitationTokens      InvitationToken[]
+  jobs                  Job[]
+  localizationSettings  LocalizationSettings?
+  modelRuns             ModelRun[]
+  models                Model[]
+  monteCarloJobs        MonteCarloJob[]
+  notificationChannels  NotificationChannel[]
+  notifications         Notification[]
+  details               OrgDetails?
+  quota                 OrgQuota?
+  settings              OrgSettings?
+  prompts               Prompt[]
+  provenance            ProvenanceEntry[]
+  rawTransactions       RawTransaction[]
+  realtimeSimulations   RealtimeSimulation[]
+  shareTokens           ShareToken[]
+  roles                 UserOrgRole[]
+  usageRecords          UserUsage[]
 
   @@map("orgs")
 }
@@ -275,13 +275,13 @@ model Driver {
   unit            String?
   formula         String?
   isCalculated    Boolean         @default(false) @map("is_calculated")
-  minRange        Decimal?        @map("min_range") @db.Decimal(20, 4)
-  maxRange        Decimal?        @map("max_range") @db.Decimal(20, 4)
-  isLocked        Boolean         @default(false) @map("is_locked")
-  dependencies    Json?
   version         Int             @default(1)
   createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  dependencies    Json?
+  isLocked        Boolean         @default(false) @map("is_locked")
+  maxRange        Decimal?        @map("max_range") @db.Decimal(20, 4)
+  minRange        Decimal?        @map("min_range") @db.Decimal(20, 4)
   formulas        DriverFormula[]
   values          DriverValue[]
   model           Model           @relation(fields: [modelId], references: [id], onDelete: Cascade)
@@ -659,12 +659,12 @@ model AICFOConversation {
   orgId     String         @db.Uuid
   userId    String         @db.Uuid
   title     String?
-  status    String         @default("active") // active, archived
+  status    String         @default("active")
   createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  messages  AICFOMessage[]
   org       Org            @relation(fields: [orgId], references: [id], onDelete: Cascade)
   user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  AICFOMessage[]
 
   @@index([orgId])
   @@index([userId])
@@ -674,15 +674,15 @@ model AICFOConversation {
 model AICFOMessage {
   id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   conversationId  String            @db.Uuid
-  role            String            // user, assistant
-  content         String            // @db.Text is implied for String in Postgres if needed
+  role            String
+  content         String
   agentType       String?
   confidence      Decimal?          @db.Decimal(5, 4)
-  thoughts        Json?             // Array of AgentThought
-  dataSources     Json?             // Array of DataSource
-  recommendations Json?             // Array of AgentRecommendation
-  calculations    Json?             // Map of calculations
-  visualizations  Json?             // Array of AgentVisualization
+  thoughts        Json?
+  dataSources     Json?
+  recommendations Json?
+  calculations    Json?
+  visualizations  Json?
   metadata        Json?
   createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   conversation    AICFOConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -840,26 +840,26 @@ model LocalizationSettings {
 }
 
 model HeadcountPlan {
-  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId           String    @map("org_id") @db.Uuid
-  name            String
-  department      String    @default("General")
-  role            String
-  level           String?   // e.g. "Junior", "Mid", "Senior", "Lead", "Director"
-  quantity        Int       @default(1)
-  salary          Decimal?  @db.Decimal(20, 4) // Annual salary per head
-  benefitsMultiplier Decimal? @default(1.3) @map("benefits_multiplier") @db.Decimal(5, 2) // 1.3 = 30% benefits on top
-  totalAnnualCost Decimal?  @map("total_annual_cost") @db.Decimal(20, 4)
-  startDate       DateTime  @map("start_date") @db.Date
-  endDate         DateTime? @map("end_date") @db.Date
-  rampMonths      Int       @default(3) @map("ramp_months") // months to full productivity
-  status          String    @default("planned") // planned | approved | hiring | filled | cancelled
-  hiringStage     String?   @default("open") @map("hiring_stage") // open | sourcing | interview | offer | onboarding | active
-  notes           String?
-  createdById     String?   @map("created_by_id") @db.Uuid
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  org             Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId              String    @map("org_id") @db.Uuid
+  name               String
+  department         String    @default("General")
+  role               String
+  level              String?
+  quantity           Int       @default(1)
+  salary             Decimal?  @db.Decimal(20, 4)
+  benefitsMultiplier Decimal?  @default(1.3) @map("benefits_multiplier") @db.Decimal(5, 2)
+  totalAnnualCost    Decimal?  @map("total_annual_cost") @db.Decimal(20, 4)
+  startDate          DateTime  @map("start_date") @db.Date
+  endDate            DateTime? @map("end_date") @db.Date
+  rampMonths         Int       @default(3) @map("ramp_months")
+  status             String    @default("planned")
+  hiringStage        String?   @default("open") @map("hiring_stage")
+  notes              String?
+  createdById        String?   @map("created_by_id") @db.Uuid
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  org                Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@index([orgId])
   @@index([department])
@@ -869,21 +869,21 @@ model HeadcountPlan {
 }
 
 model ConsolidationEntity {
-  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId           String    @map("org_id") @db.Uuid
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orgId           String   @map("org_id") @db.Uuid
   name            String
-  code            String?   // e.g. "US-HQ", "EU-SUB", "APAC-JV"
-  entityType      String    @default("subsidiary") @map("entity_type") // parent | subsidiary | joint_venture | associate
-  currency        String    @default("USD")
-  ownershipPct    Decimal   @default(100) @map("ownership_pct") @db.Decimal(5, 2) // 100 = fully owned
+  code            String?
+  entityType      String   @default("subsidiary") @map("entity_type")
+  currency        String   @default("USD")
+  ownershipPct    Decimal  @default(100) @map("ownership_pct") @db.Decimal(5, 2)
   country         String?
-  taxRate         Decimal?  @map("tax_rate") @db.Decimal(5, 4) // e.g. 0.2100 = 21%
-  isActive        Boolean   @default(true) @map("is_active")
-  financialData   Json?     @map("financial_data") // cached 3-statement results
-  intercompanyMap Json?     @map("intercompany_map") // IC transaction definitions
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  org             Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  taxRate         Decimal? @map("tax_rate") @db.Decimal(5, 4)
+  isActive        Boolean  @default(true) @map("is_active")
+  financialData   Json?    @map("financial_data")
+  intercompanyMap Json?    @map("intercompany_map")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  org             Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@unique([orgId, code])
   @@index([orgId])
@@ -895,7 +895,6 @@ model Budget {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orgId       String   @map("org_id") @db.Uuid
   category    String
-  department  String?  @default("General")
   month       String
   amount      Decimal  @db.Decimal(20, 4)
   currency    String   @default("USD")
@@ -903,6 +902,7 @@ model Budget {
   createdById String?  @map("created_by_id") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  department  String?  @default("General")
   createdBy   User?    @relation("budget_createdBy", fields: [createdById], references: [id])
   org         Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
 

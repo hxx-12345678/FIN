@@ -671,13 +671,14 @@ export function CreateModelForm({
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Data-Driven AI */}
-                <button
-                  onClick={() => dataStatus?.intelligenceGating?.dataDrivenAI && setIntelligenceEngine("data-driven")}
-                  className={`p-5 rounded-2xl border-2 text-left flex flex-col gap-4 transition-all relative group h-full ${intelligenceEngine === "data-driven"
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setIntelligenceEngine("data-driven")}
+                  onKeyDown={(e) => e.key === 'Enter' && setIntelligenceEngine("data-driven")}
+                  className={`p-5 rounded-2xl border-2 text-left flex flex-col gap-4 transition-all relative group h-full cursor-pointer ${intelligenceEngine === "data-driven"
                     ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-600 ring-offset-2 shadow-xl'
-                    : !dataStatus?.intelligenceGating?.dataDrivenAI
-                      ? 'border-slate-100 bg-slate-50 opacity-40 cursor-not-allowed grayscale'
-                      : 'border-slate-100 bg-white hover:border-indigo-200 hover:shadow-lg'
+                    : 'border-slate-100 bg-white hover:border-indigo-200 hover:shadow-lg'
                     }`}
                 >
                   <div className={`p-3 w-fit rounded-xl ${intelligenceEngine === "data-driven" ? 'bg-indigo-600 text-white shadow-lg rotate-3' : 'bg-slate-100 text-slate-500 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors'}`}>
@@ -690,32 +691,53 @@ export function CreateModelForm({
                     </div>
                   </div>
                   {intelligenceEngine === "data-driven" && (
-                     <div className="mt-auto pt-4 border-t border-indigo-100 space-y-3">
-                        <p className="text-[10px] font-black uppercase text-indigo-700">Data Selection</p>
-                        <div className="space-y-2">
-                           <button 
-                             onClick={(e) => { e.stopPropagation(); setDataSelectionMode("all"); }}
-                             className={`w-full text-left p-2 rounded-lg text-xs font-bold flex items-center gap-2 border transition-all ${dataSelectionMode === 'all' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-600 border-indigo-100 hover:border-indigo-300'}`}
-                           >
-                              <Database className="h-3.5 w-3.5" />
-                              Use All Org Data
-                           </button>
-                           <button 
-                             onClick={(e) => { e.stopPropagation(); setDataSelectionMode("specific"); }}
-                             className={`w-full text-left p-2 rounded-lg text-xs font-bold flex items-center gap-2 border transition-all ${dataSelectionMode === 'specific' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-600 border-indigo-100 hover:border-indigo-300'}`}
-                           >
-                              <Plus className="h-3.5 w-3.5" />
-                              Upload Specific File
-                           </button>
-                        </div>
-                     </div>
+                    <div className="mt-auto pt-4 border-t border-indigo-100 space-y-3">
+                      <p className="text-[10px] font-black uppercase text-indigo-700">Data Selection</p>
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            if (dataStatus?.intelligenceGating?.dataDrivenAI) {
+                              setDataSelectionMode("all"); 
+                            } else {
+                              toast.error("Connect an ERP or use CSV Import first to use 'All Org Data'.");
+                            }
+                          }}
+                          className={`w-full text-left p-3 rounded-xl text-xs font-bold flex items-center justify-between gap-2 border transition-all duration-200 ${dataSelectionMode === 'all' ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg scale-[1.02]' : 'bg-white text-slate-600 border-indigo-100 hover:border-indigo-300 hover:bg-slate-50'} ${!dataStatus?.intelligenceGating?.dataDrivenAI ? 'opacity-50 grayscale cursor-not-allowed' : 'cursor-pointer'}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Database className={`h-4 w-4 ${dataSelectionMode === 'all' ? 'text-white' : 'text-indigo-600'}`} />
+                            <span>Use All Org Data</span>
+                          </div>
+                          {dataSelectionMode === 'all' && <Badge variant="secondary" className="bg-white/20 text-white border-none text-[8px] px-1 h-4">Active</Badge>}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            setDataSelectionMode("specific"); 
+                          }}
+                          className={`w-full text-left p-3 rounded-xl text-xs font-bold flex items-center justify-between gap-2 border transition-all duration-200 ${dataSelectionMode === 'specific' ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg scale-[1.02]' : 'bg-white text-slate-600 border-indigo-100 hover:border-indigo-300 hover:bg-slate-50'} cursor-pointer`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Plus className={`h-4 w-4 ${dataSelectionMode === 'specific' ? 'text-white' : 'text-indigo-600'}`} />
+                            <span>Upload Specific File</span>
+                          </div>
+                          {dataSelectionMode === 'specific' && <Badge variant="secondary" className="bg-white/20 text-white border-none text-[8px] px-1 h-4">Active</Badge>}
+                        </button>
+                      </div>
+                    </div>
                   )}
-                </button>
+                </div>
 
                 {/* Synthetic AI */}
-                <button
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setIntelligenceEngine("synthetic")}
-                  className={`p-5 rounded-2xl border-2 text-left flex flex-col gap-4 transition-all group h-full ${intelligenceEngine === "synthetic"
+                  onKeyDown={(e) => e.key === 'Enter' && setIntelligenceEngine("synthetic")}
+                  className={`p-5 rounded-2xl border-2 text-left flex flex-col gap-4 transition-all group h-full cursor-pointer ${intelligenceEngine === "synthetic"
                     ? 'border-purple-600 bg-purple-50/50 ring-2 ring-purple-600 ring-offset-2 shadow-xl'
                     : 'border-slate-100 bg-white hover:border-purple-200 hover:shadow-lg'
                     }`}
@@ -732,12 +754,15 @@ export function CreateModelForm({
                   <Badge variant="outline" className="mt-auto text-[10px] w-fit font-black uppercase text-purple-600 border-purple-200 bg-purple-50">
                     Always Available
                   </Badge>
-                </button>
+                </div>
 
                 {/* Manual */}
-                <button
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setIntelligenceEngine("manual")}
-                  className={`p-5 rounded-2xl border-2 text-left flex flex-col gap-4 transition-all group h-full ${intelligenceEngine === "manual"
+                  onKeyDown={(e) => e.key === 'Enter' && setIntelligenceEngine("manual")}
+                  className={`p-5 rounded-2xl border-2 text-left flex flex-col gap-4 transition-all group h-full cursor-pointer ${intelligenceEngine === "manual"
                     ? 'border-slate-900 bg-slate-50 ring-2 ring-slate-900 ring-offset-2 shadow-xl'
                     : 'border-slate-100 bg-white hover:border-slate-300 hover:shadow-lg'
                     }`}
@@ -754,7 +779,7 @@ export function CreateModelForm({
                   <Badge variant="outline" className="mt-auto text-[10px] w-fit font-black uppercase text-slate-600 border-slate-200 bg-slate-50">
                     Traditional
                   </Badge>
-                </button>
+                </div>
               </div>
 
               <div className="flex justify-between pt-4">

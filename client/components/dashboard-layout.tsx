@@ -80,25 +80,25 @@ const navigationItems = [
     title: "Scenario Planning",
     icon: TrendingUp,
     key: "scenarios",
-    badge: "AI",
+    badge: null,
   },
   {
     title: "Real-time Simulations",
     icon: Activity,
     key: "simulations",
-    badge: "Live",
+    badge: null,
   },
   {
     title: "AI CFO Assistant",
     icon: MessageSquare,
     key: "assistant",
-    badge: "AI",
+    badge: null,
   },
   {
-    title: "AI Forecasting",
+    title: "Forecasting",
     icon: Brain,
     key: "forecasting",
-    badge: "AI",
+    badge: null,
   },
   {
     title: "Governance & Approvals",
@@ -110,7 +110,7 @@ const navigationItems = [
     title: "Semantic Ledger",
     icon: Database,
     key: "ledger",
-    badge: "Truth",
+    badge: null,
   },
   {
     title: "Board Reporting",
@@ -156,11 +156,11 @@ const managementItems = [
     key: "integrations",
   },
   // Notifications removed - not currently functional
-  {
-    title: "Compliance",
-    icon: Shield,
-    key: "compliance",
-  },
+  // {
+  //   title: "Compliance",
+  //   icon: Shield,
+  //   key: "compliance",
+  // },
   {
     title: "Settings",
     icon: Settings,
@@ -439,10 +439,13 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
                 />
               </div>
               <div className="flex flex-col">
-                <span className="text-lg font-bold tracking-tight text-foreground">
-                  FinaPilot
-                </span>
-                <span className="text-[10px] uppercase tracking-widest text-blue-600 font-bold">AI Finance OS</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-lg font-bold tracking-tight text-foreground">
+                    FinaPilot
+                  </span>
+                  <Badge variant="outline" className="text-[8px] px-1 py-0 h-4 font-black border-blue-200 text-blue-600 bg-blue-50/50">V1.0 pro</Badge>
+                </div>
+                <span className="text-[10px] uppercase tracking-widest text-blue-600 font-bold">Finance OS</span>
               </div>
             </div>
           </div>

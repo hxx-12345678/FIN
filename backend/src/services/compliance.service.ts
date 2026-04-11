@@ -546,7 +546,19 @@ export const complianceService = {
       logger.warn('Could not fetch security controls from org settings');
     }
 
-    // Default controls if none exist
+    // Calculate real data completeness for 'dlp' and 'compliance-management'
+    let dataCompleteness = 0;
+    try {
+      const totalTransactions = await prisma.rawTransaction.count({ where: { orgId, isDuplicate: false } });
+      const mappedTransactions = await prisma.financialLedger.count({ where: { orgId } });
+      dataCompleteness = totalTransactions > 0 
+        ? Math.round((mappedTransactions / totalTransactions) * 100) 
+        : 100; // If no transactions, it's technically complete
+    } catch (error) {
+      logger.warn('Failed to calculate real data completeness, falling back to 0');
+    }
+
+    // Default controls with some dynamic values
     const defaultControls: SecurityControl[] = [
       // Access Control
       { id: 'mfa', category: 'Access Control', name: 'Multi-Factor Authentication', description: 'Required for all users', status: 'enabled', coverage: 100 },
@@ -556,7 +568,7 @@ export const complianceService = {
       // Data Protection
       { id: 'encryption-rest', category: 'Data Protection', name: 'Data Encryption at Rest', description: 'AES-256 encryption', status: 'enabled', coverage: 100 },
       { id: 'encryption-transit', category: 'Data Protection', name: 'Data Encryption in Transit', description: 'TLS 1.3 for all connections', status: 'enabled', coverage: 100 },
-      { id: 'dlp', category: 'Data Protection', name: 'Data Loss Prevention', description: 'Automated data protection', status: 'enabled', coverage: 85 },
+      { id: 'dlp', category: 'Data Protection', name: 'Data Loss Prevention', description: 'Automated data protection and mapping', status: 'enabled', coverage: dataCompleteness },
       { id: 'backup', category: 'Data Protection', name: 'Backup & Recovery', description: 'Automated daily backups', status: 'enabled', coverage: 100 },
       // Network Security
       { id: 'firewall', category: 'Network Security', name: 'Firewall Protection', description: 'Network-level protection', status: 'enabled', coverage: 100 },
@@ -706,7 +718,7 @@ export const complianceService = {
     const users = userIds.length > 0
       ? await prisma.user.findMany({
           where: { id: { in: userIds } },
-          select: { id: true, email: true, name: true },
+          select: { id: true, email: true, name: true }
         })
       : [];
 

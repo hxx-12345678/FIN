@@ -30,9 +30,30 @@ export const forecastingController = {
                 assumptions: req.body.assumptions || {}
             });
 
+            let metrics = null;
+            if (result.backtest && result.backtest.best_method) {
+                const parts = result.backtest.best_method.split('_');
+                const windowKey = parts.pop();
+                const bestMethod = parts.join('_');
+                if (windowKey && bestMethod && result.backtest.windows?.[windowKey]?.[bestMethod]) {
+                    metrics = result.backtest.windows[windowKey][bestMethod];
+                }
+            }
+
             // Include the historical data in the response so the frontend 
             // shows actual model-specific values instead of hardcoded mock data
-            res.json({ ok: true, ...result, history, actual: history });
+            res.json({ 
+                ok: true, 
+                ...result, 
+                forecast: result.forecast?.mean || [], // Parse the flat array out of the hybrid forecast
+                confidenceBands: {
+                    lower: result.forecast?.lower || [],
+                    upper: result.forecast?.upper || []
+                },
+                metrics,
+                history, 
+                actual: history 
+            });
         } catch (error) {
             next(error);
         }

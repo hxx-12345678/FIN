@@ -207,6 +207,51 @@ export const budgetService = {
   },
 
   /**
+   * Internal version of getBudgets: Get budgets for an organization without RBAC check
+   * For system-level operations like budget vs actual aggregation
+   */
+  async getBudgetsInternal(
+    orgId: string,
+    filters?: {
+      category?: string;
+      month?: string;
+      startMonth?: string;
+      endMonth?: string;
+    }
+  ): Promise<BudgetRecord[]> {
+    const where: any = { orgId };
+
+    if (filters?.category) {
+      where.category = normalizeCategory(filters.category);
+    }
+
+    if (filters?.month) {
+      where.month = filters.month;
+    } else if (filters?.startMonth || filters?.endMonth) {
+      where.month = {};
+      if (filters.startMonth) {
+        where.month.gte = filters.startMonth;
+      }
+      if (filters.endMonth) {
+        where.month.lte = filters.endMonth;
+      }
+    }
+
+    const budgets = await prisma.budget.findMany({
+      where,
+      orderBy: [
+        { month: 'asc' },
+        { category: 'asc' },
+      ],
+    });
+
+    return budgets.map(b => ({
+      ...b,
+      amount: Number(b.amount),
+    })) as BudgetRecord[];
+  },
+
+  /**
    * Get budget summary
    */
   async getBudgetSummary(
@@ -366,11 +411,9 @@ export const budgetService = {
     if (startMonth) filters.startMonth = startMonth;
     if (endMonth) filters.endMonth = endMonth;
 
-    // Use a system user ID for internal calls (bypass auth)
-    // In production, this should be called from within authenticated context
-    const budgets = await budgetService.getBudgets(
+    // Internal call - bypass RBAC
+    const budgets = await budgetService.getBudgetsInternal(
       orgId,
-      '00000000-0000-0000-0000-000000000000', // System user
       filters
     );
 

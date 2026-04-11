@@ -30,9 +30,10 @@ interface AIAssistTabProps {
     modelId: string | null
     currentRunId?: string | null
     refreshKey?: number
+    onSuccess?: () => void
 }
 
-export function AIAssistTab({ orgId, modelId, currentRunId, refreshKey }: AIAssistTabProps) {
+export function AIAssistTab({ orgId, modelId, currentRunId, refreshKey, onSuccess }: AIAssistTabProps) {
     const [strategy, setStrategy] = useState<"aggressive" | "sustainable" | "efficiency" | null>(null)
     const [loading, setLoading] = useState(false)
     const [sensitivities, setSensitivities] = useState<any[]>([])
@@ -123,6 +124,7 @@ export function AIAssistTab({ orgId, modelId, currentRunId, refreshKey }: AIAssi
             setInitialized(true)
             toast.success("AI assumptions confirmed and applied to model.")
             addLog("Industrial baseline locked.")
+            if (onSuccess) onSuccess()
         }, 800)
     }
 

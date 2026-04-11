@@ -182,7 +182,7 @@ export function BudgetWorkflow({ orgId, modelId }: { orgId: string | null, model
                                             </div>
                                         )}
                                         <Button variant="ghost" size="sm" className="w-full text-[10px] font-bold text-slate-400 gap-1 hover:text-slate-900">
-                                            <MessageSquare className="h-3.5 w-3.5" /> VIEW COMMENTS (3)
+                                            <div className="h-0 w-0 overflow-hidden" />
                                         </Button>
                                     </div>
                                 </div>

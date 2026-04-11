@@ -1,6 +1,8 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from './auth';
-import { UnauthorizedError, ForbiddenError } from '../utils/errors';
+import { UnauthorizedError, ForbiddenError, ValidationError } from '../utils/errors';
+import { logger } from '../utils/logger';
+import { isValidUUID } from '../utils/validation';
 import prisma from '../config/database';
 
 /**
@@ -19,6 +21,11 @@ export async function getUserOrgRole(
   userId: string,
   orgId: string
 ): Promise<string | null> {
+  // Guard against invalid UUIDs to prevent Prisma crashes
+  if (!isValidUUID(userId) || !isValidUUID(orgId)) {
+    return null;
+  }
+
   const role = await prisma.userOrgRole.findUnique({
     where: {
       userId_orgId: {
@@ -73,6 +80,10 @@ export const requireOrgAccess = (orgIdParam: string = 'orgId', minRole: 'viewer'
         throw new ForbiddenError('Organization ID required');
       }
 
+      if (!isValidUUID(orgId)) {
+        throw new ValidationError('Invalid Organization ID format');
+      }
+
       const role = await getUserOrgRole(req.user.id, orgId);
 
       if (!role) {
@@ -114,6 +125,10 @@ export const requireOrgRole = (
 
       if (!orgId || typeof orgId !== 'string') {
         throw new ForbiddenError('Organization ID required');
+      }
+
+      if (!isValidUUID(orgId)) {
+        throw new ValidationError('Invalid Organization ID format');
       }
 
       const role = await getUserOrgRole(req.user.id, orgId);
@@ -557,11 +572,6 @@ export const requireExportOwnership = (exportIdParam: string = 'exportId', minRo
 /**
  * Utility: Validate UUID format
  */
-export function isValidUUID(uuid: string): boolean {
-  const uuidRegex =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(uuid);
-}
 
 /**
  * Middleware: Validate UUID params

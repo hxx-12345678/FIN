@@ -107,15 +107,17 @@ export function validateOrgName(orgName: string): void {
  * @throws ValidationError if ID is not a valid UUID
  */
 export function validateUUID(id: string, fieldName: string = 'ID'): void {
-  if (!id || typeof id !== 'string') {
-    throw new ValidationError(`${fieldName} is required and must be a string`);
-  }
-
-  // UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (v1-v5 compliant)
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  
-  if (!uuidRegex.test(id)) {
+  if (!isValidUUID(id)) {
     throw new ValidationError(`${fieldName} must be a valid UUID format`);
   }
 }
 
+/**
+ * Check if string is a valid UUID
+ */
+export function isValidUUID(id: string): boolean {
+  if (!id || typeof id !== 'string') return false;
+  // UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (v1-v5 compliant)
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(id);
+}

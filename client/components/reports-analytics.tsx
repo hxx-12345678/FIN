@@ -101,6 +101,7 @@ export function ReportsAnalytics() {
   const [customReports, setCustomReports] = useState<any[]>([])
   const [scheduledReports, setScheduledReports] = useState<any[]>([])
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [hasModels, setHasModels] = useState(false)
 
   // Fetch orgId
   useEffect(() => {
@@ -112,6 +113,7 @@ export function ReportsAnalytics() {
     if (orgId) {
       fetchOverviewData()
       fetchExports()
+      fetchModels()
     }
   }, [orgId])
 
@@ -393,6 +395,24 @@ export function ReportsAnalytics() {
       }
     } catch (error) {
       console.error("Failed to fetch exports:", error)
+    }
+  }
+
+  const fetchModels = async () => {
+    if (!orgId) return
+    try {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/models`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
+      if (response.ok) {
+        const result = await response.json()
+        if (result.ok && result.models && result.models.length > 0) {
+          setHasModels(true)
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch models:", error)
     }
   }
 
@@ -702,7 +722,7 @@ export function ReportsAnalytics() {
       </div>
 
       {/* Onboarding Banner for No Models */}
-      {!loading && customReports.length === 0 && (
+      {!loading && customReports.length === 0 && !hasModels && (
         <Card className="bg-indigo-600 text-white overflow-hidden relative border-0 shadow-lg mb-6">
           <div className="absolute top-0 right-0 p-6 opacity-20 transform translate-x-1/4 -translate-y-1/4">
             <Zap className="h-48 w-48" />

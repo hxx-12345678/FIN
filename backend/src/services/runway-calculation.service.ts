@@ -239,8 +239,8 @@ export const runwayCalculationService = {
 
         const monthlyRevenue = totalRevenue / periodsForAvg.length;
         const monthlyExpenses = totalExpenses / periodsForAvg.length;
-        // Burn rate is monthly expenses (cash going out)
-        const monthlyBurnRate = monthlyExpenses;
+        // Burn rate is Net Burn (Expenses - Revenue), but at least 0
+        const monthlyBurnRate = Math.max(0, monthlyExpenses - monthlyRevenue);
 
         // If no cash balance from ledger, estimate from transactions (net: revenue - expenses)
         if (cashBalance === 0) {

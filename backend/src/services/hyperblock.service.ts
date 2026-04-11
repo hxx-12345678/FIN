@@ -66,7 +66,7 @@ export const hyperblockService = {
             // 5. Save trace for explainability if an update occurred
             if (update) {
                 try {
-                    createdTrace = await (prisma as any).computationTrace.create({
+                    createdTrace = await prisma.computationTrace.create({
                         data: {
                             orgId,
                             modelId,
@@ -105,7 +105,7 @@ export const hyperblockService = {
      */
     getTraces: async (modelId: string, limit: number = 10) => {
         try {
-            return await (prisma as any).computationTrace.findMany({
+            return await prisma.computationTrace.findMany({
                 where: { modelId },
                 orderBy: { createdAt: 'desc' },
                 take: limit

@@ -20,7 +20,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
-import { TrendingUp, TrendingDown, Target, Share, Download, Eye, MessageSquare, Loader2, AlertCircle, Sparkles } from "lucide-react"
+import { TrendingUp, TrendingDown, Target, Share, Download, Eye, Loader2, AlertCircle, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { FinancialTermTooltip } from "./financial-term-tooltip"
@@ -219,17 +219,72 @@ export function InvestorDashboard() {
           <p className="text-sm md:text-base text-muted-foreground">Real-time insights for stakeholders and investors</p>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          <Button variant="outline" className="w-full sm:w-auto">
-            <MessageSquare className="mr-2 h-4 w-4" />
-            <span className="hidden sm:inline">Add Comment</span>
-            <span className="sm:hidden">Comment</span>
-          </Button>
-          <Button variant="outline" className="w-full sm:w-auto">
+          <Button 
+            variant="outline" 
+            className="w-full sm:w-auto"
+            disabled={!orgId}
+            onClick={async () => {
+              if (!orgId) return;
+              try {
+                const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/share-tokens`, {
+                  method: 'POST',
+                  headers: getAuthHeaders(),
+                  credentials: "include",
+                  body: JSON.stringify({
+                    scope: 'read-only',
+                    expiresInDays: 7
+                  })
+                });
+                
+                if (response.ok) {
+                  const result = await response.json();
+                  const shareUrl = `${window.location.origin}/share/${result.token}`;
+                  await navigator.clipboard.writeText(shareUrl);
+                  toast.success("Secure sharing link generated and copied to clipboard!", {
+                    description: "Link expires in 7 days."
+                  });
+                } else {
+                  // Fallback to current URL if token creation fails
+                  navigator.clipboard.writeText(window.location.href);
+                  toast.success("Dashboard link copied to clipboard!");
+                }
+              } catch (error) {
+                navigator.clipboard.writeText(window.location.href);
+                toast.success("Dashboard link copied to clipboard!");
+              }
+            }}
+          >
             <Share className="mr-2 h-4 w-4" />
             <span className="hidden sm:inline">Share Dashboard</span>
             <span className="sm:hidden">Share</span>
           </Button>
-          <Button className="w-full sm:w-auto">
+          <Button 
+            className="w-full sm:w-auto"
+            disabled={!orgId}
+            onClick={async () => {
+              if (!orgId) return;
+              toast.info("Generating investor report export...");
+              try {
+                // Use latest model run if possible, otherwise use manual export
+                const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/exports`, {
+                  method: 'POST',
+                  headers: getAuthHeaders(),
+                  credentials: "include",
+                  body: JSON.stringify({
+                    type: 'pdf',
+                    template: 'investor-update'
+                  })
+                });
+                if (response.ok) {
+                  toast.success("Investor report generated! Check your email or downloads shortly.");
+                } else {
+                  toast.error("Failed to generate export. Please try again.");
+                }
+              } catch (e) {
+                toast.error("Error connecting to export service.");
+              }
+            }}
+          >
             <Download className="mr-2 h-4 w-4" />
             <span className="hidden sm:inline">Export Report</span>
             <span className="sm:hidden">Export</span>

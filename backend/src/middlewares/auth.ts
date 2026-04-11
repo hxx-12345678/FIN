@@ -36,10 +36,10 @@ export const authenticate = async (
     let payload: JWTPayload;
     try {
       payload = verifyToken(token);
-    } catch (error) {
+    } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : 'Token verification failed';
-      console.error('[Auth] Token verification failed:', errorMessage);
-      throw new UnauthorizedError(errorMessage.includes('expired') ? 'Token expired' : 'Invalid token');
+      console.warn('[Auth] Authentication failed:', errorMessage);
+      throw new UnauthorizedError(errorMessage.includes('expired') ? 'Token expired' : 'Invalid or expired token');
     }
 
     // Verify user exists and is active

@@ -280,10 +280,10 @@ export function AIAssistant() {
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [historySheetOpen, setHistorySheetOpen] = useState(false)
-  
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
-  
+
   // File upload state for chat
   const [attachedFiles, setAttachedFiles] = useState<File[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -572,7 +572,7 @@ export function AIAssistant() {
         },
         body: JSON.stringify({
           query: content,
-          context: { 
+          context: {
             conversationId: currentConversationId,
             attachments: attachments.length > 0 ? attachments : undefined
           },
@@ -717,7 +717,7 @@ export function AIAssistant() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                AI CFO
+                AI CFO <span className="text-xs font-semibold ml-1.5 opacity-70 align-top">V1.0 pro</span>
               </h1>
               <Badge variant="secondary" className="flex items-center gap-1 bg-gradient-to-r from-blue-100 to-purple-100 text-blue-700 border-blue-200">
                 <Cpu className="h-3 w-3" />
@@ -816,7 +816,7 @@ export function AIAssistant() {
                           <TooltipContent>Chat History</TooltipContent>
                         </Tooltip>
                         <Badge variant="outline" className="text-[10px] h-6 bg-background/50 border-border/50 text-foreground/70 font-mono">
-                          v4.2-PRO
+                          v1.0-PRO
                         </Badge>
                       </div>
                     </div>
@@ -826,16 +826,15 @@ export function AIAssistant() {
                       <div className="space-y-0 p-0">
                         {messages.length === 0 && (
                           <div className="flex flex-col items-center justify-center min-h-[400px] py-8 text-center space-y-8 animate-in fade-in zoom-in duration-500">
-                             <Brain className="h-16 w-16 text-primary animate-pulse" />
-                             <h2 className="text-2xl font-bold">How can I help your finance team today?</h2>
+                            <Brain className="h-16 w-16 text-primary animate-pulse" />
+                            <h2 className="text-2xl font-bold">How can I help your finance team today?</h2>
                           </div>
                         )}
                         {messages.map((message) => (
                           <div
                             key={message.id}
-                            className={`group w-full py-10 transition-colors border-b border-border/10 last:border-0 ${
-                              message.type === "user" ? "bg-muted/5" : "bg-transparent hover:bg-muted/5"
-                            } animate-in fade-in slide-in-from-bottom-2 duration-500`}
+                            className={`group w-full py-10 transition-colors border-b border-border/10 last:border-0 ${message.type === "user" ? "bg-muted/5" : "bg-transparent hover:bg-muted/5"
+                              } animate-in fade-in slide-in-from-bottom-2 duration-500`}
                           >
                             <div className="max-w-3xl mx-auto px-6 flex gap-8">
                               <div className="flex-shrink-0 mt-1">
@@ -865,11 +864,10 @@ export function AIAssistant() {
                                   <div className="space-y-3 mb-6 animate-in fade-in duration-300">
                                     {message.agentThoughts.map((thought, idx) => (
                                       <div key={idx} className="flex items-start gap-3 animate-in slide-in-from-left-2 duration-500" style={{ animationDelay: `${idx * 150}ms` }}>
-                                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 text-[9px] font-mono font-black shadow-sm ${
-                                          idx === message.agentThoughts!.length - 1 
-                                            ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 animate-pulse' 
-                                            : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                        }`}>
+                                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 text-[9px] font-mono font-black shadow-sm ${idx === message.agentThoughts!.length - 1
+                                          ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 animate-pulse'
+                                          : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                          }`}>
                                           {idx === message.agentThoughts!.length - 1 ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
                                         </div>
                                         <div className="flex-1 min-w-0">
@@ -904,71 +902,71 @@ export function AIAssistant() {
                                   </div>
                                 )}
                                 {message.visualizations && message.visualizations.length > 0 && (
-                                    <div className="mt-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                                        {message.visualizations.map((viz: any, idx: number) => (
-                                            <div key={idx} className="p-6 rounded-2xl border border-white/[0.06] bg-[#0f0f1a] shadow-2xl overflow-hidden relative group">
-                                                <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-cyan-400/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                                                <h4 className="text-[13px] uppercase tracking-[0.15em] font-black text-white/80 mb-6 flex items-center gap-2.5">
-                                                  <BarChart3 className="h-4 w-4 text-cyan-400" />
-                                                  {viz.title}
-                                                </h4>
-                                                <div className="h-[380px] w-full">
-                                                    <ResponsiveContainer width="100%" height="100%">
-                                                        {viz.type === 'bar' || viz.type === 'chart' ? (
-                                                            <BarChart data={viz.data} margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
-                                                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                                                                <XAxis
-                                                                  dataKey="name" fontSize={12} tickMargin={12}
-                                                                  stroke="#94a3b8" tick={{ fill: '#cbd5e1', fontWeight: 600 }}
-                                                                  axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
-                                                                />
-                                                                <YAxis
-                                                                  fontSize={11} tickFormatter={(value: number) => `$${(value/1000).toFixed(0)}k`}
-                                                                  stroke="#94a3b8" tick={{ fill: '#cbd5e1', fontWeight: 500 }}
-                                                                  axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
-                                                                />
-                                                                <RechartsTooltip
-                                                                  contentStyle={{ background: '#1a1a2e', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '12px', fontSize: '12px', color: '#f1f5f9', padding: '10px 14px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
-                                                                  labelStyle={{ color: '#94a3b8', fontWeight: 700, marginBottom: '4px' }}
-                                                                  itemStyle={{ color: '#e2e8f0' }}
-                                                                  formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
-                                                                  cursor={{ fill: 'rgba(99,102,241,0.06)' }}
-                                                                />
-                                                                <Legend wrapperStyle={{ color: '#cbd5e1', fontSize: '12px', fontWeight: 600, paddingTop: '16px' }} />
-                                                                <Bar dataKey="value" fill="#22d3ee" radius={[6, 6, 0, 0]} name="Actual" />
-                                                                {(viz.data[0] && viz.data[0].target) && <Bar dataKey="target" fill="#34d399" radius={[6, 6, 0, 0]} name="Target" opacity={0.7} />}
-                                                                {(viz.data[0] && viz.data[0].baseline) && <Bar dataKey="baseline" fill="#fbbf24" radius={[6, 6, 0, 0]} name="Baseline" opacity={0.6} />}
-                                                            </BarChart>
-                                                        ) : (
-                                                            <LineChart data={viz.data} margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
-                                                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                                                                <XAxis
-                                                                  dataKey="name" fontSize={12} tickMargin={12}
-                                                                  stroke="#94a3b8" tick={{ fill: '#cbd5e1', fontWeight: 600 }}
-                                                                  axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
-                                                                />
-                                                                <YAxis
-                                                                  fontSize={11} tickFormatter={(value: number) => `$${(value/1000).toFixed(0)}k`}
-                                                                  stroke="#94a3b8" tick={{ fill: '#cbd5e1', fontWeight: 500 }}
-                                                                  axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
-                                                                />
-                                                                <RechartsTooltip
-                                                                  contentStyle={{ background: '#1a1a2e', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '12px', fontSize: '12px', color: '#f1f5f9', padding: '10px 14px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
-                                                                  labelStyle={{ color: '#94a3b8', fontWeight: 700, marginBottom: '4px' }}
-                                                                  itemStyle={{ color: '#e2e8f0' }}
-                                                                  formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
-                                                                />
-                                                                <Legend wrapperStyle={{ color: '#cbd5e1', fontSize: '12px', fontWeight: 600, paddingTop: '16px' }} />
-                                                                <Line type="monotone" dataKey="value" stroke="#22d3ee" strokeWidth={3} dot={{ r: 5, fill: '#22d3ee', strokeWidth: 2, stroke: '#0f0f1a' }} activeDot={{ r: 7, fill: '#22d3ee', stroke: '#fff', strokeWidth: 2 }} name="Actual" />
-                                                                {(viz.data[0] && viz.data[0].baseline) && <Line type="monotone" dataKey="baseline" stroke="#f472b6" strokeDasharray="6 4" strokeWidth={2.5} dot={{ r: 4, fill: '#f472b6' }} name="Baseline" />}
-                                                                {(viz.data[0] && viz.data[0].target) && <Line type="monotone" dataKey="target" stroke="#34d399" strokeWidth={2} dot={{ r: 4, fill: '#34d399' }} name="Target" />}
-                                                            </LineChart>
-                                                        )}
-                                                    </ResponsiveContainer>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
+                                  <div className="mt-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                                    {message.visualizations.map((viz: any, idx: number) => (
+                                      <div key={idx} className="p-6 rounded-2xl border border-white/[0.06] bg-[#0f0f1a] shadow-2xl overflow-hidden relative group">
+                                        <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-cyan-400/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                                        <h4 className="text-[13px] uppercase tracking-[0.15em] font-black text-white/80 mb-6 flex items-center gap-2.5">
+                                          <BarChart3 className="h-4 w-4 text-cyan-400" />
+                                          {viz.title}
+                                        </h4>
+                                        <div className="h-[380px] w-full">
+                                          <ResponsiveContainer width="100%" height="100%">
+                                            {viz.type === 'bar' || viz.type === 'chart' ? (
+                                              <BarChart data={viz.data} margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                                                <XAxis
+                                                  dataKey="name" fontSize={12} tickMargin={12}
+                                                  stroke="#94a3b8" tick={{ fill: '#cbd5e1', fontWeight: 600 }}
+                                                  axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+                                                />
+                                                <YAxis
+                                                  fontSize={11} tickFormatter={(value: number) => `$${(value / 1000).toFixed(0)}k`}
+                                                  stroke="#94a3b8" tick={{ fill: '#cbd5e1', fontWeight: 500 }}
+                                                  axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+                                                />
+                                                <RechartsTooltip
+                                                  contentStyle={{ background: '#1a1a2e', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '12px', fontSize: '12px', color: '#f1f5f9', padding: '10px 14px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
+                                                  labelStyle={{ color: '#94a3b8', fontWeight: 700, marginBottom: '4px' }}
+                                                  itemStyle={{ color: '#e2e8f0' }}
+                                                  formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
+                                                  cursor={{ fill: 'rgba(99,102,241,0.06)' }}
+                                                />
+                                                <Legend wrapperStyle={{ color: '#cbd5e1', fontSize: '12px', fontWeight: 600, paddingTop: '16px' }} />
+                                                <Bar dataKey="value" fill="#22d3ee" radius={[6, 6, 0, 0]} name="Actual" />
+                                                {(viz.data[0] && viz.data[0].target) && <Bar dataKey="target" fill="#34d399" radius={[6, 6, 0, 0]} name="Target" opacity={0.7} />}
+                                                {(viz.data[0] && viz.data[0].baseline) && <Bar dataKey="baseline" fill="#fbbf24" radius={[6, 6, 0, 0]} name="Baseline" opacity={0.6} />}
+                                              </BarChart>
+                                            ) : (
+                                              <LineChart data={viz.data} margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                                                <XAxis
+                                                  dataKey="name" fontSize={12} tickMargin={12}
+                                                  stroke="#94a3b8" tick={{ fill: '#cbd5e1', fontWeight: 600 }}
+                                                  axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+                                                />
+                                                <YAxis
+                                                  fontSize={11} tickFormatter={(value: number) => `$${(value / 1000).toFixed(0)}k`}
+                                                  stroke="#94a3b8" tick={{ fill: '#cbd5e1', fontWeight: 500 }}
+                                                  axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+                                                />
+                                                <RechartsTooltip
+                                                  contentStyle={{ background: '#1a1a2e', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '12px', fontSize: '12px', color: '#f1f5f9', padding: '10px 14px', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
+                                                  labelStyle={{ color: '#94a3b8', fontWeight: 700, marginBottom: '4px' }}
+                                                  itemStyle={{ color: '#e2e8f0' }}
+                                                  formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
+                                                />
+                                                <Legend wrapperStyle={{ color: '#cbd5e1', fontSize: '12px', fontWeight: 600, paddingTop: '16px' }} />
+                                                <Line type="monotone" dataKey="value" stroke="#22d3ee" strokeWidth={3} dot={{ r: 5, fill: '#22d3ee', strokeWidth: 2, stroke: '#0f0f1a' }} activeDot={{ r: 7, fill: '#22d3ee', stroke: '#fff', strokeWidth: 2 }} name="Actual" />
+                                                {(viz.data[0] && viz.data[0].baseline) && <Line type="monotone" dataKey="baseline" stroke="#f472b6" strokeDasharray="6 4" strokeWidth={2.5} dot={{ r: 4, fill: '#f472b6' }} name="Baseline" />}
+                                                {(viz.data[0] && viz.data[0].target) && <Line type="monotone" dataKey="target" stroke="#34d399" strokeWidth={2} dot={{ r: 4, fill: '#34d399' }} name="Target" />}
+                                              </LineChart>
+                                            )}
+                                          </ResponsiveContainer>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
                                 )}
 
 
@@ -1013,8 +1011,7 @@ export function AIAssistant() {
                                   <div className="mt-10 pt-6 border-t border-border/10 space-y-4">
                                     <div className="flex items-center gap-4">
                                       {message.confidence && (
-                                        <div className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-[10px] font-extrabold border shadow-sm ${
-                                          message.confidence > 0.8 ? 'bg-emerald-50/50 text-emerald-700 border-emerald-200/50' :
+                                        <div className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-[10px] font-extrabold border shadow-sm ${message.confidence > 0.8 ? 'bg-emerald-50/50 text-emerald-700 border-emerald-200/50' :
                                           message.confidence > 0.6 ? 'bg-amber-50/50 text-amber-700 border-amber-200/50' :
                                             'bg-red-50/50 text-red-700 border-red-200/50'
                                           }`}>
@@ -1054,19 +1051,19 @@ export function AIAssistant() {
                                 )}
 
                                 {message.suggestions && message.suggestions.length > 0 && (
-                                    <div className="mt-10 flex flex-wrap gap-2.5">
-                                        {message.suggestions.map((suggestion, idx) => (
-                                            <Button 
-                                                key={idx} 
-                                                variant="outline" 
-                                                size="sm" 
-                                                className="text-[11.5px] font-semibold h-8 rounded-xl bg-background border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all shadow-sm"
-                                                onClick={() => handleSendMessage(suggestion)}
-                                            >
-                                                {suggestion}
-                                            </Button>
-                                        ))}
-                                    </div>
+                                  <div className="mt-10 flex flex-wrap gap-2.5">
+                                    {message.suggestions.map((suggestion, idx) => (
+                                      <Button
+                                        key={idx}
+                                        variant="outline"
+                                        size="sm"
+                                        className="text-[11.5px] font-semibold h-8 rounded-xl bg-background border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all shadow-sm"
+                                        onClick={() => handleSendMessage(suggestion)}
+                                      >
+                                        {suggestion}
+                                      </Button>
+                                    ))}
+                                  </div>
                                 )}
                               </div>
                             </div>
@@ -1115,7 +1112,7 @@ export function AIAssistant() {
                               <div key={idx} className="relative group/file bg-muted/50 rounded-lg p-2 pr-8 border border-border/50 text-[11px] font-medium flex items-center gap-2 max-w-[200px] truncate shadow-sm">
                                 {file.type.startsWith('image/') ? <ImageIcon className="h-3 w-3 text-indigo-500" /> : <Paperclip className="h-3 w-3 text-slate-500" />}
                                 {file.name}
-                                <button 
+                                <button
                                   onClick={() => setAttachedFiles(prev => prev.filter((_, i) => i !== idx))}
                                   className="absolute right-1 top-1/2 -translate-y-1/2 h-5 w-5 rounded-md hover:bg-red-50 hover:text-red-500 transition-colors opacity-0 group-hover/file:opacity-100 flex items-center justify-center"
                                 >
@@ -1126,78 +1123,78 @@ export function AIAssistant() {
                           </div>
                         )}
                         <div className="flex items-end gap-3 bg-muted/30 rounded-[24px] border border-border/60 px-5 py-4 focus-within:border-primary/50 focus-within:ring-4 focus-within:ring-primary/5 focus-within:bg-background transition-all shadow-xl shadow-black/5 ring-1 ring-white/10">
-                            <input 
-                              type="file" 
-                              ref={fileInputRef} 
-                              className="hidden" 
-                              multiple 
-                              onChange={(e) => {
-                                const files = Array.from(e.target.files || [])
-                                setAttachedFiles(prev => [...prev, ...files])
-                              }}
-                            />
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 rounded-full text-muted-foreground/60 hover:text-primary hover:bg-primary/5 flex-shrink-0 transition-colors"
-                              onClick={() => fileInputRef.current?.click()}
-                            >
-                                <Paperclip className="h-4 w-4" />
-                            </Button>
-                            <textarea
+                          <input
+                            type="file"
+                            ref={fileInputRef}
+                            className="hidden"
+                            multiple
+                            onChange={(e) => {
+                              const files = Array.from(e.target.files || [])
+                              setAttachedFiles(prev => [...prev, ...files])
+                            }}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full text-muted-foreground/60 hover:text-primary hover:bg-primary/5 flex-shrink-0 transition-colors"
+                            onClick={() => fileInputRef.current?.click()}
+                          >
+                            <Paperclip className="h-4 w-4" />
+                          </Button>
+                          <textarea
                             placeholder="Message AI CFO..."
                             value={inputValue}
                             onChange={(e) => {
-                                setInputValue(e.target.value)
-                                e.target.style.height = 'auto'
-                                e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'
+                              setInputValue(e.target.value)
+                              e.target.style.height = 'auto'
+                              e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'
                             }}
                             onKeyDown={(e) => {
-                                if (e.key === "Enter" && !e.shiftKey) {
+                              if (e.key === "Enter" && !e.shiftKey) {
                                 e.preventDefault()
                                 handleSendMessage(inputValue)
-                                ;(e.target as HTMLTextAreaElement).style.height = 'auto'
-                                }
+                                  ; (e.target as HTMLTextAreaElement).style.height = 'auto'
+                              }
                             }}
                             className="flex-1 bg-transparent border-none outline-none resize-none text-[15px] placeholder:text-muted-foreground/50 min-h-[28px] max-h-[200px] leading-relaxed py-1 antialiased"
                             rows={1}
                             disabled={isTyping}
-                            />
-                            {isTyping ? (
-                              <Button
-                                size="sm"
-                                onClick={() => {
-                                  if (abortControllerRef.current) abortControllerRef.current.abort();
-                                  setIsTyping(false);
-                                }}
-                                className="h-8 px-3 rounded-xl flex-shrink-0 bg-red-500 hover:bg-red-600 shadow-md transition-all active:scale-95 text-xs font-bold text-white"
-                              >
-                                <div className="flex items-center gap-1.5">
-                                  <Loader2 className="h-3 w-3 animate-spin" /> Stop
-                                </div>
-                              </Button>
-                            ) : (
-                              <Button
-                                size="sm"
-                                onClick={() => {
-                                  handleSendMessage(inputValue)
-                                  setAttachedFiles([])
-                                }}
-                                disabled={!inputValue.trim() && attachedFiles.length === 0}
-                                className="h-8 w-8 rounded-xl flex-shrink-0 bg-primary hover:bg-primary/90 shadow-md transition-all active:scale-95"
-                              >
-                                <Send className="h-4 w-4" />
-                              </Button>
-                            )}
+                          />
+                          {isTyping ? (
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                if (abortControllerRef.current) abortControllerRef.current.abort();
+                                setIsTyping(false);
+                              }}
+                              className="h-8 px-3 rounded-xl flex-shrink-0 bg-red-500 hover:bg-red-600 shadow-md transition-all active:scale-95 text-xs font-bold text-white"
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <Loader2 className="h-3 w-3 animate-spin" /> Stop
+                              </div>
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                handleSendMessage(inputValue)
+                                setAttachedFiles([])
+                              }}
+                              disabled={!inputValue.trim() && attachedFiles.length === 0}
+                              className="h-8 w-8 rounded-xl flex-shrink-0 bg-primary hover:bg-primary/90 shadow-md transition-all active:scale-95"
+                            >
+                              <Send className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                         <div className="flex items-center justify-between mt-3 px-1">
-                            <span className="text-[10px] text-muted-foreground/40 font-medium tracking-tight">Shift + Enter for new line • Advanced Multi-Agent Orchestrator v4.2</span>
-                            <div className="flex items-center gap-4">
-                              {attachedFiles.length > 0 && (
-                                <span className="text-[10px] font-bold text-indigo-600/60 uppercase tracking-widest">{attachedFiles.length} File(s) Staged</span>
-                              )}
-                              <span className="text-[10px] text-muted-foreground/40 font-mono tracking-tighter">{inputValue.length > 0 ? `${inputValue.length}/500` : ''}</span>
-                            </div>
+                          <span className="text-[10px] text-muted-foreground/40 font-medium tracking-tight">Shift + Enter for new line • Advanced Multi-Agent Orchestrator v1.0</span>
+                          <div className="flex items-center gap-4">
+                            {attachedFiles.length > 0 && (
+                              <span className="text-[10px] font-bold text-indigo-600/60 uppercase tracking-widest">{attachedFiles.length} File(s) Staged</span>
+                            )}
+                            <span className="text-[10px] text-muted-foreground/40 font-mono tracking-tighter">{inputValue.length > 0 ? `${inputValue.length}/500` : ''}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1231,24 +1228,24 @@ export function AIAssistant() {
                 </Card>
 
                 <Card className="bg-gradient-to-br from-indigo-600 to-purple-700 text-white shadow-xl border-none">
-                    <CardHeader>
-                        <CardTitle className="text-white flex items-center gap-2">
-                            <Zap className="h-4 w-4 text-amber-300" />
-                            Proactive Alerts
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4 pt-0">
-                        <div className="bg-white/10 p-3 rounded-lg backdrop-blur-sm border border-white/10">
-                            <div className="text-[11px] font-bold uppercase tracking-wider opacity-70">Runway Threshold</div>
-                            <div className="text-sm font-medium mt-1">Alert if runway drops below 6 months</div>
-                            <div className="mt-2 text-[10px] bg-emerald-500/20 text-emerald-300 inline-block px-2 py-0.5 rounded font-bold uppercase">Active Monitoring</div>
-                        </div>
-                        <div className="bg-white/10 p-3 rounded-lg backdrop-blur-sm border border-white/10">
-                            <div className="text-[11px] font-bold uppercase tracking-wider opacity-70">Anomaly Detection</div>
-                            <div className="text-sm font-medium mt-1">Monitor for duplicate vendor payments</div>
-                            <div className="mt-2 text-[10px] bg-emerald-500/20 text-emerald-300 inline-block px-2 py-0.5 rounded font-bold uppercase">Active Monitoring</div>
-                        </div>
-                    </CardContent>
+                  <CardHeader>
+                    <CardTitle className="text-white flex items-center gap-2">
+                      <Zap className="h-4 w-4 text-amber-300" />
+                      Proactive Alerts
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4 pt-0">
+                    <div className="bg-white/10 p-3 rounded-lg backdrop-blur-sm border border-white/10">
+                      <div className="text-[11px] font-bold uppercase tracking-wider opacity-70">Runway Threshold</div>
+                      <div className="text-sm font-medium mt-1">Alert if runway drops below 6 months</div>
+                      <div className="mt-2 text-[10px] bg-emerald-500/20 text-emerald-300 inline-block px-2 py-0.5 rounded font-bold uppercase">Active Monitoring</div>
+                    </div>
+                    <div className="bg-white/10 p-3 rounded-lg backdrop-blur-sm border border-white/10">
+                      <div className="text-[11px] font-bold uppercase tracking-wider opacity-70">Anomaly Detection</div>
+                      <div className="text-sm font-medium mt-1">Monitor for duplicate vendor payments</div>
+                      <div className="mt-2 text-[10px] bg-emerald-500/20 text-emerald-300 inline-block px-2 py-0.5 rounded font-bold uppercase">Active Monitoring</div>
+                    </div>
+                  </CardContent>
                 </Card>
               </div>
             </div>
@@ -1283,22 +1280,22 @@ export function AIAssistant() {
                       <Card key={task.id} className={`border-l-4 ${task.status === "completed" ? "border-l-green-500" : "border-l-yellow-500"}`}>
                         <CardContent className="p-4 flex items-start justify-between gap-4">
                           <div className="space-y-2">
-                             <div className="flex items-center gap-2">
-                                {getStatusIcon(task.status)}
-                                <h4 className="font-medium">{task.title}</h4>
-                             </div>
-                             <p className="text-sm text-muted-foreground">{task.description}</p>
-                             <div className="flex gap-2">
-                                <Badge variant="outline" className={getPriorityColor(task.priority)}>{task.priority}</Badge>
-                             </div>
+                            <div className="flex items-center gap-2">
+                              {getStatusIcon(task.status)}
+                              <h4 className="font-medium">{task.title}</h4>
+                            </div>
+                            <p className="text-sm text-muted-foreground">{task.description}</p>
+                            <div className="flex gap-2">
+                              <Badge variant="outline" className={getPriorityColor(task.priority)}>{task.priority}</Badge>
+                            </div>
                           </div>
                           <Select value={task.status} onValueChange={(val) => handleTaskStatusChange(task.id, val as Task["status"])}>
-                             <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
-                             <SelectContent>
-                                <SelectItem value="pending">Pending</SelectItem>
-                                <SelectItem value="in-progress">In Progress</SelectItem>
-                                <SelectItem value="completed">Completed</SelectItem>
-                             </SelectContent>
+                            <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pending">Pending</SelectItem>
+                              <SelectItem value="in-progress">In Progress</SelectItem>
+                              <SelectItem value="completed">Completed</SelectItem>
+                            </SelectContent>
                           </Select>
                         </CardContent>
                       </Card>
@@ -1312,80 +1309,78 @@ export function AIAssistant() {
           <TabsContent value="staged-changes" className="space-y-4">
             <StagedChangesPanel />
           </TabsContent>
-          
+
           <TabsContent value="missions" className="space-y-6">
-             <div className="flex items-center justify-between">
-                <div>
-                   <h3 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 to-purple-600">Missions Control</h3>
-                   <p className="text-sm text-muted-foreground">Autonomous financial workflows running in the background.</p>
-                </div>
-                <Button variant="outline" className="gap-2 border-indigo-200 text-indigo-600 hover:bg-indigo-50">
-                   <Target className="h-4 w-4" /> Deploy Mission
-                </Button>
-             </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 to-purple-600">Missions Control</h3>
+                <p className="text-sm text-muted-foreground">Autonomous financial workflows running in the background.</p>
+              </div>
+              <Button variant="outline" className="gap-2 border-indigo-200 text-indigo-600 hover:bg-indigo-50">
+                <Target className="h-4 w-4" /> Deploy Mission
+              </Button>
+            </div>
 
-             <div className="grid md:grid-cols-2 gap-4">
-                <Card className="border-l-4 border-l-emerald-500 overflow-hidden group hover:shadow-xl transition-all">
-                   <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between mb-2">
-                        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none">ACTIVE</Badge>
-                        <span className="text-[10px] font-mono text-muted-foreground">ID: M-8492</span>
+            <div className="grid md:grid-cols-2 gap-4">
+              <Card className="border-l-4 border-l-emerald-500 overflow-hidden group hover:shadow-xl transition-all">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none">ACTIVE</Badge>
+                  </div>
+                  <CardTitle className="text-base group-hover:text-primary transition-colors">Daily Anomaly Guardian</CardTitle>
+                  <CardDescription>Monitors accounts payable for duplicates and fraudulent spend.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Detection Status</span>
+                      <span className="font-bold">Monitoring</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                      <div className="h-full bg-emerald-500 w-[92%] animate-pulse" />
+                    </div>
+                    <div className="flex items-center gap-2 pt-2">
+                      <div className="flex -space-x-2">
+                        {['Treasury', 'Anomaly', 'Analytics'].map((agent, i) => (
+                          <Tooltip key={i}>
+                            <TooltipTrigger>
+                              <div className="h-6 w-6 rounded-full border-2 border-background bg-slate-100 flex items-center justify-center text-[8px] font-bold">{agent[0]}</div>
+                            </TooltipTrigger>
+                            <TooltipContent>{agent} Agent</TooltipContent>
+                          </Tooltip>
+                        ))}
                       </div>
-                      <CardTitle className="text-base group-hover:text-primary transition-colors">Daily Anomaly Guardian</CardTitle>
-                      <CardDescription>Monitors accounts payable for duplicates and fraudulent spend.</CardDescription>
-                   </CardHeader>
-                   <CardContent>
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between text-xs">
-                           <span className="text-muted-foreground">Success Rate</span>
-                           <span className="font-bold">99.2%</span>
-                        </div>
-                        <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                           <div className="h-full bg-emerald-500 w-[92%]" />
-                        </div>
-                        <div className="flex items-center gap-2 pt-2">
-                           <div className="flex -space-x-2">
-                              {['Treasury', 'Anomaly', 'Analytics'].map((agent, i) => (
-                                <Tooltip key={i}>
-                                  <TooltipTrigger>
-                                    <div className="h-6 w-6 rounded-full border-2 border-background bg-slate-100 flex items-center justify-center text-[8px] font-bold">{agent[0]}</div>
-                                  </TooltipTrigger>
-                                  <TooltipContent>{agent} Agent</TooltipContent>
-                                </Tooltip>
-                              ))}
-                           </div>
-                           <span className="text-[10px] text-muted-foreground font-medium">+ 3 Agents Collaborating</span>
-                        </div>
-                      </div>
-                   </CardContent>
-                </Card>
+                      <span className="text-[10px] text-muted-foreground font-medium">Multi-agent consensus active</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-                <Card className="border-l-4 border-l-indigo-500 overflow-hidden group hover:shadow-xl transition-all">
-                   <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between mb-2">
-                        <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 border-none">SCHEDULED</Badge>
-                        <span className="text-[10px] font-mono text-muted-foreground">ID: M-1029</span>
-                      </div>
-                      <CardTitle className="text-base group-hover:text-primary transition-colors">Strategic Runway Forecaster</CardTitle>
-                      <CardDescription>Generates weekly P10/P50/P90 cash flow projections.</CardDescription>
-                   </CardHeader>
-                   <CardContent>
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between text-xs">
-                           <span className="text-muted-foreground">Next Execution</span>
-                           <span className="font-bold text-indigo-600">Tonight, 02:00 AM</span>
-                        </div>
-                        <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                           <div className="h-full bg-indigo-500 w-[45%] opacity-30" />
-                        </div>
-                        <div className="flex items-center gap-4 pt-2">
-                           <button className="text-[10px] font-bold text-muted-foreground hover:text-foreground">View Trace</button>
-                           <button className="text-[10px] font-bold text-indigo-600">Run Now</button>
-                        </div>
-                      </div>
-                   </CardContent>
-                </Card>
-             </div>
+              <Card className="border-l-4 border-l-indigo-500 overflow-hidden group hover:shadow-xl transition-all">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 border-none">SCHEDULED</Badge>
+                  </div>
+                  <CardTitle className="text-base group-hover:text-primary transition-colors">Strategic Runway Forecaster</CardTitle>
+                  <CardDescription>Generates weekly P10/P50/P90 cash flow projections.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Next Execution</span>
+                      <span className="font-bold text-indigo-600 italic">Periodic</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                      <div className="h-full bg-indigo-500 w-[45%] opacity-30" />
+                    </div>
+                    <div className="flex items-center gap-4 pt-2">
+                      <button className="text-[10px] font-bold text-muted-foreground hover:text-foreground">View Trace</button>
+                      <button className="text-[10px] font-bold text-indigo-600">Sync Now</button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
 
@@ -1395,34 +1390,34 @@ export function AIAssistant() {
               <DialogTitle>Create Task</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-2">
-               <div className="space-y-2">
-                 <Label>Title</Label>
-                 <Input value={taskForm.title} onChange={(e) => setTaskForm({...taskForm, title: e.target.value})} />
-               </div>
-               <div className="space-y-2">
-                 <Label>Description</Label>
-                 <Textarea value={taskForm.description} onChange={(e) => setTaskForm({...taskForm, description: e.target.value})} />
-               </div>
-               <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Priority</Label>
-                    <Select value={taskForm.priority} onValueChange={(val) => setTaskForm({...taskForm, priority: val as Task["priority"]})}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="low">Low</SelectItem>
-                            <SelectItem value="medium">Medium</SelectItem>
-                            <SelectItem value="high">High</SelectItem>
-                        </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Due Date</Label>
-                    <Input type="date" value={taskForm.dueDate} onChange={(e) => setTaskForm({...taskForm, dueDate: e.target.value})} />
-                  </div>
-               </div>
+              <div className="space-y-2">
+                <Label>Title</Label>
+                <Input value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Description</Label>
+                <Textarea value={taskForm.description} onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Priority</Label>
+                  <Select value={taskForm.priority} onValueChange={(val) => setTaskForm({ ...taskForm, priority: val as Task["priority"] })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Due Date</Label>
+                  <Input type="date" value={taskForm.dueDate} onChange={(e) => setTaskForm({ ...taskForm, dueDate: e.target.value })} />
+                </div>
+              </div>
             </div>
             <DialogFooter>
-               <Button onClick={handleSaveTask}>Save Task</Button>
+              <Button onClick={handleSaveTask}>Save Task</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1434,10 +1429,10 @@ export function AIAssistant() {
               <SheetDescription>Deep-dive data visualization and audit trail.</SheetDescription>
             </SheetHeader>
             <div className="mt-8 space-y-6">
-                <div className="p-12 text-center border-2 border-dashed rounded-xl">
-                    <BarChart3 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                    <p className="font-medium text-muted-foreground">Detailed view for "{activeVizKey}" coming soon.</p>
-                </div>
+              <div className="p-12 text-center border-2 border-dashed rounded-xl">
+                <BarChart3 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <p className="font-medium text-muted-foreground">Detailed view for "{activeVizKey}" coming soon.</p>
+              </div>
             </div>
           </SheetContent>
         </Sheet>
@@ -1470,11 +1465,10 @@ export function AIAssistant() {
                         loadConversation(conv.id)
                         setHistorySheetOpen(false)
                       }}
-                      className={`w-full text-left p-3 rounded-xl transition-all border ${
-                        currentConversationId === conv.id
-                          ? "bg-primary/10 border-primary text-primary"
-                          : "bg-background border-border hover:bg-muted"
-                      }`}
+                      className={`w-full text-left p-3 rounded-xl transition-all border ${currentConversationId === conv.id
+                        ? "bg-primary/10 border-primary text-primary"
+                        : "bg-background border-border hover:bg-muted"
+                        }`}
                     >
                       <div className="font-bold text-sm truncate">{conv.title || "New Session"}</div>
                       <div className="text-[10px] opacity-60 mt-1 flex items-center justify-between">

@@ -8,14 +8,46 @@ export const errorHandler = (
   res: Response,
   next: NextFunction
 ) => {
-  // Log error details
-  logger.error('Error occurred:', {
-    message: err.message,
-    path: req.path,
-    method: req.method,
-    statusCode: err instanceof AppError ? err.statusCode : 500,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-  });
+  // Determine status code for logging
+  let statusCode = 500;
+  if (err instanceof AppError) {
+    statusCode = err.statusCode;
+  } else if (err instanceof SyntaxError && (err as any).status === 400) {
+    statusCode = 400;
+  } else if (err.name === 'PrismaClientKnownRequestError') {
+    statusCode = 400; // Most known Prisma errors in this app are bad requests or not found
+  } else if (err.name === 'ValidationError') {
+    statusCode = 400;
+  }
+
+  if (statusCode >= 500) {
+    logger.error('System failure occurred:', {
+      message: err.message,
+      path: req.path,
+      method: req.method,
+      statusCode,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    });
+  } else {
+    // Audit-level warning for client errors
+    logger.warn('Client request handling:', {
+      message: err.message,
+      path: req.path,
+      method: req.method,
+      statusCode,
+    });
+  }
+
+  // Handle SyntaxError (usually from express.json() for invalid JSON)
+  if (err instanceof SyntaxError && 'status' in err && (err as any).status === 400 && 'body' in err) {
+    return res.status(400).json({
+      ok: false,
+      error: {
+        code: 'BAD_REQUEST',
+        message: 'Invalid JSON payload',
+      },
+    });
+  }
 
   // Handle known AppError instances
   if (err instanceof AppError) {
@@ -59,6 +91,17 @@ export const errorHandler = (
         },
       });
     }
+  }
+
+  // Handle Prisma validation errors (like invalid UUIDs that Prisma catches)
+  if (err.name === 'PrismaClientValidationError') {
+    return res.status(400).json({
+      ok: false,
+      error: {
+        code: 'BAD_REQUEST',
+        message: 'Invalid data format provided to database',
+      },
+    });
   }
 
   // Handle validation errors (e.g., from express-validator or our ValidationError)

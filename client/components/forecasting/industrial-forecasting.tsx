@@ -426,12 +426,7 @@ export function IndustrialForecasting({ orgId, modelId, currentRunId, refreshKey
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {(sensitivityData && sensitivityData.length > 0 ? sensitivityData : [
-                                        { parameter: 'Customer Acquisition Cost', impact_pct: 11.2, elasticity: 1.1 },
-                                        { parameter: 'Monthly Churn Rate', impact_pct: -16.4, elasticity: 1.5 },
-                                        { parameter: 'Average Order Value', impact_pct: 10.1, elasticity: 0.9 },
-                                        { parameter: 'Organic Traffic Multiplier', impact_pct: 4.8, elasticity: 0.4 }
-                                    ]).map((row: any, i: number) => (
+                                    {(sensitivityData && sensitivityData.length > 0 ? sensitivityData : []).map((row: any, i: number) => (
                                         <tr key={i} className="border-b border-slate-100 hover:bg-slate-50/30 transition-colors">
                                             <td className="p-3 font-bold text-slate-700 border-r border-slate-200 bg-slate-50/30">{row.parameter}</td>
                                             <td className={`p-3 text-center font-mono ${row.impact_pct < 0 ? 'text-rose-600 font-bold' : 'text-slate-400'}`}>
@@ -465,17 +460,17 @@ export function IndustrialForecasting({ orgId, modelId, currentRunId, refreshKey
                         <div className="p-3 bg-white/5 rounded-xl border border-white/10">
                             <div className="flex justify-between items-center mb-2">
                                 <span className="text-[10px] font-black uppercase tracking-widest text-indigo-300">Default Probability</span>
-                                <span className="text-xs font-bold text-rose-400">0.04%</span>
+                                <span className="text-xs font-bold text-rose-400">{regimeInfo?.defaultProb?.toFixed(2) || "N/A"}%</span>
                             </div>
                             <div className="w-full bg-white/10 rounded-full h-1">
-                                <div className="bg-rose-500 h-full rounded-full" style={{ width: '4%' }}></div>
+                                <div className="bg-rose-500 h-full rounded-full" style={{ width: `${regimeInfo?.defaultProb || 0}%` }}></div>
                             </div>
                         </div>
 
                         <div className="p-4 bg-indigo-500/10 rounded-xl border border-indigo-500/20 space-y-3">
                             <h5 className="text-[10px] font-black uppercase text-indigo-400">Survival Horizon</h5>
                             <div className="flex items-end gap-2">
-                                <span className="text-3xl font-black">27.4</span>
+                                <span className="text-3xl font-black">{regimeInfo?.survivalHorizon || "--"}</span>
                                 <span className="text-xs text-indigo-300 font-bold mb-1">Months</span>
                             </div>
                             <p className="text-[10px] text-slate-400 italic">Expected runway under median stress conditions (COVID-style macro event).</p>

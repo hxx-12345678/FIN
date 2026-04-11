@@ -52,6 +52,16 @@ interface FieldMapping {
   csvColumn: string
   targetField: string
   confidence?: number
+  explanation?: string
+  method?: string
+}
+
+interface SmartMappingResult {
+  mappings: any[];
+  unmappedColumns: string[];
+  skipSuggestions: string[];
+  overallConfidence: number;
+  formatDetected: string;
 }
 
 interface MappingTemplate {
@@ -73,6 +83,15 @@ const targetFields = [
   { value: "currency", label: "Currency", required: false },
 ]
 
+const FINAPILOT_HEADERS = [
+  'date', 'mrr', 'arr', 'customer_count', 'new_customers', 'churned_customers',
+  'churn_rate', 'arpa', 'cac', 'ltv', 'revenue', 'cogs', 'payroll',
+  'infrastructure', 'marketing', 'operating_expenses', 'cash_balance',
+  'orders', 'aov', 'conversion_rate', 'traffic', 'units_sold',
+  'inventory_value', 'shipping_costs', 'payment_processing',
+  'amount', 'description', 'category', 'account', 'reference', 'type', 'currency'
+];
+
 interface CSVImportWizardProps {
   orgId?: string | null
   token?: string | null
@@ -91,11 +110,15 @@ export function CSVImportWizard({ orgId: propOrgId, token: propToken, onImportCo
   const [selectedTemplate, setSelectedTemplate] = useState<string>("")
   const [templateName, setTemplateName] = useState("")
   const [templateDescription, setTemplateDescription] = useState("")
+  const [smartMappingResult, setSmartMappingResult] = useState<SmartMappingResult | null>(null)
+  const [useSmartMapping, setUseSmartMapping] = useState(true)
   const [skipFirstRow, setSkipFirstRow] = useState(true)
   const [importedRows, setImportedRows] = useState<number>(0)
   const [initialCash, setInitialCash] = useState<string>("0")
   const [initialCustomers, setInitialCustomers] = useState<string>("0")
   const [isImporting, setIsImporting] = useState(false)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [detectedFormat, setDetectedFormat] = useState<'finapilot' | 'custom' | null>(null)
   const [pendingJobId, setPendingJobId] = useState<string | null>(null)
   const [currentJobId, setCurrentJobId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -375,53 +398,107 @@ export function CSVImportWizard({ orgId: propOrgId, token: propToken, onImportCo
       setCsvHeaders(cleanHeaders)
       console.log("✅ Headers set:", cleanHeaders.length)
 
+      // Local Detection
+      const normalizedHeaders = cleanHeaders.map(h => h.toLowerCase().trim().replace(/[_\s-]+/g, '_'));
+      const matches = normalizedHeaders.filter(h => FINAPILOT_HEADERS.includes(h));
+      const matchPercentage = (matches.length / cleanHeaders.length) * 100;
+      const isNative = matchPercentage >= 60;
+      setDetectedFormat(isNative ? 'finapilot' : 'custom');
+
+      if (isNative) {
+        setUseSmartMapping(false); // No need for AI if it's our format
+      }
+
       const data: CSVRow[] = []
       const startIndex = skipFirstRow ? 1 : 0
 
-      // Read all rows for import, but only show first 10 for preview
       for (let i = startIndex; i < lines.length; i++) {
         const line = lines[i].trim()
-        if (!line) continue // Skip empty lines
+        if (!line) continue
 
         const values = parseCSVLine(line)
-        if (values.length === 0) continue // Skip rows with no data
+        if (values.length === 0) continue
 
         const row: CSVRow = {}
         let hasData = false
 
         cleanHeaders.forEach((header, index) => {
           const value = (values[index] || "").trim()
-          // Clean the value: remove extra whitespace, handle null/undefined
           row[header] = value === "null" || value === "undefined" || value === "NULL" || value === "UNDEFINED" ? "" : value
           if (value) hasData = true
         })
 
-        // Only add rows that have at least some data
         if (hasData) {
           data.push(row)
         }
       }
 
-      console.log("📊 Parsed data rows:", data.length)
-
-      if (data.length === 0) {
-        toast.error("CSV file has no data rows. Please check the file.")
-        return
-      }
-
       setCsvData(data)
-      setPreviewRows(data.slice(0, 10)) // Show first 10 rows for preview
-
-      // Auto-map fields
-      const autoMappings = autoMapFields(cleanHeaders)
-      console.log("🗺️ Auto-mapped fields:", autoMappings.length)
-      setFieldMappings(autoMappings)
-
+      const prevRows = data.slice(0, 10)
+      setPreviewRows(prevRows)
       setStep("preview")
-      toast.success(`CSV file loaded: ${data.length} rows detected`)
+      toast.success(isNative ? "FinaPilot Template Detected!" : "CSV loaded successfully")
     }
 
     reader.readAsText(file)
+  }
+
+  const runSmartMapping = async () => {
+    if (!csvHeaders.length || !previewRows.length) {
+      console.warn("⚠️ Cannot run smart mapping: Missing headers or preview data");
+      return;
+    }
+
+    console.log("🧠 Initiating AI Smart Mapping...", {
+      headerCount: csvHeaders.length,
+      sampleSize: previewRows.length
+    });
+
+    setIsAnalyzing(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/import/map/smart`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ headers: csvHeaders, sampleRows: previewRows }),
+      });
+
+      console.log("📡 AI Response Status:", res.status);
+
+      if (res.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
+      const result = await res.json();
+      console.log("🎯 AI Result Data:", result);
+
+      if (result.ok && result.data?.mappings && result.data.mappings.length > 0) {
+        const smartMappings = result.data.mappings.map((m: any) => ({
+          csvColumn: m.csvColumn || m.csv_field,
+          targetField: m.internalField || m.internal_field,
+          confidence: m.confidence,
+          explanation: m.explanation,
+          method: m.method || 'ai_semantic',
+        }));
+        
+        console.log(`✅ AI mapped ${smartMappings.length} columns successfully`);
+        setFieldMappings(smartMappings);
+        setSmartMappingResult(result.data);
+        toast.success(`✨ AI Mapping Analysis Complete (${smartMappings.length} fields detected)`);
+      } else {
+        console.log("ℹ️ AI returned no specific mappings, falling back to heuristic matching");
+        setFieldMappings(autoMapFields(csvHeaders));
+        if (result.ok) {
+           toast.info("Heuristic mapping applied (AI suggest manual review)");
+        }
+      }
+    } catch (err) {
+      console.error("❌ Smart mapping critical failure:", err);
+      setFieldMappings(autoMapFields(csvHeaders));
+      toast.error("AI Analysis failed. Falling back to basic mapping.");
+    } finally {
+      setIsAnalyzing(false);
+    }
   }
 
   const handleMappingChange = (csvColumn: string, targetField: string) => {
@@ -574,9 +651,12 @@ export function CSVImportWizard({ orgId: propOrgId, token: propToken, onImportCo
       console.log("📤 Full upload URL:", uploadUrl)
       console.log("📤 Upload file size:", formData.get('file') instanceof File ? (formData.get('file') as File).size : 'unknown')
 
+      const uploadHeaders = { ...getAuthHeaders() } as any;
+      delete uploadHeaders["Content-Type"];
+
       const uploadResponse = await fetch(uploadUrl, {
         method: "POST",
-        headers: getAuthHeaders(),
+        headers: uploadHeaders,
         credentials: "include",
         body: formData,
       })
@@ -965,624 +1045,359 @@ export function CSVImportWizard({ orgId: propOrgId, token: propToken, onImportCo
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline">
-          <Upload className="mr-2 h-4 w-4" />
+        <Button variant="outline" className="flex items-center gap-2">
+          <Upload className="h-4 w-4" />
           Import CSV
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>CSV Import Wizard</DialogTitle>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col p-0">
+        <DialogHeader className="p-6 border-b">
+          <DialogTitle className="flex items-center gap-2">
+            <Upload className="h-5 w-5 text-blue-500" />
+            Import Financial Data
+          </DialogTitle>
           <DialogDescription>
-            Import financial data from CSV files with automatic field mapping
+            Upload your CSV to populate your financial model with AI assistance.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6">
-          {/* Progress Steps */}
-          <div className="flex items-center justify-between">
-            {["upload", "preview", "mapping", "review"].map((s, index) => (
-              <div key={s} className="flex items-center flex-1">
-                <div
-                  className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${step === s
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : ["upload", "preview", "mapping", "review"].indexOf(step) > index
-                      ? "bg-green-500 text-white border-green-500"
-                      : "bg-muted text-muted-foreground border-muted"
-                    }`}
-                >
-                  {["upload", "preview", "mapping", "review"].indexOf(step) > index ? (
-                    <CheckCircle2 className="h-4 w-4" />
-                  ) : (
-                    index + 1
-                  )}
-                </div>
-                <div className="flex-1 h-0.5 mx-2 bg-muted">
-                  {index < 3 && (
+        <div className="flex-1 overflow-y-auto p-6">
+          {/* Step Indicators */}
+          <div className="flex items-center justify-between mb-8 px-4">
+            {[
+              { id: "upload", label: "Upload", icon: Upload },
+              { id: "preview", label: "Preview", icon: Eye },
+              { id: "mapping", label: "Mapping", icon: Map },
+              { id: "review", label: "Import", icon: CheckCircle2 },
+            ].map((s, index, arr) => {
+              const Icon = s.icon
+              const isActive = step === s.id
+              const currentStepIndex = ["upload", "preview", "mapping", "review"].indexOf(step)
+              const isPast = currentStepIndex > index
+              
+              return (
+                <div key={s.id} className="flex items-center flex-1 last:flex-none">
+                  <div className="flex flex-col items-center gap-2 relative border-none">
                     <div
-                      className={`h-full ${["upload", "preview", "mapping", "review"].indexOf(step) > index
-                        ? "bg-green-500"
-                        : ""
-                        }`}
-                    />
+                      className={`h-10 w-10 rounded-full flex items-center justify-center border-2 transition-colors ${
+                        isActive
+                          ? "border-blue-500 bg-blue-50 text-blue-500"
+                          : isPast
+                          ? "border-green-500 bg-green-50 text-green-500"
+                          : "border-muted text-muted-foreground"
+                      }`}
+                    >
+                      {isPast ? <CheckCircle2 className="h-6 w-6" /> : <Icon className="h-5 w-5" />}
+                    </div>
+                    <span className={`text-xs font-medium ${isActive ? "text-blue-600" : "text-muted-foreground"}`}>
+                      {s.label}
+                    </span>
+                  </div>
+                  {index < arr.length - 1 && (
+                    <div className={`flex-1 h-[2px] mx-4 -mt-6 ${isPast ? "bg-green-500" : "bg-muted"}`} />
                   )}
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
-          {/* Step 1: Upload */}
-          {step === "upload" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Upload CSV File</CardTitle>
-                <CardDescription>Select a CSV file to import financial data</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="border-2 border-dashed rounded-lg p-8 text-center">
-                  <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                  <Label htmlFor="csv-upload" className="cursor-pointer">
-                    <span className="text-primary font-medium">Click to upload</span> or drag and drop
-                  </Label>
-                  <Input
-                    id="csv-upload"
+          {/* Conditional Content by Step */}
+          <div>
+            {step === "upload" && (
+              <div className="space-y-6">
+                <div
+                  className="border-2 border-dashed border-muted rounded-xl p-12 text-center hover:border-blue-400 transition-colors cursor-pointer group bg-slate-50/50"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <input
                     type="file"
-                    accept=".csv"
-                    onChange={handleFileUpload}
-                    ref={fileInputRef}
                     className="hidden"
+                    ref={fileInputRef}
+                    onChange={handleFileUpload}
+                    accept=".csv"
                   />
-                  <p className="text-sm text-muted-foreground mt-2">CSV files only (max 10MB)</p>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="skip-header"
-                    checked={skipFirstRow}
-                    onCheckedChange={(checked) => setSkipFirstRow(checked as boolean)}
-                  />
-                  <Label htmlFor="skip-header" className="cursor-pointer">
-                    First row contains headers
-                  </Label>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Step 2: Preview */}
-          {step === "preview" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Preview Data</CardTitle>
-                <CardDescription>Review the first 10 rows of your CSV file</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {csvData.length > 100 ? (
-                  <VirtualizedTable
-                    data={csvData.map((row, index) => ({ ...row, id: `row-${index}` }))}
-                    columns={csvHeaders.map((header) => ({
-                      key: header,
-                      header,
-                      render: (row: CSVRow) => (
-                        <span className="max-w-[200px] truncate block">{row[header] || "-"}</span>
-                      ),
-                    }))}
-                    containerHeight={400}
-                    rowHeight={48}
-                  />
-                ) : (
-                  <div className="border rounded-lg overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          {csvHeaders.map((header) => (
-                            <TableHead key={header} className="min-w-[120px]">
-                              {header}
-                            </TableHead>
-                          ))}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {previewRows.map((row, index) => (
-                          <TableRow key={index}>
-                            {csvHeaders.map((header) => (
-                              <TableCell key={header} className="max-w-[200px] truncate">
-                                {row[header] || "-"}
-                              </TableCell>
-                            ))}
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                  <div className="h-16 w-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
+                    <Upload className="h-8 w-8" />
                   </div>
-                )}
-                <div className="mt-4 flex items-center justify-between">
-                  <p className="text-sm text-muted-foreground">
-                    Showing {previewRows.length} of {csvData.length} rows
+                  <h3 className="text-lg font-semibold mb-2">Select a CSV File</h3>
+                  <p className="text-sm text-muted-foreground max-w-xs mx-auto mb-4">
+                    Drag and drop your file here, or click to browse.
                   </p>
-                  <Button
-                    onClick={() => {
-                      console.log("🔄 Continue to Mapping clicked")
-                      console.log("📊 Current state:", {
-                        step,
-                        csvHeadersCount: csvHeaders.length,
-                        csvDataCount: csvData.length,
-                        fieldMappingsCount: fieldMappings.length
-                      })
-                      if (csvHeaders.length === 0) {
-                        toast.error("No CSV headers detected. Please check your file format.")
-                        return
-                      }
-                      if (csvData.length === 0) {
-                        toast.error("No CSV data detected. Please check your file.")
-                        return
-                      }
-                      setStep("mapping")
-                      console.log("✅ Step set to mapping")
-                    }}
-                  >
-                    Continue to Mapping
+                  <div className="flex items-center justify-center gap-4 text-xs font-medium text-slate-500">
+                    <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-green-500" /> Max 50MB</span>
+                    <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-green-500" /> Auto-mapping</span>
+                  </div>
+                </div>
+
+                <Card className="border-blue-100 bg-blue-50/30">
+                  <CardContent className="p-4 flex items-start gap-4">
+                    <div className="p-2 bg-blue-100 rounded-lg shrink-0">
+                      <Sparkles className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div className="space-y-3">
+                      <div>
+                        <h4 className="text-sm font-semibold text-blue-900">AI-Powered Extraction</h4>
+                        <p className="text-xs text-blue-800/80 leading-relaxed mt-1">
+                          Our intelligence engine automatically maps your specific accounting export (QuickBooks, NetSuite, Xero) to our categories.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Checkbox 
+                          id="auto-mapping" 
+                          checked={useSmartMapping} 
+                          onCheckedChange={(c) => setUseSmartMapping(c as boolean)} 
+                        />
+                        <Label htmlFor="auto-mapping" className="text-xs font-bold text-blue-950 cursor-pointer">
+                          Enable AI Smart Mapping (Recommended)
+                        </Label>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <div className="flex justify-center">
+                  <Button variant="ghost" size="sm" className="text-muted-foreground h-auto py-1" asChild>
+                    <a href="/templates/finapilot_import_template.csv" download>
+                      <Download className="mr-2 h-3 w-3" />
+                      Download FinaPilot template
+                    </a>
                   </Button>
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              </div>
+            )}
 
-          {/* Step 3: Mapping */}
-          {step === "mapping" && csvHeaders.length > 0 && (
-            <Tabs defaultValue="mapping" className="w-full">
-              <TabsList>
-                <TabsTrigger value="mapping">Field Mapping</TabsTrigger>
-                <TabsTrigger value="templates">Saved Templates</TabsTrigger>
-              </TabsList>
+            {step === "preview" && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      Data Preview
+                      {detectedFormat === 'finapilot' ? (
+                        <Badge className="bg-green-500/10 text-green-600 border-green-200">
+                          <CheckCircle2 className="w-3 h-3 mr-1" /> Standard Format
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-200">
+                          <AlertCircle className="w-3 h-3 mr-1" /> Custom Format
+                        </Badge>
+                      )}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">Showing sample rows for verification.</p>
+                  </div>
+                </div>
 
-              <TabsContent value="mapping" className="space-y-4 overflow-x-auto overflow-y-visible">
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="flex items-center gap-2">
-                          <Map className="h-5 w-5" />
-                          Map CSV Columns to Fields
-                        </CardTitle>
-                        <CardDescription>
-                          {fieldMappings.length > 0 && (
-                            <span className="flex items-center gap-2 mt-2">
-                              <Sparkles className="h-4 w-4 text-green-500" />
-                              Auto-mapped {fieldMappings.length} fields
-                            </span>
-                          )}
-                        </CardDescription>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          const autoMappings = autoMapFields(csvHeaders)
-                          setFieldMappings(autoMappings)
-                          toast.success("Fields re-mapped automatically")
-                        }}
-                      >
-                        <Sparkles className="mr-2 h-4 w-4" />
-                        Re-auto Map
-                      </Button>
+                {detectedFormat === 'custom' && (
+                  <div className="p-4 border border-amber-200 bg-amber-50 rounded-xl flex items-start gap-3">
+                    <Sparkles className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-amber-900">Custom Accounting Export Detected</p>
+                      <p className="text-xs text-amber-800 leading-normal">
+                        We recommend using **AI Smart Mapping** to understand your columns. Or, <a href="/templates/finapilot_import_template.csv" download className="font-bold underline decoration-dotted">download our native format</a> to skip mapping.
+                      </p>
                     </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {/* Required Fields */}
-                    <div className="space-y-3">
-                      <h4 className="font-medium text-sm">Required Fields</h4>
-                      {targetFields
-                        .filter((f) => f.required)
-                        .map((field) => {
-                          const mapping = fieldMappings.find((m) => m.targetField === field.value)
-                          const currentColumn = getMappedColumn(field.value)
-                          const confidence = mapping?.confidence || (currentColumn !== "__none__" ? getFieldConfidence(field.value, currentColumn) : 0)
-                          const isMapped = currentColumn !== "__none__"
+                  </div>
+                )}
 
-                          return (
-                            <div key={field.value} className="flex items-center gap-4 p-3 border rounded-lg bg-white">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <Label className="font-medium">{field.label}</Label>
-                                  {isMapped && confidence > 0 && (
-                                    <Badge
-                                      variant="secondary"
-                                      className={`text-xs ${confidence >= 90 ? "bg-green-100 text-green-700" :
-                                        confidence >= 75 ? "bg-blue-100 text-blue-700" :
-                                          "bg-yellow-100 text-yellow-700"
-                                        }`}
-                                    >
-                                      {confidence}% confidence
-                                    </Badge>
-                                  )}
-                                  {!isMapped && (
-                                    <Badge variant="outline" className="text-xs bg-red-50 text-red-600 border-red-200">
-                                      Not mapped
-                                    </Badge>
-                                  )}
-                                </div>
-                              </div>
-                              <Select
-                                value={currentColumn}
-                                onValueChange={(value) => {
-                                  handleMappingChange(value, field.value)
-                                  // Recalculate confidence after change
-                                  if (value !== "__none__") {
-                                    const newConfidence = getFieldConfidence(field.value, value)
-                                    setFieldMappings((prev) => {
-                                      const existing = prev.find((m) => m.targetField === field.value)
-                                      if (existing) {
-                                        return prev.map((m) =>
-                                          m.targetField === field.value
-                                            ? { ...m, csvColumn: value, confidence: newConfidence }
-                                            : m
-                                        )
-                                      } else {
-                                        return [...prev, { csvColumn: value, targetField: field.value, confidence: newConfidence }]
-                                      }
-                                    })
-                                  }
-                                }}
-                              >
-                                <SelectTrigger className="w-[250px]">
-                                  <SelectValue placeholder="Select CSV column" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="__none__">None</SelectItem>
-                                  {csvHeaders.map((header) => (
-                                    <SelectItem key={header} value={header}>
-                                      {header}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              {isMapped && (
-                                <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
-                              )}
-                            </div>
-                          )
-                        })}
+                <div className="border rounded-xl overflow-hidden bg-white shadow-sm max-h-[300px] overflow-y-auto">
+                  <Table>
+                    <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-sm">
+                      <TableRow>
+                        {csvHeaders.map((header) => (
+                          <TableHead key={header} className="text-[10px] font-bold uppercase tracking-wider text-slate-500 py-3 whitespace-nowrap">
+                            {header}
+                          </TableHead>
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {previewRows.map((row, index) => (
+                        <TableRow key={index} className="hover:bg-slate-50/50">
+                          {csvHeaders.map((header) => (
+                            <TableCell key={header} className="py-2 text-xs truncate max-w-[150px]">
+                              {row[header] || <span className="text-muted-foreground/30 italic">empty</span>}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
 
-                      {/* Optional Fields */}
-                      <div className="mt-6">
-                        <h4 className="font-medium text-sm mb-3">Optional Fields</h4>
-                        {targetFields
-                          .filter((f) => !f.required)
-                          .map((field) => {
+                <div className="flex items-center justify-between pt-4 border-t">
+                  <div className="flex items-center gap-4">
+                    <p className="text-xs text-muted-foreground">{csvData.length} records total.</p>
+                    <div className="flex items-center gap-2">
+                      <Checkbox 
+                        id="toggle-ai-preview" 
+                        checked={useSmartMapping} 
+                        onCheckedChange={(c) => setUseSmartMapping(c as boolean)} 
+                      />
+                      <Label htmlFor="toggle-ai-preview" className="text-xs font-medium cursor-pointer">Use AI Intelligence</Label>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setStep("upload")}>Back</Button>
+                    <Button size="sm" onClick={() => {
+                      setStep("mapping");
+                      if (useSmartMapping) runSmartMapping();
+                      else setFieldMappings(autoMapFields(csvHeaders));
+                    }}>
+                      Proceed to Mapping
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {step === "mapping" && (
+              <div className="space-y-6">
+                {isAnalyzing ? (
+                  <div className="py-20 flex flex-col items-center justify-center space-y-6">
+                    <div className="relative">
+                      <div className="h-20 w-20 rounded-full border-4 border-blue-100 border-t-blue-500 animate-spin" />
+                      <Sparkles className="h-8 w-8 text-amber-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse" />
+                    </div>
+                    <div className="text-center space-y-2">
+                      <h3 className="text-xl font-bold">Gemini Intelligence Scanning...</h3>
+                      <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+                        Analyzing your dataset structure for accurate financial reconciliation.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <Card className="border-none bg-slate-50 shadow-none">
+                      <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
+                        <div>
+                          <CardTitle className="text-base font-bold">Column Reconciliation</CardTitle>
+                          <CardDescription className="text-xs">
+                             {smartMappingResult ? "AI has suggested relevant matches below." : "Verify the automatically detected mappings."}
+                          </CardDescription>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={runSmartMapping} className="text-blue-600 hover:text-blue-700 hover:bg-blue-50">
+                          <Sparkles className="w-3 h-3 mr-2" />
+                          Re-scan data
+                        </Button>
+                      </CardHeader>
+                      <CardContent className="px-6 pb-6 space-y-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="w-1 h-4 bg-blue-500 rounded-full" />
+                          <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Core Metrics</h4>
+                        </div>
+                        
+                        <div className="grid gap-3">
+                          {targetFields.map((field) => {
                             const mapping = fieldMappings.find((m) => m.targetField === field.value)
                             const currentColumn = getMappedColumn(field.value)
                             const confidence = mapping?.confidence || (currentColumn !== "__none__" ? getFieldConfidence(field.value, currentColumn) : 0)
                             const isMapped = currentColumn !== "__none__"
 
                             return (
-                              <div
-                                key={field.value}
-                                className="flex items-center gap-4 p-3 border rounded-lg mb-2 bg-white"
-                              >
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <Label className="font-medium">{field.label}</Label>
-                                    {isMapped && confidence > 0 && (
-                                      <Badge
-                                        variant="secondary"
-                                        className={`text-xs ${confidence >= 90 ? "bg-green-100 text-green-700" :
-                                          confidence >= 75 ? "bg-blue-100 text-blue-700" :
-                                            "bg-yellow-100 text-yellow-700"
-                                          }`}
-                                      >
-                                        {confidence}% confidence
-                                      </Badge>
-                                    )}
-                                    {!isMapped && (
-                                      <Badge variant="outline" className="text-xs text-muted-foreground">
-                                        Optional
-                                      </Badge>
-                                    )}
+                              <div key={field.value} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                      <Label className="text-sm font-bold">{field.label}</Label>
+                                      {field.required && <Badge variant="outline" className="text-[9px] h-4 border-red-200 text-red-500 bg-red-50 font-bold uppercase">Required</Badge>}
+                                      {isMapped && confidence > 0 && (
+                                        <Badge className={`text-[10px] h-4 border-none ${confidence >= 90 ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}`}>
+                                          {confidence}% AI Confidence
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <p className="text-[10px] text-slate-400">Target system field</p>
+                                  </div>
+
+                                  <div className="flex items-center gap-2">
+                                    <Select value={currentColumn} onValueChange={(val) => handleMappingChange(val, field.value)}>
+                                      <SelectTrigger className="w-full sm:w-[240px] h-9 text-xs bg-slate-50/50">
+                                        <SelectValue placeholder="Select Column..." />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="__none__" className="text-slate-400 italic">No Selection</SelectItem>
+                                        {csvHeaders.map(h => (
+                                          <SelectItem key={h} value={h}>
+                                            {h} {smartMappingResult?.skipSuggestions?.includes(h) ? "⚠️" : ""}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    {isMapped ? <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" /> : <XCircle className="h-5 w-5 text-slate-200 shrink-0" />}
                                   </div>
                                 </div>
-                                <Select
-                                  value={currentColumn}
-                                  onValueChange={(value) => {
-                                    handleMappingChange(value, field.value)
-                                    // Recalculate confidence after change
-                                    if (value !== "__none__") {
-                                      const newConfidence = getFieldConfidence(field.value, value)
-                                      setFieldMappings((prev) => {
-                                        const existing = prev.find((m) => m.targetField === field.value)
-                                        if (existing) {
-                                          return prev.map((m) =>
-                                            m.targetField === field.value
-                                              ? { ...m, csvColumn: value, confidence: newConfidence }
-                                              : m
-                                          )
-                                        } else {
-                                          return [...prev, { csvColumn: value, targetField: field.value, confidence: newConfidence }]
-                                        }
-                                      })
-                                    }
-                                  }}
-                                >
-                                  <SelectTrigger className="w-[250px]">
-                                    <SelectValue placeholder="Select CSV column (optional)" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="__none__">None</SelectItem>
-                                    {csvHeaders.map((header) => (
-                                      <SelectItem key={header} value={header}>
-                                        {header}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                {isMapped && (
-                                  <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
+                                {mapping?.explanation && isMapped && (
+                                  <div className="mt-3 pt-3 border-t border-dashed flex gap-2">
+                                    <Sparkles className="h-3 w-3 text-blue-500 mt-0.5 shrink-0" />
+                                    <p className="text-[10px] leading-normal text-slate-500">
+                                      <span className="font-bold text-blue-600 mr-1">AI Logic:</span> {mapping.explanation}
+                                    </p>
+                                  </div>
                                 )}
                               </div>
                             )
                           })}
-                      </div>
-
-                      {/* Unmapped Columns Warning */}
-                      {getUnmappedColumns().length > 0 && (
-                        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                          <div className="flex items-start gap-2">
-                            <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5" />
-                            <div>
-                              <p className="text-sm font-medium text-yellow-800">
-                                Unmapped columns: {getUnmappedColumns().join(", ")}
-                              </p>
-                              <p className="text-xs text-yellow-600 mt-1">
-                                These columns will be ignored during import
-                              </p>
-                            </div>
-                          </div>
                         </div>
-                      )}
+                      </CardContent>
+                    </Card>
 
-                      {/* Initial Values */}
-                      <div className="mt-6 p-4 border rounded-lg space-y-3 bg-blue-50 dark:bg-blue-950/20">
-                        <div className="flex items-start gap-2">
-                          <div className="h-5 w-5 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 mt-0.5">
-                            <span className="text-white text-xs">i</span>
-                          </div>
-                          <div className="flex-1">
-                            <h4 className="font-medium text-sm mb-1">Additional Model Parameters</h4>
-                            <p className="text-xs text-muted-foreground mb-3">
-                              These values help improve model accuracy and are used when auto-generating financial models after CSV import.
-                            </p>
-                            <div className="space-y-2 text-xs">
-                              <div className="flex items-start gap-2">
-                                <span className="font-medium">💰 Initial Cash on Hand:</span>
-                                <span className="text-muted-foreground">Starting cash balance for financial projections and runway calculations</span>
-                              </div>
-                              <div className="flex items-start gap-2">
-                                <span className="font-medium">👥 Active Customers Count:</span>
-                                <span className="text-muted-foreground">Used for customer-based revenue calculations, unit economics (LTV/CAC), and investor dashboard metrics</span>
-                              </div>
-                            </div>
-                          </div>
+                    <div className="p-4 border rounded-xl bg-slate-50 space-y-4">
+                      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest px-1">Import Meta-Parameters</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-1.5 p-1">
+                          <Label htmlFor="cash-input" className="text-xs font-semibold">Initial Cash Balance</Label>
+                          <Input id="cash-input" type="number" placeholder="0.00" value={initialCash} onChange={e => setInitialCash(e.target.value)} className="bg-white text-xs h-9" />
                         </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <Label htmlFor="initial-cash">Initial Cash on Hand</Label>
-                            <Input
-                              id="initial-cash"
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={initialCash}
-                              onChange={(e) => {
-                                const val = e.target.value.replace(/[^0-9.-]/g, '')
-                                setInitialCash(val || "0")
-                              }}
-                              placeholder="e.g. 100000"
-                            />
-                          </div>
-                          <div>
-                            <Label htmlFor="initial-customers">Active Customers Count</Label>
-                            <Input
-                              id="initial-customers"
-                              type="number"
-                              min="0"
-                              step="1"
-                              value={initialCustomers}
-                              onChange={(e) => {
-                                const val = e.target.value.replace(/[^0-9]/g, '')
-                                setInitialCustomers(val || "0")
-                              }}
-                              placeholder="e.g. 100"
-                            />
-                          </div>
+                        <div className="space-y-1.5 p-1">
+                          <Label htmlFor="cust-input" className="text-xs font-semibold">Current Customer Base</Label>
+                          <Input id="cust-input" type="number" placeholder="0" value={initialCustomers} onChange={e => setInitialCustomers(e.target.value)} className="bg-white text-xs h-9" />
                         </div>
                       </div>
+                    </div>
 
-                      {/* Save Template */}
-                      <div className="mt-6 p-4 border rounded-lg space-y-3">
-                        <h4 className="font-medium text-sm">Save Mapping Template</h4>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <Label htmlFor="template-name">Template Name</Label>
-                            <Input
-                              id="template-name"
-                              value={templateName}
-                              onChange={(e) => setTemplateName(e.target.value)}
-                              placeholder="e.g., QuickBooks Export"
-                            />
-                          </div>
-                          <div>
-                            <Label htmlFor="template-desc">Description (optional)</Label>
-                            <Input
-                              id="template-desc"
-                              value={templateDescription}
-                              onChange={(e) => setTemplateDescription(e.target.value)}
-                              placeholder="Brief description"
-                            />
-                          </div>
-                        </div>
-                        <Button onClick={handleSaveTemplate} variant="outline" size="sm">
-                          <Save className="mr-2 h-4 w-4" />
-                          Save Template
+                    <div className="flex justify-between items-center pt-4 border-t">
+                      <Button variant="ghost" size="sm" onClick={() => setStep("preview")}>Back</Button>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={handleSaveTemplate}>Save Template</Button>
+                        <Button size="sm" onClick={handleImport} disabled={!validateMappings() || isImporting}>
+                          {isImporting ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                          Complete Final Import
                         </Button>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setStep("preview")} disabled={isImporting}>
-                    Back
-                  </Button>
-                  <Button
-                    onClick={handleImport}
-                    disabled={!validateMappings() || isImporting}
-                  >
-                    {isImporting ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Importing...
-                      </>
-                    ) : (
-                      "Continue to Import"
-                    )}
-                  </Button>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="templates" className="space-y-4 overflow-x-auto overflow-y-visible">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Saved Mapping Templates</CardTitle>
-                    <CardDescription>Load a previously saved mapping configuration</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {savedTemplates.length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                        <p>No saved templates yet</p>
-                        <p className="text-sm">Save a mapping configuration to reuse it later</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {savedTemplates.map((template) => (
-                          <div
-                            key={template.id}
-                            className="flex items-center justify-between p-4 border rounded-lg"
-                          >
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <h4 className="font-medium">{template.name}</h4>
-                                {selectedTemplate === template.id && (
-                                  <Badge variant="default">Active</Badge>
-                                )}
-                              </div>
-                              {template.description && (
-                                <p className="text-sm text-muted-foreground mt-1">
-                                  {template.description}
-                                </p>
-                              )}
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {template.mappings.length} mappings • Saved{" "}
-                                {new Date(template.createdAt).toLocaleDateString()}
-                              </p>
-                            </div>
-                            <div className="flex gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleLoadTemplate(template.id)}
-                              >
-                                <Eye className="h-4 w-4 mr-2" />
-                                Load
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleDeleteTemplate(template.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
-          )}
-
-          {/* Show error if mapping step is selected but no headers */}
-          {step === "mapping" && csvHeaders.length === 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-destructive">
-                  <AlertCircle className="h-5 w-5" />
-                  No CSV Data Available
-                </CardTitle>
-                <CardDescription>
-                  Please upload a CSV file first before proceeding to mapping.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button onClick={() => setStep("upload")}>
-                  Go Back to Upload
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Step 4: Review & Import - Show if step is review OR if we have a job ID */}
-          {(step === "review" || pendingJobId || currentJobId) && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                  Import Progress
-                </CardTitle>
-                <CardDescription>
-                  Importing your data... Please wait.
-                  {(currentJobId || pendingJobId) && (
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      (Job: {(currentJobId || pendingJobId)?.substring(0, 8)}...)
-                    </span>
-                  )}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Rows imported</span>
-                    <span className="font-medium">
-                      {importedRows} / {csvData.length}
-                    </span>
                   </div>
-                  <div className="w-full bg-muted rounded-full h-2">
-                    <div
-                      className="bg-primary h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${csvData.length > 0 ? Math.min(100, (importedRows / csvData.length) * 100) : 0}%` }}
+                )}
+              </div>
+            )}
+
+            {step === "review" && (
+              <div className="py-20 space-y-8 text-center animate-in zoom-in duration-500">
+                <div className="h-24 w-24 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto border-4 border-white shadow-2xl relative">
+                  <Loader2 className="h-10 w-10 animate-spin" />
+                  <div className="absolute -bottom-2 -right-2 bg-white rounded-full p-1 shadow-md border">
+                     <div className="h-6 w-6 bg-blue-500 rounded-full flex items-center justify-center text-white text-[10px] font-bold">
+                        {Math.round((importedRows / (csvData.length || 1)) * 100)}%
+                     </div>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-2xl font-bold">Synchronizing Data</h3>
+                  <p className="text-sm text-muted-foreground">Integrating {csvData.length} records into your organizational model.</p>
+                </div>
+                <div className="max-w-md mx-auto space-y-4">
+                  <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden border">
+                    <div 
+                      className="h-full bg-blue-500 transition-all duration-700" 
+                      style={{ width: `${Math.min(100, (importedRows / (csvData.length || 1)) * 100)}%` }}
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground text-center">
-                    {importedRows === 0 ? "Starting import..." : `Processing ${importedRows} of ${csvData.length} rows...`}
-                  </p>
-                </div>
-                <div className="p-4 bg-muted/50 rounded-lg">
-                  <h4 className="font-medium mb-2">Import Summary</h4>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Total Rows:</span>
-                      <span className="ml-2 font-medium">{csvData.length}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Fields Mapped:</span>
-                      <span className="ml-2 font-medium">{fieldMappings.length}</span>
-                    </div>
+                  <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    <span>Inbound Traffic</span>
+                    <span>{importedRows} / {csvData.length} records processed</span>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              </div>
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

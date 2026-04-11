@@ -33,6 +33,14 @@ router.post('/import/map/suggest', authenticate, csvMappingController.suggestMap
  */
 router.post('/import/map/validate', authenticate, csvMappingController.validateMapping);
 
+/**
+ * POST /import/map/smart
+ * AI-powered mapping: analyzes headers + sample data for intelligent suggestions
+ * Body: { headers: string[], sampleRows: Record<string, string>[] }
+ * Requires authentication
+ */
+router.post('/import/map/smart', authenticate, csvMappingController.smartMap);
+
 export default router;
 
 

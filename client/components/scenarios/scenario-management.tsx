@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import {
     Table,
@@ -335,7 +336,35 @@ export function ScenarioManagement({ orgId, modelId, onRefresh, currentRunId, re
         toast.info("Excel export coming in next release (Q3)");
     }
 
-    if (loading) return <div className="p-12 text-center"><Loader2 className="animate-spin inline mr-2" /> Synching Scenarios...</div>
+    if (loading) return (
+        <div className="space-y-8 pb-12">
+            <div className="flex justify-between items-end">
+                <div className="space-y-2">
+                    <Skeleton className="h-9 w-64" />
+                    <Skeleton className="h-4 w-96" />
+                </div>
+                <div className="flex gap-2">
+                    <Skeleton className="h-10 w-32" />
+                    <Skeleton className="h-10 w-32" />
+                </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="md:col-span-1 space-y-4">
+                    <Skeleton className="h-4 w-32" />
+                    {[1, 2, 3].map((i) => (
+                        <Skeleton key={i} className="h-20 w-full rounded-xl" />
+                    ))}
+                </div>
+                <div className="md:col-span-3 space-y-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <Skeleton className="h-44 w-full rounded-xl" />
+                        <Skeleton className="h-44 w-full rounded-xl" />
+                        <Skeleton className="h-[400px] lg:col-span-2 w-full rounded-xl" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
 
     return (
         <div className="space-y-8 pb-12">
@@ -402,7 +431,43 @@ export function ScenarioManagement({ orgId, modelId, onRefresh, currentRunId, re
 
                 {/* Comparison / Workspace Area */}
                 <div className="md:col-span-3 space-y-6">
-                    {showDiff ? (
+                    {scenarios.length === 0 && !loading ? (
+                        <Card className="border-2 border-dashed border-slate-200 bg-slate-50/50 flex flex-col items-center justify-center p-12 text-center min-h-[500px]">
+                            <div className="h-16 w-16 rounded-3xl bg-white shadow-xl flex items-center justify-center border border-slate-100 mb-6 group-hover:scale-110 transition-transform">
+                                <GitBranch className="h-8 w-8 text-indigo-500" />
+                            </div>
+                            <h3 className="text-xl font-black text-slate-900 tracking-tight">No Active Scenarios Found</h3>
+                            <p className="text-sm text-slate-500 max-w-sm mt-2 leading-relaxed">
+                                Scenario Planning allows you to branch your baseline model into multiple tracks. 
+                                <span className="font-bold text-indigo-600"> Nothing will be seen in this tab until you initialize your first scenario branch.</span>
+                            </p>
+                            <div className="mt-8 flex flex-col sm:flex-row gap-3">
+                                <Button 
+                                    className="bg-indigo-600 hover:bg-indigo-700 font-bold px-8 h-11 shadow-lg shadow-indigo-200"
+                                    onClick={() => handleCreateScenario()}
+                                >
+                                    <Zap className="h-4 w-4 mr-2" /> Initialize Scenarios
+                                </Button>
+                                <Button variant="outline" className="h-11 font-bold">
+                                    View Documentation
+                                </Button>
+                            </div>
+                            <div className="mt-12 grid grid-cols-3 gap-8 w-full max-w-2xl border-t border-slate-200 pt-8 opacity-50">
+                                <div className="text-center">
+                                    <p className="text-[10px] font-black uppercase text-slate-400">Step 1</p>
+                                    <p className="text-xs font-bold text-slate-600 mt-1">Select Baseline</p>
+                                </div>
+                                <div className="text-center border-x border-slate-200 px-4">
+                                    <p className="text-[10px] font-black uppercase text-slate-400">Step 2</p>
+                                    <p className="text-xs font-bold text-slate-600 mt-1">Branch Assumptions</p>
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-[10px] font-black uppercase text-slate-400">Step 3</p>
+                                    <p className="text-xs font-bold text-slate-600 mt-1">Visual Diff Analysis</p>
+                                </div>
+                            </div>
+                        </Card>
+                    ) : showDiff ? (
                         <Card className="border-none bg-slate-50 shadow-inner min-h-[500px]">
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
@@ -415,27 +480,38 @@ export function ScenarioManagement({ orgId, modelId, onRefresh, currentRunId, re
                                 <div className="space-y-8 py-4">
                                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                                         <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
-                                            <Label className="text-[10px] text-muted-foreground uppercase font-black">Net Alpha</Label>
-                                            <div className="text-2xl font-black text-emerald-600 flex items-center gap-2 mt-1">
-                                                +$1.2M <TrendingUp className="h-5 w-5" />
+                                            <Label className="text-[10px] text-muted-foreground uppercase font-black">Net Alpha (Revenue)</Label>
+                                            <div className={`text-2xl font-black flex items-center gap-2 mt-1 ${((scenarios.find(s => s.id === activeScenario)?.summary?.totalRevenue || 0) - (scenarios.find(s => s.isDefault)?.summary?.totalRevenue || 0)) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                {(() => {
+                                                    const active = scenarios.find(s => s.id === activeScenario)?.summary?.totalRevenue || 0;
+                                                    const base = scenarios.find(s => s.isDefault)?.summary?.totalRevenue || 0;
+                                                    const delta = active - base;
+                                                    return delta === 0 ? "No Change" : `${delta > 0 ? '+' : ''}$${(Math.abs(delta) / 1000000).toFixed(1)}M`;
+                                                })()}
+                                                {((scenarios.find(s => s.id === activeScenario)?.summary?.totalRevenue || 0) - (scenarios.find(s => s.isDefault)?.summary?.totalRevenue || 0)) >= 0 ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />}
                                             </div>
-                                            <div className="text-[10px] text-slate-400 mt-2 font-bold flex items-center gap-1">
-                                                <History className="h-3 w-3" /> VS. BASELINE (MARCH)
+                                            <div className="text-[10px] text-slate-400 mt-2 font-bold flex items-center gap-1 uppercase">
+                                                <History className="h-3 w-3" /> VS. BASELINE MODEL
                                             </div>
                                         </div>
                                         <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
-                                            <Label className="text-[10px] text-muted-foreground uppercase font-black">Runway Impact</Label>
+                                            <Label className="text-[10px] text-muted-foreground uppercase font-black">Impact Confidence</Label>
                                             <div className="text-2xl font-black text-blue-600 flex items-center gap-2 mt-1">
-                                                +4.2 Mo <Clock className="h-5 w-5" />
+                                                {scenarios.find(s => s.id === activeScenario)?.summary ? "High" : "N/A"} <Target className="h-5 w-5" />
                                             </div>
-                                            <div className="text-[10px] text-slate-400 mt-2 font-bold">EXTENDED LIQUIDITY WINDOW</div>
+                                            <div className="text-[10px] text-slate-400 mt-2 font-bold uppercase">CONFIDENCE RANKING</div>
                                         </div>
                                         <div className="p-4 bg-white rounded-xl border border-rose-100 shadow-sm bg-rose-50/20">
-                                            <Label className="text-[10px] text-rose-500 uppercase font-black">Risk Exposure</Label>
-                                            <div className="text-2xl font-black text-rose-600 flex items-center gap-2 mt-1">
-                                                Low <ShieldAlert className="h-5 w-5 font-bold" />
+                                            <Label className="text-[10px] text-slate-500 uppercase font-black">Burn Profile</Label>
+                                            <div className="text-2xl font-black flex items-center gap-2 mt-1">
+                                                {(() => {
+                                                    const active = scenarios.find(s => s.id === activeScenario)?.summary?.burnRate || 0;
+                                                    const base = scenarios.find(s => s.isDefault)?.summary?.burnRate || 0;
+                                                    if (!active || !base) return <><span className="text-slate-600">Undefined</span> <ShieldAlert className="h-5 w-5 font-bold" /></>;
+                                                    return active > base ? <><span className="text-rose-600">Elevated</span> <TrendingUp className="h-5 w-5 text-rose-500 font-bold" /></> : <><span className="text-emerald-600">Optimized</span> <TrendingDown className="h-5 w-5 text-emerald-500 font-bold" /></>;
+                                                })()}
                                             </div>
-                                            <div className="text-[10px] text-rose-400 mt-2 font-bold">95% CONFIDENCE INTERVAL</div>
+                                            <div className="text-[10px] text-slate-400 mt-2 font-bold uppercase">VERSUS BASELINE RATE</div>
                                         </div>
                                     </div>
 
@@ -445,24 +521,25 @@ export function ScenarioManagement({ orgId, modelId, onRefresh, currentRunId, re
                                             Variance Waterfall Analysis
                                         </h4>
                                         <div className="h-40 flex items-end gap-2 px-4 border-b border-l pb-2 bg-white/50 rounded-lg pt-8">
-                                            {[
-                                                { label: 'Base', val: 70, color: 'bg-slate-300' },
-                                                { label: 'Pricing', val: 15, color: 'bg-emerald-500', isDelta: true },
-                                                { label: 'Churn', val: 10, color: 'bg-emerald-400', isDelta: true },
-                                                { label: 'Hiring', val: -12, color: 'bg-rose-500', isDelta: true },
-                                                { label: 'New Target', val: 83, color: 'bg-primary' }
-                                            ].map((item, i) => (
-                                                <div key={i} className="flex-1 flex flex-col items-center group cursor-help">
-                                                    <div className="text-[9px] font-bold mb-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        {item.val > 0 ? '+' : ''}{item.val}%
+                                            {activeScenario && scenarios.find(s => s.id === activeScenario)?.summary?.varianceBridge ? 
+                                                (scenarios.find(s => s.id === activeScenario)?.summary?.varianceBridge as any[]).map((item, i) => (
+                                                    <div key={i} className="flex-1 flex flex-col items-center group cursor-help">
+                                                        <div className="text-[9px] font-bold mb-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            {item.value > 0 ? '+' : ''}{item.value}%
+                                                        </div>
+                                                        <div
+                                                            className={`${item.value >= 0 ? 'bg-emerald-500' : 'bg-rose-500'} w-full rounded-t-sm transition-all duration-700 hover:brightness-110 shadow-sm`}
+                                                            style={{ height: `${Math.min(Math.abs(item.value) * 1.5, 100)}px` }}
+                                                        />
+                                                        <span className="text-[8px] mt-2 font-black uppercase text-slate-400">{item.label}</span>
                                                     </div>
-                                                    <div
-                                                        className={`${item.color} w-full rounded-t-sm transition-all duration-700 hover:brightness-110 shadow-sm`}
-                                                        style={{ height: `${Math.abs(item.val) * 1.5}px` }}
-                                                    />
-                                                    <span className="text-[8px] mt-2 font-black uppercase text-slate-400">{item.label}</span>
-                                                </div>
-                                            ))}
+                                                )) : (
+                                                    <div className="flex flex-col items-center justify-center w-full h-full text-muted-foreground text-[10px] uppercase font-black tracking-widest gap-2">
+                                                        <BarChart className="h-6 w-6 opacity-20" />
+                                                        No Variance Data Available
+                                                    </div>
+                                                )
+                                            }
                                         </div>
                                     </div>
 
@@ -470,30 +547,30 @@ export function ScenarioManagement({ orgId, modelId, onRefresh, currentRunId, re
                                         <div className="space-y-3">
                                             <Label className="text-xs uppercase font-black text-slate-500 flex items-center gap-2">
                                                 <Flame className="h-3 w-3 text-orange-500" />
-                                                Driver Sensitivity Matrix
+                                                Runway Health
                                             </Label>
-                                            <div className="grid grid-cols-4 gap-1">
-                                                {Array.from({ length: 12 }).map((_, i) => (
-                                                    <div
-                                                        key={i}
-                                                        className={`h-8 rounded-sm animate-pulse`}
-                                                        style={{
-                                                            backgroundColor: i % 3 === 0 ? '#ef4444' : i % 2 === 0 ? '#fbbf24' : '#10b981',
-                                                            opacity: 0.3 + (Math.random() * 0.7)
-                                                        }}
-                                                    />
-                                                ))}
+                                            <div className="text-3xl font-black text-slate-800 tracking-tight">
+                                                {scenarios.find(s => s.id === activeScenario)?.summary?.runwayMonths?.toFixed(1) || '0.0'} <span className="text-sm font-bold text-slate-500 uppercase tracking-widest">Months</span>
                                             </div>
-                                            <p className="text-[9px] text-slate-400 italic font-medium">Heatmap showing ARR impact across multiple pricing tiers vs retention rates.</p>
+                                            <p className="text-[9px] text-slate-400 italic font-medium">Estimated runway before cash depletion under new branch assumptions.</p>
                                         </div>
 
                                         <div className="space-y-3">
                                             <Label className="text-xs uppercase font-black text-slate-500 flex items-center gap-2">
                                                 <Zap className="h-4 w-4 text-primary" />
-                                                Board Perspective (AI Summary)
+                                                AI Generated Insight
                                             </Label>
                                             <div className="p-3 bg-slate-900 text-slate-100 rounded-xl text-[11px] leading-relaxed border-2 border-primary/20 shadow-lg">
-                                                <span className="text-primary font-bold">Executive Insight:</span> This branch demonstrates superior capital efficiency. By delaying 3 engineering hires until Q3, we can increase our marketing spend by 15% without reducing our cash-out date, resulting in a 4.2x LTV/CAC.
+                                                <span className="text-primary font-bold">Executive Summary:</span> {
+                                                    (() => {
+                                                        const activeS = scenarios.find(s => s.id === activeScenario);
+                                                        const baseS = scenarios.find(s => s.isDefault);
+                                                        if (!activeS?.summary || !baseS?.summary) return 'Run scenario to generate insights.';
+                                                        const revDelta = (activeS.summary.totalRevenue || 0) - (baseS.summary.totalRevenue || 0);
+                                                        const dir = revDelta > 0 ? 'an increase' : 'a decrease';
+                                                        return `This branch projects ${dir} in lifetime ARR versus the baseline trajectory. Pay close attention to underlying burn rate variations as you merge changes.`;
+                                                    })()
+                                                }
                                                 <div 
                                                     className="mt-2 text-primary font-bold uppercase tracking-widest text-[9px] flex items-center gap-1 cursor-pointer hover:underline disabled:opacity-50"
                                                     onClick={() => !generatingPDF && handleGenerateBoardPDF()}
@@ -586,18 +663,18 @@ export function ScenarioManagement({ orgId, modelId, onRefresh, currentRunId, re
                                                 const kpiRows = [
                                                     { 
                                                         m: 'Annual Recurring Revenue (ARR)', 
-                                                        b: baseSum.totalRevenue ? `$${(baseSum.totalRevenue / 1000000).toFixed(1)}M` : '$42.5M', 
-                                                        a: activeSum.totalRevenue ? `$${(activeSum.totalRevenue / 1000000).toFixed(1)}M` : '$51.2M'
+                                                        b: baseSum.totalRevenue ? `$${(baseSum.totalRevenue / 1000000).toFixed(1)}M` : 'No Data', 
+                                                        a: activeSum.totalRevenue ? `$${(activeSum.totalRevenue / 1000000).toFixed(1)}M` : 'No Data'
                                                     },
                                                     { 
                                                         m: 'Net Income / Burn', 
-                                                        b: baseSum.netIncome ? `$${(baseSum.netIncome / 1000000).toFixed(1)}M` : '-$1.4M', 
-                                                        a: activeSum.netIncome ? `$${(activeSum.netIncome / 1000000).toFixed(1)}M` : '-$0.8M'
+                                                        b: baseSum.netIncome ? `$${(baseSum.netIncome / 1000000).toFixed(1)}M` : 'No Data', 
+                                                        a: activeSum.netIncome ? `$${(activeSum.netIncome / 1000000).toFixed(1)}M` : 'No Data'
                                                     },
                                                     { 
                                                         m: 'EBITDA Margin %', 
-                                                        b: baseSum.ebitda && baseSum.totalRevenue ? `${((baseSum.ebitda / baseSum.totalRevenue) * 100).toFixed(1)}%` : '78.2%', 
-                                                        a: activeSum.ebitda && activeSum.totalRevenue ? `${((activeSum.ebitda / activeSum.totalRevenue) * 100).toFixed(1)}%` : '81.5%'
+                                                        b: baseSum.ebitda && baseSum.totalRevenue ? `${((baseSum.ebitda / baseSum.totalRevenue) * 100).toFixed(1)}%` : 'No Data', 
+                                                        a: activeSum.ebitda && activeSum.totalRevenue ? `${((activeSum.ebitda / activeSum.totalRevenue) * 100).toFixed(1)}%` : 'No Data'
                                                     }
                                                 ];
 
@@ -640,28 +717,21 @@ export function ScenarioManagement({ orgId, modelId, onRefresh, currentRunId, re
                                 </CardHeader>
                                 <CardContent className="p-8">
                                     <div className="flex items-end justify-between h-48 gap-4 px-6">
-                                        {[
-                                            { label: 'Baseline', value: 300000, color: 'bg-slate-800' },
-                                            { label: 'Pricing', value: 50000, color: 'bg-emerald-500', isDelta: true },
-                                            { label: 'Volume', value: 80000, color: 'bg-emerald-500', isDelta: true },
-                                            { label: 'Churn', value: -25000, color: 'bg-rose-500', isDelta: true },
-                                            { label: 'Upsell', value: 45000, color: 'bg-emerald-500', isDelta: true },
-                                            { label: 'Target', value: 450000, color: 'bg-indigo-600' }
-                                        ].map((bar, i) => (
+                                        {(activeScenario && scenarios.find(s => s.id === activeScenario)?.summary?.varianceBridge) ? (scenarios.find(s => s.id === activeScenario)?.summary?.varianceBridge as any[]).map((bar, i) => (
                                             <div key={i} className="flex-1 flex flex-col items-center gap-2 group relative">
                                                 <div 
-                                                    className={`w-full rounded-t-lg transition-all duration-700 ${bar.color} ${bar.isDelta ? 'opacity-80 group-hover:opacity-100' : 'opacity-100'}`}
-                                                    style={{ height: `${Math.abs(bar.value) / 4500}%` }}
+                                                    className={`w-full rounded-t-lg transition-all duration-700 ${bar.value >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                                                    style={{ height: `${Math.min(Math.abs(bar.value) * 1.5, 100)}%` }}
                                                 />
                                                 <div className="text-[10px] font-black text-slate-500 uppercase tracking-tighter whitespace-nowrap">{bar.label}</div>
-                                                <div className={`text-[10px] font-mono font-bold ${bar.value < 0 ? 'text-rose-600' : 'text-slate-900'}`}>{bar.value > 0 && bar.isDelta ? '+' : ''}{bar.value.toLocaleString()}</div>
-                                                {bar.isDelta && (
-                                                    <div className="absolute -top-6 text-[9px] font-black text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        {((bar.value / 300000) * 100).toFixed(1)}% Impact
-                                                    </div>
-                                                )}
+                                                <div className={`text-[10px] font-mono font-bold ${bar.value < 0 ? 'text-rose-600' : 'text-slate-900'}`}>{bar.value > 0 ? '+' : ''}{bar.value.toLocaleString()}%</div>
                                             </div>
-                                        ))}
+                                        )) : (
+                                            <div className="flex flex-col items-center justify-center w-full h-full text-muted-foreground text-[10px] uppercase font-black tracking-widest gap-2">
+                                                <LayoutGrid className="h-8 w-8 opacity-20" />
+                                                Run Scenario for Bridge Analysis
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="mt-8 p-4 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center">
                                         <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-1">AI Narrative Bridge</p>
