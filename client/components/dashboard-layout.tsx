@@ -53,7 +53,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 interface DashboardLayoutProps {
   children: React.ReactNode
   activeView: string
-  onViewChange: (view: string) => void
+  onViewChange: (view: string, tab?: string) => void
   demoMode?: boolean
 }
 
@@ -193,6 +193,7 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
     id: string
     name: string | null
     email: string
+    mfaEnabled?: boolean
     orgs: Array<{
       id: string
       name: string
@@ -302,6 +303,68 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
     return () => document.removeEventListener("mousemove", handleMouseMove)
   }, [isMobile, sidebarOpen])
 
+  // ── High-priority alert notification polling (30 s) ──────────────────────
+  useEffect(() => {
+    if (!currentOrgId || !userData) return
+
+    const pollNotifications = async () => {
+      try {
+        const res = await fetch(
+          `${API_BASE_URL}/orgs/${currentOrgId}/notifications?priority=high&read=false&limit=5`,
+          { headers: getAuthHeaders(), credentials: "include" }
+        )
+        if (!res.ok) return
+        const result = await res.json()
+        if (!result.ok || !result.data?.length) return
+
+        // Load suppressed alert IDs (persisted, not just session)
+        const suppressed: string[] = JSON.parse(
+          localStorage.getItem("fina_suppressed_alerts") || "[]"
+        )
+
+        result.data.forEach((notif: any) => {
+          if (suppressed.includes(notif.id)) return
+          const toastId = `alert-${notif.id}`
+
+          const markRead = () => {
+            fetch(
+              `${API_BASE_URL}/orgs/${currentOrgId}/notifications/${notif.id}/read`,
+              { method: "PUT", headers: getAuthHeaders(), credentials: "include" }
+            ).catch(() => {})
+            toast.dismiss(toastId)
+          }
+
+          const suppress = () => {
+            const updated = [...suppressed, notif.id]
+            localStorage.setItem("fina_suppressed_alerts", JSON.stringify(updated))
+            toast.dismiss(toastId)
+          }
+
+          // Use toast.error with description string (Sonner v1 compatible approach)
+          toast.error(notif.title, {
+            id: toastId,
+            description: notif.message,
+            duration: 15000,   // 15 s auto-dismiss
+            action: {
+              label: "Dismiss",
+              onClick: markRead,
+            },
+            cancel: {
+              label: "Don't show again",
+              onClick: suppress,
+            },
+          })
+        })
+      } catch (err) {
+        console.error("[Notification Poll] error:", err)
+      }
+    }
+
+    pollNotifications()
+    const timer = setInterval(pollNotifications, 30_000)
+    return () => clearInterval(timer)
+  }, [currentOrgId, userData])
+
   const handleMainContentClick = () => {
     if (sidebarOpen && !isMobile) {
       setSidebarOpen(false)
@@ -375,11 +438,8 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
   }
 
   const handleMFA = () => {
-    onViewChange("settings")
-    // Could dispatch event to open MFA tab in settings
-    setTimeout(() => {
-      window.dispatchEvent(new CustomEvent("open-settings-tab", { detail: { tab: "security" } }))
-    }, 100)
+    // Open settings page specifically on the security tab for MFA management
+    onViewChange("settings", "security")
   }
 
   // Get current organization
@@ -552,10 +612,17 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
                     Contact Sales
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleMFA}>
-                    <Shield className="mr-2 h-4 w-4" />
-                    <span>MFA Enabled</span>
-                    <Badge variant="default" className="ml-auto text-xs">Active</Badge>
+                  <DropdownMenuItem onClick={handleMFA} className="cursor-pointer group">
+                    <Shield className="mr-2 h-4 w-4 text-slate-400 group-hover:text-indigo-400 transition-colors" />
+                    <span className="flex-1">MFA Security</span>
+                    {userData?.mfaEnabled ? (
+                      <div className="flex items-center gap-1.5 ml-auto">
+                        <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-emerald-500/30 text-emerald-500 bg-emerald-500/5 uppercase font-black">Active</Badge>
+                      </div>
+                    ) : (
+                      <Badge variant="outline" className="ml-auto text-[10px] px-1.5 py-0 h-4 text-slate-500 border-slate-200 uppercase font-black">Disabled</Badge>
+                    )}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={handleAccountSettings}>
                     <Settings className="mr-2 h-4 w-4" />

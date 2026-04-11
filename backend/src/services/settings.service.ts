@@ -612,6 +612,10 @@ export const settingsService = {
         preferences.emailNotifications = channel.enabled;
       } else if (channel.type === 'in-app') {
         preferences.pushNotifications = channel.enabled;
+      } else if (channel.type === 'marketing') {
+        preferences.marketingEmails = channel.enabled;
+      } else if (channel.type === 'alerts') {
+        preferences.alertNotifications = channel.enabled;
       }
     });
 
@@ -672,6 +676,48 @@ export const settingsService = {
         },
         update: {
           enabled: params.pushNotifications,
+        },
+      });
+    }
+
+    if (params.marketingEmails !== undefined) {
+      await prisma.notificationChannel.upsert({
+        where: {
+          notification_channel_unique: {
+            orgId,
+            userId,
+            type: 'marketing',
+          },
+        },
+        create: {
+          orgId,
+          userId,
+          type: 'marketing',
+          enabled: params.marketingEmails,
+        },
+        update: {
+          enabled: params.marketingEmails,
+        },
+      });
+    }
+
+    if (params.alertNotifications !== undefined) {
+      await prisma.notificationChannel.upsert({
+        where: {
+          notification_channel_unique: {
+            orgId,
+            userId,
+            type: 'alerts',
+          },
+        },
+        create: {
+          orgId,
+          userId,
+          type: 'alerts',
+          enabled: params.alertNotifications,
+        },
+        update: {
+          enabled: params.alertNotifications,
         },
       });
     }

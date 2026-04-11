@@ -55,6 +55,7 @@ interface AlertRule {
   notifyEmail: boolean
   notifySlack: boolean
   slackWebhook?: string
+  severity: "critical" | "warning" | "info"
   lastTriggered?: string | Date
   createdBy?: {
     id: string
@@ -109,6 +110,7 @@ export function AlertsManagement() {
     notifyEmail: true,
     notifySlack: false,
     slackWebhook: "",
+    severity: "warning" as "critical" | "warning" | "info",
   })
 
   // Fetch orgId
@@ -226,6 +228,7 @@ export function AlertsManagement() {
           notifyEmail: alertForm.notifyEmail,
           notifySlack: alertForm.notifySlack,
           slackWebhook: alertForm.slackWebhook || undefined,
+          severity: alertForm.severity,
         }),
       })
 
@@ -269,6 +272,7 @@ export function AlertsManagement() {
           notifyEmail: alertForm.notifyEmail,
           notifySlack: alertForm.notifySlack,
           slackWebhook: alertForm.slackWebhook || undefined,
+          severity: alertForm.severity,
         }),
       })
 
@@ -351,6 +355,7 @@ export function AlertsManagement() {
       notifyEmail: alert.notifyEmail,
       notifySlack: alert.notifySlack,
       slackWebhook: alert.slackWebhook || "",
+      severity: alert.severity || "warning",
     })
   }
 
@@ -364,6 +369,7 @@ export function AlertsManagement() {
       notifyEmail: true,
       notifySlack: false,
       slackWebhook: "",
+      severity: "warning",
     })
   }
 
@@ -499,13 +505,25 @@ export function AlertsManagement() {
                   {alerts.map((alert) => {
                     const MetricIcon = getMetricIcon(alert.metric)
                     const lastTriggered = alert.lastTriggered ? new Date(alert.lastTriggered) : null
+                    
+                    const severityColors = {
+                      critical: "bg-red-50 border-red-200 text-red-700",
+                      warning: "bg-yellow-50 border-yellow-200 text-yellow-700",
+                      info: "bg-blue-50 border-blue-200 text-blue-700",
+                    }
+                    const badgeColors = {
+                      critical: "bg-red-100 text-red-800 hover:bg-red-100",
+                      warning: "bg-yellow-100 text-yellow-800 hover:bg-yellow-100",
+                      info: "bg-blue-100 text-blue-800 hover:bg-blue-100",
+                    }
+
                     return (
-                      <Card key={alert.id} className={!alert.enabled ? "opacity-60" : ""}>
+                      <Card key={alert.id} className={`${!alert.enabled ? "opacity-60" : ""} ${alert.severity ? severityColors[alert.severity as keyof typeof severityColors] : "bg-card"} transition-all hover:shadow-md`}>
                         <CardContent className="p-4">
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex items-start gap-3 flex-1">
-                              <div className="p-2 bg-blue-100 rounded-lg">
-                                <MetricIcon className="h-5 w-5 text-blue-600" />
+                              <div className={`p-2 rounded-lg ${alert.severity === 'critical' ? 'bg-red-100' : alert.severity === 'warning' ? 'bg-yellow-100' : 'bg-blue-100'}`}>
+                                <MetricIcon className={`h-5 w-5 ${alert.severity === 'critical' ? 'text-red-600' : alert.severity === 'warning' ? 'text-yellow-600' : 'text-blue-600'}`} />
                               </div>
                               <div className="flex-1 space-y-2">
                                 <div className="flex items-center gap-2">
@@ -520,7 +538,7 @@ export function AlertsManagement() {
                                   <p className="text-sm text-muted-foreground">{alert.description}</p>
                                 )}
                                 <div className="flex flex-wrap gap-2 text-sm">
-                                  <Badge variant="outline">
+                                  <Badge variant="outline" className={badgeColors[alert.severity as keyof typeof badgeColors] || "bg-gray-100 text-gray-800"}>
                                     {getMetricLabel(alert.metric)}{" "}
                                     {getOperatorSymbol(alert.operator)} {alert.threshold}
                                   </Badge>
@@ -726,17 +744,36 @@ export function AlertsManagement() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="threshold">Threshold Value *</Label>
-              <Input
-                id="threshold"
-                value={alertForm.threshold}
-                onChange={(e) => setAlertForm({ ...alertForm, threshold: e.target.value })}
-                placeholder="e.g., 1000000 or 15"
-              />
-              <p className="text-xs text-muted-foreground">
-                Enter numeric value (e.g., 1000000 for ₹10,00,000 or 15 for 15%)
-              </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="threshold">Threshold Value *</Label>
+                <Input
+                  id="threshold"
+                  value={alertForm.threshold}
+                  onChange={(e) => setAlertForm({ ...alertForm, threshold: e.target.value })}
+                  placeholder="e.g., 1000000 or 15"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Enter numeric value (e.g., 1000000 or 15)
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="severity">Severity Level *</Label>
+                <Select
+                  value={alertForm.severity}
+                  onValueChange={(value) => setAlertForm({ ...alertForm, severity: value as "critical"|"warning"|"info" })}
+                >
+                  <SelectTrigger id="severity">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="critical">Critical</SelectItem>
+                    <SelectItem value="warning">Warning</SelectItem>
+                    <SelectItem value="info">Info</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
           </div>

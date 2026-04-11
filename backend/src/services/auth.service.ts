@@ -268,7 +268,18 @@ export const authService = {
 
     const orgId = userRole?.orgId;
 
-    // Generate tokens
+    // ── MFA Check (Enterprise Logic) ──────────────────────────────────────────
+    if ((user as any).mfaEnabled) {
+      logger.info(`[Auth] User ${user.id} matched credentials; MFA challenge required.`);
+      return {
+        requiresMFA: true,
+        userId: user.id,
+        email: user.email,
+        message: 'MFA challenge required'
+      };
+    }
+
+    // Generate tokens (if MFA not enabled)
     const token = generateToken({
       userId: user.id,
       email: user.email,
@@ -299,6 +310,60 @@ export const authService = {
         orgRoles: user.roles // Map for test script compatibility
       },
       token,
+      refreshToken,
+      orgId
+    };
+  },
+
+  verifyLoginMFA: async (userId: string, token: string) => {
+    const { mfaService } = require('./mfa.service');
+    const isValid = await mfaService.verifyMFAToken(userId, token);
+    
+    if (!isValid) {
+      throw new UnauthorizedError('Invalid MFA token');
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        roles: {
+          include: {
+            org: true
+          }
+        }
+      }
+    });
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedError('User not found');
+    }
+
+    const userRole = await prisma.userOrgRole.findFirst({
+      where: { userId: user.id },
+      include: { org: true },
+    });
+
+    const orgId = userRole?.orgId;
+
+    const accessToken = generateToken({
+      userId: user.id,
+      email: user.email,
+      orgId: orgId,
+    });
+    
+    const refreshToken = generateRefreshToken({
+      userId: user.id,
+      email: user.email,
+      orgId: orgId,
+    });
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+      },
+      token: accessToken,
       refreshToken,
       orgId
     };
@@ -486,6 +551,8 @@ export const authService = {
       isActive: user.isActive,
       createdAt: user.createdAt,
       lastLogin: user.lastLogin,
+      // @ts-ignore
+      mfaEnabled: user.mfaEnabled || false,
       orgs,
     };
   },

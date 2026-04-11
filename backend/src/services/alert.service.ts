@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { NotFoundError, ForbiddenError, ValidationError } from '../utils/errors';
 import { auditService } from './audit.service';
+import { emailService } from './email.service';
 
 export interface CreateAlertParams {
   name: string;
@@ -11,6 +12,7 @@ export interface CreateAlertParams {
   notifyEmail?: boolean;
   notifySlack?: boolean;
   slackWebhook?: string;
+  severity?: string;
 }
 
 const VALID_METRICS = [
@@ -70,6 +72,7 @@ export const alertService = {
         notifyEmail: params.notifyEmail || false,
         notifySlack: params.notifySlack || false,
         slackWebhook: params.slackWebhook,
+        severity: params.severity || 'warning',
         createdById: userId,
       },
     });
@@ -222,6 +225,7 @@ export const alertService = {
         ...(updateData.notifyEmail !== undefined && { notifyEmail: updateData.notifyEmail }),
         ...(updateData.notifySlack !== undefined && { notifySlack: updateData.notifySlack }),
         ...(updateData.slackWebhook !== undefined && { slackWebhook: updateData.slackWebhook }),
+        ...(updateData.severity !== undefined && { severity: updateData.severity }),
       },
     });
 
@@ -292,6 +296,9 @@ export const alertService = {
           orgId: alert.orgId,
         },
       },
+      include: {
+        user: true,
+      },
     });
 
     if (!role) {
@@ -323,11 +330,73 @@ export const alertService = {
         break;
     }
 
+    // ALWAYS send email if triggered AND (severity is critical OR user explicitly enabled it)
+    const shouldNotifyEmail = triggered && (alert.severity === 'critical' || alert.notifyEmail);
+
+    if (shouldNotifyEmail && role.user?.email) {
+      const emailHtml = `
+        <div style="font-family: sans-serif; padding: 20px; border-left: 10px solid ${alert.severity === 'critical' ? '#dc2626' : '#d97706'}; background-color: #fef2f2;">
+          <h2 style="color: ${alert.severity === 'critical' ? '#dc2626' : '#d97706'}; font-size: 24px; margin-bottom: 20px;">
+            ${alert.severity === 'critical' ? '🚨 CRITICAL ALERT:' : '⚠️ ALERT:'} ${alert.name}
+          </h2>
+          <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+            <p style="margin-bottom: 15px; font-size: 16px;">The following threshold was breached for <strong>${alert.metric}</strong>:</p>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><strong>Condition</strong></td>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #eee;">${alert.metric} ${alert.operator} ${threshold}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #eee;"><strong>Actual Value</strong></td>
+                    <td style="padding: 10px 0; border-bottom: 1px solid #eee; color: #dc2626; font-weight: bold;">${testValue}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 0;"><strong>Severity</strong></td>
+                    <td style="padding: 10px 0;"><span style="background: ${alert.severity === 'critical' ? '#fee2e2' : '#fef3c7'}; color: ${alert.severity === 'critical' ? '#991b1b' : '#92400e'}; padding: 4px 12px; border-radius: 999px; font-size: 14px; font-weight: bold;">${alert.severity.toUpperCase()}</span></td>
+                </tr>
+            </table>
+          </div>
+          <p style="margin-top: 20px; font-size: 14px; color: #64748b;">
+            This is an automated security/financial alert from your FinaPilot dashboard. 
+            ${alert.severity === 'critical' ? '<strong>Notice:</strong> Critical alerts are sent regardless of notification preferences for your protection.' : ''}
+          </p>
+          <div style="margin-top: 30px; text-align: center;">
+            <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard#alerts" style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">View Details in Dashboard</a>
+          </div>
+        </div>
+      `;
+      await emailService.sendEmail({
+        to: role.user.email,
+        subject: `${alert.severity === 'critical' ? '🚨 CRITICAL ALERT:' : '⚠️ Alert:'} ${alert.name} for ${role.user.name || 'Your Org'}`,
+        html: emailHtml,
+      });
+
+      // Also create a persistent notification in the DB so it shows up in the UI
+      await prisma.notification.create({
+        data: {
+          orgId: alert.orgId,
+          userId: role.userId,
+          type: 'alert',
+          title: `${alert.severity === 'critical' ? 'CRITICAL: ' : ''}${alert.name}`,
+          message: `${alert.metric} is ${testValue} (${alert.operator} ${threshold})`,
+          category: 'financial',
+          priority: alert.severity === 'critical' ? 'high' : 'medium',
+          metadata: {
+            alertId: alert.id,
+            metric: alert.metric,
+            value: testValue,
+            threshold: threshold,
+            operator: alert.operator
+          }
+        }
+      });
+    }
+
     return {
       triggered,
       message: triggered
-        ? `Alert "${alert.name}" would be triggered: ${testValue} ${alert.operator} ${threshold}`
-        : `Alert "${alert.name}" would not be triggered: ${testValue} ${alert.operator} ${threshold}`,
+        ? `Alert "${alert.name}" triggered: ${testValue} ${alert.operator} ${threshold}`
+        : `Alert "${alert.name}" not triggered: ${testValue} ${alert.operator} ${threshold}`,
     };
   },
 };

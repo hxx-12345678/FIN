@@ -95,6 +95,28 @@ export const authController = {
     }
   },
 
+  verifyLoginMFA: async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { userId, mfaToken } = req.body;
+
+      if (!userId || !mfaToken) {
+        throw new ValidationError('UserId and MFA token are required');
+      }
+
+      const result = await authService.verifyLoginMFA(userId, mfaToken);
+
+      // Set secure HttpOnly cookies
+      setAuthCookies(res, result.token, (result as any).refreshToken);
+
+      res.json({
+        ok: true,
+        ...result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   refresh: async (req: Request, res: Response, next: NextFunction) => {
     try {
       // Prioritize refresh token from cookie

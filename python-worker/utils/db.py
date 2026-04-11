@@ -24,24 +24,28 @@ def get_db_connection():
     if database_url.startswith('postgres://'):
         database_url = database_url.replace('postgres://', 'postgresql://', 1)
 
-    # psycopg2/libpq URI parsing does not accept Prisma-style query params like ?schema=public.
-    # If present, strip it from the URI and apply it via SET search_path after connect.
-    schema_name = None
+    # Robust DSN parsing to strip Prisma-specific parameters while preserving others
+    schema_name = "public"
     try:
-        parsed_for_query = urlparse(database_url)
-        if parsed_for_query.query:
-            query_pairs = parse_qsl(parsed_for_query.query, keep_blank_values=True)
-            filtered_pairs = []
-            for k, v in query_pairs:
-                if k == 'schema' and v:
-                    schema_name = v
-                    continue
-                filtered_pairs.append((k, v))
-            if len(filtered_pairs) != len(query_pairs):
-                database_url = parsed_for_query._replace(query=urlencode(filtered_pairs)).geturl()
-    except Exception:
-        # If parsing fails, leave the URL unchanged and fall back to default search_path
-        schema_name = None
+        from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+        parsed = urlparse(database_url)
+        if parsed.query:
+            params = dict(parse_qsl(parsed.query))
+            if 'schema' in params:
+                schema_name = params.pop('schema')
+            
+            # Reconstruct query without schema
+            new_query = urlencode(params)
+            database_url = urlunparse((
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                parsed.params,
+                new_query,
+                parsed.fragment
+            ))
+    except Exception as e:
+        print(f"DEBUG: Schema parsing failed: {e}")
         
     # Parse for logging and specific checks
     try:

@@ -147,8 +147,8 @@ def handle_alert_check(job_id: str, org_id: str, object_id: str, params: Dict[st
                     WHERE id = %s
                 """, (alert_id,))
                 
-                # Deliver alert (Stub)
-                deliver_alert(alert_id, metric_name, metric_val, threshold_value, channels, webhook)
+                # Deliver alert
+                deliver_alert(cursor, org_id, alert_id, metric_name, metric_val, threshold_value, operator, channels, webhook)
 
         conn.commit()
         complete_job(job_id, {
@@ -167,16 +167,50 @@ def handle_alert_check(job_id: str, org_id: str, object_id: str, params: Dict[st
         if conn:
             conn.close()
 
-def deliver_alert(alert_id, metric, value, threshold, channels, webhook):
-    """Stub for alert delivery"""
-    message = f"🚨 ALERT: {metric} is {value} (Threshold: {threshold})"
+def deliver_alert(cursor, org_id, alert_id, metric, value, threshold, operator, channels, webhook):
+    """
+    Deliver alert and create persistent notification record.
+    """
+    # 1. Fetch alert details including severity and creator
+    cursor.execute("""
+        SELECT name, severity, "created_by_id" 
+        FROM alert_rules 
+        WHERE id = %s
+    """, (alert_id,))
     
-    if 'email' in channels:
-        logger.info(f"[MOCK EMAIL] Sending alert {alert_id}: {message}")
-        # In production: sendgrid.send(...)
+    row = cursor.fetchone()
+    if not row:
+        return
+        
+    alert_name, severity, created_by_id = row
+    
+    # 2. Create database notification record (shared with UI)
+    title = f"{'CRITICAL: ' if severity == 'critical' else ''}{alert_name}"
+    message = f"{metric} is {value} ({operator} {threshold})"
+    priority = 'high' if severity == 'critical' else 'medium'
+    
+    metadata = json.dumps({
+        'alertId': alert_id,
+        'metric': metric,
+        'value': value,
+        'threshold': threshold,
+        'operator': operator,
+        'source': 'automated_check'
+    })
+    
+    cursor.execute("""
+        INSERT INTO notifications (id, "orgId", "userId", type, title, message, category, priority, read, created_at, metadata)
+        VALUES (gen_random_uuid(), %s, %s, 'alert', %s, %s, 'financial', %s, false, NOW(), %s)
+    """, (org_id, created_by_id, title, message, priority, metadata))
+    
+    # 3. Handle external delivery (Mock for now, or trigger email via Node if preferred)
+    # Note: In a full system, we might push to a Redis queue that the Node email service reads.
+    display_msg = f"🚨 ALERT: {title} - {message}"
+    
+    if 'email' in channels or severity == 'critical':
+        logger.info(f"[EMAIL] Delivering alert to user {created_by_id}: {display_msg} (Critical Override: {severity == 'critical'})")
     
     if 'slack' in channels:
-        logger.info(f"[MOCK SLACK] Sending alert {alert_id}: {message}")
-        # In production: requests.post(webhook, json={'text': message})
+        logger.info(f"[SLACK] Delivering alert to webhook {webhook}: {display_msg}")
 
 

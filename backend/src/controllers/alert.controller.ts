@@ -23,6 +23,7 @@ export const alertController = {
         notifyEmail,
         notifySlack,
         slackWebhook,
+        severity,
       } = req.body;
 
       if (!name || !metric || !operator || threshold === undefined) {
@@ -38,6 +39,7 @@ export const alertController = {
         notifyEmail,
         notifySlack,
         slackWebhook,
+        severity,
       });
 
       res.status(201).json({

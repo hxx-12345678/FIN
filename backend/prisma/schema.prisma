@@ -35,6 +35,9 @@ model User {
   roles                       UserOrgRole[]
   preferences                 UserPreferences?
   usageRecords                UserUsage[]
+  mfaEnabled                  Boolean               @default(false) @map("mfa_enabled")
+  mfaSecret                   String?               @map("mfa_secret")
+  mfaBackupCodes              String?               @map("mfa_backup_codes")
 
   @@map("users")
 }
@@ -612,18 +615,19 @@ model BillingUsage {
 
 model AlertRule {
   id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId         String    @db.Uuid
+  orgId         String    @map("org_id") @db.Uuid
   name          String
   description   String?
   metric        String
   operator      String
   threshold     Decimal   @db.Decimal(20, 4)
+  severity      String    @default("warning") // "info", "warning", "critical"
   enabled       Boolean   @default(true)
   notifyEmail   Boolean   @default(false) @map("notify_email")
   notifySlack   Boolean   @default(false) @map("notify_slack")
   slackWebhook  String?   @map("slack_webhook")
   lastTriggered DateTime? @map("last_triggered") @db.Timestamptz(6)
-  createdById   String?   @db.Uuid
+  createdById   String?   @map("created_by_id") @db.Uuid
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdBy     User?     @relation("alert_createdBy", fields: [createdById], references: [id])
@@ -636,13 +640,13 @@ model AlertRule {
 
 model AICFOPlan {
   id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId       String    @db.Uuid
-  modelRunId  String?   @db.Uuid
+  orgId       String    @map("org_id") @db.Uuid
+  modelRunId  String?   @map("model_run_id") @db.Uuid
   name        String
   description String?
   planJson    Json      @map("plan_json")
   status      String    @default("draft")
-  createdById String?   @db.Uuid
+  createdById String?   @map("created_by_id") @db.Uuid
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdBy   User?     @relation("plan_createdBy", fields: [createdById], references: [id])
@@ -656,8 +660,8 @@ model AICFOPlan {
 
 model AICFOConversation {
   id        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId     String         @db.Uuid
-  userId    String         @db.Uuid
+  orgId     String         @map("org_id") @db.Uuid
+  userId    String         @map("user_id") @db.Uuid
   title     String?
   status    String         @default("active")
   createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -673,7 +677,7 @@ model AICFOConversation {
 
 model AICFOMessage {
   id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  conversationId  String            @db.Uuid
+  conversationId  String            @map("conversation_id") @db.Uuid
   role            String
   content         String
   agentType       String?

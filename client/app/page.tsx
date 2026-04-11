@@ -55,9 +55,30 @@ export default function HomePage() {
 }
 
 function HomePageContent() {
-  // Initialize with default values for SSR compatibility (prevents hydration mismatch)
-  const [showLanding, setShowLanding] = useState(true)
-  const [activeView, setActiveViewState] = useState("overview")
+  // Initialize with null to indicate "checking auth" and prevent landing page flash
+  const [showLanding, setShowLanding] = useState<boolean | null>(null)
+  const [activeView, setActiveViewState] = useState(() => {
+    if (typeof window !== "undefined") {
+      const currentHash = window.location.hash.replace("#", "")
+      const validViews = [
+        "overview", "modeling", "budget-actual", "scenarios", "simulations",
+        "forecasting", "assistant", "reports", "board-reporting", "investor",
+        "users", "integrations", "notifications", "compliance", "settings", 
+        "onboarding", "collaboration", "job-queue", "export-queue", "approvals", 
+        "ledger", "consolidation", "headcount"
+      ]
+      if (currentHash && validViews.includes(currentHash)) {
+        return currentHash
+      }
+      try {
+        const savedView = localStorage.getItem("finapilot_active_view")
+        if (savedView && validViews.includes(savedView)) {
+          return savedView
+        }
+      } catch (_e) {}
+    }
+    return "overview"
+  })
 
   // Wrapper to persist activeView to localStorage
   const setActiveView = (view: string) => {
@@ -72,7 +93,7 @@ function HomePageContent() {
   const [viewTabs, setViewTabs] = useState<Record<string, string>>({})
 
   // Handler to update both state and URL hash when view changes
-  const handleViewChange = (view: string) => {
+  const handleViewChange = (view: string, tab?: string) => {
     // Save current tab before switching
     const currentParams = new URLSearchParams(window.location.search)
     const currentTab = currentParams.get("tab")
@@ -85,7 +106,7 @@ function HomePageContent() {
     window.location.hash = `#${view}`
 
     // Restore tab for the next view if it exists
-    const nextTab = viewTabs[view]
+    const nextTab = tab || viewTabs[view]
     const nextParams = new URLSearchParams(window.location.search)
 
     if (nextTab) {
@@ -451,6 +472,11 @@ function HomePageContent() {
         </ErrorBoundary>
       </>
     )
+  }
+
+  // Return a blank page while auth status is being determined to avoid landing page flash
+  if (showLanding === null) {
+    return <div className="fixed inset-0 bg-white z-[9999]" />
   }
 
   if (showLanding) {

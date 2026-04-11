@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, Mail, Lock, Eye, EyeOff } from "lucide-react"
+import { Loader2, Mail, Lock, Eye, EyeOff, Shield } from "lucide-react"
 import { SSOLogin } from "./sso-login"
 import { toast } from "sonner"
 import { API_BASE_URL } from "@/lib/api-config"
@@ -19,6 +19,9 @@ export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
+  const [requiresMFA, setRequiresMFA] = useState(false)
+  const [mfaToken, setMfaToken] = useState("")
+  const [tempUserId, setTempUserId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -28,47 +31,56 @@ export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
     setIsLoading(true)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      const endpoint = requiresMFA ? `${API_BASE_URL}/auth/mfa/verify-login` : `${API_BASE_URL}/auth/login`
+      const payload = requiresMFA 
+        ? { userId: tempUserId, mfaToken } 
+        : { email, password }
+
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         credentials: "include",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(payload),
       })
 
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.message || "Login failed")
+        throw new Error(data.message || "Authentication failed")
       }
 
-      // Use HttpOnly cookies instead of localStorage for tokens
-      // The backend already sets HttpOnly cookies via setAuthCookies helper
-      // Wait, due to CORS/same-site issues on dev/preview environments, we still need local auth-token mapping
+      // Check if MFA is required
+      if (data.requiresMFA) {
+        setRequiresMFA(true)
+        setTempUserId(data.userId)
+        toast.info("MFA code required to continue")
+        setIsLoading(false)
+        return
+      }
+
+      // Success logic...
       if (data.token) {
         localStorage.setItem("auth-token", data.token)
       }
 
-      // Store non-sensitive metadata for UI persistence
       localStorage.setItem("is-logged-in", "true")
       if (data.user?.id) {
         localStorage.setItem("userId", data.user.id)
       }
 
-      // Legacy support for orgId visibility
       if (data.user?.orgs?.[0]?.id) {
         localStorage.setItem("orgId", data.user.orgs[0].id)
+      } else if (data.orgId) {
+        localStorage.setItem("orgId", data.orgId)
       }
 
       toast.success("Successfully signed in")
-
-      // Dispatch login success event to show post-login options
       window.dispatchEvent(new CustomEvent("login-success", { detail: {} }))
-
       onSuccess?.()
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Login failed. Please try again."
+      const errorMessage = err instanceof Error ? err.message : "Authentication failed. Please try again."
       setError(errorMessage)
       toast.error(errorMessage)
     } finally {
@@ -84,78 +96,116 @@ export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
         </div>
       )}
 
-      <SSOLogin
-        onSuccess={onSuccess}
-        onError={(err) => setError(err)}
-      />
+      {!requiresMFA && (
+        <>
+          <SSOLogin
+            onSuccess={onSuccess}
+            onError={(err: string) => setError(err)}
+          />
 
-      <div className="relative my-6">
-        <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t border-white/10" />
-        </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-[#020617] px-4 text-slate-500 font-black tracking-widest">Or continue with email</span>
-        </div>
-      </div>
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-white/10" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-[#020617] px-4 text-slate-500 font-black tracking-widest">Or continue with email</span>
+            </div>
+          </div>
+        </>
+      )}
 
       <form onSubmit={handleLogin} className="space-y-5">
-        <div className="space-y-3">
-          <Label htmlFor="email" className="text-xs font-black uppercase tracking-widest text-slate-400">Email</Label>
-          <div className="relative">
-            <Mail className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
-            <Input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="pl-12 h-14 bg-white/5 border-white/10 text-white placeholder:text-slate-500 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-              required
-              disabled={isLoading}
-            />
-          </div>
-        </div>
+        {!requiresMFA ? (
+          <>
+            <div className="space-y-3">
+              <Label htmlFor="email" className="text-xs font-black uppercase tracking-widest text-slate-400">Email</Label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="pl-12 h-14 bg-white/5 border-white/10 text-white placeholder:text-slate-500 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                  required
+                  disabled={isLoading}
+                />
+              </div>
+            </div>
 
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="password" className="text-xs font-black uppercase tracking-widest text-slate-400">Password</Label>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password" className="text-xs font-black uppercase tracking-widest text-slate-400">Password</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-auto p-0 text-xs text-slate-500 hover:text-white font-medium"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  Forgot?
+                </Button>
+              </div>
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pl-12 pr-12 h-14 bg-white/5 border-white/10 text-white placeholder:text-slate-500 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                  required
+                  disabled={isLoading}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-4 hover:bg-transparent text-slate-500 hover:text-white"
+                  onClick={() => setShowPassword(!showPassword)}
+                  disabled={isLoading}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-5 w-5" />
+                  ) : (
+                    <Eye className="h-5 w-5" />
+                  )}
+                </Button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="space-y-3">
+            <Label htmlFor="mfaToken" className="text-xs font-black uppercase tracking-widest text-slate-400">Verification Code</Label>
+            <div className="relative">
+              <Shield className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
+              <Input
+                id="mfaToken"
+                type="text"
+                placeholder="Enter 6-digit TOTP code"
+                value={mfaToken}
+                onChange={(e) => setMfaToken(e.target.value)}
+                className="pl-12 h-14 bg-white/5 border-white/10 text-white placeholder:text-slate-500 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                required
+                autoFocus
+                disabled={isLoading}
+              />
+            </div>
+            <p className="text-[10px] text-slate-500">Check your authenticator app (e.g. Google Authenticator)</p>
             <Button
               type="button"
-              variant="ghost"
-              className="h-auto p-0 text-xs text-slate-500 hover:text-white font-medium"
-              onClick={() => setShowPassword(!showPassword)}
+              variant="link"
+              className="p-0 text-xs text-indigo-400 h-auto"
+              onClick={() => {
+                setRequiresMFA(false)
+                setMfaToken("")
+              }}
             >
-              Forgot?
+              Back to login
             </Button>
           </div>
-          <div className="relative">
-            <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
-            <Input
-              id="password"
-              type={showPassword ? "text" : "password"}
-              placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="pl-12 pr-12 h-14 bg-white/5 border-white/10 text-white placeholder:text-slate-500 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-              required
-              disabled={isLoading}
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="absolute right-0 top-0 h-full px-4 hover:bg-transparent text-slate-500 hover:text-white"
-              onClick={() => setShowPassword(!showPassword)}
-              disabled={isLoading}
-            >
-              {showPassword ? (
-                <EyeOff className="h-5 w-5" />
-              ) : (
-                <Eye className="h-5 w-5" />
-              )}
-            </Button>
-          </div>
-        </div>
+        )}
 
         <Button
           type="submit"
@@ -165,26 +215,27 @@ export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
           {isLoading ? (
             <>
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Signing in...
+              {requiresMFA ? "Verifying..." : "Signing in..."}
             </>
           ) : (
-            "Sign In"
+            requiresMFA ? "Verify Code" : "Sign In"
           )}
         </Button>
       </form>
 
-      <div className="text-center text-sm pt-4">
-        <span className="text-slate-500">Don't have an account? </span>
-        <Button
-          type="button"
-          variant="link"
-          className="h-auto p-0 text-sm text-indigo-400 hover:text-indigo-300 font-bold"
-          onClick={onSwitchToSignup}
-        >
-          Sign up
-        </Button>
-      </div>
+      {!requiresMFA && (
+        <div className="text-center text-sm pt-4">
+          <span className="text-slate-500">Don't have an account? </span>
+          <Button
+            type="button"
+            variant="link"
+            className="h-auto p-0 text-sm text-indigo-400 hover:text-indigo-300 font-bold"
+            onClick={onSwitchToSignup}
+          >
+            Sign up
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
-

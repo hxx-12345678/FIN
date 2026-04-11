@@ -1029,38 +1029,127 @@ export function SettingsPage() {
                 <Bell className="h-5 w-5" />
                 Notification Preferences
               </CardTitle>
-              <CardDescription>Control how and when you receive notifications</CardDescription>
+              <CardDescription>
+                Control how and when you receive notifications. Changes are saved immediately.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label htmlFor="emailNotifications">Email Notifications</Label>
-                  <p className="text-sm text-muted-foreground">Receive notifications via email</p>
+
+              {/* Email Notifications */}
+              <div className="flex items-center justify-between py-2 border-b border-border/50">
+                <div className="space-y-0.5">
+                  <Label htmlFor="emailNotifications" className="text-sm font-medium cursor-pointer">
+                    Email Notifications
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Receive general system and activity notifications via email
+                  </p>
                 </div>
                 <Switch
                   id="emailNotifications"
                   checked={notificationPrefs.emailNotifications}
-                  onCheckedChange={(checked) => {
+                  onCheckedChange={async (checked) => {
                     setNotificationPrefs({ ...notificationPrefs, emailNotifications: checked })
                     setHasChanges(true)
+                    try {
+                      const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/notifications/preferences`, {
+                        method: "PUT",
+                        headers: getAuthHeaders(),
+                        credentials: "include",
+                        body: JSON.stringify({ emailNotifications: checked }),
+                      })
+                      if (res.ok) {
+                        toast.success(`Email notifications ${checked ? "enabled" : "disabled"}`)
+                      }
+                    } catch { /* saved on global save too */ }
                   }}
                 />
               </div>
 
-              <div className="flex items-center justify-between">
+              {/* Alert Notifications */}
+              <div className="flex items-center justify-between py-2 border-b border-border/50">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="alertNotifications" className="text-sm font-medium cursor-pointer">
+                      Alert Notifications
+                    </Label>
+                    <Badge variant="secondary" className="text-xs">Recommended ON</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Receive alert emails when financial thresholds are breached
+                  </p>
+                </div>
+                <Switch
+                  id="alertNotifications"
+                  checked={notificationPrefs.alertNotifications}
+                  onCheckedChange={async (checked) => {
+                    setNotificationPrefs({ ...notificationPrefs, alertNotifications: checked })
+                    setHasChanges(true)
+                    try {
+                      const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/notifications/preferences`, {
+                        method: "PUT",
+                        headers: getAuthHeaders(),
+                        credentials: "include",
+                        body: JSON.stringify({ alertNotifications: checked }),
+                      })
+                      if (res.ok) {
+                        toast.success(`Alert notifications ${checked ? "enabled" : "disabled"}`)
+                      }
+                    } catch { /* saved on global save too */ }
+                  }}
+                />
+              </div>
+
+              {/* Critical Alert Override Notice */}
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
                 <div>
-                  <Label htmlFor="marketingEmails">Marketing & Newsletter (GDPR Consent)</Label>
-                  <p className="text-sm text-muted-foreground">Receive product updates and tips</p>
+                  <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">
+                    Critical alerts always notify
+                  </p>
+                  <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                    CRITICAL severity alerts bypass notification toggles for your security. 
+                    You will always receive critical financial alerts via email, regardless of settings above.
+                  </p>
+                </div>
+              </div>
+
+              {/* Marketing & Newsletter */}
+              <div className="flex items-center justify-between py-2">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="marketingEmails" className="text-sm font-medium cursor-pointer">
+                      Marketing &amp; Newsletter
+                    </Label>
+                    <Badge variant="outline" className="text-xs text-muted-foreground">GDPR Consent</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Product updates, tips, and FinaPilot news. You can withdraw consent at any time.
+                  </p>
                 </div>
                 <Switch
                   id="marketingEmails"
                   checked={notificationPrefs.marketingEmails}
-                  onCheckedChange={(checked) => {
+                  onCheckedChange={async (checked) => {
                     setNotificationPrefs({ ...notificationPrefs, marketingEmails: checked })
                     setHasChanges(true)
+                    try {
+                      const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/notifications/preferences`, {
+                        method: "PUT",
+                        headers: getAuthHeaders(),
+                        credentials: "include",
+                        body: JSON.stringify({ marketingEmails: checked }),
+                      })
+                      if (res.ok) {
+                        toast.success(checked
+                          ? "Subscribed to marketing emails"
+                          : "Unsubscribed from marketing emails (GDPR consent withdrawn)")
+                      }
+                    } catch { /* saved on global save too */ }
                   }}
                 />
               </div>
+
             </CardContent>
           </Card>
         </TabsContent>
