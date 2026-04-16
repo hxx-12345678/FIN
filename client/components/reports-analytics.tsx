@@ -30,7 +30,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
-import { FileText, Download, Share, Calendar, TrendingUp, TrendingDown, Zap, Filter, Eye, ListTodo, Sparkles } from "lucide-react"
+import { FileText, Download, Share, Calendar, TrendingUp, TrendingDown, Zap, Filter, Eye, ListTodo, Sparkles, BarChart3, PieChart as PieChartIcon, Users, DollarSign, Target, Briefcase } from "lucide-react"
 import Link from "next/link"
 
 // Report templates - static list of available templates
@@ -38,50 +38,74 @@ const reportTemplates = [
   {
     id: "executive-summary",
     name: "Executive Summary",
-    description: "High-level overview for leadership",
+    description: "High-level overview for leadership with key performance highlights and strategic outlook",
     category: "Executive",
+    audience: "C-Suite / Board",
     frequency: "Monthly",
     status: "ready",
+    icon: "briefcase",
+    color: "text-purple-600",
+    bgColor: "bg-purple-50",
   },
   {
     id: "financial-performance",
     name: "Financial Performance",
-    description: "Detailed P&L and cash flow analysis",
+    description: "Detailed P&L, cash flow, and balance sheet analysis with variance commentary",
     category: "Financial",
+    audience: "Finance Team",
     frequency: "Monthly",
     status: "ready",
+    icon: "dollar",
+    color: "text-emerald-600",
+    bgColor: "bg-emerald-50",
   },
   {
     id: "kpi-dashboard",
     name: "KPI Dashboard",
-    description: "Key performance indicators tracking",
+    description: "Real-time key performance indicators with trend analysis and threshold alerts",
     category: "Operations",
+    audience: "All Stakeholders",
     frequency: "Weekly",
     status: "ready",
+    icon: "barchart",
+    color: "text-blue-600",
+    bgColor: "bg-blue-50",
   },
   {
     id: "investor-update",
     name: "Investor Update",
-    description: "Monthly investor communication",
+    description: "Monthly investor communication with unit economics, runway, and growth metrics",
     category: "Investor",
+    audience: "Investors & LPs",
     frequency: "Monthly",
     status: "ready",
+    icon: "target",
+    color: "text-amber-600",
+    bgColor: "bg-amber-50",
   },
   {
     id: "budget-variance",
     name: "Budget Variance",
-    description: "Budget vs actual analysis",
+    description: "Budget vs actual analysis with automated variance highlights and drill-down",
     category: "Financial",
+    audience: "Finance & Controllers",
     frequency: "Monthly",
     status: "ready",
+    icon: "piechart",
+    color: "text-rose-600",
+    bgColor: "bg-rose-50",
   },
   {
     id: "growth-metrics",
     name: "Growth Metrics",
-    description: "Customer and revenue growth analysis",
+    description: "Customer acquisition, revenue growth, cohort analysis, and expansion metrics",
     category: "Growth",
+    audience: "Growth & Sales",
     frequency: "Weekly",
     status: "ready",
+    icon: "users",
+    color: "text-indigo-600",
+    bgColor: "bg-indigo-50",
   },
 ]
 
@@ -374,8 +398,12 @@ export function ReportsAnalytics() {
 
             return {
               id: exp.id,
-              name: `Report - ${exp.type.toUpperCase()}`,
-              type: "Custom",
+              name: exp.metaJson?.reportTitle || exp.metaJson?.template
+                ? `${reportTemplates.find(t => t.id === exp.metaJson?.template)?.name || 'Report'} — ${exp.type.toUpperCase()}`
+                : `Report — ${exp.type.toUpperCase()}`,
+              type: exp.metaJson?.template
+                ? reportTemplates.find(t => t.id === exp.metaJson?.template)?.category || "Custom"
+                : "Custom",
               createdBy: exp.createdBy?.name || "System",
               lastModified: exp.createdAt ? new Date(exp.createdAt).toLocaleString() : "Unknown",
               views: 0,
@@ -850,67 +878,81 @@ export function ReportsAnalytics() {
 
         <TabsContent value="templates" className="space-y-4 overflow-x-auto overflow-y-visible">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-            {reportTemplates.map((template) => (
-              <Card
-                key={template.id}
-                className={`cursor-pointer transition-all hover:shadow-md ${selectedTemplate === template.id ? "ring-2 ring-primary" : ""
-                  }`}
-                onClick={() => setSelectedTemplate(template.id)}
-              >
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">{template.name}</CardTitle>
-                    <Badge
-                      variant={
-                        template.status === "ready" ? "default" : template.status === "draft" ? "secondary" : "outline"
-                      }
-                    >
-                      {template.status}
-                    </Badge>
-                  </div>
-                  <CardDescription>{template.description}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Category:</span>
-                      <Badge variant="outline">{template.category}</Badge>
+            {reportTemplates.map((template) => {
+              const iconMap: Record<string, any> = {
+                briefcase: Briefcase,
+                dollar: DollarSign,
+                barchart: BarChart3,
+                target: Target,
+                piechart: PieChartIcon,
+                users: Users,
+              }
+              const Icon = iconMap[template.icon] || FileText
+              return (
+                <Card
+                  key={template.id}
+                  className={`cursor-pointer transition-all hover:shadow-md ${selectedTemplate === template.id ? "ring-2 ring-primary shadow-lg" : "hover:border-primary/30"}`}
+                  onClick={() => setSelectedTemplate(template.id)}
+                >
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className={`p-2 rounded-lg ${template.bgColor}`}>
+                        <Icon className={`h-5 w-5 ${template.color}`} />
+                      </div>
+                      <Badge
+                        variant={
+                          template.status === "ready" ? "default" : template.status === "draft" ? "secondary" : "outline"
+                        }
+                      >
+                        {template.status}
+                      </Badge>
                     </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Frequency:</span>
-                      <span>{template.frequency}</span>
+                    <CardTitle className="text-lg mt-2">{template.name}</CardTitle>
+                    <CardDescription>{template.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Category</span>
+                        <Badge variant="outline">{template.category}</Badge>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Audience</span>
+                        <span className="font-medium text-xs">{template.audience}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Frequency</span>
+                        <span>{template.frequency}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Type:</span>
-                      <Badge variant="outline">{template.category}</Badge>
+                    <div className="flex gap-2 mt-4">
+                      <Button
+                        size="sm"
+                        className="flex-1"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedTemplate(template.id)
+                          handleGenerateReport()
+                        }}
+                        disabled={isGenerating}
+                      >
+                        {isGenerating && selectedTemplate === template.id ? (
+                          <>
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Zap className="mr-1 h-3 w-3" />
+                            Generate
+                          </>
+                        )}
+                      </Button>
                     </div>
-                  </div>
-                  <div className="flex gap-2 mt-4">
-                    <Button
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => {
-                        setSelectedTemplate(template.id)
-                        handleGenerateReport()
-                      }}
-                      disabled={isGenerating}
-                    >
-                      {isGenerating && selectedTemplate === template.id ? (
-                        <>
-                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                          Generating...
-                        </>
-                      ) : (
-                        <>
-                          <FileText className="mr-1 h-3 w-3" />
-                          Generate
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              )
+            })}
           </div>
         </TabsContent>
 
@@ -1084,9 +1126,9 @@ export function ReportsAnalytics() {
                     )}
                     Refresh
                   </Button>
-                  <Button>
-                    <FileText className="mr-2 h-4 w-4" />
-                    Create Report
+                  <Button onClick={handleGenerateReport} disabled={isGenerating}>
+                    <Zap className="mr-2 h-4 w-4" />
+                    {isGenerating ? "Generating..." : "Create Report"}
                   </Button>
                 </div>
               </div>

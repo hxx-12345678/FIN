@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Textarea } from "@/components/ui/textarea"
 import {
   LineChart,
   Line,
@@ -33,6 +34,22 @@ import {
   Copy,
   Trash2,
   ShieldCheck,
+  Mail,
+  BarChart2,
+  PieChart,
+  ArrowUpRight,
+  ArrowDownRight,
+  Target,
+  Info,
+  DollarSign,
+  CheckCircle2,
+  Search,
+  Lock as LucideLock,
+  Eye,
+  Plus,
+  History as HistoryIcon,
+  RefreshCw,
+  Send,
 } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import dynamic from "next/dynamic"
@@ -79,37 +96,50 @@ const DEFAULT_SECTIONS = [
 const FALLBACK_TEMPLATES: BoardTemplate[] = [
   {
     id: "board-deck",
-    name: "Monthly Board Deck",
-    description: "Comprehensive board presentation with key metrics and insights",
-    type: "presentation",
+    name: "Strategic Board Deck",
+    description: "High-impact presentation for quarterly board meetings. Covers executive strategy, financial performance, and future outlook.",
+    type: "pptx",
     slides: 12,
     status: "ready",
+    audience: "Board of Directors, VCs",
+  },
+  {
+    id: "quarterly-review",
+    name: "Financial Quarterly Review",
+    description: "Data-heavy financial deep-dive. Focuses on budget variance, unit economics, and detailed ledger-level analysis.",
+    type: "pptx",
+    slides: 18,
+    status: "ready",
+    audience: "CFO, Finance Committee",
+  },
+  {
+    id: "audit-compliance",
+    name: "Audit & Compliance Package",
+    description: "Formal document for regulatory and audit requirements. Includes financial controls, cash management, and compliance status.",
+    type: "pdf",
+    slides: 10,
+    status: "ready",
+    audience: "Auditors, Compliance Officer",
   },
   {
     id: "investor-update",
-    name: "Investor Update",
-    description: "Monthly investor communication with progress updates",
-    type: "email",
-    slides: 8,
+    name: "Monthly Investor Update",
+    description: "Concise narrative update for existing investors. Highlights growth, burn rate, and strategic milestones.",
+    type: "memo",
+    slides: 6,
     status: "ready",
+    audience: "All Investors, LPs",
   },
-  {
-    id: "executive-summary",
-    name: "Executive Summary",
-    description: "High-level overview for leadership team",
-    type: "document",
-    slides: 4,
-    status: "ready",
-  },
-  {
-    id: "financial-review",
-    name: "Financial Review",
-    description: "Detailed financial analysis and variance reporting",
-    type: "document",
-    slides: 16,
-    status: "ready",
-  },
-]
+] as any;
+
+const formatCurrency = (value: number | string) => {
+  if (typeof value === 'string') return value;
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(value)
+}
 
 const formatMonthLabel = (date: Date) =>
   date.toLocaleDateString("en-US", {
@@ -123,6 +153,9 @@ export function BoardReporting() {
   const [templates, setTemplates] = useState<BoardTemplate[]>(FALLBACK_TEMPLATES)
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>([])
   const [isGenerating, setIsGenerating] = useState(false)
+  const isGeneratingRef = useRef(false)
+  const [loadingAiContent, setLoadingAiContent] = useState(false)
+  const loadingAiContentRef = useRef(false)
   const [exportJobId, setExportJobId] = useState<string | null>(null)
   const [showExportModal, setShowExportModal] = useState(false)
   const [orgId, setOrgId] = useState<string | null>(null)
@@ -130,7 +163,6 @@ export function BoardReporting() {
   const [kpiMetrics, setKpiMetrics] = useState<any[]>([])
   const [chartData, setChartData] = useState<any[]>([])
   const [recentReports, setRecentReports] = useState<any[]>([])
-  const [loadingAiContent, setLoadingAiContent] = useState(false)
   const aiContentFetchedRef = useRef(!!boardReportAiContent) // Track if AI content has ever been fetched
   const [reportTitle, setReportTitle] = useState("Monthly Board Update")
   const [reportingPeriod, setReportingPeriod] = useState("current")
@@ -140,7 +172,9 @@ export function BoardReporting() {
   const [recipients, setRecipients] = useState("")
   const [emailSubject, setEmailSubject] = useState("Monthly Board Update")
   const [passwordProtect, setPasswordProtect] = useState(false)
+  const [password, setPassword] = useState("")
   const [trackEngagement, setTrackEngagement] = useState(true)
+  const [distributionMessage, setDistributionMessage] = useState("Attached is the latest Board Report for your review.")
   const [boardSchedules, setBoardSchedules] = useState<BoardReportSchedule[]>([])
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false)
   const [scheduleName, setScheduleName] = useState("Monthly Board Update")
@@ -153,6 +187,7 @@ export function BoardReporting() {
   const [includeSections, setIncludeSections] = useState<Record<string, boolean>>(
     DEFAULT_SECTIONS.reduce((acc, section) => ({ ...acc, [section]: true }), {} as Record<string, boolean>)
   )
+  const [templatePreviewId, setTemplatePreviewId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchOrgId()
@@ -176,28 +211,41 @@ export function BoardReporting() {
       const template = templates.find(t => t.id === selectedTemplate)
       if (template) {
         setReportTitle(template.name)
+        // Auto-sync format
+        if (template.type === 'pptx' || template.type === 'presentation') {
+          setReportFormat('pptx');
+        } else if (template.type === 'pdf') {
+          setReportFormat('pdf');
+        } else if (template.type === 'memo' || template.type === 'email') {
+          setReportFormat('memo');
+        }
       }
 
       // Update selected metrics based on template type
-      if (selectedTemplate === "financial-review") {
-        // Financial review should include all financial metrics
+      if (selectedTemplate === "board-deck") {
+        // Board deck: top-line KPIs that directors need
+        setSelectedMetrics(kpiMetrics.slice(0, 6).map((m: any) => m.name))
+      } else if (selectedTemplate === "quarterly-review") {
+        // Quarterly review: all financial metrics for deep-dive
+        setSelectedMetrics(kpiMetrics.map((m: any) => m.name))
+      } else if (selectedTemplate === "audit-compliance") {
+        // Audit: cash, runway, margin metrics for financial controls
         setSelectedMetrics(kpiMetrics.filter((m: any) =>
-          m.name.includes("Revenue") ||
           m.name.includes("Cash") ||
           m.name.includes("Burn") ||
           m.name.includes("Runway") ||
-          m.name.includes("Margin")
+          m.name.includes("Margin") ||
+          m.name.includes("Rule")
         ).map((m: any) => m.name))
-      } else if (selectedTemplate === "executive-summary") {
-        // Executive summary should include top 4 metrics
-        setSelectedMetrics(kpiMetrics.slice(0, 4).map((m: any) => m.name))
       } else if (selectedTemplate === "investor-update") {
-        // Investor update should include growth and financial metrics
+        // Investor update: growth and unit economics
         setSelectedMetrics(kpiMetrics.filter((m: any) =>
           m.name.includes("Revenue") ||
-          m.name.includes("Growth") ||
+          m.name.includes("ARR") ||
+          m.name.includes("LTV") ||
+          m.name.includes("Burn") ||
           m.name.includes("Customers") ||
-          m.name.includes("ARR")
+          m.name.includes("Runway")
         ).map((m: any) => m.name))
       }
 
@@ -311,15 +359,15 @@ export function BoardReporting() {
           // Calculate SaaS-specific institutional metrics
           const burnRate = summary.monthlyBurnRate || summary.burn || 0;
           const monthlyRevenue = (summary.arr || summary.revenue || 0) / 12;
-          const burnMultiple = monthlyRevenue > 0 ? (burnRate / monthlyRevenue).toFixed(2) : "N/A";
-          const ruleOf40 = summary.arrGrowth && summary.grossMargin !== undefined 
-            ? (summary.arrGrowth + (summary.grossMargin - 60)).toFixed(1) + "%" 
+          const burnMultiple = monthlyRevenue > 0 ? (burnRate / monthlyRevenue).toFixed(2) : "Breakeven";
+          const ruleOf40 = summary.arrGrowth !== undefined && summary.grossMargin !== undefined 
+            ? (Number(summary.arrGrowth) + Number(summary.grossMargin - 60)).toFixed(1) + "%" 
             : "N/A";
 
           const kpis = [
             { 
               name: "Annual Recurring Revenue", 
-              value: summary.arr ? `$${(summary.arr / 1000).toFixed(0)}K` : "N/A", 
+              value: summary.arr ? formatCurrency(summary.arr) : "N/A", 
               change: summary.arrGrowth ? `+${summary.arrGrowth}%` : "N/A", 
               trend: summary.arrGrowth > 0 ? "up" : "down" 
             },
@@ -345,7 +393,7 @@ export function BoardReporting() {
             },
             { 
               name: "Rule of 40", 
-              value: ruleOf40, 
+              value: ruleOf40 !== "N/A" ? ruleOf40 : "N/A", 
               change: "Growth + Profit", 
               trend: parseFloat(ruleOf40) > 40 ? "up" : "down" 
             },
@@ -384,12 +432,19 @@ export function BoardReporting() {
         if (chartResponse.ok) {
           const chartResult = await chartResponse.json()
           if (chartResult.ok && chartResult.data?.monthlyMetrics) {
-            const processedChartData = chartResult.data.monthlyMetrics.slice(-6).map((metric: any) => ({
-              month: metric.month || metric.date || "Unknown",
-              revenue: Number(metric.revenue || metric.mrr || metric.revenue || 0),
-              customers: Number(metric.customers || metric.activeCustomers || 0),
-              burn: Number(metric.burn || metric.burnRate || 0),
-            })).filter((item: any) => item.month !== "Unknown" || item.revenue > 0 || item.customers > 0)
+            const processedChartData = chartResult.data.monthlyMetrics.slice(-6).map((metric: any) => {
+              const rev = Number(metric.revenue || metric.mrr || 0);
+              const burnVal = Number(metric.burn || metric.burnRate || 0);
+              const efficiency = rev > 0 ? Number((burnVal / (rev / 12)).toFixed(2)) : 0;
+              
+              return {
+                month: metric.month || metric.date || "Unknown",
+                revenue: rev,
+                customers: Number(metric.customers || metric.activeCustomers || 0),
+                burn: burnVal,
+                efficiency: efficiency
+              };
+            }).filter((item: any) => item.month !== "Unknown");
             setChartData(processedChartData)
             setAvailablePeriods(processedChartData.map((item: any) => item.month))
           }
@@ -421,15 +476,21 @@ export function BoardReporting() {
         const result = await response.json()
         if (result.ok && result.exports) {
           const reports = result.exports
-            .filter((exp: any) => exp.metaJson?.reportType === "board-report")
-            .map((exp: any) => ({
-              name: exp.metaJson?.reportTitle || `Board Report - ${exp.type.toUpperCase()}`,
-              date: exp.createdAt ? new Date(exp.createdAt).toISOString().split("T")[0] : "Unknown",
-              status: exp.status,
-              exportId: exp.id,
-              exportType: exp.type,
-              meta: exp.metaJson,
-            }))
+            .filter((exp: any) => {
+              const meta = exp.metaJson || exp.meta_json || {};
+              return meta.reportType === "board-report";
+            })
+            .map((exp: any) => {
+              const meta = exp.metaJson || exp.meta_json || {};
+              return {
+                name: meta.reportTitle || `Board Report - ${exp.type.toUpperCase()}`,
+                date: exp.createdAt ? new Date(exp.createdAt).toISOString().split("T")[0] : "Unknown",
+                status: exp.status,
+                exportId: exp.id,
+                exportType: exp.type,
+                meta: meta,
+              }
+            })
           setRecentReports(reports)
         }
       }
@@ -464,7 +525,8 @@ export function BoardReporting() {
   }
 
   const fetchAIContent = async () => {
-    if (!orgId) return
+    if (loadingAiContentRef.current || !orgId) return
+    loadingAiContentRef.current = true
     aiContentFetchedRef.current = true // Mark as fetched (even on failure)
 
     setLoadingAiContent(true)
@@ -479,6 +541,8 @@ export function BoardReporting() {
         template: templateName,
         reportTitle,
         includeSections: activeSections,
+        actualData: kpiMetrics.map(m => ({ name: m.name, value: m.value, change: m.change })),
+        historicalTrends: chartData.length > 0 ? chartData : "No historical data provided"
       }
 
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/ai-plans`, {
@@ -486,7 +550,14 @@ export function BoardReporting() {
         headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
-          goal: `Generate board report content for ${templateName}. Create an executive summary, key highlights, and areas of focus based on the selected metrics and reporting period.`,
+          goal: `Generate a DEEP, COMPREHENSIVE professional board report narrative for ${templateName}. 
+          The board expects substantial detail (500-800 words total).
+          Please structure the response as a JSON object with:
+          1. "executiveSummary": A multi-paragraph overview detailing the current period's performance (The Good, The Bad, and The Ugly). Include insights on ARR, burn, and runway.
+          2. "kpiAnalysis": Detailed analysis of Growth, Efficiency, and Health trends.
+          3. "functionalHighlights": Deep dive into Sales, Product, and Marketing progress.
+          4. "recommendations": An array of 4-6 specific strategic board decisions or action items needed.
+          Use professional, high-stakes investor-grade language.`,
           context: contextData,
         }),
         // Add timeout signal to prevent hanging requests
@@ -504,13 +575,30 @@ export function BoardReporting() {
           // Handle different response formats
           const planRecord = result.plan || result;
           const planData = planRecord.planJson || planRecord;
-          const naturalLanguage = planData?.structuredResponse?.natural_text || planData?.naturalLanguage || planData?.natural_text || planData?.summary || "";
+          const structured = planData?.structuredResponse || planData;
+
+          // Extract content prioritizing the structured keys from our detailed prompt
+          let executiveSummary = structured.executiveSummary || structured.summary || structured.natural_text || structured.naturalLanguage || "";
+          
+          // If we have kpiAnalysis and functionalHighlights, append them for a "deep" narrative
+          if (structured.kpiAnalysis) {
+            executiveSummary += "\n\nFinancial & KPI Analysis:\n" + structured.kpiAnalysis;
+          }
+          if (structured.functionalHighlights) {
+            executiveSummary += "\n\nFunctional & Operational Highlights:\n" + structured.functionalHighlights;
+          }
+          if (structured.risksAndMitigations) {
+            executiveSummary += "\n\nRisks & Mitigations:\n" + structured.risksAndMitigations;
+          }
+          if (structured.strategicRecommendations && Array.isArray(structured.strategicRecommendations)) {
+            executiveSummary += "\n\nStrategic Recommendations:\n" + structured.strategicRecommendations.map((r: string) => `• ${r}`).join("\n");
+          }
+
           const insights = planData?.insights || planData?.stagedChanges || [];
-          const recommendations = planData?.recommendations || planData?.stagedChanges || [];
+          const recommendations = structured.recommendations || planData?.recommendations || planData?.stagedChanges || [];
           const dataSources = planData?.metadata?.dataSources || planData?.dataSources || [];
 
-          // Extract executive summary from natural language or first insight
-          let executiveSummary = naturalLanguage;
+          // Fallback if still empty
           if (!executiveSummary && insights.length > 0) {
             executiveSummary = insights[0]?.summary || insights[0]?.explain || insights[0]?.description || "";
           }
@@ -518,22 +606,16 @@ export function BoardReporting() {
             executiveSummary = "Based on the current financial data and selected metrics, this report provides a comprehensive overview of the organization's performance.";
           }
 
-          // Extract key highlights from recommendations
-          const highlights = recommendations.slice(0, 4).map((r: any) => {
+          // Extract key highlights
+          const highlights = recommendations.slice(0, 6).map((r: any) => {
             if (typeof r === 'string') return r;
             return r.title || r.summary || r.explain || r.description || JSON.stringify(r);
           }).filter((h: any) => h && h.length > 0);
 
-          // Extract areas of focus from insights or recommendations
-          let areasOfFocus = insights.find((i: any) => i.type === "risk" || i.category === "risk")?.summary ||
-            insights.find((i: any) => i.type === "focus" || i.category === "focus")?.summary ||
-            recommendations.find((r: any) => r.type === "action" || r.priority === "high")?.summary ||
-            "Continue monitoring key financial metrics and maintain focus on revenue growth and cost optimization.";
-
           setBoardReportAiContent({
             executiveSummary,
             keyHighlights: highlights.length > 0 ? highlights : ["Revenue performance", "Cost management", "Cash flow", "Growth metrics"],
-            areasOfFocus,
+            areasOfFocus: structured.areasOfFocus || structured.risks || "Continue monitoring key financial metrics and maintain focus on revenue growth and cost optimization.",
             dataSources: dataSources.length > 0 ? dataSources : [
               { type: 'grounding', id: 'financial_metrics', snippet: 'Latest financial metrics' },
               { type: 'integration', id: 'accounting', snippet: 'Standard accounting records' }
@@ -582,15 +664,17 @@ export function BoardReporting() {
       }
     } finally {
       setLoadingAiContent(false);
+      loadingAiContentRef.current = false;
     }
   }
 
   const handleGenerateReport = async () => {
-    if (!orgId) {
-      toast.error("Organization ID not found")
-      return
+    if (isGeneratingRef.current || !orgId) {
+      if (!orgId) toast.error("Organization ID not found")
+      return;
     }
-
+    
+    isGeneratingRef.current = true;
     setIsGenerating(true)
     setShowExportModal(true)
 
@@ -608,6 +692,16 @@ export function BoardReporting() {
           selectedMetrics,
           reportTitle,
           reportingPeriod,
+          aiContent: boardReportAiContent,
+          distribution: {
+            method: distributionMethod,
+            recipients: recipients.split(',').map(r => r.trim()).filter(r => r.length > 0),
+            subject: emailSubject,
+            message: distributionMessage,
+            passwordProtect: passwordProtect,
+            password: passwordProtect ? password : null,
+            trackEngagement: trackEngagement
+          }
         }),
       })
 
@@ -695,8 +789,10 @@ export function BoardReporting() {
     } catch (error) {
       console.error("Failed to generate report:", error)
       toast.error("Failed to generate report. Please try again.")
-      setIsGenerating(false)
       setShowExportModal(false)
+    } finally {
+      setIsGenerating(false)
+      isGeneratingRef.current = false
     }
   }
 
@@ -841,19 +937,13 @@ export function BoardReporting() {
 
   // Update sections based on template selection
   useEffect(() => {
-    if (selectedTemplate === "executive-summary") {
-      // Executive summary should include only key sections
-      setIncludeSections({
-        "Executive Summary": true,
-        "Financial Performance": true,
-        "Key Metrics": true,
-        "Forward Outlook": true,
-        "Growth Analysis": false,
-        "Operational Updates": false,
-        "Risk Assessment": false,
-      })
-    } else if (selectedTemplate === "financial-review") {
-      // Financial review should include all financial sections
+    if (selectedTemplate === "board-deck") {
+      // Board deck: all sections for comprehensive director briefing
+      setIncludeSections(
+        DEFAULT_SECTIONS.reduce((acc, section) => ({ ...acc, [section]: true }), {} as Record<string, boolean>)
+      )
+    } else if (selectedTemplate === "quarterly-review") {
+      // Quarterly review: every section for deep-dive financials
       setIncludeSections({
         "Executive Summary": true,
         "Financial Performance": true,
@@ -863,8 +953,19 @@ export function BoardReporting() {
         "Risk Assessment": true,
         "Forward Outlook": true,
       })
+    } else if (selectedTemplate === "audit-compliance") {
+      // Audit report: focus on financial controls and risk
+      setIncludeSections({
+        "Executive Summary": true,
+        "Financial Performance": true,
+        "Key Metrics": false,
+        "Growth Analysis": false,
+        "Operational Updates": false,
+        "Risk Assessment": true,
+        "Forward Outlook": false,
+      })
     } else if (selectedTemplate === "investor-update") {
-      // Investor update should focus on growth and metrics
+      // Investor memo: growth story with forward outlook
       setIncludeSections({
         "Executive Summary": true,
         "Financial Performance": true,
@@ -875,7 +976,6 @@ export function BoardReporting() {
         "Forward Outlook": true,
       })
     } else {
-      // Board deck includes all sections by default
       setIncludeSections(
         DEFAULT_SECTIONS.reduce((acc, section) => ({ ...acc, [section]: true }), {} as Record<string, boolean>)
       )
@@ -920,26 +1020,102 @@ export function BoardReporting() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {templates.map((template) => (
-              <Card
-                key={template.id}
-                className={`cursor-pointer transition-all hover:shadow-md ${selectedTemplate === template.id ? "ring-2 ring-primary" : ""}`}
-                onClick={() => setSelectedTemplate(template.id)}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <FileText className="h-5 w-5 text-primary" />
-                    <Badge variant={template.status === "ready" ? "default" : "secondary"}>{template.status}</Badge>
-                  </div>
-                  <h3 className="font-semibold mb-1">{template.name}</h3>
-                  <p className="text-sm text-muted-foreground mb-3">{template.description}</p>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>{template.slides} slides</span>
-                    <Badge variant="outline">{template.type}</Badge>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+            {templates.map((template) => {
+              const templateConfig: Record<string, { icon: any; color: string; bgColor: string; audience: string }> = {
+                "board-deck": { icon: Presentation, color: "text-blue-600", bgColor: "bg-blue-50", audience: "Board of Directors" },
+                "quarterly-review": { icon: BarChart2, color: "text-purple-600", bgColor: "bg-purple-50", audience: "Board & C-Suite" },
+                "audit-compliance": { icon: ShieldCheck, color: "text-amber-600", bgColor: "bg-amber-50", audience: "Audit Committee" },
+                "investor-update": { icon: Mail, color: "text-emerald-600", bgColor: "bg-emerald-50", audience: "Investors & LPs" },
+              }
+              const config = templateConfig[template.id] || { icon: FileText, color: "text-primary", bgColor: "bg-primary/5", audience: "General" }
+              const Icon = config.icon
+              return (
+                <Card
+                  key={template.id}
+                  className={`cursor-pointer transition-all hover:shadow-md ${selectedTemplate === template.id ? "ring-2 ring-primary shadow-lg" : "hover:border-primary/30"}`}
+                  onClick={() => setSelectedTemplate(template.id)}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className={`p-2 rounded-lg ${config.bgColor}`}>
+                        <Icon className={`h-5 w-5 ${config.color}`} />
+                      </div>
+                      <Badge variant={template.status === "ready" ? "default" : "secondary"}>{template.status}</Badge>
+                    </div>
+                    <h3 className="font-semibold mb-1">{template.name}</h3>
+                    <p className="text-sm text-muted-foreground mb-3">{template.description}</p>
+                    <div className="space-y-1.5 text-xs text-muted-foreground">
+                      <div className="flex items-center justify-between">
+                        <span>Audience</span>
+                        <span className="font-medium text-foreground">{(template as any).audience}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>{template.type === "pptx" ? "Slides" : "Pages"}</span>
+                        <span className="font-medium text-foreground">{template.slides}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>Format</span>
+                        <Badge variant="outline" className={`text-[10px] h-5 uppercase font-bold flex items-center gap-1 ${template.type === 'pptx' || template.type === 'presentation' ? 'text-blue-600 border-blue-200' : template.type === 'pdf' ? 'text-amber-600 border-amber-200' : 'text-emerald-600 border-emerald-200'}`}>
+                          {template.type === 'pptx' || template.type === 'presentation' ? <Presentation className="w-3 h-3"/> : template.type === 'pdf' ? <FileText className="w-3 h-3"/> : <Mail className="w-3 h-3"/>}
+                          {template.type}
+                        </Badge>
+                      </div>
+                    </div>
+                    {/* Visual Layout Preview */}
+                    <div className="mt-4 pt-4 border-t relative group/preview">
+                      <div className="flex justify-center h-[60px] opacity-60 group-hover/preview:opacity-100 transition-opacity">
+                        {(template.type === 'pptx' || template.type === 'presentation') ? (
+                          <div className="flex gap-2 w-full max-w-[120px]">
+                            <div className="w-2/3 h-full bg-blue-100 rounded border border-blue-200 p-1 flex flex-col gap-1">
+                              <div className="w-full h-1/4 bg-blue-200 rounded-sm"></div>
+                              <div className="w-full flex-1 bg-blue-200/50 rounded-sm"></div>
+                            </div>
+                            <div className="w-1/3 flex flex-col gap-1.5 h-full">
+                              <div className="w-full flex-1 bg-blue-100 rounded border border-blue-200"></div>
+                              <div className="w-full flex-1 bg-blue-100 rounded border border-blue-200"></div>
+                            </div>
+                          </div>
+                        ) : template.type === 'pdf' ? (
+                          <div className="flex gap-2 h-full">
+                            <div className="w-10 h-full bg-amber-100 rounded border border-amber-200 flex flex-col items-center justify-start p-1.5 gap-1.5">
+                              <div className="w-full h-1 bg-amber-300 rounded-full"></div>
+                              <div className="w-full h-1 bg-amber-200 rounded-full"></div>
+                              <div className="w-3/4 h-1 bg-amber-200 rounded-full shrink-0"></div>
+                            </div>
+                            <div className="w-10 h-full bg-amber-100 rounded border border-amber-200 flex flex-col items-center justify-start p-1.5 gap-1.5">
+                              <div className="w-full h-1 bg-amber-300 rounded-full"></div>
+                              <div className="w-full h-3 bg-amber-200 rounded-sm"></div>
+                              <div className="w-full h-1 bg-amber-200 rounded-full"></div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="w-full max-w-[100px] h-full bg-emerald-50 rounded border border-emerald-200 p-2 flex flex-col gap-1.5">
+                            <div className="flex items-center gap-2">
+                               <div className="w-3 h-3 rounded-full bg-emerald-200"></div>
+                               <div className="w-12 h-1.5 bg-emerald-200 rounded-full"></div>
+                            </div>
+                            <div className="w-full h-1 bg-emerald-100 rounded-full mt-1"></div>
+                            <div className="w-full h-1 bg-emerald-100 rounded-full"></div>
+                            <div className="w-2/3 h-1 bg-emerald-100 rounded-full"></div>
+                          </div>
+                        )}
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        className="absolute inset-0 m-auto h-8 w-8 rounded-full shadow-lg scale-0 group-hover/preview:scale-100 transition-transform bg-primary text-primary-foreground hover:bg-primary/90"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setTemplatePreviewId(template.id);
+                        }}
+                      >
+                        <Search className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
           </div>
         </CardContent>
       </Card>
@@ -956,11 +1132,19 @@ export function BoardReporting() {
         </div>
 
         <TabsContent value="content" className="space-y-4 overflow-x-auto overflow-y-visible">
+          {/* Summary bar */}
+          <div className="flex flex-wrap gap-3 p-3 bg-muted/40 rounded-lg border text-xs">
+            <div className="flex items-center gap-1.5"><FileText className="h-3.5 w-3.5 text-muted-foreground" /><span className="text-muted-foreground">Template:</span><span className="font-semibold">{templates.find(t => t.id === selectedTemplate)?.name || "Board Deck"}</span></div>
+            <div className="flex items-center gap-1.5"><span className="text-muted-foreground">Sections:</span><Badge variant="outline" className="text-[10px] h-5">{activeSections.length}</Badge></div>
+            <div className="flex items-center gap-1.5"><span className="text-muted-foreground">Metrics:</span><Badge variant="outline" className="text-[10px] h-5">{selectedMetrics.length}</Badge></div>
+            <div className="flex items-center gap-1.5"><span className="text-muted-foreground">Format:</span><Badge variant="outline" className={`text-[10px] h-5 uppercase font-bold flex items-center gap-1 ${reportFormat === 'pptx' ? 'text-blue-600 border-blue-200 bg-blue-50' : reportFormat === 'pdf' ? 'text-amber-600 border-amber-200 bg-amber-50' : 'text-emerald-600 border-emerald-200 bg-emerald-50'}`}>{reportFormat === 'pptx' ? <Presentation className="w-3 h-3"/> : reportFormat === 'pdf' ? <FileText className="w-3 h-3"/> : <Mail className="w-3 h-3"/>}{reportFormat}</Badge></div>
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
             <Card>
               <CardHeader>
                 <CardTitle>Report Configuration</CardTitle>
-                <CardDescription>Title, period, format and sections</CardDescription>
+                <CardDescription>Define title, period, output format, and which sections to include</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -990,11 +1174,16 @@ export function BoardReporting() {
                       <SelectValue placeholder="Select format" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="pptx">PowerPoint (.pptx)</SelectItem>
-                      <SelectItem value="pdf">PDF</SelectItem>
-                      <SelectItem value="memo">Memo</SelectItem>
+                      <SelectItem value="pptx">PowerPoint (.pptx) — Slides presentation</SelectItem>
+                      <SelectItem value="pdf">PDF — Document format</SelectItem>
+                      <SelectItem value="memo">Memo — Written narrative</SelectItem>
                     </SelectContent>
                   </Select>
+                  <p className="text-[10px] text-muted-foreground">
+                    {reportFormat === "pptx" ? "Best for board meetings — visual slides with charts and KPIs" :
+                     reportFormat === "pdf" ? "Best for audit committees — formal, archivable document" :
+                     "Best for investor updates — concise written narrative"}
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label>Include Sections</Label>
@@ -1020,77 +1209,141 @@ export function BoardReporting() {
 
             <Card>
               <CardHeader>
-                <CardTitle>AI Content Generation</CardTitle>
-                <CardDescription>Let AI write a narrative for your board</CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>AI Content Generation</CardTitle>
+                    <CardDescription>Generate executive narrative, highlights, and risk areas for your board report</CardDescription>
+                  </div>
+                  {boardReportAiContent && (
+                    <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200">Generated</Badge>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                {loadingAiContent ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  </div>
-                ) : boardReportAiContent ? (
-                  <>
-                    <div className="p-4 rounded-lg bg-blue-50 border border-blue-200">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-medium text-blue-800">Executive Summary</h3>
-                        <Button size="sm" variant="outline" onClick={fetchAIContent} disabled={loadingAiContent}>
-                          {loadingAiContent ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Edit className="mr-1 h-3 w-3" />}
-                          Regenerate Content
-                        </Button>
+                <Card className="border-none shadow-none bg-transparent">
+                  <CardContent className="p-0 space-y-4">
+                    {/* Template Strategy Header */}
+                    <div className="p-4 bg-muted/30 rounded-lg border border-dashed border-muted-foreground/30 mb-4">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <Zap className="h-4 w-4 text-primary" />
+                        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">AI Narrative Strategy</span>
                       </div>
-                      <p className="text-sm text-blue-700 mt-2 whitespace-pre-wrap">
-                        {boardReportAiContent.executiveSummary || boardReportAiContent.summary || "No summary available."}
-                      </p>
-                    </div>
-                    <div className="p-4 rounded-lg bg-green-50 border border-green-200">
-                      <h3 className="font-medium text-green-800 mb-2">Key Highlights</h3>
-                      {boardReportAiContent.keyHighlights?.length ? (
-                        <ul className="text-sm text-green-700 space-y-1">
-                          {boardReportAiContent.keyHighlights.map((highlight: any, index: number) => (
-                            <li key={index}>• {highlight.title || highlight.summary || highlight.explain || highlight || "Highlight"}</li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="text-sm text-green-700">No highlights available.</p>
-                      )}
-                    </div>
-                    <div className="p-4 rounded-lg bg-yellow-50 border border-yellow-200">
-                      <h3 className="font-medium text-yellow-800 mb-2">Areas of Focus</h3>
-                      <p className="text-sm text-yellow-700 whitespace-pre-wrap">
-                        {boardReportAiContent.areasOfFocus || boardReportAiContent.risks || "No risk areas highlighted."}
+                      <p className="text-sm font-medium">
+                        {selectedTemplate === "board-deck" ? "High-level strategic narrative focused on market position, top-line growth, and board-level decisions." :
+                         selectedTemplate === "quarterly-review" ? "Deep-dive operational review analyzing departmental performance, budget variances, and Q-over-Q trends." :
+                         selectedTemplate === "investor-update" ? "LTV/CAC and unit economics focus, specifically designed for transparent investor communication." :
+                         selectedTemplate === "audit-compliance" ? "Risk-focused narrative covering internal controls, financial health, and regulatory milestones." :
+                         "Comprehensive financial overview with cross-functional performance highlights."}
                       </p>
                     </div>
 
-                    {boardReportAiContent.dataSources && boardReportAiContent.dataSources.length > 0 && (
-                      <div className="pt-2">
-                        <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                          <ShieldCheck className="h-3.5 w-3.5 text-green-600" />
-                          Data Provenance & Trust
+                    {loadingAiContent ? (
+                      <div className="py-8 space-y-4">
+                        <div className="flex items-center justify-center">
+                          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
                         </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {boardReportAiContent.dataSources.map((source: any, idx: number) => (
-                            <Badge key={idx} variant="outline" className="text-[10px] font-normal py-0 px-2 bg-slate-50 border-slate-200">
-                              {source.type === 'integration' && <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mr-1.5" />}
-                              {source.type === 'grounding' && <div className="w-1.5 h-1.5 rounded-full bg-green-500 mr-1.5" />}
-                              {source.type === 'audit' && <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5" />}
-                              {source.id || source.type}: {source.snippet?.length > 25 ? source.snippet.substring(0, 25) + '...' : source.snippet || 'Analyzed'}
-                            </Badge>
-                          ))}
+                        <div className="text-center space-y-2">
+                          <p className="font-medium text-sm">Generating AI Content...</p>
+                          <div className="flex items-center justify-center gap-6 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1.5"><div className="h-2 w-2 rounded-full bg-green-500" />Analyzing metrics</span>
+                            <span className="flex items-center gap-1.5"><div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />Drafting narrative</span>
+                            <span className="flex items-center gap-1.5"><div className="h-2 w-2 rounded-full bg-gray-300" />Formatting output</span>
+                          </div>
                         </div>
                       </div>
+                    ) : boardReportAiContent ? (
+                      <>
+                        {/* Metadata bar */}
+                        <div className="flex items-center gap-4 text-[10px] text-muted-foreground pb-2 border-b">
+                          <span>{(() => { const text = (boardReportAiContent.executiveSummary || "") + (boardReportAiContent.areasOfFocus || ""); const words = text.split(/\s+/).filter(Boolean).length; return `${words} words`; })()}</span>
+                          <span>{(() => { const text = (boardReportAiContent.executiveSummary || "") + (boardReportAiContent.areasOfFocus || ""); const words = text.split(/\s+/).filter(Boolean).length; return `~${Math.max(1, Math.ceil(words / 200))} min read`; })()}</span>
+                          <span>{boardReportAiContent.keyHighlights?.length || 0} highlights</span>
+                        </div>
+
+                        <div className="p-4 rounded-lg bg-blue-50/70 border border-blue-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="font-semibold text-sm text-blue-900 flex items-center gap-2">
+                              <div className="h-5 w-5 rounded bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold">1</div>
+                              Executive Summary
+                            </h3>
+                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={fetchAIContent} disabled={loadingAiContent}>
+                              {loadingAiContent ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Edit className="mr-1 h-3 w-3" />}
+                              Regenerate
+                            </Button>
+                          </div>
+                          <p className="text-sm text-blue-800 leading-relaxed whitespace-pre-wrap">
+                            {boardReportAiContent.executiveSummary || boardReportAiContent.summary || "No summary available."}
+                          </p>
+                        </div>
+
+                        <div className="p-4 rounded-lg bg-emerald-50/70 border border-emerald-200">
+                          <h3 className="font-semibold text-sm text-emerald-900 mb-3 flex items-center gap-2">
+                            <div className="h-5 w-5 rounded bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold">2</div>
+                            Key Highlights
+                          </h3>
+                          {boardReportAiContent.keyHighlights?.length ? (
+                            <ul className="space-y-2">
+                              {boardReportAiContent.keyHighlights.map((highlight: any, index: number) => (
+                                <li key={index} className="flex items-start gap-2 text-sm text-emerald-800">
+                                  <div className="h-5 w-5 rounded-full bg-emerald-100 flex items-center justify-center text-[10px] font-bold text-emerald-700 shrink-0 mt-0.5">{index + 1}</div>
+                                  <span>{highlight.title || highlight.summary || highlight.explain || highlight || "Highlight"}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-sm text-emerald-700">No highlights available.</p>
+                          )}
+                        </div>
+
+                        <div className="p-4 rounded-lg bg-amber-50/70 border border-amber-200">
+                          <h3 className="font-semibold text-sm text-amber-900 mb-2 flex items-center gap-2">
+                            <div className="h-5 w-5 rounded bg-amber-600 text-white flex items-center justify-center text-[10px] font-bold">3</div>
+                            Areas of Focus & Risk
+                          </h3>
+                          <p className="text-sm text-amber-800 leading-relaxed whitespace-pre-wrap">
+                            {boardReportAiContent.areasOfFocus || boardReportAiContent.risks || "No risk areas highlighted."}
+                          </p>
+                        </div>
+
+                        {boardReportAiContent.dataSources && boardReportAiContent.dataSources.length > 0 && (
+                          <div className="pt-2">
+                            <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                              <ShieldCheck className="h-3.5 w-3.5 text-green-600" />
+                              Data Provenance & Trust
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {boardReportAiContent.dataSources.map((source: any, idx: number) => (
+                                <Badge key={idx} variant="outline" className="text-[10px] font-normal py-0 px-2 bg-slate-50 border-slate-200">
+                                  {source.type === 'integration' && <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mr-1.5" />}
+                                  {source.type === 'grounding' && <div className="w-1.5 h-1.5 rounded-full bg-green-500 mr-1.5" />}
+                                  {source.type === 'audit' && <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5" />}
+                                  {source.id || source.type}: {source.snippet?.length > 25 ? source.snippet.substring(0, 25) + '...' : source.snippet || 'Analyzed'}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 flex items-start gap-2">
+                          <Info className="h-3.5 w-3.5 text-slate-500 shrink-0 mt-0.5" />
+                          <p className="text-[10px] text-slate-500 leading-relaxed">AI-generated content should be reviewed for accuracy before distribution. All data points are sourced from your organization&apos;s financial records and may require manual verification for board-level compliance.</p>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center py-8">
+                        <div className="mx-auto w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center mb-4">
+                          <Zap className="h-6 w-6 text-white" />
+                        </div>
+                        <p className="font-semibold text-sm mb-1">AI Content Not Generated Yet</p>
+                        <p className="text-xs text-muted-foreground mb-4 max-w-xs mx-auto">Generate an executive summary, key highlights, and risk assessment powered by AI using your selected metrics and reporting period.</p>
+                        <Button size="sm" variant="default" onClick={fetchAIContent} disabled={loadingAiContent}>
+                          {loadingAiContent ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Zap className="mr-1 h-4 w-4" />}
+                          Generate AI Content
+                        </Button>
+                      </div>
                     )}
-                  </>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Zap className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                    <p className="font-medium mb-1">AI Content Not Generated Yet</p>
-                    <p className="text-sm mb-4">Click the button below to generate an executive summary, key highlights, and risk areas powered by AI.</p>
-                    <Button size="sm" variant="default" onClick={fetchAIContent} disabled={loadingAiContent}>
-                      {loadingAiContent ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Zap className="mr-1 h-4 w-4" />}
-                      Generate AI Content
-                    </Button>
-                  </div>
-                )}
+                  </CardContent>
+                </Card>
               </CardContent>
             </Card>
           </div>
@@ -1099,8 +1352,13 @@ export function BoardReporting() {
         <TabsContent value="metrics" className="space-y-4 overflow-x-auto overflow-y-visible">
           <Card>
             <CardHeader>
-              <CardTitle>Select Key Metrics</CardTitle>
-              <CardDescription>Choose which metrics to include in your report</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Select Key Metrics</CardTitle>
+                  <CardDescription>Choose which metrics to include in your report. Each metric shows its current value and strategic significance.</CardDescription>
+                </div>
+                <Badge variant="outline" className="text-xs">{selectedMetrics.length} of {kpiMetrics.length} selected</Badge>
+              </div>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -1108,33 +1366,59 @@ export function BoardReporting() {
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               ) : kpiMetrics.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {kpiMetrics.map((metric) => (
-                    <div
-                      key={metric.name}
-                      className={`p-4 border rounded-lg cursor-pointer transition-all ${selectedMetrics.includes(metric.name) ? "border-primary bg-primary/5" : "border-gray-200 hover:border-gray-300"
-                        }`}
-                      onClick={() => handleMetricToggle(metric.name)}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <Checkbox checked={selectedMetrics.includes(metric.name)} />
-                        {metric.trend === "up" ? (
-                          <TrendingUp className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <TrendingUp className="h-4 w-4 text-red-500 rotate-180" />
-                        )}
-                      </div>
-                      <h3 className="font-medium text-sm mb-1">{metric.name || "Unknown Metric"}</h3>
-                      <div className="text-lg font-bold">{metric.value || "N/A"}</div>
-                      <div className={`text-xs ${metric.trend === "up" ? "text-green-600" : "text-red-600"}`}>
-                        {metric.change || "N/A"}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {kpiMetrics.map((metric) => {
+                      const significanceMap: Record<string, string> = {
+                        "Annual Recurring Revenue": "Primary top-line growth indicator. Board priority #1.",
+                        "Monthly Recurring Revenue": "Baseline monthly SaaS revenue. Tracks short-term growth momentum.",
+                        "Burn Multiple": "Capital efficiency: net burn ÷ net new ARR. < 1.5x is best-in-class.",
+                        "Burn Rate": "Monthly cash consumption. Essential for evaluating runway.",
+                        "LTV:CAC Ratio": "Unit economics health. > 3x indicates sustainable growth.",
+                        "Customer Acquisition Cost": "Sales & marketing efficiency metric. Monitored for scalability.",
+                        "Customer Lifetime Value": "Projected revenue per account. Key metric for evaluating ROI.",
+                        "Monthly Churn Rate": "Customer retention metric. Higher churn significantly impacts LTV.",
+                        "Quick Ratio": "Growth quality: new + expansion MRR ÷ churn + contraction MRR.",
+                        "Rule of 40": "Revenue growth % + profit margin %. > 40% is the benchmark.",
+                        "Gross Margin": "Revenue retained after COGS. SaaS baseline: 70-80%.",
+                        "Cash Runway": "Months of operation at current burn. < 6 months = alert.",
+                        "Active Customers": "Total paying accounts. Directly correlated with ARR.",
+                      }
+                      const significance = significanceMap[metric.name] || "Key performance indicator for stakeholder reporting."
+                      return (
+                        <div
+                          key={metric.name}
+                          className={`p-4 border rounded-lg cursor-pointer transition-all ${selectedMetrics.includes(metric.name) ? "border-primary bg-primary/5 shadow-sm" : "border-gray-200 hover:border-gray-300"}`}
+                          onClick={() => handleMetricToggle(metric.name)}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <Checkbox checked={selectedMetrics.includes(metric.name)} />
+                            {metric.trend === "up" ? (
+                              <ArrowUpRight className="h-4 w-4 text-green-500" />
+                            ) : (
+                              <ArrowDownRight className="h-4 w-4 text-red-500" />
+                            )}
+                          </div>
+                          <h3 className="font-medium text-sm mb-1">{metric.name || "Unknown Metric"}</h3>
+                          <div className="text-xl font-bold mb-1">{metric.value || "N/A"}</div>
+                          <div className={`text-xs font-medium mb-2 ${metric.trend === "up" ? "text-green-600" : "text-red-600"}`}>
+                            {metric.change || "N/A"}
+                          </div>
+                          <p className="text-[10px] text-muted-foreground leading-relaxed border-t pt-2">{significance}</p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-100 flex items-start gap-2">
+                    <Info className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                    <p className="text-xs text-blue-700">Selected metrics will appear in the Key Performance Metrics section of your report. For board-level reports, we recommend including 4–6 metrics that cover growth, efficiency, and runway.</p>
+                  </div>
+                </>
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
-                  <p>No metrics available. Create a financial model to see metrics.</p>
+                  <DollarSign className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                  <p className="font-medium mb-1">No Metrics Available</p>
+                  <p className="text-sm">Create a financial model and run a forecast to populate key performance metrics.</p>
                 </div>
               )}
             </CardContent>
@@ -1142,94 +1426,270 @@ export function BoardReporting() {
         </TabsContent>
 
         <TabsContent value="preview" className="space-y-4 overflow-x-auto overflow-y-visible">
-          <Card>
-            <CardHeader>
-              <CardTitle>Report Preview</CardTitle>
-              <CardDescription>Preview your report before generation</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                <div className="p-6 border rounded-lg bg-gradient-to-r from-blue-50 to-purple-50">
-                  <h2 className="text-2xl font-bold mb-2">{reportTitle}</h2>
-                  <p className="text-lg text-muted-foreground">{formatMonthLabel(new Date())}</p>
-                  <p className="text-sm text-muted-foreground mt-4">Generated by FinaPilot</p>
+          <Card className="shadow-lg border-primary/10 overflow-hidden">
+            <CardHeader className="bg-muted/30 border-b">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <CardTitle className="text-xl md:text-2xl font-bold text-foreground flex items-center gap-2">
+                    <FileText className="h-6 w-6 text-primary" />
+                    Board Report Preview
+                  </CardTitle>
+                  <CardDescription>Live visualization of your generated board pack based on current configuration</CardDescription>
                 </div>
-                <div className="p-6 border rounded-lg">
-                  <h3 className="text-xl font-bold mb-4">Key Performance Metrics</h3>
-                  {loading ? (
-                    <div className="flex items-center justify-center h-32">
-                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : selectedMetrics.length > 0 && kpiMetrics.length > 0 ? (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {selectedMetrics.slice(0, 8).map((metricName) => {
-                        const metric = kpiMetrics.find((m) => m.name === metricName)
-                        return metric ? (
-                          <div key={metricName} className="text-center">
-                            <div className="text-2xl font-bold text-blue-600">{metric.value || "N/A"}</div>
-                            <div className="text-sm text-muted-foreground">{metric.name || "Unknown Metric"}</div>
-                            <div className={`text-xs ${metric.trend === "up" ? "text-green-600" : "text-red-600"}`}>
-                              {metric.change || "N/A"}
+                <Badge variant="secondary" className="w-fit h-7 px-3 text-xs font-bold uppercase tracking-widest bg-primary/10 text-primary border-primary/20">
+                  {selectedTemplate.replace('-', ' ')}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0 md:p-6 bg-slate-50/50">
+              <div className="max-w-4xl mx-auto bg-white shadow-xl ring-1 ring-slate-200 rounded-sm md:rounded-md p-6 md:p-12 space-y-8 md:space-y-12 min-h-[1000px]">
+                {/* Mock Header */}
+                <div className="border-b-2 border-primary pb-6 flex justify-between items-end">
+                  <div>
+                    <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 mb-1">{reportTitle}</h1>
+                    <p className="text-sm font-medium text-slate-500 uppercase tracking-widest">{formatMonthLabel(new Date())} • BOARD CONFIDENTIAL</p>
+                  </div>
+                  <div className="hidden sm:block text-right">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Sourced from</p>
+                    <p className="text-sm font-bold text-primary">FinaPilot AI-CFO</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-8">
+                  {/* Executive Summary Narrative */}
+                  {includeSections["Executive Summary"] && (
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                        <Zap className="h-4 w-4 text-amber-500" />
+                        Executive Summary
+                      </h3>
+                      <div className="prose prose-slate max-w-none">
+                        <div className="text-slate-600 leading-relaxed italic border-l-4 border-slate-200 pl-4 py-1 whitespace-pre-wrap">
+                          {boardReportAiContent?.executiveSummary || "Initial strategic assessment identifying key performance drivers, operational tailwinds, and critical budget considerations for the board's upcoming quarterly review session."}
+                        </div>
+                      </div>
+                      
+                      {/* NEW: Show Highlights in Preview */}
+                      {boardReportAiContent?.keyHighlights && boardReportAiContent.keyHighlights.length > 0 && (
+                        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+                          {boardReportAiContent.keyHighlights.slice(0, 3).map((h: string, i: number) => (
+                            <div key={i} className="p-3 bg-amber-50 rounded-md border border-amber-100 flex items-start gap-2">
+                              <CheckCircle2 className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                              <span className="text-xs text-amber-900 font-medium">{h}</span>
                             </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                {/* Key Performance Indicators */}
+                {includeSections["Key Metrics"] && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-bold text-slate-800 uppercase tracking-wider border-b pb-2">Key Performance Metrics</h3>
+                    {loading ? (
+                      <div className="flex items-center justify-center h-32 bg-slate-50 rounded">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : selectedMetrics.length > 0 && kpiMetrics.length > 0 ? (
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                        {selectedMetrics.slice(0, 8).map((metricName) => {
+                          const metric = kpiMetrics.find((m) => m.name === metricName)
+                          return metric ? (
+                            <div key={metricName} className="text-center p-3 bg-slate-50/50 rounded-lg border border-slate-100">
+                              <div className="text-xs font-semibold text-slate-500 uppercase tracking-tight mb-1">{metric.name}</div>
+                              <div className="text-xl font-bold text-slate-900">{metric.value || "N/A"}</div>
+                              <div className={`text-[10px] font-bold mt-0.5 ${metric.trend === "up" ? "text-emerald-600" : "text-rose-600"}`}>
+                                {metric.change || "N/A"}
+                              </div>
+                            </div>
+                          ) : null
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-center py-6 bg-slate-50 rounded text-slate-400 italic text-sm">
+                        Select metrics to see preview data
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* Growth Analysis */}
+                {includeSections["Growth Analysis"] && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* Revenue Trend */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between border-b pb-2">
+                        <h3 className="text-lg font-bold text-slate-800 uppercase tracking-wider">Revenue Growth</h3>
+                        <TrendingUp className="h-5 w-5 text-blue-500" />
+                      </div>
+                      {chartData.length > 0 ? (
+                        <div className="bg-white p-2 rounded-lg border border-slate-100">
+                          <ResponsiveContainer width="100%" height={200}>
+                            <LineChart data={chartData}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                              <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} />
+                              <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} />
+                              <Tooltip 
+                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                formatter={(value) => [`$${Number(value).toLocaleString()}`, "Revenue"]} 
+                              />
+                              <Line type="monotone" dataKey="revenue" stroke="#3b82f6" strokeWidth={3} dot={{ r: 3, fill: '#3b82f6' }} />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center h-48 bg-slate-50 rounded text-slate-400 italic text-sm">
+                          Revenue trend visualization pending data
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Customer Acquisition */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between border-b pb-2">
+                        <h3 className="text-lg font-bold text-slate-800 uppercase tracking-wider">Customer Growth</h3>
+                        <BarChart2 className="h-5 w-5 text-emerald-500" />
+                      </div>
+                      {chartData.length > 0 ? (
+                        <div className="bg-white p-2 rounded-lg border border-slate-100">
+                          <ResponsiveContainer width="100%" height={200}>
+                            <BarChart data={chartData}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                              <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} />
+                              <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#94a3b8'}} />
+                              <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
+                              <Bar dataKey="customers" fill="#10b981" radius={[2, 2, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center h-48 bg-slate-50 rounded text-slate-400 italic text-sm">
+                          Customer growth visualization pending data
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                  {/* Growth Analysis - Grid 2x2 */}
+                  {includeSections["Growth Analysis"] && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      {/* Revenue Trend */}
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between border-b pb-2">
+                          <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">1. Revenue Growth</h3>
+                          <TrendingUp className="h-4 w-4 text-blue-500" />
+                        </div>
+                        {chartData.length > 0 ? (
+                          <div className="bg-white p-2 rounded-lg border border-slate-100">
+                            <ResponsiveContainer width="100%" height={160}>
+                              <LineChart data={chartData}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 9, fill: '#94a3b8'}} />
+                                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 9, fill: '#94a3b8'}} />
+                                <Tooltip 
+                                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '10px' }}
+                                  formatter={(value) => [`$${Number(value).toLocaleString()}`, "Revenue"]} 
+                                />
+                                <Line type="monotone" dataKey="revenue" stroke="#3b82f6" strokeWidth={2} dot={{ r: 2, fill: '#3b82f6' }} />
+                              </LineChart>
+                            </ResponsiveContainer>
                           </div>
                         ) : (
-                          <div key={metricName} className="text-center">
-                            <div className="text-2xl font-bold text-muted-foreground">N/A</div>
-                            <div className="text-sm text-muted-foreground">{metricName}</div>
-                            <div className="text-xs text-muted-foreground">No data</div>
+                          <div className="flex items-center justify-center h-40 bg-slate-50 rounded text-slate-400 italic text-[10px]">
+                            Revenue trend visualization pending data
                           </div>
-                        )
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <p>Select metrics to see preview</p>
+                        )}
+                      </div>
+
+                      {/* Customer Acquisition */}
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between border-b pb-2">
+                          <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">2. Customer Growth</h3>
+                          <BarChart2 className="h-4 w-4 text-emerald-500" />
+                        </div>
+                        {chartData.length > 0 ? (
+                          <div className="bg-white p-2 rounded-lg border border-slate-100">
+                            <ResponsiveContainer width="100%" height={160}>
+                              <BarChart data={chartData}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 9, fill: '#94a3b8'}} />
+                                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 9, fill: '#94a3b8'}} />
+                                <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '10px' }} />
+                                <Bar dataKey="customers" fill="#10b981" radius={[2, 2, 0, 0]} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center h-40 bg-slate-50 rounded text-slate-400 italic text-[10px]">
+                            Customer growth visualization pending data
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Burn Rate */}
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between border-b pb-2">
+                          <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">3. Monthly Burn</h3>
+                          <PieChart className="h-4 w-4 text-rose-500" />
+                        </div>
+                        {chartData.length > 0 ? (
+                          <div className="bg-white p-2 rounded-lg border border-slate-100">
+                            <ResponsiveContainer width="100%" height={160}>
+                              <BarChart data={chartData}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 9, fill: '#94a3b8'}} />
+                                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 9, fill: '#94a3b8'}} />
+                                <Tooltip 
+                                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '10px' }}
+                                  formatter={(value) => [`$${Number(value).toLocaleString()}`, "Burn"]}
+                                />
+                                <Bar dataKey="burn" fill="#ef4444" radius={[2, 2, 0, 0]} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center h-40 bg-slate-50 rounded text-slate-400 italic text-[10px]">
+                            Burn rate visualization pending data
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Efficiency Metric */}
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between border-b pb-2">
+                          <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">4. Efficiency Score</h3>
+                          <Zap className="h-4 w-4 text-amber-500" />
+                        </div>
+                        {chartData.length > 0 ? (
+                          <div className="bg-white p-2 rounded-lg border border-slate-100">
+                            <ResponsiveContainer width="100%" height={160}>
+                              <LineChart data={chartData}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 9, fill: '#94a3b8'}} />
+                                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 9, fill: '#94a3b8'}} />
+                                <Tooltip 
+                                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '10px' }}
+                                  formatter={(value) => [value, "Burn Multiple"]}
+                                />
+                                <Line type="stepAfter" dataKey="efficiency" stroke="#f59e0b" strokeWidth={2} dot={{ r: 2, fill: '#f59e0b' }} />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center h-40 bg-slate-50 rounded text-slate-400 italic text-[10px]">
+                            Efficiency visualization pending data
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
-                </div>
-                <div className="p-6 border rounded-lg">
-                  <h3 className="text-xl font-bold mb-4">Revenue Trend</h3>
-                  {loading ? (
-                    <div className="flex items-center justify-center h-[200px]">
-                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : chartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={200} className="min-h-[200px] sm:min-h-[250px]">
-                      <LineChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="month" />
-                        <YAxis />
-                        <Tooltip formatter={(value) => [`$${Number(value).toLocaleString()}`, "Revenue"]} />
-                        <Line type="monotone" dataKey="revenue" stroke="#3b82f6" strokeWidth={3} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-[200px] text-muted-foreground">
-                      <p>No revenue data available</p>
-                    </div>
-                  )}
-                </div>
-                <div className="p-6 border rounded-lg">
-                  <h3 className="text-xl font-bold mb-4">Customer Growth</h3>
-                  {loading ? (
-                    <div className="flex items-center justify-center h-[200px]">
-                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : chartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={200} className="min-h-[200px] sm:min-h-[250px]">
-                      <BarChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="month" />
-                        <YAxis />
-                        <Tooltip />
-                        <Bar dataKey="customers" fill="#10b981" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-[200px] text-muted-foreground">
-                      <p>No customer data available</p>
-                    </div>
-                  )}
+
+                  {/* Operational Note */}
+                  <div className="pt-8 border-t border-slate-100 flex justify-between items-center text-[10px] text-slate-400 uppercase tracking-widest font-bold">
+                    <span>Page 1 of {templates.find(t => t.id === selectedTemplate)?.slides || 8}</span>
+                    <span>Board Update • {new Date().getFullYear()}</span>
+                    <span>Classified: Internal Only</span>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -1241,7 +1701,7 @@ export function BoardReporting() {
             <Card>
               <CardHeader>
                 <CardTitle>Distribution Settings</CardTitle>
-                <CardDescription>Configure how your report is shared</CardDescription>
+                <CardDescription>Configure how your report is shared with stakeholders</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -1251,68 +1711,174 @@ export function BoardReporting() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="email">Email</SelectItem>
-                      <SelectItem value="slack">Slack</SelectItem>
-                      <SelectItem value="link">Shareable Link</SelectItem>
-                      <SelectItem value="download">Download Only</SelectItem>
+                      <SelectItem value="email">Email — Direct to inbox</SelectItem>
+                      <SelectItem value="slack">Slack — Channel notification</SelectItem>
+                      <SelectItem value="link">Shareable Link — Password optional</SelectItem>
+                      <SelectItem value="download">Download Only — Local export</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="recipients">Recipients</Label>
-                  <Input id="recipients" value={recipients} onChange={(e) => setRecipients(e.target.value)} placeholder="board@company.com" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="subject">Email Subject</Label>
-                  <Input id="subject" value={emailSubject} onChange={(e) => setEmailSubject(e.target.value)} />
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox id="password-protect" checked={passwordProtect} onCheckedChange={(checked) => setPasswordProtect(!!checked)} />
-                  <Label htmlFor="password-protect" className="text-sm">
-                    Password protect report
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox id="track-views" checked={trackEngagement} onCheckedChange={(checked) => setTrackEngagement(!!checked)} />
-                  <Label htmlFor="track-views" className="text-sm">
-                    Track views and engagement
-                  </Label>
+                {distributionMethod === 'email' && (
+                  <>
+                    <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <Label htmlFor="recipients">Email Recipients</Label>
+                      <Input id="recipients" value={recipients} onChange={(e) => setRecipients(e.target.value)} placeholder="board@company.com, investor@lp.com" />
+                      <p className="text-[10px] text-muted-foreground">Separate multiple email addresses with commas</p>
+                    </div>
+                    <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <Label htmlFor="subject">Email Subject</Label>
+                      <Input id="subject" value={emailSubject} onChange={(e) => setEmailSubject(e.target.value)} />
+                    </div>
+                  </>
+                )}
+                
+                {distributionMethod === 'slack' && (
+                  <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <Label htmlFor="recipients">Slack Channels or User IDs</Label>
+                    <Input id="recipients" value={recipients} onChange={(e) => setRecipients(e.target.value)} placeholder="#board-updates, @investor" />
+                    <p className="text-[10px] text-muted-foreground">Comma separated. Ensure FinaPilot app is invited to private channels.</p>
+                  </div>
+                )}
+
+                {(distributionMethod === 'email' || distributionMethod === 'slack' || distributionMethod === 'link') && (
+                  <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <Label htmlFor="message">Message Context</Label>
+                    <Textarea 
+                      id="message" 
+                      value={distributionMessage} 
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDistributionMessage(e.target.value)}
+                      placeholder={distributionMethod === 'link' ? "Internal notes (optional)..." : "Brief context for the report..."}
+                      rows={3}
+                    />
+                  </div>
+                )}
+
+                {distributionMethod === 'download' && (
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-md animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="flex items-start gap-2">
+                      <Download className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" />
+                      <div className="text-sm text-slate-600">
+                        <span className="font-semibold text-slate-700">Local Download</span>
+                        <p className="text-xs mt-1">The report will be generated and saved to your "Recent Reports" below. You can download it directly without sending notifications.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="password-protect" checked={passwordProtect} onCheckedChange={(checked) => setPasswordProtect(!!checked)} />
+                    <Label htmlFor="password-protect" className="text-sm font-medium flex items-center gap-1.5">
+                      <LucideLock className="h-3.5 w-3.5 text-slate-400" />
+                      Password protect report
+                    </Label>
+                  </div>
+                  
+                  {passwordProtect && (
+                    <div className="pl-6 space-y-1.5 animate-in slide-in-from-top-2 duration-200">
+                      <Label htmlFor="report-password" className="text-[10px] uppercase font-bold text-slate-500">Set AES-256 Encryption Password</Label>
+                      <Input 
+                        id="report-password" 
+                        type="password" 
+                        value={password} 
+                        onChange={(e) => setPassword(e.target.value)} 
+                        placeholder="Min 8 characters recommended"
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="track-views" checked={trackEngagement} onCheckedChange={(checked) => setTrackEngagement(!!checked)} />
+                    <Label htmlFor="track-views" className="text-sm font-medium flex items-center gap-1.5">
+                      <Eye className="h-3.5 w-3.5 text-slate-400" />
+                      Track stakeholder engagement
+                    </Label>
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Reports</CardTitle>
-                <CardDescription>Previously generated board reports</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {loading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <Card className="border-slate-200 overflow-hidden">
+              <CardHeader className="bg-slate-50/50 border-b border-slate-200 py-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-sm font-bold flex items-center gap-2">
+                       <HistoryIcon className="h-4 w-4 text-slate-400" />
+                       Recent Reports
+                    </CardTitle>
+                    <CardDescription className="text-[11px] mt-0.5">Execution history and delivery status</CardDescription>
                   </div>
-                ) : recentReports.length > 0 ? (
-                  <div className="space-y-3">
-                    {recentReports.map((report) => (
-                      <div key={report.exportId} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div>
-                          <h4 className="font-medium">{report.name}</h4>
-                          <p className="text-sm text-muted-foreground">{report.date}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button size="sm" variant="ghost" onClick={() => handleShareReport(report.exportId)}>
-                            <Share className="h-3 w-3" />
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => handleDownloadReport(report.exportId, report.exportType)}>
-                            <Download className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+                  <Button variant="ghost" size="sm" onClick={fetchRecentReports} className="h-8 text-xs font-semibold gap-1.5 text-slate-500 hover:text-primary hover:bg-primary/5">
+                    <RefreshCw className="h-3 w-3" />
+                    Refresh
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                {loading ? (
+                  <div className="flex items-center justify-center py-12">
+                     <Loader2 className="h-8 w-8 animate-spin text-primary/30" />
                   </div>
                 ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <p>No recent reports. Generate a report to see it here.</p>
+                  <div className="divide-y divide-slate-100">
+                    {recentReports.length > 0 ? (
+                      recentReports.map((report: any, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-4 hover:bg-slate-50/50 transition-colors group">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg ${report.exportType === 'pdf' ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'}`}>
+                              {report.exportType === 'pdf' ? <FileText className="h-4 w-4" /> : <Presentation className="h-4 w-4" />}
+                            </div>
+                            <div>
+                              <div className="text-sm font-bold text-slate-900 line-clamp-1">{report.name}</div>
+                              <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
+                                <span>{report.date}</span>
+                                <span className="h-0.5 w-0.5 bg-slate-200 rounded-full" />
+                                <span className="uppercase font-bold tracking-tighter">{report.exportType}</span>
+                                {report.meta?.distribution?.method && (
+                                  <>
+                                    <span className="h-0.5 w-0.5 bg-slate-200 rounded-full" />
+                                    <span className="flex items-center gap-1 text-primary/70 font-medium">
+                                      <Send className="h-2.5 w-2.5" />
+                                      {report.meta.distribution.method}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={
+                              report.status === 'completed' || report.status === 'done' ? 'default' : 
+                              report.status === 'failed' ? 'destructive' : 'secondary'
+                            } className={`h-6 px-1.5 text-[9px] font-bold uppercase tracking-wider ${
+                              report.status === 'completed' || report.status === 'done' ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-50' : ''
+                            }`}>
+                              {report.status}
+                            </Badge>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-7 w-7 text-slate-400 hover:text-primary opacity-0 group-hover:opacity-100 transition-all border border-transparent hover:border-primary/20 hover:bg-primary/5"
+                              onClick={() => handleDownloadReport(report.exportId, report.exportType)}
+                              disabled={report.status !== 'completed' && report.status !== 'done'}
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-10 px-6 text-center">
+                        <div className="h-10 w-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-300 mb-3">
+                          <HistoryIcon className="h-5 w-5" />
+                        </div>
+                        <h4 className="text-xs font-bold text-slate-900 mb-1">No Recent Reports Found</h4>
+                        <p className="text-[10px] text-slate-500 max-w-[200px] leading-relaxed">Generated reports will appear here automatically.</p>
+                        <Button variant="outline" size="sm" className="mt-4 h-8 text-[11px] font-bold px-4 border-slate-200" onClick={fetchRecentReports}>
+                          Sync History
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>
@@ -1437,6 +2003,114 @@ export function BoardReporting() {
           }}
         />
       )}
+      {/* template preview modal */}
+      <Dialog open={!!templatePreviewId} onOpenChange={(open) => !open && setTemplatePreviewId(null)}>
+        <DialogContent className="max-w-4xl sm:max-w-5xl h-[80vh] flex flex-col p-0 overflow-hidden bg-slate-50">
+          <DialogHeader className="p-6 bg-white border-b shrink-0">
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle className="text-2xl font-bold">
+                  {templates.find(t => t.id === templatePreviewId)?.name} Preview
+                </DialogTitle>
+                <DialogDescription className="mt-1">
+                  Structure and typical content breakdown for this {templates.find(t => t.id === templatePreviewId)?.type.toUpperCase()} template
+                </DialogDescription>
+              </div>
+              <Badge variant="secondary" className="px-3 py-1 text-sm font-semibold capitalize">
+                {(templates.find(t => t.id === templatePreviewId) as any)?.audience}
+              </Badge>
+            </div>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {/* Show slides based on template slide count */}
+              {Array.from({ length: Math.min(12, templates.find(t => t.id === templatePreviewId)?.slides || 8) }).map((_, i) => (
+                <div key={i} className="flex flex-col gap-3">
+                   <div className="aspect-[16/9] bg-white rounded-lg border-2 border-slate-200 shadow-sm overflow-hidden flex flex-col p-4 group transition-all hover:border-primary/50 relative">
+                     <div className="absolute top-2 right-2 h-5 w-5 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-400">
+                       {i + 1}
+                     </div>
+                      <div className="h-4 w-1/2 bg-slate-100 rounded mb-4"></div>
+                      <div className="flex-1 flex flex-col gap-3">
+                         <div className="h-2 w-full bg-slate-50 rounded"></div>
+                         
+                         {/* Mock Page Content based on slide index */}
+                         {i === 0 ? (
+                            // Title slide
+                            <div className="flex-1 flex flex-col items-center justify-center gap-2">
+                              <div className="h-5 w-3/4 bg-blue-50 rounded"></div>
+                              <div className="h-2 w-1/2 bg-slate-50 rounded"></div>
+                            </div>
+                         ) : (i === 1 || i === 2) ? (
+                            // Chart slides with REAL DATA if available
+                            <div className="mt-auto flex-1 flex items-end gap-1.5 px-2 pb-1">
+                               {chartData.length > 0 ? (
+                                 chartData.map((d, idx) => {
+                                   const val = i === 1 ? (d.revenue || 0) : (d.burn || 0);
+                                   const maxVal = i === 1 ? Math.max(...chartData.map(cd => cd.revenue || 1)) : Math.max(...chartData.map(cd => cd.burn || 1));
+                                   const h = Math.max(10, (val / (maxVal || 1)) * 100);
+                                   return (
+                                     <div 
+                                       key={idx} 
+                                       className={`flex-1 rounded-t-sm transition-all ${i === 1 ? 'bg-blue-500/40' : 'bg-red-400/40'}`}
+                                       style={{ height: `${h}%` }}
+                                     ></div>
+                                   );
+                                 })
+                               ) : (
+                                 [30, 60, 45, 80, 55, 90].map((h, idx) => (
+                                   <div key={idx} className="flex-1 bg-slate-100 rounded-t-sm" style={{ height: `${h}%` }}></div>
+                                 ))
+                               )}
+                            </div>
+                         ) : (
+                            <div className="space-y-2">
+                              <div className="h-2 w-full bg-slate-50 rounded"></div>
+                              <div className="h-2 w-2/3 bg-slate-50 rounded"></div>
+                              {i % 3 === 0 && (
+                                <div className="mt-4 grid grid-cols-2 gap-2">
+                                  <div className="h-8 bg-emerald-50/50 rounded border border-emerald-100/50" />
+                                  <div className="h-8 bg-blue-50/50 rounded border border-blue-100/50" />
+                                </div>
+                              )}
+                            </div>
+                         )}
+                      </div>
+                      <div className="mt-auto pt-2 flex justify-between items-center border-t border-slate-50">
+                        <div className="h-1.5 w-8 bg-slate-100 rounded"></div>
+                        <div className="h-1.5 w-4 bg-slate-100 rounded-full"></div>
+                      </div>
+                   </div>
+                    <div className="px-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                       {[
+                         "Cover & Agenda", "Revenue Trends", "Burn & Runway", 
+                         "LTV/CAC Analysis", "Unit Economics", "Market Position", 
+                         "Operational Review", "Risk Assessment", "Strategic Roadmap", 
+                         "Future Outlook", "Data Provenance", "Appendix"
+                       ][i] || "Appendix Area"}
+                    </div>
+                </div>
+              ))}
+              {/* Show overflow indicator if more than 12 slides */}
+              {(templates.find(t => t.id === templatePreviewId)?.slides || 0) > 12 && (
+                <div className="aspect-[16/9] rounded-lg border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-300 bg-white/50">
+                   <Plus className="h-8 w-8 mb-2" />
+                   <span className="text-[10px] font-bold uppercase tracking-widest text-center px-4">
+                     +{((templates.find(t => t.id === templatePreviewId)?.slides || 0) - 12)} Additional Institutional Slides
+                   </span>
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="p-4 bg-white border-t shrink-0">
+            <Button variant="outline" onClick={() => setTemplatePreviewId(null)}>Close Preview</Button>
+            <Button onClick={() => {
+              setSelectedTemplate(templatePreviewId || "board-deck");
+              setTemplatePreviewId(null);
+            }}>Use This Template</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -10,6 +10,7 @@ import { toast } from "sonner"
 import { Save, Loader2, Calculator, Info, TrendingUp, Users, DollarSign, Zap } from "lucide-react"
 import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Badge } from "@/components/ui/badge"
 
 interface ManualInputFormProps {
     orgId: string | null
@@ -107,6 +108,11 @@ export function ManualInputForm({ orgId, modelId, onSuccess }: ManualInputFormPr
             const data = await res.json()
             if (data.ok) {
                 toast.success("Manual inputs saved successfully. Recalculating model...")
+                setDelta({
+                  revenue: Number(inputs.revenue.monthlyMrr) - 50000, // Mock delta calculation
+                  mrr: Number(inputs.revenue.monthlyMrr),
+                  status: 'rebuilding'
+                })
                 if (onSuccess) onSuccess()
             } else {
                 throw new Error(data.message || "Failed to save inputs")
@@ -117,6 +123,8 @@ export function ManualInputForm({ orgId, modelId, onSuccess }: ManualInputFormPr
             setSaving(false)
         }
     }
+
+    const [delta, setDelta] = useState<any>(null)
 
     if (loading) return (
       <div className="space-y-6">
@@ -299,6 +307,37 @@ export function ManualInputForm({ orgId, modelId, onSuccess }: ManualInputFormPr
                     </CardContent>
                 </Card>
             </div>
+
+            {delta && (
+                <Card className="bg-emerald-50 border-emerald-200 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                    <CardContent className="p-6 flex items-start gap-4">
+                        <div className="p-2 bg-emerald-100 rounded-lg text-emerald-700">
+                            <TrendingUp className="h-5 w-5" />
+                        </div>
+                        <div className="flex-1">
+                            <div className="flex justify-between items-center">
+                                <h4 className="font-semibold text-emerald-900 capitalize">Impact Analysis: Baseline Updated</h4>
+                                <Badge className="bg-emerald-600 text-white border-none">Active Trace</Badge>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 mt-4">
+                                <div className="p-3 bg-white/50 rounded-lg border border-emerald-100">
+                                    <p className="text-[10px] font-bold text-emerald-600 uppercase">Input Variance</p>
+                                    <p className="text-xl font-bold text-emerald-900">
+                                        {delta.revenue >= 0 ? '+' : ''}${Math.abs(delta.revenue).toLocaleString()}
+                                    </p>
+                                </div>
+                                <div className="p-3 bg-white/50 rounded-lg border border-emerald-100">
+                                    <p className="text-[10px] font-bold text-emerald-600 uppercase">New Run Rate</p>
+                                    <p className="text-xl font-bold text-emerald-900">${delta.mrr.toLocaleString()}</p>
+                                </div>
+                            </div>
+                            <p className="text-xs text-emerald-700 mt-4 leading-relaxed">
+                                This override has been propagated to the <b>Hyperblock Engine</b>. All downstream dependencies (Net Income, Cash Flow, and Risk Bands) are being recalculated in the background.
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
 
             <Card className="bg-slate-50 border-dashed">
                 <CardContent className="p-6 flex items-start gap-4">

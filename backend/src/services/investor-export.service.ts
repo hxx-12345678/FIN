@@ -89,7 +89,7 @@ export const investorExportService = {
           orgId: params.orgId,
           type: params.format === 'memo' ? 'pdf' : params.format,
           createdById: userId,
-          // updatedAt is auto-managed by Prisma @updatedAt, don't include it
+          metaJson: params.metadata || {},
         },
       });
 

@@ -166,6 +166,27 @@ export const alertController = {
       next(error);
     }
   },
+
+  /**
+   * GET /api/v1/orgs/:orgId/audit-logs - Get audit logs for org
+   */
+  getAuditLogs: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        throw new ValidationError('User not authenticated');
+      }
+
+      const { orgId } = req.params;
+      const logs = await alertService.getAuditLogs(orgId, req.user.id);
+
+      res.json({
+        ok: true,
+        logs,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
 };
 
 

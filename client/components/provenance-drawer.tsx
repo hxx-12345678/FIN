@@ -121,7 +121,7 @@ export function ProvenanceDrawer({
       const data = await response.json()
 
       if (data.ok && data.entries) {
-        const transformed = transformProvenanceResponse(data, cellKey)
+        const transformed = transformProvenanceResponse(data, cellKey, initialProvenanceData?.value)
         setProvenanceData(transformed)
       } else {
         throw new Error('Invalid provenance response format')
@@ -136,7 +136,7 @@ export function ProvenanceDrawer({
     }
   }
 
-  const transformProvenanceResponse = (apiData: any, cellKey: string): ProvenanceData => {
+  const transformProvenanceResponse = (apiData: any, cellKey: string, fallbackValue?: string): ProvenanceData => {
     const transactions: any[] = []
     const assumptions: any[] = []
     const auditTrail: any[] = []
@@ -201,18 +201,26 @@ export function ProvenanceDrawer({
     const parts = cellKey.split(':')
     const metricName = parts.length > 1 ? `${parts[1]}${parts[2] ? ` - ${parts[2]}` : ''}` : cellKey
 
-    // Try to extract value from entries if available
-    let cellValue = 'N/A'
-    if (apiData.entries && apiData.entries.length > 0) {
-      // Try to get value from summary or sourceRef
+    let cellValue = fallbackValue !== undefined && fallbackValue !== null ? String(fallbackValue) : 'N/A'
+    
+    // Safely format raw float strings that might be passed from the grid calculation layer
+    if (cellValue !== 'N/A' && !isNaN(Number(cellValue)) && cellValue.trim() !== '') {
+      const numValue = Number(cellValue)
+      if (Math.abs(numValue) >= 1000) {
+        cellValue = `$${(numValue / 1000).toFixed(1)}K`
+      } else {
+        cellValue = `$${numValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      }
+    }
+    
+    // Only attempt to extract from entries if we don't have a valid fallback value
+    if (cellValue === 'N/A' && apiData.entries && apiData.entries.length > 0) {
       const firstEntry = apiData.entries[0]
 
-      // Priority 1: Check summary.totalAmount (for transaction-based entries)
-      if (firstEntry.summary && firstEntry.summary.totalAmount !== undefined) {
+      if (firstEntry.summary && firstEntry.summary.totalAmount !== undefined && firstEntry.summary.totalAmount !== null) {
         cellValue = `$${Number(firstEntry.summary.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       }
-      // Priority 2: Check assumptionRef.value (for assumption-based entries)
-      else if (firstEntry.assumptionRef && firstEntry.assumptionRef.value !== undefined) {
+      else if (firstEntry.assumptionRef && firstEntry.assumptionRef.value !== undefined && firstEntry.assumptionRef.value !== null) {
         const val = firstEntry.assumptionRef.value
         if (typeof val === 'number') {
           cellValue = `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -220,17 +228,16 @@ export function ProvenanceDrawer({
           cellValue = String(val)
         }
       }
-      // Priority 3: Check sourceRef.value
       else if (firstEntry.sourceRef && typeof firstEntry.sourceRef === 'object') {
         const ref = firstEntry.sourceRef
-        if (ref.value !== undefined) {
+        if (ref.value !== undefined && ref.value !== null) {
           const val = ref.value
           if (typeof val === 'number') {
             cellValue = `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
           } else {
             cellValue = String(val)
           }
-        } else if (ref.total_amount !== undefined) {
+        } else if (ref.total_amount !== undefined && ref.total_amount !== null) {
           cellValue = `$${Number(ref.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
         }
       }

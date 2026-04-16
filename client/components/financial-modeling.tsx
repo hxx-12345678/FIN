@@ -146,6 +146,14 @@ export function FinancialModeling() {
   const [strategicPulse, setStrategicPulse] = useState<any>(null)
   const [isAnalyzingPulse, setIsAnalyzingPulse] = useState(false)
   const [isGlobalRecomputing, setIsGlobalRecomputing] = useState(false)
+  const [isMobileView, setIsMobileView] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobileView(window.innerWidth < 768)
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
   // Dirty flag: when set, fetchModelRuns will NOT overwrite currentRun / financialData
   const localRecomputeDirtyRef = React.useRef(false)
   const initialFetchDoneRef = React.useRef(false)
@@ -937,7 +945,7 @@ export function FinancialModeling() {
   }
 
   return (
-    <div className="container mx-auto p-4 space-y-6 max-w-7xl">
+    <div className="w-full space-y-6 animate-in fade-in duration-700 px-1 sm:px-4 max-w-full overflow-x-hidden">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Institutional Financial Modeling</h1>
@@ -975,7 +983,7 @@ export function FinancialModeling() {
 
 
 
-      <Card className="bg-gradient-to-r from-slate-900 to-slate-800 text-white border-none shadow-xl overflow-hidden">
+      <Card className="relative bg-gradient-to-r from-slate-900 to-slate-800 text-white border-none shadow-xl overflow-hidden">
         <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
           <Zap className="h-32 w-32" />
         </div>
@@ -1044,10 +1052,8 @@ export function FinancialModeling() {
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="overflow-hidden border-2 border-primary/20 hover:border-primary/40 transition-all duration-300 group cursor-pointer shadow-md hover:shadow-xl bg-gradient-to-br from-white to-slate-50" onClick={() => { setCreateModelAiMode(false); setShowCreateModelDialog(true); }}>
-          <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-            <Calculator className="h-12 w-12 text-primary" />
-          </div>
+        <Card className="relative overflow-hidden border-2 border-primary/20 hover:border-primary/40 transition-all duration-300 group cursor-pointer shadow-md hover:shadow-xl bg-gradient-to-br from-white to-slate-50" onClick={() => { setCreateModelAiMode(false); setShowCreateModelDialog(true); }}>
+
           <CardContent className="p-6">
             <div className="flex items-center gap-4">
               <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-all duration-500 shadow-inner">
@@ -1065,22 +1071,20 @@ export function FinancialModeling() {
         </Card>
 
         <Card
-          className={`overflow-hidden border-2 transition-all duration-300 group cursor-pointer shadow-md hover:shadow-xl bg-gradient-to-br from-white to-purple-50 ${dataStatus?.intelligenceGating?.dataDrivenAI
+          className={`relative overflow-hidden border-2 transition-all duration-300 group cursor-pointer shadow-md hover:shadow-xl bg-gradient-to-br from-white to-purple-50 ${dataStatus?.intelligenceGating?.dataDrivenAI
             ? 'border-purple-500/20 hover:border-purple-500/40'
             : 'border-slate-200 opacity-75'
             }`}
           onClick={handleAIGenerate}
         >
-          <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-            <Brain className="h-12 w-12 text-purple-600" />
-          </div>
+
           <CardContent className="p-6">
             <div className="flex items-center gap-4">
               <div className={`h-14 w-14 rounded-2xl flex items-center justify-center transition-all duration-500 shadow-inner ${dataStatus?.intelligenceGating?.dataDrivenAI
                 ? 'bg-purple-500/10 text-purple-600 group-hover:bg-purple-600 group-hover:text-white'
                 : 'bg-slate-100 text-slate-400'
                 }`}>
-                <Brain className="h-7 w-7" />
+                <Sparkles className="h-7 w-7" />
               </div>
               <div>
                 <h3 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-pink-600">Precision Build</h3>
@@ -1497,40 +1501,44 @@ export function FinancialModeling() {
                           <DollarSign className="h-4 w-4 text-purple-600" />
                           <h4 className="text-xs font-black text-slate-900 uppercase tracking-tighter">Institutional Sources & Uses</h4>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="adaptive-grid">
                           <div className="space-y-2">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Sources of Funds</p>
-                            <Table className="text-[11px] border rounded-lg overflow-hidden">
-                              <TableBody>
-                                {Object.entries((currentRun?.summaryJson as any)?.lbo?.sourcesUses?.sources || {}).map(([key, val]: [string, any]) => (
-                                  <TableRow key={key} className="h-8">
-                                    <TableCell className="py-1 font-medium">{key}</TableCell>
-                                    <TableCell className="py-1 text-right font-bold text-indigo-600">{formatCurrency(val as number)}</TableCell>
+                            <div className="table-container-premium">
+                              <Table className="text-[11px]">
+                                <TableBody>
+                                  {Object.entries((currentRun?.summaryJson as any)?.lbo?.sourcesUses?.sources || {}).map(([key, val]: [string, any]) => (
+                                    <TableRow key={key} className="h-8">
+                                      <TableCell className="py-1 font-medium">{key}</TableCell>
+                                      <TableCell className="py-1 text-right font-bold text-indigo-600">{formatCurrency(val as number)}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                  <TableRow className="bg-slate-50 h-8 font-black">
+                                    <TableCell className="py-1">Total Sources</TableCell>
+                                    <TableCell className="py-1 text-right">{formatCurrency(Object.values((currentRun?.summaryJson as any)?.lbo?.sourcesUses?.sources || {}).reduce((a: any, b: any) => a + b, 0) as number)}</TableCell>
                                   </TableRow>
-                                ))}
-                                <TableRow className="bg-slate-50 h-8 font-black">
-                                  <TableCell className="py-1">Total Sources</TableCell>
-                                  <TableCell className="py-1 text-right">{formatCurrency(Object.values((currentRun?.summaryJson as any)?.lbo?.sourcesUses?.sources || {}).reduce((a: any, b: any) => a + b, 0) as number)}</TableCell>
-                                </TableRow>
-                              </TableBody>
-                            </Table>
+                                </TableBody>
+                              </Table>
+                            </div>
                           </div>
                           <div className="space-y-2">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Uses of Funds</p>
-                            <Table className="text-[11px] border rounded-lg overflow-hidden">
-                              <TableBody>
-                                {Object.entries((currentRun?.summaryJson as any)?.lbo?.sourcesUses?.uses || {}).map(([key, val]: [string, any]) => (
-                                  <TableRow key={key} className="h-8">
-                                    <TableCell className="py-1 font-medium">{key}</TableCell>
-                                    <TableCell className="py-1 text-right font-bold text-rose-600">{formatCurrency(val as number)}</TableCell>
+                            <div className="table-container-premium">
+                              <Table className="text-[11px]">
+                                <TableBody>
+                                  {Object.entries((currentRun?.summaryJson as any)?.lbo?.sourcesUses?.uses || {}).map(([key, val]: [string, any]) => (
+                                    <TableRow key={key} className="h-8">
+                                      <TableCell className="py-1 font-medium">{key}</TableCell>
+                                      <TableCell className="py-1 text-right font-bold text-rose-600">{formatCurrency(val as number)}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                  <TableRow className="bg-slate-50 h-8 font-black">
+                                    <TableCell className="py-1">Total Uses</TableCell>
+                                    <TableCell className="py-1 text-right">{formatCurrency(Object.values((currentRun?.summaryJson as any)?.lbo?.sourcesUses?.uses || {}).reduce((a: any, b: any) => a + b, 0) as number)}</TableCell>
                                   </TableRow>
-                                ))}
-                                <TableRow className="bg-slate-50 h-8 font-black">
-                                  <TableCell className="py-1">Total Uses</TableCell>
-                                  <TableCell className="py-1 text-right">{formatCurrency(Object.values((currentRun?.summaryJson as any)?.lbo?.sourcesUses?.uses || {}).reduce((a: any, b: any) => a + b, 0) as number)}</TableCell>
-                                </TableRow>
-                              </TableBody>
-                            </Table>
+                                </TableBody>
+                              </Table>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1546,7 +1554,7 @@ export function FinancialModeling() {
               SAAS KPI ROW — Unit Economics from computed data
           ═══════════════════════════════════════════════════════ */}
           {(currentRun?.summaryJson as any)?.arr > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+            <div className="adaptive-grid !grid-cols-2 md:!grid-cols-4 lg:!grid-cols-8">
               {[
                 { label: 'ARR', value: formatCurrency((currentRun?.summaryJson as any)?.arr || ((currentRun?.summaryJson as any)?.mrr * 12) || 0), icon: TrendingUp, color: 'blue' },
                 { label: 'CAC', value: formatCurrency((currentRun?.summaryJson as any)?.cac || (currentRun?.summaryJson as any)?.kpis?.cac || 0), icon: Users, color: 'purple' },
@@ -1741,7 +1749,7 @@ export function FinancialModeling() {
                 <CardDescription>Consolidated performance with provenance</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
+                <div className="table-container-premium !border-0 !shadow-none">
                   <Table>
                     <TableHeader className="bg-slate-50">
                       <TableRow>
@@ -2322,12 +2330,21 @@ export function FinancialModeling() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
               <DependencyGraph
-                nodes={currentModel?.drivers?.map(d => ({
+                nodes={currentModel?.drivers && currentModel.drivers.length > 0 ? currentModel.drivers.map(d => ({
                   id: d.id,
                   name: d.name,
                   type: d.isCalculated ? 'formula' : 'input' as any
-                })) || []}
-                edges={(() => {
+                })) : [
+                  { id: 'rev', name: 'Revenue', type: 'formula' },
+                  { id: 'cogs', name: 'COGS', type: 'formula' },
+                  { id: 'gp', name: 'Gross Profit', type: 'formula' },
+                  { id: 'opex', name: 'Operating Expenses', type: 'input' },
+                  { id: 'ebitda', name: 'EBITDA', type: 'formula' },
+                  { id: 'dep', name: 'Depreciation', type: 'input' },
+                  { id: 'net', name: 'Net Income', type: 'formula' },
+                  { id: 'cash', name: 'Cash Flow', type: 'formula' },
+                ]}
+                edges={currentModel?.drivers && currentModel.drivers.length > 0 ? (() => {
                   const edges: any[] = [];
                   currentModel?.driverFormulas?.forEach(f => {
                     const deps = typeof f.dependencies === 'string' ? JSON.parse(f.dependencies) : f.dependencies;
@@ -2336,7 +2353,15 @@ export function FinancialModeling() {
                     }
                   });
                   return edges;
-                })()}
+                })() : [
+                  { source: 'rev', target: 'gp' },
+                  { source: 'cogs', target: 'gp' },
+                  { source: 'gp', target: 'ebitda' },
+                  { source: 'opex', target: 'ebitda' },
+                  { source: 'ebitda', target: 'net' },
+                  { source: 'dep', target: 'net' },
+                  { source: 'net', target: 'cash' },
+                ]}
                 affectedNodeIds={affectedNodeIds}
               />
             </div>

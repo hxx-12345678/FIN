@@ -106,6 +106,8 @@ export const boardReportingController = {
         selectedMetrics = [],
         reportTitle,
         reportingPeriod,
+        aiContent,
+        distribution,
       } = req.body;
 
       if (!['pptx', 'pdf', 'memo'].includes(format)) {
@@ -141,6 +143,8 @@ export const boardReportingController = {
           selectedMetrics,
           reportTitle,
           reportingPeriod,
+          aiContent,
+          distribution,
           budgetActualData: budgetActualData
             ? {
                 summary: budgetActualData.summary,
@@ -176,7 +180,7 @@ export const boardReportingController = {
           name: 'Monthly Board Deck',
           description: 'Comprehensive board presentation with key metrics and insights',
           type: 'presentation',
-          slides: 12,
+          slides: 8,
           status: 'ready',
         },
         {
@@ -184,7 +188,7 @@ export const boardReportingController = {
           name: 'Investor Update',
           description: 'Monthly investor communication with progress updates',
           type: 'email',
-          slides: 8,
+          slides: 6,
           status: 'ready',
         },
         {
@@ -200,7 +204,7 @@ export const boardReportingController = {
           name: 'Financial Review',
           description: 'Detailed financial analysis and variance reporting',
           type: 'document',
-          slides: 16,
+          slides: 7,
           status: 'ready',
         },
         {
@@ -208,7 +212,7 @@ export const boardReportingController = {
           name: 'Budget Variance Report',
           description: 'Detailed budget vs actual analysis with variance explanations',
           type: 'document',
-          slides: 10,
+          slides: 7,
           status: 'ready',
         },
       ];
@@ -242,21 +246,21 @@ export const boardReportingController = {
       const metrics = [
         {
           name: 'Monthly Recurring Revenue',
-          value: `$${Math.round((summary.arr || 0) / 12).toLocaleString()}`,
+          value: `$${Math.round((summary.arr || 0) / 12).toLocaleString('en-US')}`,
           change: `+${summary.arrGrowth || 0}%`,
           trend: (summary.arrGrowth || 0) > 0 ? 'up' : 'down',
           category: 'revenue',
         },
         {
           name: 'Annual Recurring Revenue',
-          value: `$${Math.round(summary.arr || 0).toLocaleString()}`,
+          value: `$${Math.round(summary.arr || 0).toLocaleString('en-US')}`,
           change: `+${summary.arrGrowth || 0}%`,
           trend: (summary.arrGrowth || 0) > 0 ? 'up' : 'down',
           category: 'revenue',
         },
         {
           name: 'Active Customers',
-          value: (summary.activeCustomers || 0).toLocaleString(),
+          value: (summary.activeCustomers || 0).toLocaleString('en-US'),
           change: `+${summary.customerGrowth || 0}%`,
           trend: (summary.customerGrowth || 0) > 0 ? 'up' : 'down',
           category: 'customers',
@@ -298,14 +302,14 @@ export const boardReportingController = {
         },
         {
           name: 'Burn Rate',
-          value: `$${dashboardData.monthlyMetrics?.[dashboardData.monthlyMetrics.length - 1]?.burn?.toLocaleString() || 0}`,
+          value: `$${dashboardData.monthlyMetrics?.[dashboardData.monthlyMetrics.length - 1]?.burn?.toLocaleString('en-US') || 0}`,
           change: `0%`,
           trend: 'down',
           category: 'cash',
         },
         {
           name: 'Rule of 40',
-          value: `${saas.ruleOf40 || 0}%`,
+          value: `${(saas.ruleOf40 || 0).toFixed(1)}%`,
           change: `Efficiency`,
           trend: (saas.ruleOf40 || 0) >= 40 ? 'up' : 'down',
           category: 'profitability',

@@ -336,7 +336,7 @@ export function RiskAnalysisHub({ orgId, modelId }: { orgId: string | null, mode
                         <CardHeader className="pb-2">
                             <CardTitle className="text-sm flex items-center gap-2 text-rose-500 font-bold uppercase tracking-wider">
                                 <AlertCircle className="h-4 w-4" />
-                                Fatal Risk: Bankruptcy
+                                Causal Bankruptcy Risk
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">

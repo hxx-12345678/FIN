@@ -27,6 +27,7 @@ const NotificationsPage = dynamic(() => import("@/components/notifications-page"
 const CompliancePage = dynamic(() => import("@/components/compliance-page").then(mod => mod.CompliancePage))
 const SettingsPage = dynamic(() => import("@/components/settings-page").then(mod => mod.SettingsPage))
 const OnboardingPage = dynamic(() => import("@/components/onboarding-page").then(mod => mod.OnboardingPage))
+const DocumentationPage = dynamic(() => import("@/components/documentation-page").then(mod => mod.DocumentationPage))
 const CollaborationPage = dynamic(() => import("@/components/collaboration-page").then(mod => mod.CollaborationPage))
 const ApprovalManagement = dynamic(() => import("@/components/approval-management").then(mod => mod.ApprovalManagement))
 const SemanticLedger = dynamic(() => import("@/components/semantic-ledger").then(mod => mod.SemanticLedger))
@@ -63,9 +64,9 @@ function HomePageContent() {
       const validViews = [
         "overview", "modeling", "budget-actual", "scenarios", "simulations",
         "forecasting", "assistant", "reports", "board-reporting", "investor",
-        "users", "integrations", "notifications", "compliance", "settings", 
-        "onboarding", "collaboration", "job-queue", "export-queue", "approvals", 
-        "ledger", "consolidation", "headcount"
+        "users", "integrations", "notifications", "compliance", "settings",
+        "onboarding", "collaboration", "job-queue", "export-queue", "approvals",
+        "ledger", "consolidation", "headcount", "docs"
       ]
       if (currentHash && validViews.includes(currentHash)) {
         return currentHash
@@ -75,7 +76,7 @@ function HomePageContent() {
         if (savedView && validViews.includes(savedView)) {
           return savedView
         }
-      } catch (_e) {}
+      } catch (_e) { }
     }
     return "overview"
   })
@@ -445,6 +446,8 @@ function HomePageContent() {
           return <SettingsPage />
         case "onboarding":
           return <OnboardingPage />
+        case "docs":
+          return <DocumentationPage />
         case "collaboration":
           return <CollaborationPage />
         case "approvals":

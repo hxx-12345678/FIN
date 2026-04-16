@@ -99,6 +99,9 @@
       "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
     font-feature-settings: "cv11", "ss01";
     font-variation-settings: "opsz" 32;
+    max-width: 100vw;
+    overflow-x: hidden;
+    position: relative;
   }
 }
 
@@ -199,4 +202,33 @@ html {
 
 .tab-trigger-premium {
   @apply px-4 py-2 text-xs font-bold transition-all duration-300 rounded-lg whitespace-nowrap;
+}
+
+/* Institutional Table Responsiveness */
+.table-container-premium {
+  @apply w-full overflow-x-auto rounded-xl border border-slate-200/60 bg-white shadow-sm;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-premium {
+  @apply min-w-full divide-y divide-slate-100;
+}
+
+/* Force prevent horizontal scroll on outer containers */
+.no-x-scroll {
+  max-width: 100%;
+  overflow-x: hidden !important;
+}
+
+/* Responsive Grid for Cards */
+.adaptive-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+@media (max-width: 640px) {
+  .adaptive-grid {
+    grid-template-columns: 1fr;
+  }
 }

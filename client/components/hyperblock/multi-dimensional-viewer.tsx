@@ -371,7 +371,7 @@ export function MultiDimensionalViewer({ orgId, modelId }: { orgId: string | nul
                                 </div>
                                 <div className="flex justify-between items-center text-xs">
                                     <span className="text-blue-200">Unique data points</span>
-                                    <Badge className="bg-blue-400/30 text-white border-none">1,402</Badge>
+                                    <Badge className="bg-blue-400/30 text-white border-none">{pivotData ? (pivotData.rows.length * pivotData.columns.length).toLocaleString() : "0"}</Badge>
                                 </div>
                             </div>
                         </CardContent>

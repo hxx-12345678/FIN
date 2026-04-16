@@ -85,6 +85,78 @@ export const exportController = {
   },
 
   /**
+   * GET /api/v1/exports/:id/status
+   * Get the status of an export
+   */
+  getExportStatus: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const exportRecord = await prisma.export.findUnique({
+        where: { id },
+        select: { id: true, status: true, updatedAt: true },
+      });
+
+      if (!exportRecord) {
+        throw new NotFoundError('Export not found');
+      }
+
+      res.json({ 
+        ok: true, 
+        id: exportRecord.id, 
+        exportId: exportRecord.id, // For client compatibility
+        status: exportRecord.status,
+        progress: exportRecord.status === 'completed' ? 100 : 0, // Simplified for now
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  /**
+   * POST /api/v1/exports/:id/cancel
+   * Cancel an ongoing export
+   */
+  cancelExport: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const exportRecord = await prisma.export.findUnique({
+        where: { id },
+      });
+
+      if (!exportRecord) {
+        throw new NotFoundError('Export not found');
+      }
+
+      if (exportRecord.status === 'completed' || exportRecord.status === 'failed') {
+        return res.status(400).json({
+          ok: false,
+          error: { code: 'INVALID_STATE', message: `Cannot cancel export with status: ${exportRecord.status}` },
+        });
+      }
+
+      // Update status to cancelled
+      await prisma.export.update({
+        where: { id },
+        data: { status: 'failed' }, // Or 'cancelled' if your schema supports it
+      });
+
+      // Try to cancel the associated job if it exists
+      const job = await prisma.job.findFirst({
+        where: { objectId: id, jobType: { startsWith: 'export_' } },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (job && (job.status === 'pending' || job.status === 'queued' || job.status === 'running')) {
+        await jobService.cancelJob(job.id, req.user.id);
+      }
+
+      res.json({ ok: true, message: 'Export cancellation requested' });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  /**
    * GET /api/v1/exports/:id/download
    * Download export file directly from database
    */

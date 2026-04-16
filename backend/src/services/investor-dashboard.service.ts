@@ -190,27 +190,8 @@ export const investorDashboardService = {
         }
       }
     }
-
-    // Extract monthly metrics (after we have activeCustomers)
-    const monthlyMetrics = extractMonthlyMetrics(summary, activeCustomers);
-
-    // Calculate growth rates
-    const arrGrowth = calculateGrowthRate(monthlyMetrics, 'arr');
-    const customerGrowth = calculateGrowthRate(monthlyMetrics, 'customers');
-
-    // Calculate health score (0-100)
-    const healthScore = calculateHealthScore({
-      arr,
-      burnRate,
-      runwayMonths,
-      arrGrowth,
-    });
-
-    // Get milestones and updates (data-driven from actual metrics and audit logs)
-    const milestones = getMilestones(arr, runwayMonths);
-    const keyUpdates = await getKeyUpdates(orgId, latestModelRun.createdAt);
-
     // If still 0 customers but we have revenue, count from transactions
+    // Do this BEFORE extracting monthly metrics so we can use it there
     if (activeCustomers === 0 && arr > 0) {
       const transactions = await prisma.rawTransaction.findMany({
         where: {
@@ -243,9 +224,28 @@ export const investorDashboardService = {
       }
       activeCustomers = uniqueCustomers.size;
       if (activeCustomers > 0) {
-        console.log(`[InvestorDashboard] Calculated ${activeCustomers} unique customers from transactions (model run had 0)`);
+        console.log(`[InvestorDashboard] Calculated ${activeCustomers} unique customers from transactions (fallback)`);
       }
     }
+
+    // Extract monthly metrics (after we have activeCustomers)
+    const monthlyMetrics = extractMonthlyMetrics(summary, activeCustomers);
+
+    // Calculate growth rates
+    const arrGrowth = calculateGrowthRate(monthlyMetrics, 'arr');
+    const customerGrowth = calculateGrowthRate(monthlyMetrics, 'customers');
+
+    // Calculate health score (0-100)
+    const healthScore = calculateHealthScore({
+      arr,
+      burnRate,
+      runwayMonths,
+      arrGrowth,
+    });
+
+    // Get milestones and updates (data-driven from actual metrics and audit logs)
+    const milestones = getMilestones(arr, runwayMonths);
+    const keyUpdates = await getKeyUpdates(orgId, latestModelRun.createdAt);
 
     // Calculate unit economics - try summary first, then model assumptions, then calculate from data
     let ltv = Number(summary.ltv || summary.customerLTV || summary.kpis?.ltv || 0);
@@ -766,11 +766,12 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
     const monthName = monthNames[monthIndex];
     const revenue = monthlyRevenueMap.get(period) || 0;
     const burn = monthlyExpenseMap.get(period) || 0;
+    const periodCustomers = monthlyCustomersMap.get(period)?.size || 0;
 
     monthlyMetrics.push({
       month: monthName,
       revenue: Math.round(revenue),
-      customers: activeCustomers, // Use calculated activeCustomers for all months
+      customers: periodCustomers > 0 ? periodCustomers : activeCustomers, 
       burn: Math.round(burn),
       arr: Math.round(revenue * 12),
     });

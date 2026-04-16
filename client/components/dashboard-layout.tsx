@@ -206,6 +206,16 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
   const { selectedModelId, setSelectedModelId, orgId: contextOrgId, setOrgId: setContextOrgId } = useModel()
   const [models, setModels] = useState<any[]>([])
   const [currentOrgId, setCurrentOrgId] = useState<string | null>(contextOrgId)
+  
+  // Notification toast state
+  const [activeNotificationToast, setActiveNotificationToast] = useState<{
+    id: string;
+    title: string;
+    message: string;
+    type: string;
+  } | null>(null)
+  const [showNotificationToast, setShowNotificationToast] = useState(false)
+  const [notificationCount, setNotificationCount] = useState(0)
 
   // Fetch user data
   useEffect(() => {
@@ -310,51 +320,35 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
     const pollNotifications = async () => {
       try {
         const res = await fetch(
-          `${API_BASE_URL}/orgs/${currentOrgId}/notifications?priority=high&read=false&limit=5`,
+          `${API_BASE_URL}/orgs/${currentOrgId}/notifications?read=false&limit=10`,
           { headers: getAuthHeaders(), credentials: "include" }
         )
         if (!res.ok) return
         const result = await res.json()
-        if (!result.ok || !result.data?.length) return
+        if (!result.ok || !result.data) return
 
-        // Load suppressed alert IDs (persisted, not just session)
-        const suppressed: string[] = JSON.parse(
-          localStorage.getItem("fina_suppressed_alerts") || "[]"
-        )
+        const newCount = result.data.filter((n: any) => !n.read).length
+        setNotificationCount(newCount)
 
-        result.data.forEach((notif: any) => {
-          if (suppressed.includes(notif.id)) return
-          const toastId = `alert-${notif.id}`
-
-          const markRead = () => {
-            fetch(
-              `${API_BASE_URL}/orgs/${currentOrgId}/notifications/${notif.id}/read`,
-              { method: "PUT", headers: getAuthHeaders(), credentials: "include" }
-            ).catch(() => {})
-            toast.dismiss(toastId)
+        if (result.data.length > 0) {
+          const latest = result.data[0]
+          
+          // Check if this is truly "new" (not seen in this session)
+          const seenIds = JSON.parse(sessionStorage.getItem("fina_seen_notifs") || "[]")
+          if (!seenIds.includes(latest.id)) {
+            // Show custom sidebar toast
+            setActiveNotificationToast(latest)
+            setShowNotificationToast(true)
+            
+            // Auto hide after 5 seconds
+            setTimeout(() => {
+              setShowNotificationToast(false)
+            }, 5000)
+            
+            // Mark as seen in session
+            sessionStorage.setItem("fina_seen_notifs", JSON.stringify([...seenIds, latest.id]))
           }
-
-          const suppress = () => {
-            const updated = [...suppressed, notif.id]
-            localStorage.setItem("fina_suppressed_alerts", JSON.stringify(updated))
-            toast.dismiss(toastId)
-          }
-
-          // Use toast.error with description string (Sonner v1 compatible approach)
-          toast.error(notif.title, {
-            id: toastId,
-            description: notif.message,
-            duration: 15000,   // 15 s auto-dismiss
-            action: {
-              label: "Dismiss",
-              onClick: markRead,
-            },
-            cancel: {
-              label: "Don't show again",
-              onClick: suppress,
-            },
-          })
-        })
+        }
       } catch (err) {
         console.error("[Notification Poll] error:", err)
       }
@@ -466,10 +460,10 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
         <Button
           variant="outline"
           size="icon"
-          className="fixed top-4 left-4 z-50 bg-background shadow-lg"
+          className="fixed top-4 left-4 z-[100] bg-white shadow-xl border-2 border-primary/20 hover:border-primary/50 transition-all rounded-xl"
           onClick={() => setSidebarOpen(!sidebarOpen)}
         >
-          {sidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+          {sidebarOpen ? <X className="h-5 w-5 text-primary" /> : <Menu className="h-5 w-5 text-primary" />}
         </Button>
       )}
 
@@ -568,7 +562,39 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
             </div>
           </div>
 
-          <div className="border-t p-2">
+          {activeNotificationToast && (
+            <div className={`mt-auto pt-6 border-t border-sidebar-border/50 px-4 mb-4 transition-all duration-700 ${showNotificationToast ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0 pointer-events-none h-0 p-0 m-0'}`}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className={`p-1.5 rounded-md ${activeNotificationToast.type === 'alert' ? 'bg-red-500/20' : 'bg-blue-500/20'}`}>
+                    <Zap className={`h-3.5 w-3.5 ${activeNotificationToast.type === 'alert' ? 'text-red-400' : 'text-blue-400'}`} />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-black text-white leading-tight uppercase tracking-widest">New Intelligence</p>
+                    <p className="text-[9px] text-sidebar-foreground/50 font-bold">Anomaly detected</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className={`p-3 rounded-xl border ${activeNotificationToast.type === 'alert' ? 'border-red-500/30 bg-red-500/5' : 'border-blue-500/30 bg-blue-500/5'} backdrop-blur-sm`}>
+                <p className="text-[10px] font-bold text-sidebar-foreground mb-1 line-clamp-2 leading-relaxed">
+                  {activeNotificationToast.message}
+                </p>
+                <button 
+                  onClick={() => {
+                    onViewChange('notifications');
+                    setNotificationCount(0);
+                    setActiveNotificationToast(null);
+                  }}
+                  className="flex items-center text-[9px] font-black text-blue-400 hover:text-blue-300 transition-colors uppercase tracking-widest"
+                >
+                  Investigate
+                  <Activity className="ml-1 h-2.5 w-2.5" />
+                </button>
+              </div>
+            </div>
+          )}
+            
             {loadingUser ? (
               <div className="flex items-center gap-2 p-2">
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -643,22 +669,21 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
             )}
           </div>
         </div>
-      </div>
 
       <div
         ref={mainContentRef}
         className={`
-          flex-1 flex flex-col min-h-screen
-          ${isMobile ? "w-full" : "w-full"}
+          flex-1 flex flex-col min-h-screen max-w-full
           transition-all duration-300 ease-in-out
         `}
         onClick={handleMainContentClick}
       >
         <header
           className={`
-          flex h-16 shrink-0 items-center gap-4 border-b px-4 md:px-6 
+          flex h-16 shrink-0 items-center justify-between gap-4 border-b px-4 md:px-6 
           bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60
           ${isMobile ? "pl-16" : "pl-6"}
+          w-full max-w-full overflow-hidden
         `}
         >
           {demoMode && (
@@ -691,10 +716,25 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
               </div>
             )}
           </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative hover:bg-slate-100 transition-colors"
+              onClick={() => handleNavClick("notifications")}
+            >
+              <Bell className="h-5 w-5 text-slate-600" />
+              {notificationCount > 0 && (
+                <span className={`absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm transition-colors ${notificationCount > 5 ? 'bg-red-600 animate-pulse' : 'bg-blue-600'}`}>
+                  {notificationCount > 9 ? "9+" : notificationCount}
+                </span>
+              )}
+            </Button>
+          </div>
         </header>
 
-        <main className="flex-1 overflow-auto bg-gray-50/50">
-          <div className="h-full w-full p-4 md:p-6">{children}</div>
+        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50/50 w-full">
+          <div className="mx-auto w-full max-w-full p-4 md:p-6 overflow-x-hidden">{children}</div>
         </main>
       </div>
 

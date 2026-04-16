@@ -193,15 +193,29 @@ export function AIAssistTab({ orgId, modelId, currentRunId, refreshKey, onSucces
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <div className="space-y-3">
-                                    {[
-                                        { field: "Target Retention", value: strategy === "efficiency" ? "98%" : "92%", change: "+4%" },
-                                        { field: "Avg Deal Size", value: "$45k", change: "+$5k" },
-                                        { field: "CAC Limit", value: strategy === "aggressive" ? "$25k" : "$12k", change: "-$2k" }
-                                    ].map((sug, i) => (
+                                    {(aiInsights?.suggestions || [
+                                        { 
+                                            field: strategy === "aggressive" ? "Growth Spend" : strategy === "efficiency" ? "Marketing OpEx" : "Retention Target", 
+                                            value: strategy === "aggressive" ? "+$25k" : strategy === "efficiency" ? "-15%" : "96%", 
+                                            change: strategy === "aggressive" ? "+12%" : strategy === "efficiency" ? "-5%" : "+2.4%" 
+                                        },
+                                        { 
+                                            field: "Hiring Plan", 
+                                            value: strategy === "aggressive" ? "Accelerated" : "Deferred", 
+                                            change: strategy === "aggressive" ? "+4 Heads" : "Frozen" 
+                                        },
+                                        { 
+                                            field: "Pricing Architecture", 
+                                            value: "Enterprise Tier", 
+                                            change: "+$5k ACV" 
+                                        }
+                                    ]).map((sug: any, i: number) => (
                                         <div key={i} className="flex items-center justify-between p-2 bg-white rounded border border-purple-100">
                                             <div className="text-xs font-semibold">{sug.field}</div>
                                             <div className="flex items-center gap-2">
-                                                <span className="text-[10px] text-emerald-600 font-bold">{sug.change}</span>
+                                                <span className={`text-[10px] font-bold ${sug.change.includes('-') ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                                    {sug.change}
+                                                </span>
                                                 <span className="font-mono text-xs">{sug.value}</span>
                                                 <Edit3 className="h-3 w-3 text-slate-300 cursor-pointer" />
                                             </div>

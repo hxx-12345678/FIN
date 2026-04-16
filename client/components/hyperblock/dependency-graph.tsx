@@ -100,10 +100,17 @@ export function DependencyGraph({ nodes, edges, affectedNodeIds = [] }: Dependen
                 </div>
             </CardHeader>
             <CardContent className="p-0 relative bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]">
-                <div className="overflow-auto max-h-[600px] min-h-[400px] p-10 custom-scrollbar">
+                <div className="overflow-auto max-h-[600px] min-h-[400px] p-10 custom-scrollbar relative">
+                    {nodes.length === 0 ? (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500">
+                            <Network className="h-12 w-12 mb-4 opacity-20" />
+                            <p>No computational drivers defined.</p>
+                            <p className="text-sm mt-1">Connect data sources or add drivers to visualize calculation paths.</p>
+                        </div>
+                    ) : (
                     <svg
                         width={layout.levels.length * 250 + 100}
-                        height={Math.max(...layout.levels.map(l => l.length)) * 100 + 100}
+                        height={layout.levels.length > 0 ? Math.max(...layout.levels.map(l => l.length)) * 100 + 100 : 200}
                         className="relative z-10"
                     >
                         {/* Draw Edges */}
@@ -193,6 +200,7 @@ export function DependencyGraph({ nodes, edges, affectedNodeIds = [] }: Dependen
                             );
                         })}
                     </svg>
+                    )}
                 </div>
             </CardContent>
         </Card>

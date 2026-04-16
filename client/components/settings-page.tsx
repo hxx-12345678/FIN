@@ -690,18 +690,20 @@ export function SettingsPage() {
         }}
         className="space-y-4 w-full"
       >
-        <div className="overflow-x-auto overflow-y-visible -mx-4 px-4 md:mx-0 md:px-0">
-          <TabsList className="inline-flex w-full min-w-[600px] md:min-w-0 md:grid md:grid-cols-8 h-auto p-1 gap-1">
-            <TabsTrigger value="profile" className="text-xs sm:text-sm whitespace-nowrap flex-shrink-0">Profile</TabsTrigger>
-            <TabsTrigger value="organization" className="text-xs sm:text-sm whitespace-nowrap flex-shrink-0">Organization</TabsTrigger>
-            <TabsTrigger value="notifications" className="text-xs sm:text-sm whitespace-nowrap flex-shrink-0">Notifications</TabsTrigger>
-            <TabsTrigger value="alerts" className="text-xs sm:text-sm whitespace-nowrap flex-shrink-0">Alerts</TabsTrigger>
-            <TabsTrigger value="localization" className="text-xs sm:text-sm whitespace-nowrap flex-shrink-0">Localization</TabsTrigger>
-            <TabsTrigger value="sync" className="text-xs sm:text-sm whitespace-nowrap flex-shrink-0">Sync Audit</TabsTrigger>
-            <TabsTrigger value="security" className="text-xs sm:text-sm whitespace-nowrap flex-shrink-0">Security</TabsTrigger>
-            <TabsTrigger value="api" className="text-xs sm:text-sm whitespace-nowrap flex-shrink-0">API</TabsTrigger>
+        <div className="w-full overflow-x-auto scrollbar-hide py-1">
+          <TabsList className="flex w-max md:w-full h-11 bg-slate-100/50 p-1 gap-1 border border-slate-200/60 rounded-xl">
+            <TabsTrigger value="profile" className="px-5 py-2 text-xs font-bold whitespace-nowrap rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Profile</TabsTrigger>
+            <TabsTrigger value="organization" className="px-5 py-2 text-xs font-bold whitespace-nowrap rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Organization</TabsTrigger>
+            <TabsTrigger value="notifications" className="px-5 py-2 text-xs font-bold whitespace-nowrap rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Notifications</TabsTrigger>
+            <TabsTrigger value="localization" className="px-5 py-2 text-xs font-bold whitespace-nowrap rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Localization</TabsTrigger>
+            <TabsTrigger value="sync" className="px-5 py-2 text-xs font-bold whitespace-nowrap rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Sync Audit</TabsTrigger>
+            <TabsTrigger value="security" className="px-5 py-2 text-xs font-bold whitespace-nowrap rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Security</TabsTrigger>
+            <TabsTrigger value="api" className="px-5 py-2 text-xs font-bold whitespace-nowrap rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">API</TabsTrigger>
           </TabsList>
         </div>
+        
+        {/* Redirecting alerts to dedicated page handled by parent logic if needed, 
+            but for now we just remove the tab from this view */}
 
         {/* Profile Tab */}
         <TabsContent value="profile" className="space-y-6 overflow-x-auto overflow-y-visible">
@@ -1154,10 +1156,7 @@ export function SettingsPage() {
           </Card>
         </TabsContent>
 
-        {/* Alerts Tab */}
-        <TabsContent value="alerts" className="space-y-6 overflow-x-auto overflow-y-visible">
-          <AlertsManagement />
-        </TabsContent>
+
 
         {/* Localization Tab */}
         <TabsContent value="localization" className="space-y-6 overflow-x-auto overflow-y-visible">

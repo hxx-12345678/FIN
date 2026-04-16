@@ -24,11 +24,6 @@ router.post('/orgs/:orgId/ai-cfo/upload', authenticate, orgRateLimit, requireOrg
 // Generate AI-CFO plan (with rate limiting and audit logging)
 // Note: Rate limiting might be too strict for board reporting, but we keep it for now
 router.post('/orgs/:orgId/ai-plans', authenticate, requireFinanceOrAdmin('orgId'), auditLogger, aicfoController.generatePlan);
-// ... [rest same as before] ...
-
-// Generate AI-CFO plan (with rate limiting and audit logging)
-// Note: Rate limiting might be too strict for board reporting, but we keep it for now
-router.post('/orgs/:orgId/ai-plans', authenticate, requireFinanceOrAdmin('orgId'), auditLogger, aicfoController.generatePlan);
 
 // Apply AI-CFO plan changes (create scenario)
 router.post('/orgs/:orgId/ai-plans/apply', authenticate, requireFinanceOrAdmin('orgId'), aicfoController.applyPlan);

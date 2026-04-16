@@ -50,7 +50,7 @@ export const aicfoService = {
       throw new ValidationError('Goal is required');
     }
 
-    const sanitizedGoal = sanitizeString(params.goal.trim(), 500);
+    const sanitizedGoal = sanitizeString(params.goal.trim(), 2000);
     const queryLower = sanitizedGoal.toLowerCase();
 
     // Handle meta-queries (UI suggestions) that need special responses

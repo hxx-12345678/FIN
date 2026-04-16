@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { NotFoundError, ForbiddenError, ValidationError } from '../utils/errors';
 import { auditService } from './audit.service';
 import { emailService } from './email.service';
+import { logger } from '../utils/logger';
 
 export interface CreateAlertParams {
   name: string;
@@ -265,6 +266,16 @@ export const alertService = {
       throw new ForbiddenError('Only admins can delete alerts');
     }
 
+    // Delete corresponding notifications 
+    try {
+      await prisma.$executeRaw`
+        DELETE FROM "notifications"
+        WHERE "metadata"->>'alertId' = ${alertId}
+      `;
+    } catch (e) {
+      logger.error('Failed to delete associated notifications: ' + e);
+    }
+
     await prisma.alertRule.delete({
       where: { id: alertId },
     });
@@ -398,6 +409,44 @@ export const alertService = {
         ? `Alert "${alert.name}" triggered: ${testValue} ${alert.operator} ${threshold}`
         : `Alert "${alert.name}" not triggered: ${testValue} ${alert.operator} ${threshold}`,
     };
+  },
+
+  getAuditLogs: async (orgId: string, userId: string) => {
+    // Verify user access
+    const role = await prisma.userOrgRole.findUnique({
+      where: {
+        userId_orgId: {
+          userId,
+          orgId,
+        },
+      },
+    });
+
+    if (!role) {
+      throw new ForbiddenError('No access to this organization');
+    }
+
+    return await prisma.auditLog.findMany({
+      where: { 
+        orgId,
+        OR: [
+          { objectType: 'alert_rule' },
+          { action: { contains: 'alert' } },
+          { action: { contains: 'notification' } }
+        ]
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      include: {
+        actorUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
   },
 };
 

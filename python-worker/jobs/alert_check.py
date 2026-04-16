@@ -27,7 +27,7 @@ def handle_alert_check(job_id: str, org_id: str, object_id: str, params: Dict[st
         cursor.execute("""
             SELECT id, metric, operator, threshold, notify_email, notify_slack, slack_webhook
             FROM alert_rules
-            WHERE "orgId" = %s AND enabled = true
+            WHERE org_id = %s AND enabled = true
         """, (org_id,))
         
         alerts = cursor.fetchall()
@@ -167,13 +167,13 @@ def handle_alert_check(job_id: str, org_id: str, object_id: str, params: Dict[st
         if conn:
             conn.close()
 
-def deliver_alert(cursor, org_id, alert_id, metric, value, threshold, operator, channels, webhook):
+def deliver_alert(conn, cursor, org_id, alert_id, metric, value, threshold, operator, channels, webhook):
     """
     Deliver alert and create persistent notification record.
     """
     # 1. Fetch alert details including severity and creator
     cursor.execute("""
-        SELECT name, severity, "created_by_id" 
+        SELECT name, severity, "created_by_id", slack_webhook
         FROM alert_rules 
         WHERE id = %s
     """, (alert_id,))
@@ -182,35 +182,73 @@ def deliver_alert(cursor, org_id, alert_id, metric, value, threshold, operator, 
     if not row:
         return
         
-    alert_name, severity, created_by_id = row
+    alert_name, severity, created_by_id, slack_webhook = row
     
-    # 2. Create database notification record (shared with UI)
-    title = f"{'CRITICAL: ' if severity == 'critical' else ''}{alert_name}"
-    message = f"{metric} is {value} ({operator} {threshold})"
-    priority = 'high' if severity == 'critical' else 'medium'
+    title = f"Alert: {alert_name}"
+    display_msg = f"{metric} is {value} ({operator} {threshold})"
     
-    metadata = json.dumps({
-        'alertId': alert_id,
-        'metric': metric,
-        'value': value,
-        'threshold': threshold,
-        'operator': operator,
-        'source': 'automated_check'
-    })
+    # 1. Persist to notifications table
+    try:
+        cursor.execute("""
+            INSERT INTO notifications (
+                id, "orgId", "userId", type, title, message, category, priority, read, created_at
+            ) VALUES (
+                gen_random_uuid(), %s, %s, %s, %s, %s, %s, %s, %s, NOW()
+            )
+        """, (
+            org_id,
+            created_by_id,
+            'alert',
+            title,
+            display_msg,
+            'financial',
+            'high' if severity == 'critical' else 'medium',
+            False
+        ))
+        conn.commit()
+    except Exception as e:
+        logger.error(f"Failed to persist notification: {str(e)}")
+
+    # 2. External Delivery
+    from jobs.notification import send_email_notification, send_slack_notification
     
-    cursor.execute("""
-        INSERT INTO notifications (id, "orgId", "userId", type, title, message, category, priority, read, created_at, metadata)
-        VALUES (gen_random_uuid(), %s, %s, 'alert', %s, %s, 'financial', %s, false, NOW(), %s)
-    """, (org_id, created_by_id, title, message, priority, metadata))
-    
-    # 3. Handle external delivery (Mock for now, or trigger email via Node if preferred)
-    # Note: In a full system, we might push to a Redis queue that the Node email service reads.
-    display_msg = f"🚨 ALERT: {title} - {message}"
-    
+    # Fetch user email if needed
+    user_email = None
+    if created_by_id:
+        cursor.execute("SELECT email FROM users WHERE id = %s", (created_by_id,))
+        res = cursor.fetchone()
+        if res:
+            user_email = res[0]
+
+    # Email Delivery
     if 'email' in channels or severity == 'critical':
-        logger.info(f"[EMAIL] Delivering alert to user {created_by_id}: {display_msg} (Critical Override: {severity == 'critical'})")
-    
+        if user_email:
+            send_email_notification(
+                to_email=user_email,
+                subject=f"[FinaPilot] {title}",
+                body=f"Intelligence Alert Triggered\n\n{display_msg}\n\nSeverity: {severity}\nTime: {datetime.now().isoformat()}",
+                html_body=f"<h3>Intelligence Alert Triggered</h3><p><b>{display_msg}</b></p><p>Severity: {severity}</p>"
+            )
+        else:
+            logger.warning(f"Unable to send email: No email found for user {created_by_id}")
+
+    # Slack Delivery
     if 'slack' in channels:
-        logger.info(f"[SLACK] Delivering alert to webhook {webhook}: {display_msg}")
-
-
+        webhook_url = slack_webhook or webhook
+        if not webhook_url:
+            # Try to get org default slack webhook
+            cursor.execute("SELECT config_json FROM org_settings WHERE \"orgId\" = %s AND key = 'slack_webhook'", (org_id,))
+            res = cursor.fetchone()
+            if res:
+                # Handle both string and JSON config
+                val = res[0]
+                webhook_url = val if isinstance(val, str) else val.get('url')
+        
+        if webhook_url:
+            icon = "🚨" if severity == "critical" else "⚠️"
+            send_slack_notification(
+                webhook_url=webhook_url,
+                message=f"{icon} *FinaPilot Intelligence Alert*\n\n*Rule:* {alert_name}\n*Message:* {display_msg}\n*Severity:* {severity}"
+            )
+        else:
+            logger.warning(f"Unable to send Slack: No webhook found for org {org_id}")

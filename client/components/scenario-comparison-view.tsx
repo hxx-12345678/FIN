@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell, ReferenceLine } from "recharts"
 import { TrendingUp, TrendingDown, Minus, Download, ArrowUpRight, ArrowDownRight, Loader2 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
@@ -266,6 +266,133 @@ export function ScenarioComparisonView({ modelId, orgId, scenarios: propScenario
           </Button>
         </div>
       </div>
+
+      {/* Waterfall Bridge */}
+      {base && scenarios.length > 1 && (
+        <Card className="border-2 border-indigo-100 shadow-xl overflow-hidden">
+          <CardHeader className="bg-indigo-50/50">
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-indigo-600" />
+              Scenario Value Bridge (Waterfall)
+            </CardTitle>
+            <CardDescription>Visualizing the step-by-step impact from Base to Selected Scenario</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <div className="h-[350px] w-full">
+               <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={(() => {
+                      const selected = scenarios.find(s => s.id !== baseScenario && s.id !== "") || scenarios[1];
+                      if (!selected || !base) return [];
+
+                      const revDelta = selected.data.revenue - base.data.revenue;
+                      const expDelta = -(selected.data.expenses - base.data.expenses); 
+                      
+                      // Check for zero variance
+                      if (Math.abs(revDelta) < 0.01 && Math.abs(expDelta) < 0.01) {
+                        return [];
+                      }
+
+                      let current = 0;
+                      const data = [];
+                      
+                      data.push({ 
+                        name: 'Baseline', 
+                        range: [0, base.data.revenue], 
+                        color: '#6366f1',
+                        val: base.data.revenue
+                      });
+                      
+                      current = base.data.revenue;
+                      
+                      if (Math.abs(revDelta) > 0) {
+                        const revStart = revDelta > 0 ? current : current + revDelta;
+                        data.push({ 
+                          name: 'Revenue Δ', 
+                          range: [revStart, revStart + Math.abs(revDelta)], 
+                          color: revDelta >= 0 ? '#10b981' : '#ef4444',
+                          val: revDelta
+                        });
+                        current += revDelta;
+                      }
+
+                      if (Math.abs(expDelta) > 0) {
+                        const expStart = expDelta > 0 ? current : current + expDelta;
+                        data.push({ 
+                          name: 'Expense Δ', 
+                          range: [expStart, expStart + Math.abs(expDelta)], 
+                          color: expDelta >= 0 ? '#10b981' : '#ef4444',
+                          val: expDelta
+                        });
+                        current += expDelta;
+                      }
+
+                      data.push({ 
+                        name: 'Target', 
+                        range: [0, current], 
+                        color: '#1e293b',
+                        val: current
+                      });
+
+                      return data;
+                    })()}
+                    margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} />
+                    <YAxis axisLine={false} tickLine={false} tickFormatter={(val) => `$${(val/1000).toFixed(0)}K`} />
+                    <Tooltip 
+                      cursor={{fill: 'rgba(0,0,0,0.05)'}}
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-white p-3 border rounded-lg shadow-xl shrink-0">
+                              <p className="font-bold text-slate-800">{data.name}</p>
+                              <p className="text-sm font-mono text-indigo-600">
+                                Impact: {data.val >= 0 ? '+' : ''}${Math.round(data.val).toLocaleString()}
+                              </p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Bar dataKey="range" radius={[4, 4, 0, 0]}>
+                      {
+                        // Dynamic cell coloring
+                        [0, 1, 2, 3, 4, 5].map((entry, index) => (
+                           <Cell key={`cell-${index}`} />
+                        ))
+                      }
+                    </Bar>
+                  </BarChart>
+               </ResponsiveContainer>
+               {(() => {
+                  const selected = scenarios.find(s => s.id !== baseScenario && s.id !== "") || scenarios[1];
+                  const hasVariance = selected && base && (Math.abs(selected.data.revenue - base.data.revenue) > 0.01 || Math.abs(selected.data.expenses - base.data.expenses) > 0.01);
+                  if (!hasVariance) {
+                    return (
+                      <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-sm z-10 rounded-lg">
+                        <div className="text-center p-6 border-2 border-dashed rounded-2xl bg-white shadow-sm">
+                          <p className="text-sm font-bold text-slate-400">No Computational Variance Detected</p>
+                          <p className="text-[10px] text-slate-400">Modify drivers or manual overrides to see the Enterprise Bridge.</p>
+                        </div>
+                      </div>
+                    )
+                  }
+                  return null;
+                })()}
+                <div className="flex justify-center gap-6 mt-4">
+                  <div className="flex items-center gap-2"><div className="w-3 h-3 bg-indigo-500 rounded" /> <span>Baseline</span></div>
+                  <div className="flex items-center gap-2"><div className="w-3 h-3 bg-emerald-500 rounded" /> <span>Positive Impact</span></div>
+                  <div className="flex items-center gap-2"><div className="w-3 h-3 bg-rose-500 rounded" /> <span>Negative Impact</span></div>
+                  <div className="flex items-center gap-2"><div className="w-3 h-3 bg-slate-800 rounded" /> <span>Resultant</span></div>
+               </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Side-by-Side Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">

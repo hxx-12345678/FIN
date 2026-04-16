@@ -413,7 +413,7 @@ export function OverviewDashboard() {
   const expenseBreakdown = overviewData.expenseBreakdown
 
   return (
-    <div className="space-y-4 md:space-y-6 p-4 md:p-0 overflow-x-hidden">
+    <div className="w-full max-w-full space-y-4 md:space-y-6 overflow-x-hidden pb-8">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
@@ -489,7 +489,7 @@ export function OverviewDashboard() {
               <span className="text-sm font-medium">{overviewData.cashRunway} months</span>
             </div>
             <Progress value={overviewData.healthScore} className="h-2" />
-            <div className="grid grid-cols-4 gap-4 text-sm">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
               <div className="text-center">
                 <div className="font-medium text-green-600">Growth</div>
                 <div className="text-muted-foreground">
@@ -516,7 +516,7 @@ export function OverviewDashboard() {
       </Card>
 
       {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -534,9 +534,9 @@ export function OverviewDashboard() {
                 previousMonthRevenue: overviewData.monthlyRevenue / (1 + overviewData.revenueGrowth / 100)
               }}
             />
-            <div className={`flex items-center text-xs mt-2 ${(overviewData.revenueGrowth ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
+            <div className={`flex items-center text-[10px] sm:text-xs mt-2 ${(overviewData.revenueGrowth ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
               {(overviewData.revenueGrowth ?? 0) >= 0 ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />}
-              {(overviewData.revenueGrowth ?? 0) >= 0 ? "+" : ""}{(overviewData.revenueGrowth ?? 0).toFixed(1)}% from last month
+              {(overviewData.revenueGrowth ?? 0) >= 0 ? "+" : ""}{(overviewData.revenueGrowth ?? 0).toFixed(1)}% <span className="hidden xs:inline ml-1">from last month</span><span className="xs:hidden ml-1">vs prev</span>
             </div>
           </CardContent>
         </Card>
@@ -558,9 +558,9 @@ export function OverviewDashboard() {
                 previousMonthBurnRate: overviewData.monthlyBurnRate / (1 + overviewData.burnRateChange / 100)
               }}
             />
-            <div className={`flex items-center text-xs mt-2 ${(overviewData.burnRateChange ?? 0) >= 0 ? "text-red-600" : "text-green-600"}`}>
+            <div className={`flex items-center text-[10px] sm:text-xs mt-2 ${(overviewData.burnRateChange ?? 0) >= 0 ? "text-red-600" : "text-green-600"}`}>
               {(overviewData.burnRateChange ?? 0) >= 0 ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />}
-              {(overviewData.burnRateChange ?? 0) >= 0 ? "+" : ""}{(overviewData.burnRateChange ?? 0).toFixed(1)}% from last month
+              {(overviewData.burnRateChange ?? 0) >= 0 ? "+" : ""}{(overviewData.burnRateChange ?? 0).toFixed(1)}% <span className="hidden xs:inline ml-1">from last month</span><span className="xs:hidden ml-1">vs prev</span>
             </div>
           </CardContent>
         </Card>
@@ -583,9 +583,9 @@ export function OverviewDashboard() {
                 runwayChange: overviewData.runwayChange
               }}
             />
-            <div className={`flex items-center text-xs mt-2 ${(overviewData.runwayChange ?? 0) >= 0 ? "text-green-600" : "text-yellow-600"}`}>
+            <div className={`flex items-center text-[10px] sm:text-xs mt-2 ${(overviewData.runwayChange ?? 0) >= 0 ? "text-green-600" : "text-yellow-600"}`}>
               {(overviewData.runwayChange ?? 0) >= 0 ? <TrendingUp className="mr-1 h-3 w-3" /> : <TrendingDown className="mr-1 h-3 w-3" />}
-              {(overviewData.runwayChange ?? 0) >= 0 ? "+" : ""}{(overviewData.runwayChange ?? 0).toFixed(1)} month from last period
+              {(overviewData.runwayChange ?? 0) >= 0 ? "+" : ""}{(overviewData.runwayChange ?? 0).toFixed(1)} mo <span className="hidden xs:inline ml-1">from last period</span><span className="xs:hidden ml-1">vs prev</span>
             </div>
           </CardContent>
         </Card>

@@ -44,7 +44,8 @@ export function useMFA(): UseMFAReturn {
       throw new Error(errorData.message || "Failed to setup MFA")
     }
 
-    return await response.json()
+    const res = await response.json()
+    return res.data || res
   }, [])
 
   const verifyCode = useCallback(async (code: string): Promise<boolean> => {
@@ -59,7 +60,7 @@ export function useMFA(): UseMFAReturn {
           "Content-Type": "application/json",
         },
         credentials: "include",
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({ code, token: code }), // Send both for compatibility
       })
 
       if (!response.ok) {
@@ -68,9 +69,13 @@ export function useMFA(): UseMFAReturn {
         throw new Error(errorData.message || "Invalid verification code. Please try again.")
       }
 
-      const data = await response.json()
-      if (data.valid) {
+      const res = await response.json()
+      const data = res.data || res
+      if (data.success || data.valid) {
         setAttemptsRemaining(MAX_ATTEMPTS)
+        if (data.backupCodes) {
+          setBackupCodes(data.backupCodes)
+        }
         return true
       } else {
         setAttemptsRemaining((prev) => prev - 1)
@@ -81,7 +86,7 @@ export function useMFA(): UseMFAReturn {
         throw err
       }
       setAttemptsRemaining((prev) => prev - 1)
-      throw new Error("Invalid verification code. Please try again.")
+      throw err
     }
   }, [attemptsRemaining])
 
@@ -96,8 +101,9 @@ export function useMFA(): UseMFAReturn {
       throw new Error(errorData.message || "Failed to generate backup codes")
     }
 
-    const data = await response.json()
-    const codes = data.codes || []
+    const res = await response.json()
+    const data = res.data || res
+    const codes = data.backupCodes || data.codes || []
     setBackupCodes(codes)
     return codes
   }, [])

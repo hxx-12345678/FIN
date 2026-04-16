@@ -23,6 +23,9 @@ router.delete('/alerts/:alertId', authenticate, alertController.deleteAlert);
 // Test alert rule
 router.post('/alerts/:alertId/test', authenticate, alertController.testAlert);
 
+// Get audit logs
+router.get('/orgs/:orgId/audit-logs', authenticate, requireOrgAccess('orgId'), alertController.getAuditLogs);
+
 export default router;
 
 

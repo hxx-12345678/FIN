@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { AuthModal } from "@/components/auth/auth-modal"
 import { SimulatorWidget } from "@/components/simulator-widget"
+import Link from 'next/link'
 import {
   Menu,
   X,
@@ -32,7 +33,7 @@ import {
   LineChart,
   Terminal,
   Fingerprint,
-  Link,
+  Link as LinkIcon,
   GitBranch,
   History,
   FileSearch,
@@ -663,10 +664,10 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
               <span className="text-lg font-bold tracking-tight text-white">FinaPilot</span>
            </div>
            
-           <div className="flex gap-10 text-sm font-semibold">
-              <a href="#" className="text-slate-400 hover:text-white transition-all underline decoration-transparent hover:decoration-blue-500/50 underline-offset-4 decoration-2">Privacy Policy</a>
-              <a href="#" className="text-slate-400 hover:text-white transition-all underline decoration-transparent hover:decoration-blue-500/50 underline-offset-4 decoration-2">Terms of Service</a>
-              <a href="#" className="text-slate-400 hover:text-white transition-all underline decoration-transparent hover:decoration-blue-500/50 underline-offset-4 decoration-2">SOC 2 / Data Governance</a>
+           <div className="flex gap-6 md:gap-10 text-xs md:text-sm font-semibold flex-wrap justify-center">
+              <Link href="/legal/data-privacy-security" className="text-slate-400 hover:text-white transition-all underline decoration-transparent hover:decoration-blue-500/50 underline-offset-4 decoration-2">Global Data Privacy</Link>
+              <Link href="/legal/master-subscription-agreement" className="text-slate-400 hover:text-white transition-all underline decoration-transparent hover:decoration-blue-500/50 underline-offset-4 decoration-2">Master Subscription Agreement</Link>
+              <a href="#" className="text-slate-400 hover:text-white transition-all underline decoration-transparent hover:decoration-blue-500/50 underline-offset-4 decoration-2">Trust & SOC 2</a>
            </div>
            
            <p className="text-sm font-medium">

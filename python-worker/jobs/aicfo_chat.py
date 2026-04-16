@@ -118,7 +118,7 @@ def handle_aicfo_chat(job_id: str, org_id: str, object_id: str, logs: dict):
         model_state = {}
         model_id = None
         if model_run_id:
-            cursor.execute("SELECT model_id, summary_json FROM model_runs WHERE id = %s", (model_run_id,))
+            cursor.execute('SELECT "modelId", summary_json FROM model_runs WHERE id = %s', (model_run_id,))
             row = cursor.fetchone()
             if row:
                 model_id = str(row[0])
@@ -142,8 +142,8 @@ def handle_aicfo_chat(job_id: str, org_id: str, object_id: str, logs: dict):
                 cursor.execute("""
                     SELECT d.id, d.name, d.category, f.expression 
                     FROM drivers d
-                    LEFT JOIN driver_formulas f ON d.id = f.driver_id
-                    WHERE d.model_id = %s
+                    LEFT JOIN driver_formulas f ON d.id = f."driverId"
+                    WHERE d."modelId" = %s
                 """, (model_id,))
                 node_rows = cursor.fetchall()
                 model_nodes = [{"id": str(r[0]), "name": r[1], "category": r[2], "formula": r[3]} for r in node_rows]
@@ -170,12 +170,26 @@ def handle_aicfo_chat(job_id: str, org_id: str, object_id: str, logs: dict):
                 logger.warning(f"Model reasoning engine failed: {ae}")
                 analysis_summary = f"Analytical engine error: {str(ae)}"
         
-        system_prompt = """You are an elite strategic CFO. Respond ONLY in valid JSON format.
-        Structure:
-        {
-          "recommendations": [...],
-          "naturalLanguage": "..."
-        }"""
+        system_prompt = """You are a world-class Chief Financial Officer (CFO) and strategic advisor. 
+        Your task is to generate institutional-grade financial analysis and board-level narratives.
+
+        CRITICAL OUTPUT REQUIREMENTS:
+        1. FORMAT: You MUST respond ONLY in valid JSON. No markdown codeblocks, no preamble.
+        2. STRUCTURE: If the user query implies a "board report", "investor update", or "comprehensive analysis", follow this structure:
+           {
+             "executiveSummary": "A high-level overview of performance, strategic milestones, and primary takeaways (300-400 words).",
+             "kpiAnalysis": "A deep dive into specific metrics (Revenue, Burn, NRR, LTV/CAC), explaining the 'why' behind the numbers (200-300 words).",
+             "functionalHighlights": "Specific commentary on Sales, Marketing, and Operations performance (150-200 words).",
+             "strategicRecommendations": ["At least 3 high-impact, data-driven actions"],
+             "risksAndMitigations": "Analysis of current exposure and planned counter-measures (100-150 words).",
+             "naturalLanguage": "A cohesive full-length narrative combining all the above for a professional report (500-800 words)."
+           }
+        3. CONTENT QUALITY:
+           - Use sophisticated, CFO-level vocabulary (e.g., 'capital efficiency', 'operating leverage', 'unit profitability', 'bridge analysis').
+           - NO HALLUCINATIONS: Use the provided METRICS and CONTEXT. If missing, make logical inferences based on startup benchmarks but explicitly label them as strategic assessments.
+           - LENGTH IS MANDATORY: For comprehensive report queries, the 'naturalLanguage' field MUST exceed 500 words. Total JSON content should be substantial.
+           - Be decisive and analytical, not just descriptive. Don't just say 'Revenue increased', say 'Revenue growth of X% indicates strong market fit, though we must monitor the Y% increase in CAC which may signal channel saturation.'
+        """
         
         context_text = "\n".join([f"- {str(e.get('content', ''))}" for e in evidence])
         
@@ -229,27 +243,65 @@ def handle_aicfo_chat(job_id: str, org_id: str, object_id: str, logs: dict):
                 result_data = response.json()
                 content = result_data['candidates'][0]['content']['parts'][0]['text']
                 
-                # Simple JSON extraction
+                # Clean up common LLM JSON artifacts
                 json_str = content.strip()
+                
+                # Remove markdown blocks if present
                 if '```json' in json_str:
                     json_str = json_str.split('```json')[1].split('```')[0].strip()
                 elif '```' in json_str:
                     json_str = json_str.split('```')[1].split('```')[0].strip()
                 
+                # Remove any non-printable control characters that break JSON
+                json_str = "".join(char for char in json_str if ord(char) >= 32 or char in "\n\r\t")
+                
+                # Find first { and last } to isolate the object
+                start_idx = json_str.find('{')
+                end_idx = json_str.rfind('}')
+                if start_idx != -1 and end_idx != -1:
+                    json_str = json_str[start_idx:end_idx+1]
+                
                 try:
                     parsed = json.loads(json_str)
-                except:
-                    # Attempt simple repair
+                except json.JSONDecodeError:
+                    # Attempt manual fix for common issues: trailing commas and unescaped newlines in strings
+                    # 1. Trailing commas
                     json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
+                    # 2. Unescaped newlines in JSON strings (harder, but we can try)
+                    # Replace real newlines inside quotes with \n
+                    def fix_newlines(m):
+                        return m.group(0).replace('\n', '\\n').replace('\r', '\\r')
+                    json_str = re.sub(r'"[^"]*[\n\r][^"]*"', fix_newlines, json_str)
+                    
                     try:
                         parsed = json.loads(json_str)
                     except:
-                        # Find last closing brace
-                        last_brace = json_str.rfind('}')
-                        if last_brace > 0:
-                            json_str_sub = json_str[0:last_brace+1]  # type: ignore
-                            parsed = json.loads(json_str_sub)
-                
+                        # Final fallback: regex-based extraction of known fields
+                        logger.warning("Standard JSON parsing failed, using expanded regex extraction")
+                        
+                        # Try to find naturalLanguage - look for everything between quotes after the key
+                        nl_match = re.search(r'"(?:naturalLanguage|executiveSummary|summary)":\s*"(.*?)"(?=\s*,\s*"|\s*})', json_str, re.DOTALL)
+                        if not nl_match:
+                            nl_match = re.search(r'"(?:naturalLanguage|executiveSummary|summary)":\s*"(.*)', json_str, re.DOTALL)
+                        
+                        # Try to find recommendations array
+                        rec_match = re.search(r'"recommendations":\s*\[(.*?)]', json_str, re.DOTALL)
+                        
+                        parsed = {
+                            "naturalLanguage": nl_match.group(1).replace('\\n', '\n').strip() if nl_match else "",
+                            "recommendations": []
+                        }
+                        
+                        # Clean up if we matched everything till the end
+                        if parsed["naturalLanguage"].endswith('"}'):
+                            parsed["naturalLanguage"] = parsed["naturalLanguage"][:-2]
+                        
+                        if rec_match:
+                            rec_text = rec_match.group(1)
+                            # Handle both quoted strings and objects in the recommendations array
+                            recs = re.findall(r'"(.*?)"', rec_text)
+                            parsed["recommendations"] = [r for r in recs if len(r) > 5]
+            
                 if parsed:
                     natural_language = parsed.get('naturalLanguage', '')
                     recommendations = parsed.get('recommendations', [])

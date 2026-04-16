@@ -79,6 +79,19 @@ export const computeController = {
                 throw new ValidationError('modelId is required');
             }
 
+            if (task === 'stress_test') {
+                const { riskService } = await import('../services/risk.service');
+                // Use a standard distribution for extreme stress test if none provided
+                const results = await riskService.runRiskAnalysis(orgId || '', modelId, {
+                    numSimulations: req.body.iterations || 5000,
+                    distributions: {
+                        'revenue': { dist: 'normal', params: { mean: 0, std: 0.15 } },
+                        'opex': { dist: 'normal', params: { mean: 0, std: 0.1 } }
+                    }
+                });
+                return res.json({ ok: true, result: results });
+            }
+
             const { aiSummariesService } = await import('../services/ai-summaries.service');
 
             // Map 'board_narrative' task to 'overview' reportType
