@@ -738,4 +738,49 @@ export const provenanceService = {
       jobId: job.id,
     };
   },
+
+  /**
+   * Edge Case 5: End-to-End Provenance Integrity Check
+   * Verifies that all board deck numbers in a model run have valid transaction or formula lineage.
+   */
+  verifyProvenanceIntegrity: async (modelRunId: string, orgId: string): Promise<{
+    status: 'pass' | 'fail';
+    score: number;
+    verifiedCells: number;
+    missingLineage: string[];
+    details: string;
+  }> => {
+    // 1. Get all output cells for this model run
+    const cells = await prisma.provenanceEntry.findMany({
+      where: { modelRunId, orgId },
+      select: { cellKey: true },
+      distinct: ['cellKey'],
+    });
+
+    if (cells.length === 0) {
+      return { status: 'pass', score: 100, verifiedCells: 0, missingLineage: [], details: 'No output cells found to verify.' };
+    }
+
+    // 2. Check provenance for each cell
+    const missingLineage: string[] = [];
+    for (const cell of cells) {
+      const count = await provenanceRepository.countByModelRunAndCell(modelRunId, cell.cellKey);
+      if (count === 0) {
+        missingLineage.push(cell.cellKey);
+      }
+    }
+
+    const verifiedCount = cells.length - missingLineage.length;
+    const score = Math.round((verifiedCount / cells.length) * 100);
+
+    return {
+      status: score > 90 ? 'pass' : 'fail',
+      score,
+      verifiedCells: verifiedCount,
+      missingLineage: missingLineage.slice(0, 10), // Return first 10 missing for debugging
+      details: score === 100 
+        ? 'Institutional Grade: 100% of board deck values are backed by verifiable transaction or formula lineage.'
+        : `Lineage Warning: ${missingLineage.length} cells are missing audit-grade provenance. Core USP is degraded.`
+    };
+  }
 };

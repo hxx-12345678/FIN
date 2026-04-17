@@ -47,4 +47,12 @@ router.post(
   csvController.saveMappingTemplate
 );
 
+// Validate CSV data quality before import
+router.post(
+  '/orgs/:orgId/import/csv/validate',
+  authenticate,
+  requireOrgAccess('orgId'),
+  csvController.validateData
+);
+
 export default router;

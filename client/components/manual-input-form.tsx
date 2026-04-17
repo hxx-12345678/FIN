@@ -21,6 +21,9 @@ interface ManualInputFormProps {
 export function ManualInputForm({ orgId, modelId, onSuccess }: ManualInputFormProps) {
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
+    const [originalInputs, setOriginalInputs] = useState<any>(null)
+    const [showRevalidationWarning, setShowRevalidationWarning] = useState(false)
+    const [showExtremeWarning, setShowExtremeWarning] = useState(false)
     const [inputs, setInputs] = useState<any>({
         revenue: {
             monthlyMrr: "",
@@ -66,6 +69,7 @@ export function ManualInputForm({ orgId, modelId, onSuccess }: ManualInputFormPr
                     if (data.inputs.costs) newInputs.costs = { ...newInputs.costs, ...data.inputs.costs };
                     if (data.inputs.metrics) newInputs.metrics = { ...newInputs.metrics, ...data.inputs.metrics };
                     setInputs(newInputs);
+                    setOriginalInputs(JSON.parse(JSON.stringify(newInputs))); // deep copy
                 }
             }
         } catch (error) {
@@ -85,8 +89,29 @@ export function ManualInputForm({ orgId, modelId, onSuccess }: ManualInputFormPr
         }))
     }
 
-    const handleSave = async () => {
+    const handleSave = async (skipWarnings = false) => {
         if (!orgId || !modelId) return
+
+        if (!skipWarnings && originalInputs) {
+            // Check for cascading failure risk (>20% revenue drift)
+            const oldMrr = Number(originalInputs.revenue.monthlyMrr) || 0;
+            const newMrr = Number(inputs.revenue.monthlyMrr) || 0;
+            if (oldMrr > 0 && Math.abs(newMrr - oldMrr) / oldMrr > 0.20) {
+                setShowRevalidationWarning(true);
+                return;
+            }
+
+            // Check for extreme values (>3 SD equivalent mock)
+            const oldCac = Number(originalInputs.metrics.cac) || 0;
+            const newCac = Number(inputs.metrics.cac) || 0;
+            if (oldCac > 0 && (newCac > oldCac * 3 || newCac < oldCac / 3)) {
+                setShowExtremeWarning(true);
+                return;
+            }
+        }
+
+        setShowRevalidationWarning(false);
+        setShowExtremeWarning(false);
         setSaving(true)
 
         try {
@@ -170,7 +195,7 @@ export function ManualInputForm({ orgId, modelId, onSuccess }: ManualInputFormPr
                     <h2 className="text-2xl font-bold tracking-tight">Manual Input Center</h2>
                     <p className="text-muted-foreground">Override system-detected values with manual parameters.</p>
                 </div>
-                <Button onClick={handleSave} disabled={saving} className="bg-gradient-to-r from-blue-600 to-indigo-600">
+                <Button onClick={() => handleSave()} disabled={saving} className="bg-gradient-to-r from-blue-600 to-indigo-600">
                     {saving ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
                     Save as Snapshot & Rebuild
                 </Button>
@@ -353,6 +378,47 @@ export function ManualInputForm({ orgId, modelId, onSuccess }: ManualInputFormPr
                     </div>
                 </CardContent>
             </Card>
+
+            {/* Warning Dialogs for Edge Cases */}
+            {showRevalidationWarning && (
+                <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="p-6">
+                            <div className="flex items-center gap-3 text-rose-600 mb-4">
+                                <Zap className="h-6 w-6" />
+                                <h3 className="text-lg font-bold">Cascading Failure Warning</h3>
+                            </div>
+                            <p className="text-sm text-slate-600 mb-6">
+                                The revenue assumption (MRR) was changed by <b>&gt;20%</b>. This will significantly alter downstream dependencies, including the balance sheet constraints and valuation model.
+                            </p>
+                            <div className="flex gap-3 justify-end">
+                                <Button variant="outline" onClick={() => setShowRevalidationWarning(false)}>Review Inputs</Button>
+                                <Button className="bg-rose-600 hover:bg-rose-700 text-white" onClick={() => handleSave(true)}>Acknowledge & Trigger Full Revalidation</Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showExtremeWarning && (
+                <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="p-6">
+                            <div className="flex items-center gap-3 text-amber-600 mb-4">
+                                <Info className="h-6 w-6" />
+                                <h3 className="text-lg font-bold">Unrealistic Assumption Flagged</h3>
+                            </div>
+                            <p className="text-sm text-slate-600 mb-6">
+                                We detected an assumption (e.g., CAC) deviating &gt;3 standard deviations from the historical average. Do you wish to override the engine constraint?
+                            </p>
+                            <div className="flex gap-3 justify-end">
+                                <Button variant="outline" onClick={() => setShowExtremeWarning(false)}>Review Inputs</Button>
+                                <Button className="bg-amber-600 hover:bg-amber-700 text-white" onClick={() => handleSave(true)}>Override Engine & Save</Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

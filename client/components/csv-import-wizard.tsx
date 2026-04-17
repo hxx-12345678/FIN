@@ -38,6 +38,8 @@ import {
   Trash2,
   Sparkles,
   AlertCircle,
+  AlertTriangle,
+  ShieldCheck,
   Loader2,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -96,11 +98,12 @@ interface CSVImportWizardProps {
   orgId?: string | null
   token?: string | null
   onImportComplete?: () => void
+  triggerContent?: React.ReactNode
 }
 
-export function CSVImportWizard({ orgId: propOrgId, token: propToken, onImportComplete }: CSVImportWizardProps) {
+export function CSVImportWizard({ orgId: propOrgId, token: propToken, onImportComplete, triggerContent }: CSVImportWizardProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [step, setStep] = useState<"upload" | "preview" | "mapping" | "review">("upload")
+  const [step, setStep] = useState<"upload" | "preview" | "mapping" | "validation" | "review">("upload")
   const [csvFile, setCsvFile] = useState<File | null>(null)
   const [csvData, setCsvData] = useState<CSVRow[]>([])
   const [csvHeaders, setCsvHeaders] = useState<string[]>([])
@@ -111,6 +114,8 @@ export function CSVImportWizard({ orgId: propOrgId, token: propToken, onImportCo
   const [templateName, setTemplateName] = useState("")
   const [templateDescription, setTemplateDescription] = useState("")
   const [smartMappingResult, setSmartMappingResult] = useState<SmartMappingResult | null>(null)
+  const [validationReport, setValidationReport] = useState<any | null>(null)
+  const [isValidating, setIsValidating] = useState(false)
   const [useSmartMapping, setUseSmartMapping] = useState(true)
   const [skipFirstRow, setSkipFirstRow] = useState(true)
   const [importedRows, setImportedRows] = useState<number>(0)
@@ -575,6 +580,47 @@ export function CSVImportWizard({ orgId: propOrgId, token: propToken, onImportCo
     }
 
     return true
+  }
+
+  const handleValidate = async () => {
+    if (!validateMappings()) {
+      toast.error("Please complete all required field mappings")
+      return
+    }
+
+    setIsValidating(true)
+    try {
+      const mappings: Record<string, string> = {}
+      fieldMappings.forEach((mapping) => {
+        if (mapping.csvColumn && mapping.csvColumn !== "__none__") {
+          mappings[mapping.targetField] = mapping.csvColumn
+        }
+      })
+
+      const response = await fetch(`${API_BASE_URL}/orgs/${propOrgId}/import/csv/validate`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        credentials: "include",
+        body: JSON.stringify({
+          headers: csvHeaders,
+          rows: csvData.slice(0, 5000), // Validate up to 5k rows for now to prevent payload limits
+          mappings
+        })
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        setValidationReport(result.data)
+        setStep("validation")
+      } else {
+        toast.error("Failed to run data validation")
+      }
+    } catch (error) {
+      console.error(error)
+      toast.error("Error validating data")
+    } finally {
+      setIsValidating(false)
+    }
   }
 
   const handleImport = async () => {
@@ -1045,10 +1091,12 @@ export function CSVImportWizard({ orgId: propOrgId, token: propToken, onImportCo
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="flex items-center gap-2">
-          <Upload className="h-4 w-4" />
-          Import CSV
-        </Button>
+        {triggerContent || (
+          <Button variant="outline" className="flex items-center gap-2">
+            <Upload className="h-4 w-4" />
+            Import CSV
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col p-0">
         <DialogHeader className="p-6 border-b">
@@ -1358,15 +1406,99 @@ export function CSVImportWizard({ orgId: propOrgId, token: propToken, onImportCo
                       <Button variant="ghost" size="sm" onClick={() => setStep("preview")}>Back</Button>
                       <div className="flex gap-2">
                         <Button variant="outline" size="sm" onClick={handleSaveTemplate}>Save Template</Button>
-                        <Button size="sm" onClick={handleImport} disabled={!validateMappings() || isImporting}>
-                          {isImporting ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                          Complete Final Import
+                        <Button size="sm" onClick={handleValidate} disabled={!validateMappings() || isValidating}>
+                          {isValidating ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                          Review Data Quality
                         </Button>
                       </div>
                     </div>
                   </div>
                 )}
               </div>
+            )}
+
+            {step === "validation" && validationReport && (
+               <div className="space-y-6">
+                 <div className="text-center space-y-2">
+                    <h3 className="text-2xl font-bold flex items-center justify-center gap-2">
+                      <ShieldCheck className="h-6 w-6 text-blue-500" />
+                      Data Quality Report
+                    </h3>
+                    <p className="text-sm text-muted-foreground max-w-lg mx-auto">
+                      We've analyzed your data for anomalies, temporal gaps, and mapping issues.
+                    </p>
+                 </div>
+
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <Card className="border-none shadow-sm bg-slate-50">
+                      <CardHeader className="pb-2">
+                         <CardTitle className="text-sm">Health Score</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                         <div className="flex items-end gap-3">
+                            <span className={`text-4xl font-bold ${validationReport.overallScore >= 90 ? 'text-green-500' : validationReport.overallScore >= 70 ? 'text-amber-500' : 'text-red-500'}`}>
+                              {validationReport.overallScore}
+                            </span>
+                            <span className="text-sm text-slate-500 mb-1">/ 100</span>
+                         </div>
+                      </CardContent>
+                   </Card>
+                   
+                   {validationReport.periodDetection && (
+                     <Card className="border-none shadow-sm bg-slate-50">
+                        <CardHeader className="pb-2">
+                           <CardTitle className="text-sm flex items-center justify-between">
+                             Period Detection
+                             {validationReport.periodDetection.requiresConfirmation && (
+                               <Badge variant="outline" className="bg-amber-100 text-amber-700 border-none text-[10px]">Verify</Badge>
+                             )}
+                           </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                           <p className="text-sm font-semibold capitalize">{validationReport.periodDetection.detectedFrequency} Data</p>
+                           <p className="text-xs text-slate-500 mt-1">
+                             {validationReport.periodDetection.totalPeriods} periods detected between {validationReport.periodDetection.startDate} and {validationReport.periodDetection.endDate}.
+                           </p>
+                        </CardContent>
+                     </Card>
+                   )}
+                 </div>
+
+                 {validationReport.issues.length > 0 && (
+                   <div className="space-y-3">
+                     <h4 className="text-sm font-bold text-slate-700">Flagged Issues</h4>
+                     <div className="max-h-[300px] overflow-y-auto space-y-2 pr-2">
+                       {validationReport.issues.map((issue: any, idx: number) => (
+                         <div key={idx} className={`p-3 rounded-lg border flex gap-3 text-sm ${issue.severity === 'critical' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
+                           {issue.severity === 'critical' ? <AlertCircle className="h-5 w-5 text-red-500 shrink-0" /> : <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />}
+                           <div>
+                             <p className="font-semibold text-slate-800">{issue.message}</p>
+                             {issue.suggestion && <p className="text-xs text-slate-600 mt-1">{issue.suggestion}</p>}
+                           </div>
+                         </div>
+                       ))}
+                     </div>
+                   </div>
+                 )}
+
+                 {validationReport.issues.length === 0 && (
+                   <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
+                     <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
+                     <div>
+                       <p className="font-semibold text-green-800">Clean Data Detected</p>
+                       <p className="text-sm text-green-700 mt-1">No anomalies, duplicates, or missing values were found.</p>
+                     </div>
+                   </div>
+                 )}
+
+                 <div className="flex justify-between items-center pt-4 border-t">
+                    <Button variant="ghost" size="sm" onClick={() => setStep("mapping")}>Back</Button>
+                    <Button size="sm" onClick={handleImport} disabled={isImporting || (validationReport.issues.filter((i: any) => i.severity === 'critical').length > 0)}>
+                      {isImporting ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                      Approve & Execute Import
+                    </Button>
+                 </div>
+               </div>
             )}
 
             {step === "review" && (

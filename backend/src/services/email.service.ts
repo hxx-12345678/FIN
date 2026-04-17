@@ -30,17 +30,17 @@ export const emailService = {
       const smtpUser = process.env.SMTP_USER;
       const smtpPass = process.env.SMTP_PASS;
 
-      logger.info(`[EMAIL] Sending email to ${options.to}`);
-      logger.info(`[EMAIL] Subject: ${options.subject}`);
-      logger.info(`[EMAIL] From: ${fromEmail}`);
+      // Helper to check for common dummy placeholders
+      const isInvalid = (val?: string) => !val || val.length < 10 || val.includes('your-') || val === 'enabled';
 
-      // Try Brevo API first if API key is configured (highest priority)
-      if (brevoApiKey) {
+      logger.info(`[EMAIL] Attempting delivery to ${options.to}`);
+
+      // Try Brevo API first if API key is configured
+      if (!isInvalid(brevoApiKey)) {
         try {
           const brevo = await import('@getbrevo/brevo');
           const apiInstance = new brevo.TransactionalEmailsApi();
-          // Use standard method to set API key to avoid overwriting internal methods like applyToRequest
-          apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, brevoApiKey);
+          apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, brevoApiKey!);
 
           const sendSmtpEmail: any = {
             sender: { email: fromEmail, name: 'FinaPilot' },
@@ -51,35 +51,26 @@ export const emailService = {
           };
 
           const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
-          logger.info(`[EMAIL] ✅ Email sent successfully via Brevo to ${options.to} - Message ID: ${result.body.messageId}`);
-          logger.info(`[EMAIL] Email accepted by Brevo. Recipient should receive email shortly.`);
+          logger.info(`[EMAIL] ✅ Email sent successfully via Brevo to ${options.to}`);
           return true;
         } catch (brevoError: any) {
-          logger.error(`[EMAIL] Brevo API failed:`, brevoError);
-          if (brevoError.response?.body) {
-            const errorBody = brevoError.response.body;
-            logger.error(`[EMAIL] Brevo Error Details:`, errorBody);
-
-            // Provide specific guidance for common errors
-            if (errorBody.code === 'unauthorized' || errorBody.message?.includes('API Key is not enabled')) {
-              logger.error(`[EMAIL] ❌ Brevo API Key is not enabled or invalid.`);
-              logger.error(`[EMAIL] ⚠️  Please check your Brevo dashboard:`);
-              logger.error(`[EMAIL]    1. Go to https://app.brevo.com → Settings → API Keys`);
-              logger.error(`[EMAIL]    2. Verify your API key is ENABLED`);
-              logger.error(`[EMAIL]    3. Ensure it has "Send emails" permissions`);
-              logger.error(`[EMAIL]    4. If disabled, enable it or create a new API key`);
-            }
+          if (brevoError.response?.body?.code === 'unauthorized') {
+            logger.error(`[EMAIL] ❌ Brevo Authentication Failed: API Key is invalid or disabled.`);
+            // Don't fall through to other services if auth failed - likely a global config issue
+          } else {
+            logger.error(`[EMAIL] Brevo API failed:`, brevoError.message || brevoError);
           }
-          // Fall through to SendGrid or SMTP
+          // Fall through only if it's not a terminal auth error
+          if (brevoError.response?.status === 401) return emailService.logEmailToConsole(options, fromEmail);
         }
       }
 
       // Try SendGrid if API key is configured
-      if (sendgridApiKey) {
+      if (!isInvalid(sendgridApiKey)) {
         try {
           // @ts-ignore - dynamic import may not be resolved by tsc during noEmit
           const sgMail = await import('@sendgrid/mail') as any;
-          sgMail.setApiKey(sendgridApiKey);
+          sgMail.setApiKey(sendgridApiKey!);
 
           const msg = {
             to: options.to,
@@ -90,38 +81,29 @@ export const emailService = {
           };
 
           await sgMail.send(msg);
-          logger.info(`[EMAIL] Email sent successfully via SendGrid to ${options.to}`);
+          logger.info(`[EMAIL] ✅ Email sent successfully via SendGrid to ${options.to}`);
           return true;
         } catch (sendgridError: any) {
-          logger.error(`[EMAIL] SendGrid failed, trying fallback:`, sendgridError);
-          // Fall through to SMTP or console logging
+          logger.error(`[EMAIL] SendGrid failed:`, sendgridError.message || sendgridError);
+          if (sendgridError.code === 401) return emailService.logEmailToConsole(options, fromEmail);
         }
       }
 
       // Try SMTP via nodemailer if SMTP config is provided
-      if (smtpHost && smtpUser && smtpPass) {
+      if (smtpHost && !isInvalid(smtpUser) && !isInvalid(smtpPass)) {
         try {
           const nodemailer = await import('nodemailer');
-
-          logger.info(`[EMAIL] Attempting to send via SMTP (${smtpHost}:${smtpPort})`);
+          logger.info(`[EMAIL] Attempting SMTP delivery (${smtpHost})`);
 
           const transporter = nodemailer.createTransport({
             host: smtpHost,
             port: smtpPort,
-            secure: smtpPort === 465, // true for 465, false for other ports
-            auth: {
-              user: smtpUser,
-              pass: smtpPass,
-            },
-            // Add timeout to prevent hanging
-            connectionTimeout: 10000, // 10 seconds
-            greetingTimeout: 5000, // 5 seconds
-            socketTimeout: 10000, // 10 seconds
+            secure: smtpPort === 465,
+            auth: { user: smtpUser, pass: smtpPass },
+            connectionTimeout: 5000,
+            greetingTimeout: 5000,
+            socketTimeout: 5000,
           });
-
-          // Verify SMTP connection before sending
-          await transporter.verify();
-          logger.info(`[EMAIL] SMTP connection verified successfully`);
 
           const mailOptions = {
             from: fromEmail,
@@ -132,51 +114,43 @@ export const emailService = {
           };
 
           const info = await transporter.sendMail(mailOptions);
-          logger.info(`[EMAIL] ✅ Email sent successfully via SMTP to ${options.to} - Message ID: ${info.messageId}`);
-          logger.info(`[EMAIL] Email accepted by SMTP server. Recipient should receive email shortly.`);
+          logger.info(`[EMAIL] ✅ Email sent successfully via SMTP to ${options.to}`);
           return true;
         } catch (smtpError: any) {
-          logger.error(`[EMAIL] SMTP failed:`, smtpError);
-          logger.error(`[EMAIL] SMTP Error Details:`, {
-            message: smtpError.message,
-            code: smtpError.code,
-            command: smtpError.command,
-            response: smtpError.response,
-            responseCode: smtpError.responseCode,
-          });
-          // Fall through to console logging if SMTP fails
-          // Don't silently fail - we want to know if SMTP is misconfigured
+          logger.error(`[EMAIL] ❌ SMTP delivery failed: ${smtpError.message}`);
+          // If SMTP auth failed, fallback to console immediately
         }
       }
 
-      // Fallback: Log to console for development/testing
-      console.log('\n' + '='.repeat(80));
-      console.log('[EMAIL] SENDING EMAIL (CONSOLE LOG - NO BREVO/SENDGRID/SMTP CONFIGURED)');
-      console.log('='.repeat(80));
-      console.log(`To: ${options.to}`);
-      console.log(`From: ${fromEmail}`);
-      console.log(`Subject: ${options.subject}`);
-      console.log('\n--- EMAIL CONTENT (HTML) ---');
-      console.log(options.html);
-      if (options.text) {
-        console.log('\n--- EMAIL CONTENT (TEXT) ---');
-        console.log(options.text);
-      }
-      console.log('='.repeat(80) + '\n');
-      console.log('💡 To send actual emails, configure one of:');
-      console.log('   1. BREVO_API_KEY environment variable (for Brevo - recommended)');
-      console.log('   2. SENDGRID_API_KEY environment variable (for SendGrid)');
-      console.log('   3. SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS (for SMTP)');
-      console.log('='.repeat(80) + '\n');
-
-      logger.warn(`[EMAIL] Email logged to console (no email service configured). To: ${options.to}`);
-      return true;
+      return emailService.logEmailToConsole(options, fromEmail);
 
     } catch (error) {
-      logger.error(`[EMAIL] Error sending email to ${options.to}:`, error);
+      logger.error(`[EMAIL] Global error in email service:`, error);
       return false;
     }
   },
+
+  /**
+   * Helper to log email to console when no service is available or configured
+   */
+  logEmailToConsole: (options: EmailOptions, fromEmail: string): boolean => {
+    console.log('\n' + '='.repeat(80));
+    console.log('[EMAIL] SIMULATED DELIVERY (CONSOLE LOG)');
+    console.log('='.repeat(80));
+    console.log(`To: ${options.to}`);
+    console.log(`From: ${fromEmail}`);
+    console.log(`Subject: ${options.subject}`);
+    console.log('\n[HTML Content Snippet]:');
+    console.log(options.html.substring(0, 500) + (options.html.length > 500 ? '...' : ''));
+    console.log('='.repeat(80));
+    console.log('💡 Configure BREVO_API_KEY or SMTP settings for live delivery.');
+    console.log('='.repeat(80) + '\n');
+
+    logger.warn(`[EMAIL] Delivery simulated to console for ${options.to}`);
+    return true;
+  },
+
+
 
   /**
    * Send invitation email

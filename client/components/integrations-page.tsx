@@ -23,7 +23,8 @@ import {
   Loader2,
   FileDown,
   ChevronDown,
-  FileText
+  FileText,
+  Upload
 } from "lucide-react"
 import { CSVImportWizard } from "./csv-import-wizard"
 import { ConnectorCredentialsModal } from "./connector-credentials-modal"
@@ -805,6 +806,41 @@ export function IntegrationsPage() {
                           </Button>
                         </div>
                       </>
+                    ) : connector && connector.status === "error" ? (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            {getStatusBadge(connector.status)}
+                            <Badge variant="outline" className="text-[10px]">{integration.type}</Badge>
+                        </div>
+                        <div className="p-3 bg-red-50 border border-red-100 rounded-lg text-xs">
+                          <p className="font-bold text-red-800 flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5" /> API Sync Failure</p>
+                          <p className="text-red-700 mt-1">{connector.lastSyncError || "Authentication token expired or API connection lost."}</p>
+                          {connector.lastSyncedAt && <p className="text-red-600 mt-2 font-medium">Last successful sync: {formatDate(connector.lastSyncedAt)}</p>}
+                        </div>
+                        <div className="space-y-2">
+                          <Button 
+                            className="w-full" 
+                            size="sm" 
+                            onClick={() => handleConnect(integration)} 
+                            variant="destructive"
+                          >
+                            <RefreshCw className="h-3 w-3 mr-2" /> Reconnect API
+                          </Button>
+                          <div className="relative py-2">
+                            <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-slate-200" /></div>
+                            <div className="relative flex justify-center text-[10px] uppercase font-bold"><span className="bg-white px-2 text-slate-400">or manual fallback</span></div>
+                          </div>
+                          <CSVImportWizard 
+                            orgId={orgId} 
+                            onImportComplete={() => fetchAllData(orgId!)}
+                            triggerContent={
+                              <Button className="w-full" size="sm" variant="outline">
+                                <Upload className="h-3 w-3 mr-2" /> Upload Data Manually
+                              </Button>
+                            }
+                          />
+                        </div>
+                      </div>
                     ) : (
                       <div className="space-y-4">
                         {connector && connector.status !== "connected" && (
@@ -818,7 +854,7 @@ export function IntegrationsPage() {
                           size="sm" 
                           onClick={() => handleConnect(integration)} 
                           disabled={!integration.supported}
-                          variant={connector?.status === "error" ? "destructive" : "default"}
+                          variant="default"
                         >
                           {connector ? (connector.status === "auth_pending" ? "Complete Setup" : "Reconnect") : <><Plus className="h-3 w-3 mr-1" /> Connect</>}
                         </Button>

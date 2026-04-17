@@ -357,6 +357,14 @@ export const connectorService = {
     });
 
     // Mask sensitive data
+    const lastJob = recentJobs[0];
+    const failureFallback = lastJob && lastJob.status === 'failed' ? {
+      lastFailureMessage: lastJob.logs?.[0]?.message || 'Sync failed due to API connection error',
+      lastFailureAt: lastJob.updatedAt,
+      fallbackStatus: 'operational_fallback',
+      lastSuccessfulSyncAt: connector.lastSyncedAt,
+    } : null;
+
     const safeConnector = {
       id: connector.id,
       orgId: connector.orgId,
@@ -364,6 +372,7 @@ export const connectorService = {
       status: connector.status,
       lastSyncedAt: connector.lastSyncedAt,
       createdAt: connector.createdAt,
+      failureFallback,
       // Do not return encryptedConfig or sensitive configJson
       configJson: connector.configJson ? {
         // Only return non-sensitive metadata
@@ -376,6 +385,7 @@ export const connectorService = {
       connector: safeConnector,
       syncLogs: recentJobs,
       nextSyncScheduled: connector.status === 'connected' && !connector.lastSyncedAt,
+      isDegraded: !!failureFallback,
     };
   },
 

@@ -26,11 +26,11 @@ function SignupPageContent() {
       {/* --- LEFT SIDE: THE SECURE AUTH FORM --- */}
       <div className="w-full md:w-[500px] lg:w-[600px] flex flex-col relative z-20 border-r border-slate-900 bg-[#020305] overflow-y-auto custom-scrollbar">
         
-        <div className="flex-1 flex flex-col justify-center px-8 md:px-16 py-20">
+        <div className="flex-1 flex flex-col justify-center px-8 md:px-16 py-20 min-h-screen relative">
           {/* Back Link */}
           <Link 
             href="/" 
-            className="absolute top-10 left-10 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 hover:text-white transition-all group"
+            className="absolute top-8 left-8 md:top-12 md:left-12 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 hover:text-white transition-all group z-30"
           >
             <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-1 transition-transform" />
             Back to Terminal
@@ -40,7 +40,7 @@ function SignupPageContent() {
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="w-full max-w-md mx-auto space-y-12"
+            className="w-full max-w-md mx-auto space-y-12 relative z-20 my-auto"
           >
             <div className="space-y-6 pt-12">
               <div className="flex items-center gap-4">

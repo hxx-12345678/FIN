@@ -148,7 +148,7 @@ def handle_alert_check(job_id: str, org_id: str, object_id: str, params: Dict[st
                 """, (alert_id,))
                 
                 # Deliver alert
-                deliver_alert(cursor, org_id, alert_id, metric_name, metric_val, threshold_value, operator, channels, webhook)
+                shapley = mc_data.get('risk_factors', []) if mc_data and isinstance(mc_data, dict) else []; deliver_alert(cursor, org_id, alert_id, metric_name, metric_val, threshold_value, operator, channels, webhook, shapley)
 
         conn.commit()
         complete_job(job_id, {
@@ -252,3 +252,4 @@ def deliver_alert(conn, cursor, org_id, alert_id, metric, value, threshold, oper
             )
         else:
             logger.warning(f"Unable to send Slack: No webhook found for org {org_id}")
+

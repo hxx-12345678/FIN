@@ -1,5 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { csvService } from '../services/csv.service';
+import { dataQualityService } from '../services/data-quality.service';
 import { ValidationError } from '../utils/errors';
 import { AuthRequest } from '../middlewares/auth';
 
@@ -144,6 +145,33 @@ export const csvController = {
       res.status(201).json({
         ok: true,
         data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  /** 
+   * Validate CSV data quality before import
+   * Runs schema validation, period detection, and outlier detection
+   */
+  validateData: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        throw new ValidationError('User not authenticated');
+      }
+
+      const { headers, rows, mappings } = req.body;
+
+      if (!headers || !rows || !mappings) {
+        throw new ValidationError('headers, rows, and mappings are required');
+      }
+
+      const report = dataQualityService.runFullValidation(headers, rows, mappings);
+
+      res.json({
+        ok: true,
+        data: report,
       });
     } catch (error) {
       next(error);

@@ -59,6 +59,7 @@ import {
   AlertTriangle,
   Network as NetworkIcon
 } from "lucide-react"
+import { CookieManager } from "@/components/security/cookie-manager"
 
 // --- PROFESSIONAL DESIGN TOKENS ---
 const CleanBackground = () => (
@@ -717,6 +718,7 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
         </div>
       </footer>
 
+      <CookieManager />
     </div>
   )
 }

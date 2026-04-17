@@ -8,6 +8,9 @@ import { Readable } from 'stream';
 import crypto from 'crypto';
 import prisma from '../config/database';
 
+import { dataQualityService } from './data-quality.service';
+import { parse } from 'csv-parse/sync';
+
 const MAX_UPLOAD_SIZE = parseInt(process.env.MAX_UPLOAD_SIZE || '104857600', 10); // 100MB default
 
 // In-memory cache for file data (for development when S3 is not configured)
@@ -154,6 +157,8 @@ export const csvService = {
     // Get file data from cache if S3 is not configured
     let fileDataBase64: string | null = null;
     let effectiveFileHash: string | null = fileHash || null;
+    let validationReport: any = null;
+
     const s3Bucket = process.env.S3_BUCKET_NAME;
     if (!s3Bucket) {
       const cached = fileDataCache.get(uploadKey);
@@ -161,8 +166,27 @@ export const csvService = {
         fileDataBase64 = cached.data.toString('base64');
         effectiveFileHash = effectiveFileHash || cached.fileHash;
         console.info(`File data retrieved from cache for ${uploadKey}, size: ${cached.data.length} bytes`);
-        // Don't delete cache yet - keep it until job is processed
-        // The cache will expire after 30 minutes automatically
+        
+        // --- EDGE CASE 1 & 2: PRE-IMPORT DATA QUALITY CHECK ---
+        try {
+          const content = cached.data.toString('utf-8');
+          const parsed = parse(content, { columns: true, skip_empty_lines: true, trim: true }) as unknown;
+          const records: Record<string, string>[] = Array.isArray(parsed)
+            ? (parsed as Array<Record<string, unknown>>).map((row) => {
+                const normalized: Record<string, string> = {};
+                for (const [k, v] of Object.entries(row || {})) {
+                  normalized[k] = v == null ? '' : String(v);
+                }
+                return normalized;
+              })
+            : [];
+          const headers = Object.keys(records[0] || {});
+          
+          validationReport = dataQualityService.runFullValidation(headers, records, mappings);
+          console.info(`Data quality check complete. Score: ${validationReport.overallScore}. Issues: ${validationReport.issues.length}`);
+        } catch (err) {
+          console.warn('Failed to run pre-import validation:', err);
+        }
       } else {
         console.error(`File data not found in cache for uploadKey: ${uploadKey}`);
         console.error(`Cache keys: ${Array.from(fileDataCache.keys()).join(', ')}`);
@@ -184,6 +208,7 @@ export const csvService = {
           defaultCategory,
           initialCash: initialCash || 0,
           initialCustomers: initialCustomers || 0,
+          validationReport, // Store the report for UI feedback
         } as any,
         status: 'created',
         createdByUserId: userId,
