@@ -4,7 +4,6 @@ import { useEffect, useState, useRef } from "react"
 import { motion, useScroll, AnimatePresence, useInView, useSpring, useTransform, useMotionValue } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { AuthModal } from "@/components/auth/auth-modal"
 import { SimulatorWidget } from "@/components/simulator-widget"
 import Link from 'next/link'
 import {
@@ -122,8 +121,6 @@ const capabilities = [
 
 export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
   const [scrolled, setScrolled] = useState(false)
-  const [authModalOpen, setAuthModalOpen] = useState(false)
-  const [authMode, setAuthMode] = useState<"login" | "signup">("login")
 
   // For the moving 3D Hero Effect
   const mouseX = useMotionValue(0)
@@ -346,18 +343,18 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
           </div>
 
           <div className="flex items-center gap-3 sm:gap-6">
-            <button 
-              onClick={() => { setAuthMode("login"); setAuthModalOpen(true); }} 
-              className="hidden sm:block text-sm font-medium text-slate-300 hover:text-white transition-colors"
+            <Link 
+              href="/login" 
+              className="text-sm font-medium text-slate-300 hover:text-white transition-colors"
             >
               Sign In
-            </button>
-            <Button 
-              onClick={() => { setAuthMode("signup"); setAuthModalOpen(true); }} 
-              className="bg-blue-600 text-white hover:bg-blue-500 rounded-full px-5 sm:px-8 h-9 sm:h-10 font-bold text-xs sm:text-sm transition-all shadow-lg shadow-blue-600/20 whitespace-nowrap"
+            </Link>
+            <Link 
+              href="/signup" 
+              className="bg-blue-600 text-white hover:bg-blue-500 rounded-full px-5 sm:px-8 h-9 sm:h-10 flex items-center justify-center font-bold text-xs sm:text-sm transition-all shadow-lg shadow-blue-600/20 whitespace-nowrap"
             >
               Join <span className="hidden sm:inline">&nbsp;Design Partner Program</span>
-            </Button>
+            </Link>
           </div>
         </div>
       </nav>
@@ -407,7 +404,7 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
                  className="flex flex-col sm:flex-row items-center justify-center gap-5 pt-4"
               >
                  <Button 
-                    onClick={() => { window.location.href = "https://fina-pilot.vercel.app/" }}
+                    onClick={() => { window.location.href = "/signup" }}
                     className="w-full sm:w-auto bg-blue-600 text-white hover:bg-blue-500 h-14 px-10 text-base font-bold rounded-full shadow-2xl shadow-blue-600/30"
                  >
                     Join Design Partner Program
@@ -647,40 +644,79 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
             <p className="text-xl text-slate-400 font-medium mb-10">
                Stop trusting black-box AI. Start using verifiable, agentic intelligence to back your intuition.
             </p>
-            <Button 
-               onClick={() => { setAuthMode("signup"); setAuthModalOpen(true); }}
-               className="bg-blue-600 text-white hover:bg-blue-500 h-16 px-12 text-lg font-bold rounded-full shadow-2xl shadow-blue-600/30"
+            <Link 
+               href="/signup"
+               className="inline-flex items-center justify-center bg-blue-600 text-white hover:bg-blue-500 h-16 px-12 text-lg font-bold rounded-full shadow-2xl shadow-blue-600/30 transition-all"
             >
                Join Design Partner Program
-            </Button>
+            </Link>
          </div>
       </section>
 
       {/* Minimal Institutional Footer */}
-      <footer className="py-20 bg-slate-950 border-t border-slate-900 px-6 text-slate-400">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
-           <div className="flex items-center gap-3">
-              <img src="/icon.svg" alt="FinaPilot Logo" className="w-6 h-6 rounded" />
-              <span className="text-lg font-bold tracking-tight text-white">FinaPilot</span>
+      <footer className="py-24 bg-[#050608] border-t border-slate-900 px-6 text-slate-400">
+        <div className="max-w-7xl mx-auto">
+           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-12 mb-16">
+              <div className="col-span-2 lg:col-span-2 space-y-6">
+                 <div className="flex items-center gap-3">
+                    <img src="/icon.svg" alt="FinaPilot Logo" className="w-8 h-8 rounded-lg shadow-lg" />
+                    <span className="text-2xl font-black tracking-tighter text-white">FinaPilot</span>
+                 </div>
+                 <p className="text-sm font-medium text-slate-500 max-w-xs leading-relaxed">
+                    Zero-Trust Agentic FP&A OS. <br/> Built for the next wave of institutional financial intelligence.
+                 </p>
+              </div>
+
+              <div className="space-y-6">
+                 <h4 className="text-xs font-black text-white uppercase tracking-[0.2em]">Platform</h4>
+                 <ul className="space-y-4 text-sm font-bold">
+                    <li><Link href="/#features" className="hover:text-blue-400 transition-colors">Features</Link></li>
+                    <li><Link href="/#solutions" className="hover:text-blue-400 transition-colors">Solutions</Link></li>
+                    <li><Link href="/docs" className="hover:text-blue-400 transition-colors">Documentation</Link></li>
+                    <li><Link href="/support" className="hover:text-blue-400 transition-colors">Support Center</Link></li>
+                 </ul>
+              </div>
+
+              <div className="space-y-6">
+                 <h4 className="text-xs font-black text-white uppercase tracking-[0.2em]">Company</h4>
+                 <ul className="space-y-4 text-sm font-bold">
+                    <li><Link href="/contact" className="hover:text-blue-400 transition-colors">Contact Us</Link></li>
+                    <li><Link href="/#about" className="hover:text-blue-400 transition-colors">About Us</Link></li>
+                    <li><Link href="/#careers" className="hover:text-blue-400 transition-colors">Careers</Link></li>
+                    <li><Link href="/#partners" className="hover:text-blue-400 transition-colors">Partners</Link></li>
+                 </ul>
+              </div>
+
+              <div className="space-y-6">
+                 <h4 className="text-xs font-black text-white uppercase tracking-[0.2em]">Legal & Trust</h4>
+                 <ul className="space-y-4 text-sm font-bold">
+                    <li><Link href="/legal/security" className="hover:text-blue-400 transition-colors">Security Center</Link></li>
+                    <li><Link href="/legal/data-privacy-security" className="hover:text-blue-400 transition-colors">Privacy Policy</Link></li>
+                    <li><Link href="/legal/cookies" className="hover:text-blue-400 transition-colors">Cookie Policy</Link></li>
+                    <li>
+                       <button 
+                          onClick={() => window.dispatchEvent(new Event("finapilot:open-cookie-preferences"))}
+                          className="hover:text-blue-400 transition-colors text-left"
+                       >
+                          Cookie Settings
+                       </button>
+                    </li>
+                 </ul>
+              </div>
            </div>
-           
-           <div className="flex gap-6 md:gap-10 text-xs md:text-sm font-semibold flex-wrap justify-center">
-              <Link href="/legal/data-privacy-security" className="text-slate-400 hover:text-white transition-all underline decoration-transparent hover:decoration-blue-500/50 underline-offset-4 decoration-2">Global Data Privacy</Link>
-              <Link href="/legal/master-subscription-agreement" className="text-slate-400 hover:text-white transition-all underline decoration-transparent hover:decoration-blue-500/50 underline-offset-4 decoration-2">Master Subscription Agreement</Link>
-              <a href="#" className="text-slate-400 hover:text-white transition-all underline decoration-transparent hover:decoration-blue-500/50 underline-offset-4 decoration-2">Trust & SOC 2</a>
+
+           <div className="pt-12 border-t border-slate-900 flex flex-col md:flex-row justify-between items-center gap-8 text-xs font-black uppercase tracking-widest text-slate-600">
+              <div className="flex gap-8">
+                 <span>SOC 2 Type II Certified</span>
+                 <span>GDPR Ready Architecture</span>
+              </div>
+              <p>
+                &copy; {new Date().getFullYear()} FinaPilot Technologies Inc. All rights reserved.
+              </p>
            </div>
-           
-           <p className="text-sm font-medium">
-             &copy; {new Date().getFullYear()} FinaPilot Technologies Inc.
-           </p>
         </div>
       </footer>
 
-      <AuthModal
-        open={authModalOpen}
-        onOpenChange={setAuthModalOpen}
-        defaultMode={authMode}
-      />
     </div>
   )
 }
