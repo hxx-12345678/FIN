@@ -50,6 +50,35 @@ const nextConfig = {
       "@radix-ui/react-tooltip",
     ],
   },
+  async redirects() {
+    return [
+      {
+        source: '/integrations',
+        destination: '/#integrations',
+        permanent: true,
+      },
+      {
+        source: '/dashboard',
+        destination: '/#overview',
+        permanent: true,
+      },
+      {
+        source: '/scenarios',
+        destination: '/#scenarios',
+        permanent: true,
+      },
+      {
+        source: '/board-reporting',
+        destination: '/#board-reporting',
+        permanent: true,
+      },
+      {
+        source: '/investor',
+        destination: '/#investor',
+        permanent: true,
+      },
+    ]
+  },
   async headers() {
     return [
       {

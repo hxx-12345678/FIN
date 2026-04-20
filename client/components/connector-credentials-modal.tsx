@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -151,6 +151,42 @@ const CREDENTIAL_FIELDS: { [key: string]: CredentialField[] } = {
       helperText: "Create in Settings → Apps & Custom → Personal Access Tokens",
     },
   ],
+  tally: [
+    {
+      label: "Tally.NET Server URL",
+      name: "serverUrl",
+      placeholder: "http://localhost:9000 or your Tally.NET address",
+      type: "text",
+      required: true,
+      helperText: "Enable Tally.NET in Tally ERP → F12 (Configuration) → Data Configuration → Enable ODBC/Tally.NET Server",
+    },
+    {
+      label: "Company Name (in Tally)",
+      name: "companyName",
+      placeholder: "e.g. Black Pearl Enterprise",
+      type: "text",
+      required: true,
+      helperText: "The exact company name as registered in your Tally installation",
+    },
+  ],
+  salesforce: [
+    {
+      label: "Salesforce Instance URL",
+      name: "instanceUrl",
+      placeholder: "https://yourcompany.my.salesforce.com",
+      type: "text",
+      required: true,
+      helperText: "Your Salesforce org instance URL",
+    },
+    {
+      label: "Access Token",
+      name: "accessToken",
+      placeholder: "Your connected app access token",
+      type: "password",
+      required: true,
+      helperText: "Set up a Connected App in Salesforce Setup → App Manager",
+    },
+  ],
 }
 
 export function ConnectorCredentialsModal({
@@ -167,6 +203,17 @@ export function ConnectorCredentialsModal({
   const [credentials, setCredentials] = useState<{ [key: string]: string }>({})
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  
+  // Reset state when modal opens or connector changes
+  useEffect(() => {
+    if (open) {
+      setCredentials({})
+      setError(null)
+      setLoading(false)
+      setValidating(false)
+      setSuccess(false)
+    }
+  }, [open, connectorId])
 
   const fields = CREDENTIAL_FIELDS[connectorType] || []
 

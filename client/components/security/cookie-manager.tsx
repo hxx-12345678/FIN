@@ -56,93 +56,82 @@ export function CookieManager() {
   return (
     <AnimatePresence>
       {isVisible && (
-        <div className="fixed bottom-0 left-0 right-0 z-[100000] p-4 md:p-6 pointer-events-none">
+        <div className="fixed bottom-6 right-6 z-[100000] pointer-events-none w-[340px]">
           <motion.div
-            initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 100, opacity: 0 }}
-            className="max-w-4xl mx-auto bg-[#0B0E14]/95 backdrop-blur-2xl border border-slate-800 shadow-[0_32px_80px_rgba(0,0,0,0.8)] rounded-3xl p-6 md:p-8 pointer-events-auto relative overflow-hidden"
+            initial={{ y: 20, opacity: 0, scale: 0.98 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 20, opacity: 0, scale: 0.98 }}
+            className="bg-[#0B0E14]/90 backdrop-blur-3xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] rounded-[1.5rem] p-4 pointer-events-auto relative overflow-hidden"
           >
-            {/* Branding Accent */}
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 via-indigo-500 to-cyan-400" />
-            
             {view === "banner" ? (
-              <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-center">
-                <div className="flex-1 space-y-3 text-center md:text-left">
-                  <div className="flex items-center gap-3 justify-center md:justify-start">
-                    <div className="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20">
-                      <Cookie className="w-4 h-4 text-blue-400" />
-                    </div>
-                    <span className="text-sm font-black text-white uppercase tracking-widest">Privacy Preference Center</span>
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20 shrink-0">
+                    <ShieldCheck className="w-4 h-4 text-blue-400" />
                   </div>
-                  <p className="text-sm text-slate-400 leading-relaxed font-medium">
-                    FinaPilot uses cookies for secure session management and auditable provenance tracking. See our <a href="/legal/cookies" className="text-blue-400 hover:text-blue-300 underline underline-offset-4">Cookie Statement</a>.
-                  </p>
+                  <div className="space-y-0.5">
+                    <h3 className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em]">Privacy Stack</h3>
+                    <p className="text-[11px] text-slate-300 leading-snug font-medium pr-2">
+                      FinaPilot uses core cookies to ensure audit integrity.
+                      <a href="/legal/cookies" className="text-blue-400 hover:underline ml-1">Policy</a>
+                    </p>
+                  </div>
                 </div>
                 
-                <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-                  <Button 
-                    variant="ghost" 
-                    onClick={() => setView("settings")}
-                    className="text-slate-400 hover:text-white hover:bg-slate-800/50 h-11 px-5 rounded-xl font-bold text-xs"
-                  >
-                    Manage Settings
-                  </Button>
+                <div className="flex items-center gap-2">
                   <Button
                     variant="ghost"
+                    size="sm"
                     onClick={rejectNonEssential}
-                    className="text-slate-400 hover:text-white hover:bg-slate-800/50 h-11 px-5 rounded-xl font-bold text-xs"
+                    className="flex-1 text-slate-500 hover:text-white hover:bg-white/5 h-8 rounded-lg font-bold text-[9px] uppercase tracking-wider"
                   >
-                    Reject Non-Essential
+                    Required
                   </Button>
                   <Button 
+                    size="sm"
                     onClick={acceptAll}
-                    className="bg-blue-600 hover:bg-blue-500 text-white h-11 px-8 rounded-xl font-bold text-xs shadow-lg shadow-blue-600/20"
+                    className="flex-1 bg-blue-600 hover:bg-blue-500 text-white h-8 rounded-lg font-bold text-[9px] uppercase tracking-wider shadow-lg shadow-blue-600/20"
                   >
                     Accept All
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    onClick={() => setView("settings")}
+                    className="h-8 w-8 rounded-lg text-slate-500 hover:text-white hover:bg-white/5"
+                  >
+                    <Check className="w-3.5 h-3.5" />
                   </Button>
                 </div>
               </div>
             ) : (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-                  <div className="flex items-center gap-3">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => setView("banner")}
-                      className="text-slate-400 hover:text-white h-8 w-8"
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                    <h3 className="text-lg font-bold text-white tracking-tight">Granular Consent Policies</h3>
-                  </div>
-                  <div className="hidden sm:flex items-center gap-2 text-emerald-400 text-[10px] font-black uppercase tracking-widest bg-emerald-400/10 px-3 py-1 rounded-full border border-emerald-400/20">
-                    <ShieldCheck className="w-3 h-3" />
-                    SOC 2 Compliant
-                  </div>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                  <h3 className="text-[10px] font-bold text-white/60 uppercase tracking-widest">Consent Policies</h3>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={() => setView("banner")}
+                    className="h-6 w-6 text-slate-500 hover:text-white"
+                  >
+                    <X className="w-3 h-3" />
+                  </Button>
                 </div>
 
-                <div className="grid gap-3">
+                <div className="space-y-1.5">
                   {[
-                    { id: 'necessary', title: 'Strictly Necessary', desc: 'Required for platform security and basic arithmetic integrity.', locked: true },
-                    { id: 'functional', title: 'Functional & UI', desc: 'Remembers layout and currency preferences across sessions.', locked: false },
-                    { id: 'analytics', title: 'Analytical Integrity', desc: 'Aggregated, anonymous usage data to optimize calculation engines.', locked: false },
-                    { id: 'marketing', title: 'Communications', desc: 'Contextual help and support messaging inside the app.', locked: false },
+                    { id: 'necessary', title: 'Necessary', desc: 'Secure sessions & audit trails.', locked: true },
+                    { id: 'analytics', title: 'Analytics', desc: 'Engine optimization.', locked: false },
+                    { id: 'functional', title: 'Preferences', desc: 'UI personalization.', locked: false },
                   ].map((item) => (
-                    <div key={item.id} className="flex items-center justify-between p-4 rounded-xl bg-slate-900/50 border border-slate-800/80 hover:border-slate-700 transition-all group">
-                      <div className="space-y-0.5 mr-4">
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-white text-sm">{item.title}</h4>
-                          {item.locked && <span className="text-[9px] bg-slate-800 text-slate-500 px-2 py-0.5 rounded font-black uppercase tracking-widest">MANDATORY</span>}
-                        </div>
-                        <p className="text-xs text-slate-500">{item.desc}</p>
+                    <div key={item.id} className="flex items-center justify-between p-2 rounded-xl bg-white/[0.02] border border-white/5">
+                      <div className="mr-2">
+                        <h4 className="font-bold text-white text-[10px]">{item.title}</h4>
+                        <p className="text-[9px] text-slate-500 line-clamp-1">{item.desc}</p>
                       </div>
                       
                       {item.locked ? (
-                        <div className="p-1 rounded bg-slate-800/80 shrink-0">
-                           <Check className="w-4 h-4 text-emerald-400" />
-                        </div>
+                        <div className="p-1 px-1.5 rounded bg-white/5 shrink-0 text-[7px] font-black text-slate-500">FIXED</div>
                       ) : (
                         <label className="relative inline-flex items-center cursor-pointer shrink-0">
                           <input 
@@ -151,21 +140,19 @@ export function CookieManager() {
                             checked={preferences[item.id as keyof typeof preferences]}
                             onChange={() => setPreferences(prev => ({ ...prev, [item.id]: !prev[item.id as keyof typeof preferences] }))}
                           />
-                          <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-slate-400 after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-checked:after:bg-white"></div>
+                          <div className="w-7 h-3.5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-[14px] after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-slate-500 after:rounded-full after:h-2.5 after:w-2.5 after:transition-all peer-checked:bg-blue-600 peer-checked:after:bg-white"></div>
                         </label>
                       )}
                     </div>
                   ))}
                 </div>
 
-                <div className="flex justify-end gap-3 pt-2 border-t border-slate-800">
-                  <Button 
-                    onClick={() => savePreferences()}
-                    className="bg-white text-slate-900 hover:bg-slate-200 h-11 px-8 rounded-xl font-bold text-sm shadow-xl"
-                  >
-                    Save My Preferences
-                  </Button>
-                </div>
+                <Button 
+                  onClick={() => savePreferences()}
+                  className="w-full bg-white text-[#0B0E14] hover:bg-slate-200 h-9 rounded-xl font-black text-[9px] uppercase tracking-[0.15em] shadow-xl"
+                >
+                  Confirm Choice
+                </Button>
               </div>
             )}
           </motion.div>
@@ -174,3 +161,4 @@ export function CookieManager() {
     </AnimatePresence>
   )
 }
+

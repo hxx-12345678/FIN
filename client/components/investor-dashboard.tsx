@@ -26,6 +26,7 @@ import { useRouter } from "next/navigation"
 import { FinancialTermTooltip } from "./financial-term-tooltip"
 import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { useOrg } from "@/lib/org-context"
+import { useModel } from "@/lib/model-context"
 
 interface DashboardData {
   executiveSummary: {
@@ -68,62 +69,32 @@ interface DashboardData {
 export function InvestorDashboard() {
   const router = useRouter()
   const { currencySymbol, formatCurrency } = useOrg()
+  const { orgId, selectedModelId } = useModel()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [orgId, setOrgId] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchDashboardData()
-  }, [])
-
-  const fetchOrgId = async (): Promise<string | null> => {
-    // Try to get from localStorage first
-    const storedOrgId = localStorage.getItem("orgId")
-    if (storedOrgId) return storedOrgId
-
-    // Fetch from /auth/me endpoint
-    try {
-      const response = await fetch(`${API_BASE_URL}/auth/me`, {
-        headers: getAuthHeaders(),
-        credentials: "include",
-      })
-
-      if (response.status === 401) {
-        handleUnauthorized()
-        return null
-      }
-
-      if (response.ok) {
-        const userData = await response.json()
-        if (userData.orgs && userData.orgs.length > 0) {
-          const primaryOrgId = userData.orgs[0].id
-          localStorage.setItem("orgId", primaryOrgId)
-          return primaryOrgId
-        }
-      }
-    } catch (error) {
-      console.error("Failed to fetch orgId:", error)
+    if (orgId) {
+      fetchDashboardData()
     }
-
-    return null
-  }
+  }, [orgId, selectedModelId])
 
   const fetchDashboardData = async () => {
+    if (!orgId) return;
+    
     setLoading(true)
     setError(null)
 
     try {
-      // Get orgId
-      const currentOrgId = await fetchOrgId()
-      if (!currentOrgId) {
-        throw new Error("Organization ID not found. Please ensure you're logged in.")
+      // Build URL with modelId parameter
+      const url = new URL(`${API_BASE_URL}/orgs/${orgId}/investor-dashboard`)
+      if (selectedModelId) {
+        url.searchParams.append("modelId", selectedModelId)
       }
 
-      setOrgId(currentOrgId)
-
       // Fetch dashboard data
-      const response = await fetch(`${API_BASE_URL}/orgs/${currentOrgId}/investor-dashboard`, {
+      const response = await fetch(url.toString(), {
         headers: getAuthHeaders(),
         credentials: "include",
       })

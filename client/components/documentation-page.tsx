@@ -996,7 +996,7 @@ export async function verifyMFAToken(userId: string, token: string) {
               <Badge variant="outline" className="mb-4 bg-amber-50 text-amber-600 border-amber-200 font-black text-[10px]">DATA INTEGRITY</Badge>
               <h1 className="text-4xl font-black tracking-tight mb-4">Audit Trail & Data Provenance</h1>
               <p className="text-lg text-slate-500 mb-8 font-medium">
-                FinaPilot maintains an immutable, append-only audit log for every action that modifies financial data. Each log entry is cryptographically signed with SHA-256 to prevent tampering and ensure compliance with SOC 2 Type II requirements.
+                FinaPilot maintains an immutable, append-only audit log for every action that modifies financial data. Each log entry is cryptographically signed with SHA-256 to prevent tampering and ensure alignment with SOC 2 Type II architectural requirements.
               </p>
 
               <h2 className="text-xl font-black mb-4">Audit Log Entry Structure</h2>
@@ -1044,7 +1044,7 @@ export async function verifyMFAToken(userId: string, token: string) {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-10">
                 {[
-                  { cert: "SOC 2 Type II", desc: "Annual audit covering Security, Availability, Processing Integrity, Confidentiality, and Privacy. Report available under NDA.", status: "Certified" },
+                  { cert: "SOC 2 Type II Architecture", desc: "Designed to meet SOC 2 Trust Services Criteria for Security, Availability, and Confidentiality. Attestation roadmap in place.", status: "Aligned" },
                   { cert: "GDPR Compliance", desc: "Full compliance with EU General Data Protection Regulation including data subject rights, DPA support, and EU data residency options.", status: "Compliant" },
                   { cert: "AES-256 Encryption", desc: "All data encrypted at rest using AES-256 encryption. Data in transit protected by TLS 1.3. Database connections use certificate-based authentication.", status: "Implemented" },
                   { cert: "Data Residency", desc: "Choose your data hosting region: US East (N. Virginia), EU West (Ireland), or Asia Pacific (Mumbai). Data never leaves your selected region.", status: "Configurable" },
@@ -1243,7 +1243,7 @@ Content-Type: application/json`}</code></pre>
                   { q: "How does FinaPilot differ from spreadsheets?", a: "Unlike spreadsheets, FinaPilot uses a driver-based engine where changing one input variable automatically recalculates all dependent outputs across your P&L, cash flow, and balance sheet. It adds version control, multi-user collaboration, approval workflows, and Monte Carlo simulations—none of which are possible in traditional spreadsheets." },
                   { q: "Can I import data from Excel?", a: "Yes. FinaPilot supports CSV and Excel (.xlsx) file imports through the Data Import Wizard. The wizard guides you through column mapping, data validation, and category assignment. Imported data enters a staged state and must be approved before it becomes part of your financial model." },
                   { q: "How accurate are the AI forecasts?", a: "AI forecasts are generated using Facebook Prophet for time-series decomposition and Monte Carlo simulations for probabilistic analysis. Accuracy depends on the quality and quantity of your historical data. The platform provides confidence intervals (P5/P50/P95) so you can assess the range of possible outcomes rather than relying on a single point estimate." },
-                  { q: "Is my financial data secure?", a: "Yes. All data is encrypted at rest (AES-256) and in transit (TLS 1.3). The platform implements row-level security in PostgreSQL, mandatory MFA for data mutations, and maintains an immutable audit trail with SHA-256 integrity hashing. We are SOC 2 Type II certified." },
+                  { q: "Is my financial data secure?", a: "Yes. All data is encrypted at rest (AES-256) and in transit (TLS 1.3). The platform implements row-level security in PostgreSQL, mandatory MFA for data mutations, and maintains an immutable audit trail with SHA-256 integrity hashing. We utilize a SOC 2 Type II Aligned Architecture." },
                   { q: "Can multiple team members collaborate on the same model?", a: "Yes. FinaPilot supports multi-user collaboration through RBAC (Role-Based Access Control). Team members can be assigned Viewer, Analyst, Controller, or Admin roles. Changes are staged and require approval, preventing conflicting edits. Real-time commenting is available on all financial items." },
                   { q: "How often does data sync from my ERP?", a: "Sync frequency depends on the integration: Stripe syncs every 2 hours, NetSuite and Salesforce every 4 hours, QuickBooks and Xero every 6 hours, Sage every 8 hours, and Workday every 12 hours. Enterprise plans can configure custom sync intervals." },
                   { q: "Can I generate investor-ready reports?", a: "Yes. The Board Reporting module includes templates specifically designed for board presentations and investor updates. Reports include AI-generated executive summaries, cohort analysis, unit economics, and valuation metrics. Export as PDF with your organization's branding." },
@@ -1285,7 +1285,7 @@ Content-Type: application/json`}</code></pre>
                     "Multi-channel data ingestion: NetSuite, Xero, QuickBooks, Sage, Workday, Stripe, and Salesforce connectors",
                     "RBAC system with 4-tier role hierarchy (Viewer, Analyst, Controller, Admin) and 4-Eye approval principle",
                     "Zero-trust authentication with mandatory MFA enforcement for data mutation endpoints",
-                    "Immutable audit trail with SHA-256 integrity hashing and SOC 2 Type II compliance",
+                    "Immutable audit trail with SHA-256 integrity hashing and SOC 2 Type II aligned architecture",
                     "Investor Dashboard with unit economics, valuation metrics, and secure shareable data rooms",
                     "Export Queue with background PDF, Excel, and CSV generation",
                     "Real-time alert system with in-app, email, and Slack notification routing",

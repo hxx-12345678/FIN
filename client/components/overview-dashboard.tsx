@@ -444,7 +444,10 @@ export function OverviewDashboard() {
             <span className="hidden sm:inline">Last 30 days</span>
             <span className="sm:hidden">30d</span>
           </Button>
-          <Button className="w-full sm:w-auto" onClick={() => router.push('/dashboard/analytics')}>
+          <Button 
+            className="w-full sm:w-auto" 
+            onClick={() => window.dispatchEvent(new CustomEvent('navigate-view', { detail: { view: 'reports' } }))}
+          >
             <Zap className="mr-2 h-4 w-4" />
             <span className="hidden sm:inline">Generate Report</span>
             <span className="sm:hidden">Report</span>

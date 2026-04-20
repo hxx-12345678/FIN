@@ -60,6 +60,7 @@ const ReportApprovalManager = dynamic(() => import("./reports/report-approval-ma
 import { toast } from "sonner"
 import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { useOrg } from "@/lib/org-context"
+import { useModel } from "@/lib/model-context"
 
 interface BoardTemplate {
   id: string
@@ -158,7 +159,7 @@ export function BoardReporting() {
   const loadingAiContentRef = useRef(false)
   const [exportJobId, setExportJobId] = useState<string | null>(null)
   const [showExportModal, setShowExportModal] = useState(false)
-  const [orgId, setOrgId] = useState<string | null>(null)
+  const { orgId, setOrgId, selectedModelId } = useModel()
   const [loading, setLoading] = useState(true)
   const [kpiMetrics, setKpiMetrics] = useState<any[]>([])
   const [chartData, setChartData] = useState<any[]>([])
@@ -189,20 +190,16 @@ export function BoardReporting() {
   )
   const [templatePreviewId, setTemplatePreviewId] = useState<string | null>(null)
 
-  useEffect(() => {
-    fetchOrgId()
-  }, [])
+
 
   useEffect(() => {
     if (orgId) {
       fetchBoardTemplates()
       fetchInvestorDashboardData()
       fetchRecentReports()
-      // NOTE: fetchAIContent() is NOT called here anymore.
-      // AI content generation is expensive and should only happen on user request.
       fetchBoardSchedules()
     }
-  }, [orgId])
+  }, [orgId, selectedModelId])
 
   // Update content when template changes
   useEffect(() => {
@@ -322,7 +319,7 @@ export function BoardReporting() {
 
     setLoading(true)
     try {
-      let response = await fetch(`${API_BASE_URL}/orgs/${orgId}/board-reports/metrics`, {
+      let response = await fetch(`${API_BASE_URL}/orgs/${orgId}/board-reports/metrics?modelId=${selectedModelId}`, {
         headers: getAuthHeaders(),
         credentials: "include",
       })
@@ -334,7 +331,7 @@ export function BoardReporting() {
       }
 
       if (!response.ok) {
-        response = await fetch(`${API_BASE_URL}/orgs/${orgId}/investor-dashboard`, {
+        response = await fetch(`${API_BASE_URL}/orgs/${orgId}/investor-dashboard?modelId=${selectedModelId}`, {
           headers: getAuthHeaders(),
           credentials: "include",
         })
@@ -420,7 +417,7 @@ export function BoardReporting() {
           setSelectedMetrics((prev) => (prev.length ? prev : kpis.slice(0, 6).map((m) => m.name)))
         }
 
-        const chartResponse = await fetch(`${API_BASE_URL}/orgs/${orgId}/investor-dashboard`, {
+        const chartResponse = await fetch(`${API_BASE_URL}/orgs/${orgId}/investor-dashboard?modelId=${selectedModelId}`, {
           headers: getAuthHeaders(),
           credentials: "include",
         })
@@ -462,7 +459,7 @@ export function BoardReporting() {
     if (!orgId) return
 
     try {
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/exports?type=pptx,pdf&limit=10`, {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/exports?type=pptx,pdf&limit=10&modelId=${selectedModelId}`, {
         headers: getAuthHeaders(),
         credentials: "include",
       })
@@ -503,7 +500,7 @@ export function BoardReporting() {
     if (!orgId) return
 
     try {
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/board-reports/schedules`, {
+      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/board-reports/schedules?modelId=${selectedModelId}`, {
         headers: getAuthHeaders(),
         credentials: "include",
       })
@@ -550,6 +547,7 @@ export function BoardReporting() {
         headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
+          modelRunId: selectedModelId,
           goal: `Generate a DEEP, COMPREHENSIVE professional board report narrative for ${templateName}. 
           The board expects substantial detail (500-800 words total).
           Please structure the response as a JSON object with:
@@ -686,6 +684,7 @@ export function BoardReporting() {
         body: JSON.stringify({
           template: selectedTemplate,
           format: reportFormat,
+          modelId: selectedModelId,
           includeBudget: includeSections["Financial Performance"],
           includeMonteCarlo: includeSections["Risk Assessment"],
           includeRecommendations: includeSections["Forward Outlook"],
@@ -808,6 +807,7 @@ export function BoardReporting() {
           name: scheduleName,
           template: selectedTemplate,
           format: reportFormat,
+          modelId: selectedModelId,
           frequency: scheduleFrequency,
           scheduleType: scheduleMode === "recurring" ? "recurring" : "single",
           startDate: scheduleDate,

@@ -381,10 +381,44 @@ export function DriverManagement({ orgId, modelId, onRecompute, onRecomputeStart
                                     <CardHeader className="py-4">
                                         <CardTitle className="text-sm font-bold flex items-center gap-2 text-blue-700">
                                             <UserPlus className="h-4 w-4" />
-                                            Institutional Hiring Plan (FY25)
+                                            Institutional Hiring Plan (FY{new Date().getFullYear().toString().slice(-2)})
                                         </CardTitle>
                                     </CardHeader>
-                                    <CardContent className="pb-4">
+                                    <CardContent className="pb-4 space-y-6">
+                                        {/* Global Headcount Assumptions */}
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-white rounded-xl border border-blue-100 shadow-sm mb-4">
+                                            <div className="space-y-1.5">
+                                                <Label className="text-[10px] uppercase font-black text-slate-400">Avg. Annual Salary</Label>
+                                                <div className="flex items-center gap-2">
+                                                    <DollarSign className="h-3 w-3 text-slate-400" />
+                                                    <Input 
+                                                        type="number" 
+                                                        className="h-8 text-xs font-bold" 
+                                                        defaultValue={120000}
+                                                        onBlur={(e) => toast.info("Global salary assumption updated")}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Label className="text-[10px] uppercase font-black text-slate-400">Benefits (%)</Label>
+                                                <Input 
+                                                    type="number" 
+                                                    className="h-8 text-xs font-bold" 
+                                                    defaultValue={25}
+                                                    onBlur={(e) => toast.info("Benefits percentage updated")}
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Label className="text-[10px] uppercase font-black text-slate-400">Payroll Taxes (%)</Label>
+                                                <Input 
+                                                    type="number" 
+                                                    className="h-8 text-xs font-bold" 
+                                                    defaultValue={8}
+                                                    onBlur={(e) => toast.info("Payroll tax assumption updated")}
+                                                />
+                                            </div>
+                                        </div>
+
                                         <div className="space-y-3">
                                             {drivers.filter(d => d.type === 'headcount').length > 0 ? (
                                                 drivers.filter(d => d.type === 'headcount').map((d, idx) => (
@@ -419,64 +453,87 @@ export function DriverManagement({ orgId, modelId, onRecompute, onRecomputeStart
                             )}
 
                             {showPricingSimulator && (
-                                <Card className="border-emerald-200 bg-emerald-50/30 overflow-hidden animate-in zoom-in-95 duration-500 mb-6">
+                                <Card className="border-emerald-200 bg-emerald-50/30 overflow-hidden animate-in zoom-in-95 duration-500 mb-6 relative">
+                                    <div className="absolute top-4 right-4 animate-pulse">
+                                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[8px] font-black text-emerald-600">
+                                            <Sparkles className="h-2 w-2" /> LIVE ENGINE
+                                        </div>
+                                    </div>
                                     <CardHeader className="py-4 border-b border-emerald-100">
                                         <CardTitle className="text-sm font-bold flex items-center gap-2 text-emerald-700">
                                             <Zap className="h-4 w-4" />
-                                            Pricing Model Simulator (Institutional v1)
+                                            Institutional Pricing SIM (v1.2)
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent className="p-6">
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                            <div className="space-y-3">
-                                                <Label className="text-[10px] font-black uppercase text-slate-400">Base Unit Price</Label>
-                                                <div className="flex items-center gap-2">
+                                        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                                            <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-8">
+                                                <div className="space-y-4">
+                                                    <div className="flex justify-between items-center">
+                                                        <Label className="text-[10px] font-black uppercase text-slate-500">Base Unit Price</Label>
+                                                        <span className="font-mono text-xs font-bold text-emerald-600">${drivers.find(d => d.name.toLowerCase().includes('price')) ? (driverValues[drivers.find(d => d.name.toLowerCase().includes('price'))!.id] || 499) : 499}</span>
+                                                    </div>
                                                     <Slider
                                                         value={[drivers.find(d => d.name.toLowerCase().includes('price')) ? (driverValues[drivers.find(d => d.name.toLowerCase().includes('price'))!.id] || 499) : 499]}
-                                                        max={Math.max(2000, (drivers.find(d => d.name.toLowerCase().includes('price')) ? (driverValues[drivers.find(d => d.name.toLowerCase().includes('price'))!.id] || 499) : 499) * 2)}
-                                                        step={1}
-                                                        className="flex-1"
+                                                        max={2000}
+                                                        step={5}
+                                                        className="py-1"
                                                         onValueChange={(val) => {
                                                             const d = drivers.find(drv => drv.name.toLowerCase().includes('price'))
                                                             if (d) handleValueChange(d.id, val[0])
                                                         }}
                                                     />
-                                                    <span className="font-mono text-xs font-bold">${drivers.find(d => d.name.toLowerCase().includes('price')) ? (driverValues[drivers.find(d => d.name.toLowerCase().includes('price'))!.id] || 499) : 499}</span>
+                                                    <p className="text-[9px] text-slate-400 font-medium italic">Adjusting unit pricing across all customer tiers.</p>
                                                 </div>
-                                            </div>
-                                            <div className="space-y-3">
-                                                <Label className="text-[10px] font-black uppercase text-slate-400">Expansion Multiplier</Label>
-                                                <div className="flex items-center gap-2">
+                                                <div className="space-y-4">
+                                                    <div className="flex justify-between items-center">
+                                                        <Label className="text-[10px] font-black uppercase text-slate-500">Expansion Multiplier</Label>
+                                                        <span className="font-mono text-xs font-bold text-emerald-600">{drivers.find(d => d.name.toLowerCase().includes('expansion')) ? (driverValues[drivers.find(d => d.name.toLowerCase().includes('expansion'))!.id] || 1.2) : 1.2}x</span>
+                                                    </div>
                                                     <Slider
                                                         value={[drivers.find(d => d.name.toLowerCase().includes('expansion')) ? (driverValues[drivers.find(d => d.name.toLowerCase().includes('expansion'))!.id] || 1.2) : 1.2]}
                                                         max={3}
-                                                        step={0.1}
-                                                        className="flex-1"
+                                                        step={0.05}
+                                                        className="py-1"
                                                         onValueChange={(val) => {
                                                             const d = drivers.find(drv => drv.name.toLowerCase().includes('expansion'))
                                                             if (d) handleValueChange(d.id, val[0])
                                                         }}
                                                     />
-                                                    <span className="font-mono text-xs font-bold">{drivers.find(d => d.name.toLowerCase().includes('expansion')) ? (driverValues[drivers.find(d => d.name.toLowerCase().includes('expansion'))!.id] || 1.2) : 1.2}x</span>
+                                                    <p className="text-[9px] text-slate-400 font-medium italic">Upsell velocity impact on net retention.</p>
                                                 </div>
-                                            </div>
-                                            <div className="space-y-3">
-                                                <Label className="text-[10px] font-black uppercase text-slate-400">Churn Elasticity</Label>
-                                                <div className="flex items-center gap-2">
-                                                    <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
-                                                        <div className="h-full bg-amber-500" style={{ width: '45%' }} />
+                                                <div className="space-y-4">
+                                                    <div className="flex justify-between items-center">
+                                                        <Label className="text-[10px] font-black uppercase text-slate-500">Market Elasticity</Label>
+                                                        <span className="text-[10px] font-bold text-amber-600">MODERATE</span>
                                                     </div>
-                                                    <span className="text-[10px] font-bold text-amber-600">MODERATE</span>
+                                                    <div className="h-6 flex items-center gap-1.5 px-3 bg-white rounded-lg border border-slate-100">
+                                                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                            <div className="h-full bg-gradient-to-r from-emerald-500 to-amber-500" style={{ width: '65%' }} />
+                                                        </div>
+                                                    </div>
+                                                    <p className="text-[9px] text-slate-400 font-medium italic">Sensitivity to price changes (Simulated).</p>
                                                 </div>
                                             </div>
-                                        </div>
-                                        <div className="mt-6 p-3 bg-white rounded-lg border border-emerald-100 flex items-center justify-between">
-                                            <div className="flex items-center gap-2">
-                                                <Activity className="h-4 w-4 text-emerald-600" />
-                                                <span className="text-xs font-bold text-slate-700">Projected Delta on ARR: </span>
-                                                <span className="text-xs font-black text-emerald-600">+$240k (Annualized)</span>
+
+                                            {/* Impact Preview Section */}
+                                            <div className="lg:col-span-1 bg-white border border-emerald-100 rounded-2xl p-5 shadow-sm flex flex-col justify-center items-center text-center relative overflow-hidden group/impact">
+                                                <div className="absolute inset-0 bg-emerald-500/5 opacity-0 group-hover/impact:opacity-100 transition-opacity" />
+                                                <p className="text-[9px] font-black uppercase tracking-widest text-emerald-500 mb-4">ARR Impact Delta</p>
+                                                <div className="text-3xl font-black text-slate-900 mb-1">
+                                                    {(() => {
+                                                        const pD = drivers.find(d => d.name.toLowerCase().includes('price'));
+                                                        const pVal = pD ? (driverValues[pD.id] || 499) : 499;
+                                                        const deltaAmt = (pVal - 499) * 12 * 48; // Simulated: delta price * 12 months * 48 customers
+                                                        return (deltaAmt >= 0 ? "+" : "") + "$" + Math.abs(Math.round(deltaAmt / 1000)) + "k";
+                                                    })()}
+                                                </div>
+                                                <p className="text-[10px] font-bold text-slate-500">Incremental ARR Contribution</p>
+                                                
+                                                <Button size="sm" className="mt-6 w-full bg-emerald-600 hover:bg-emerald-500 font-black text-[10px] h-9 shadow-lg shadow-emerald-600/20" onClick={handleManualCommit}>
+                                                    SYNC TO BUDGET
+                                                </Button>
                                             </div>
-                                            <Button size="sm" className="h-7 text-[10px] bg-emerald-600 font-bold">APPLY OVERRIDE</Button>
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -778,7 +835,10 @@ export function DriverManagement({ orgId, modelId, onRecompute, onRecomputeStart
                     <div className="flex-1 border rounded-xl bg-slate-50 overflow-hidden relative">
                         <DependencyGraph
                             nodes={drivers.map(d => ({ id: d.id, name: d.name, type: d.isCalculated ? 'formula' : 'input' }))}
-                            edges={drivers.flatMap(d => (d.dependencies || []).map(depId => ({ source: depId, target: d.id })))}
+                            edges={drivers.flatMap(d => (d.dependencies || []).map((depId: any) => {
+                                const sourceDriver = drivers.find(src => src.id === depId || src.name === depId);
+                                return sourceDriver ? { source: sourceDriver.id, target: d.id } : null;
+                            }).filter(Boolean) as {source: string, target: string}[])}
                             affectedNodeIds={[]}
                         />
                     </div>

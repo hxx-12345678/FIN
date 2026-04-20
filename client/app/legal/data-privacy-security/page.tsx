@@ -4,7 +4,7 @@ import { ArrowLeft, Lock, Globe, Server, Database, EyeOff, Shield, Clock, FileTe
 
 export const metadata: Metadata = {
   title: 'Privacy Policy | FinaPilot',
-  description: 'Comprehensive Privacy Policy for FinaPilot — covering data collection, AI processing, cookies, GDPR/CCPA rights, international transfers, and enterprise data security. SOC 2 Type II certified.',
+  description: 'Comprehensive Privacy Policy for FinaPilot — covering data collection, AI processing, cookies, GDPR/CCPA rights, international transfers, and enterprise data security. SOC 2 Type II Aligned Architecture.',
   keywords: 'FinaPilot privacy policy, data privacy, GDPR, CCPA, CPRA, AI data processing, financial data security, SOC2, cookie policy',
 }
 
@@ -114,7 +114,7 @@ export default function DataPrivacySecurity() {
           
           <div className="bg-emerald-50/50 rounded-xl p-6 border border-emerald-100 mb-10">
             <p className="text-sm text-emerald-900 m-0 leading-relaxed">
-              At FinaPilot, we recognize that our customers entrust us with their most sensitive financial data. This Privacy Policy is written in plain language to ensure transparency about our data practices. It applies to all users of the FinaPilot platform, website (finapilot.ai), and related services. By using our Services, you acknowledge that you have read and understood this Privacy Policy. This Privacy Policy should be read in conjunction with our <Link href="/legal/master-subscription-agreement" className="text-emerald-700 underline font-semibold">Terms of Service</Link>.
+              At FinaPilot, we recognize that our customers entrust us with their most sensitive financial data. This Privacy Policy is written in plain language to ensure transparency about our data practices. It applies to all users of the FinaPilot platform, website (finapilot.com), and related services. By using our Services, you acknowledge that you have read and understood this Privacy Policy. This Privacy Policy should be read in conjunction with our <Link href="/legal/master-subscription-agreement" className="text-emerald-700 underline font-semibold">Terms of Service</Link>.
             </p>
           </div>
 
@@ -124,11 +124,11 @@ export default function DataPrivacySecurity() {
           {/* ============================================================ */}
           <h2 id="privacy-1">1. Introduction &amp; Scope</h2>
           
-          <p><strong>1.1 Who We Are.</strong> FinaPilot Inc. (&ldquo;FinaPilot,&rdquo; &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;) is a Delaware corporation that provides an AI-powered Financial Planning &amp; Analysis (FP&amp;A) platform for businesses. Our registered address is available upon request at <a href="mailto:legal@finapilot.ai">legal@finapilot.ai</a>.</p>
+          <p><strong>1.1 Who We Are.</strong> FinaPilot Inc. (&ldquo;FinaPilot,&rdquo; &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;) is a Delaware corporation that provides an AI-powered Financial Planning &amp; Analysis (FP&amp;A) platform for businesses. Our registered address is available upon request at <a href="mailto:legal@finapilot.com">legal@finapilot.com</a>.</p>
           
           <p><strong>1.2 What This Policy Covers.</strong> This Privacy Policy applies to:</p>
           <ul>
-            <li>Our marketing website at <strong>finapilot.ai</strong> (the &ldquo;Website&rdquo;).</li>
+            <li>Our marketing website at <strong>finapilot.com</strong> (the &ldquo;Website&rdquo;).</li>
             <li>The FinaPilot cloud platform and all related applications, APIs, and integrations (the &ldquo;Platform&rdquo; or &ldquo;Cloud Services&rdquo;).</li>
             <li>All communications, support interactions, and related services provided by FinaPilot.</li>
           </ul>
@@ -312,7 +312,7 @@ export default function DataPrivacySecurity() {
           <ul>
             <li>AI does not make, and is not designed to make, decisions that produce legal effects or similarly significant effects on individuals (as defined by GDPR Article 22).</li>
             <li>All AI-generated content (forecasts, narratives, recommendations) requires human review before use in any material business decision.</li>
-            <li>If you believe an AI-generated output has materially affected you, you may contact <a href="mailto:ai-ethics@finapilot.ai">ai-ethics@finapilot.ai</a> to request a human review.</li>
+            <li>If you believe an AI-generated output has materially affected you, you may contact <a href="mailto:ai-ethics@finapilot.com">ai-ethics@finapilot.com</a> to request a human review.</li>
           </ul>
           
           <p><strong>4.5 AI Output Ownership.</strong> You retain full ownership of all AI-generated outputs produced based on your data. We claim no intellectual property rights over AI Outputs.</p>
@@ -466,7 +466,7 @@ export default function DataPrivacySecurity() {
           
           <p><strong>8.1 Certifications.</strong></p>
           <ul>
-            <li><strong>SOC 2 Type II</strong> — Annual independent audit covering Security, Availability, Processing Integrity, Confidentiality, and Privacy.</li>
+            <li><strong>SOC 2 Type II Aligned Architecture</strong> — Designed to meet Security, Availability, Processing Integrity, Confidentiality, and Privacy criteria.</li>
             <li><strong>ISO 27001 Aligned</strong> — Our ISMS follows ISO/IEC 27001:2022 controls.</li>
           </ul>
           
@@ -526,7 +526,7 @@ export default function DataPrivacySecurity() {
           
           <p><strong>For Enterprise Platform Users:</strong> If you access the Platform through your employer (the Enterprise Customer), your employer is the Data Controller for Customer Financial Data. Please direct any requests related to Customer Financial Data to your organization&apos;s administrator. FinaPilot will cooperate with its Enterprise Customers to fulfill verified data subject requests.</p>
           
-          <p><strong>How to Exercise Your Rights:</strong> Submit requests to <a href="mailto:privacy@finapilot.ai">privacy@finapilot.ai</a>. We will respond within thirty (30) days. We may need to verify your identity before processing your request.</p>
+          <p><strong>How to Exercise Your Rights:</strong> Submit requests to <a href="mailto:privacy@finapilot.com">privacy@finapilot.com</a>. We will respond within thirty (30) days. We may need to verify your identity before processing your request.</p>
 
 
           {/* ============================================================ */}
@@ -549,7 +549,7 @@ export default function DataPrivacySecurity() {
           
           <p><strong>Authorized Agent:</strong> You may designate an authorized agent to make a request on your behalf. The agent must provide written authorization, and we may verify your identity directly.</p>
           
-          <p><strong>How to Exercise Your Rights:</strong> Submit requests to <a href="mailto:privacy@finapilot.ai">privacy@finapilot.ai</a> or call our privacy line. We will respond within forty-five (45) days.</p>
+          <p><strong>How to Exercise Your Rights:</strong> Submit requests to <a href="mailto:privacy@finapilot.com">privacy@finapilot.com</a> or call our privacy line. We will respond within forty-five (45) days.</p>
           
           <p><strong>Financial Incentives:</strong> We do not offer financial incentives for the collection, sale, or deletion of personal information.</p>
 
@@ -569,7 +569,7 @@ export default function DataPrivacySecurity() {
             <li><strong>Texas (TDPSA), Oregon (OCPA), Montana (MCDPA), Tennessee, Indiana, Iowa, and other states with enacted privacy laws:</strong> We comply with the specific requirements of each applicable state privacy law.</li>
           </ul>
           
-          <p>To exercise your rights under any state privacy law, contact <a href="mailto:privacy@finapilot.ai">privacy@finapilot.ai</a>. If your request is denied, you may appeal by responding to the denial with a written appeal, and we will respond within sixty (60) days.</p>
+          <p>To exercise your rights under any state privacy law, contact <a href="mailto:privacy@finapilot.com">privacy@finapilot.com</a>. If your request is denied, you may appeal by responding to the denial with a written appeal, and we will respond within sixty (60) days.</p>
 
 
           {/* ============================================================ */}
@@ -577,7 +577,7 @@ export default function DataPrivacySecurity() {
           {/* ============================================================ */}
           <h2 id="privacy-13">13. Children&apos;s Privacy</h2>
           
-          <p>The Cloud Services are designed for businesses and are not intended for individuals under the age of eighteen (18). We do not knowingly collect personal information from children under 18 (or under 16 in the EEA). If we become aware that we have collected personal information from a child, we will take immediate steps to delete such data. If you believe we have inadvertently collected information from a child, please contact us at <a href="mailto:privacy@finapilot.ai">privacy@finapilot.ai</a>.</p>
+          <p>The Cloud Services are designed for businesses and are not intended for individuals under the age of eighteen (18). We do not knowingly collect personal information from children under 18 (or under 16 in the EEA). If we become aware that we have collected personal information from a child, we will take immediate steps to delete such data. If you believe we have inadvertently collected information from a child, please contact us at <a href="mailto:privacy@finapilot.com">privacy@finapilot.com</a>.</p>
 
 
           {/* ============================================================ */}
@@ -618,7 +618,7 @@ export default function DataPrivacySecurity() {
             <li>Audit rights and compliance documentation.</li>
             <li>Data deletion and return procedures upon termination.</li>
           </ul>
-          <p>To request a copy of our DPA, contact <a href="mailto:legal@finapilot.ai">legal@finapilot.ai</a>.</p>
+          <p>To request a copy of our DPA, contact <a href="mailto:legal@finapilot.com">legal@finapilot.com</a>.</p>
 
 
           {/* ============================================================ */}
@@ -729,7 +729,7 @@ export default function DataPrivacySecurity() {
               <Fingerprint className="h-5 w-5 text-emerald-600 mt-0.5 shrink-0" />
               <div>
                 <p className="font-semibold text-slate-900">Data Protection Officer (DPO)</p>
-                <a href="mailto:privacy@finapilot.ai" className="text-emerald-600 hover:text-emerald-800 block">privacy@finapilot.ai</a>
+                <a href="mailto:privacy@finapilot.com" className="text-emerald-600 hover:text-emerald-800 block">privacy@finapilot.com</a>
                 <p className="text-slate-500 mt-1">For all privacy rights requests, data subject access requests, and DPA inquiries.</p>
               </div>
             </div>
@@ -737,7 +737,7 @@ export default function DataPrivacySecurity() {
               <Scale className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
               <div>
                 <p className="font-semibold text-slate-900">Legal Department</p>
-                <a href="mailto:legal@finapilot.ai" className="text-blue-600 hover:text-blue-800 block">legal@finapilot.ai</a>
+                <a href="mailto:legal@finapilot.com" className="text-blue-600 hover:text-blue-800 block">legal@finapilot.com</a>
                 <p className="text-slate-500 mt-1">For DPA requests, enterprise contract negotiations, and legal inquiries.</p>
               </div>
             </div>
@@ -745,7 +745,7 @@ export default function DataPrivacySecurity() {
               <Shield className="h-5 w-5 text-purple-600 mt-0.5 shrink-0" />
               <div>
                 <p className="font-semibold text-slate-900">Security Team</p>
-                <a href="mailto:security@finapilot.ai" className="text-purple-600 hover:text-purple-800 block">security@finapilot.ai</a>
+                <a href="mailto:security@finapilot.com" className="text-purple-600 hover:text-purple-800 block">security@finapilot.com</a>
                 <p className="text-slate-500 mt-1">For reporting security vulnerabilities or incidents.</p>
               </div>
             </div>
@@ -753,15 +753,15 @@ export default function DataPrivacySecurity() {
               <Cpu className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
               <div>
                 <p className="font-semibold text-slate-900">AI Ethics Team</p>
-                <a href="mailto:ai-ethics@finapilot.ai" className="text-amber-600 hover:text-amber-800 block">ai-ethics@finapilot.ai</a>
+                <a href="mailto:ai-ethics@finapilot.com" className="text-amber-600 hover:text-amber-800 block">ai-ethics@finapilot.com</a>
                 <p className="text-slate-500 mt-1">For concerns about AI bias, automated decisions, or AI data processing.</p>
               </div>
             </div>
           </div>
           
           <div className="mt-6 p-4 bg-slate-50 rounded-xl text-sm text-slate-600">
-            <p className="m-0"><strong>EU Representative:</strong> For GDPR purposes, our representative in the European Union can be contacted at <a href="mailto:eu-representative@finapilot.ai" className="text-emerald-600">eu-representative@finapilot.ai</a>.</p>
-            <p className="m-0 mt-2"><strong>UK Representative:</strong> For UK GDPR purposes, our representative in the United Kingdom can be contacted at <a href="mailto:uk-representative@finapilot.ai" className="text-emerald-600">uk-representative@finapilot.ai</a>.</p>
+            <p className="m-0"><strong>EU Representative:</strong> For GDPR purposes, our representative in the European Union can be contacted at <a href="mailto:eu-representative@finapilot.com" className="text-emerald-600">eu-representative@finapilot.com</a>.</p>
+            <p className="m-0 mt-2"><strong>UK Representative:</strong> For UK GDPR purposes, our representative in the United Kingdom can be contacted at <a href="mailto:uk-representative@finapilot.com" className="text-emerald-600">uk-representative@finapilot.com</a>.</p>
           </div>
         </div>
 
@@ -771,7 +771,7 @@ export default function DataPrivacySecurity() {
           <div className="flex gap-4">
             <Link href="/legal/master-subscription-agreement" className="text-emerald-600 hover:text-emerald-800">Terms of Service</Link>
             <span className="text-slate-300">|</span>
-            <a href="mailto:privacy@finapilot.ai" className="text-emerald-600 hover:text-emerald-800">privacy@finapilot.ai</a>
+            <a href="mailto:privacy@finapilot.com" className="text-emerald-600 hover:text-emerald-800">privacy@finapilot.com</a>
           </div>
         </div>
       </main>

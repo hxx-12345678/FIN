@@ -237,9 +237,10 @@ export const boardReportingController = {
       }
 
       const { orgId } = req.params;
+      const { modelId } = req.query;
 
       // Use the unified investor dashboard service which handles fallback to transactions
-      const dashboardData = await investorDashboardService.getDashboardData(orgId);
+      const dashboardData = await investorDashboardService.getDashboardData(orgId, modelId as string);
       const summary = dashboardData.executiveSummary;
       const saas = dashboardData.saasMetrics;
 

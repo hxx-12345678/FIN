@@ -40,7 +40,7 @@ export function SecurityCompliancePage() {
                 <Shield className="w-6 h-6 text-green-600" />
               </div>
               <div className="font-bold text-green-900">SOC 2 Type II</div>
-              <div className="text-xs text-green-700">In Progress</div>
+              <div className="text-xs text-green-700">Aligned Architecture</div>
             </div>
           </CardContent>
         </Card>
@@ -110,7 +110,7 @@ export function SecurityCompliancePage() {
                 <div>
                   <h4 className="font-semibold text-slate-900 mb-1">Secure Data Storage</h4>
                   <p className="text-sm text-slate-600">
-                    Data is stored in SOC 2 certified data centers with redundant backups across multiple geographic
+                    Data is stored in SOC 2 ready data centers with redundant backups across multiple geographic
                     regions.
                   </p>
                 </div>
@@ -192,8 +192,8 @@ export function SecurityCompliancePage() {
             <div className="border border-slate-200 rounded-lg p-4">
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <h4 className="font-semibold text-slate-900">GDPR Compliance</h4>
-                  <Badge className="mt-1 bg-green-100 text-green-800 border-green-200">Certified</Badge>
+                  <h4 className="font-semibold text-slate-900">GDPR</h4>
+                  <Badge className="mt-1 bg-green-100 text-green-800 border-green-200">Compliant</Badge>
                 </div>
                 <Globe className="w-5 h-5 text-slate-400" />
               </div>

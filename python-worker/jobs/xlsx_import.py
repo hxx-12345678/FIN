@@ -15,6 +15,7 @@ from psycopg2.extras import execute_values
 from utils.db import get_db_connection
 from utils.s3 import download_from_s3, upload_to_s3
 from utils.logger import setup_logger
+import uuid
 
 logger = setup_logger(__name__)
 
@@ -402,6 +403,9 @@ def handle_xlsx_import(job_id: str, org_id: str, object_id: str, logs: Dict[str,
         
         logger.info(f"XLSX import completed: {transactions_created} transactions created")
 
+        # Trigger model run to update insights with new data
+        _trigger_model_run(conn, org_id)
+
         # Update import batch (lineage + stats)
         if import_batch_id:
             try:
@@ -456,4 +460,33 @@ def handle_xlsx_import(job_id: str, org_id: str, object_id: str, logs: Dict[str,
             cursor.close()
         if conn:
             conn.close()
+
+def _trigger_model_run(db, org_id: str, user_id: Optional[str] = None) -> None:
+    """Trigger a new model execution job for the organization."""
+    try:
+        cursor = db.cursor()
+        params = {
+            "triggerType": "xlsx_import",
+            "orgId": org_id
+        }
+        if user_id:
+            params["userId"] = user_id
+            
+        query = """
+            INSERT INTO public.jobs (
+                id, job_type, "orgId", status, params, queue,
+                created_at, updated_at
+            ) VALUES (
+                %s, 'auto_model_trigger', %s, 'queued', %s::jsonb, 'default',
+                NOW(), NOW()
+            )
+        """
+        cursor.execute(query, (str(uuid.uuid4()), org_id, json.dumps(params)))
+        db.commit()
+    except Exception as e:
+        logger.error(f"Failed to queue model run: {e}")
+        try:
+            db.rollback()
+        except:
+            pass
 

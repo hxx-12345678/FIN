@@ -20,9 +20,12 @@ export type ConnectorType = 'quickbooks' | 'xero' | 'stripe' | 'plaid' | 'razorp
 export const getProviderAdapter = (type: ConnectorType): ProviderAdapter => {
   const redirectUri = `${config.backendUrl}/api/v1/connectors/callback`;
 
+  // Helper to detect placeholder credentials that shouldn't be used
+  const isPlaceholder = (val: string) => !val || val === '' || val.startsWith('your-') || val.startsWith('your_') || val === 'placeholder' || val.length < 5;
+
   switch (type) {
     case 'quickbooks':
-      if (config.oauth.quickbooks.clientId && config.oauth.quickbooks.clientSecret) {
+      if (!isPlaceholder(config.oauth.quickbooks.clientId) && !isPlaceholder(config.oauth.quickbooks.clientSecret)) {
         return new QuickBooksAdapter(
           config.oauth.quickbooks.clientId,
           config.oauth.quickbooks.clientSecret,
@@ -32,7 +35,7 @@ export const getProviderAdapter = (type: ConnectorType): ProviderAdapter => {
       throw new Error('QuickBooks OAuth credentials not configured. Please set QUICKBOOKS_CLIENT_ID and QUICKBOOKS_CLIENT_SECRET in .env');
 
     case 'xero':
-      if (config.oauth.xero.clientId && config.oauth.xero.clientSecret) {
+      if (!isPlaceholder(config.oauth.xero.clientId) && !isPlaceholder(config.oauth.xero.clientSecret)) {
         return new XeroAdapter(
           config.oauth.xero.clientId,
           config.oauth.xero.clientSecret,
@@ -42,7 +45,7 @@ export const getProviderAdapter = (type: ConnectorType): ProviderAdapter => {
       throw new Error('Xero OAuth credentials not configured. Please set XERO_CLIENT_ID and XERO_CLIENT_SECRET in .env');
 
     case 'zoho':
-      if (config.oauth.zoho.clientId && config.oauth.zoho.clientSecret) {
+      if (!isPlaceholder(config.oauth.zoho.clientId) && !isPlaceholder(config.oauth.zoho.clientSecret)) {
         return new ZohoAdapter(
           config.oauth.zoho.clientId,
           config.oauth.zoho.clientSecret,
@@ -81,7 +84,7 @@ export const getProviderAdapter = (type: ConnectorType): ProviderAdapter => {
       return new ClearTaxAdapter(redirectUri);
 
     case 'slack':
-      if (config.oauth.slack.clientId && config.oauth.slack.clientSecret) {
+      if (!isPlaceholder(config.oauth.slack.clientId) && !isPlaceholder(config.oauth.slack.clientSecret)) {
         return new SlackAdapter(
           config.oauth.slack.clientId,
           config.oauth.slack.clientSecret,
@@ -91,7 +94,7 @@ export const getProviderAdapter = (type: ConnectorType): ProviderAdapter => {
       throw new Error('Slack OAuth credentials not configured. Please set SLACK_CLIENT_ID and SLACK_CLIENT_SECRET in .env');
 
     case 'asana':
-      if (config.oauth.asana.clientId && config.oauth.asana.clientSecret) {
+      if (!isPlaceholder(config.oauth.asana.clientId) && !isPlaceholder(config.oauth.asana.clientSecret)) {
         return new AsanaAdapter(
           config.oauth.asana.clientId,
           config.oauth.asana.clientSecret,
@@ -101,7 +104,7 @@ export const getProviderAdapter = (type: ConnectorType): ProviderAdapter => {
       throw new Error('Asana OAuth credentials not configured. Please set ASANA_CLIENT_ID and ASANA_CLIENT_SECRET in .env');
 
     case 'salesforce':
-      if (config.oauth.salesforce.clientId && config.oauth.salesforce.clientSecret) {
+      if (!isPlaceholder(config.oauth.salesforce.clientId) && !isPlaceholder(config.oauth.salesforce.clientSecret)) {
         return new SalesforceAdapter(
           config.oauth.salesforce.clientId,
           config.oauth.salesforce.clientSecret,

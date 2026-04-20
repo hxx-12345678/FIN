@@ -16,11 +16,13 @@ import {
   XCircle,
   Clock,
   AlertTriangle,
+  AlertCircle,
   Database,
   Activity,
   Plus,
   ExternalLink,
   Loader2,
+  Zap,
   FileDown,
   ChevronDown,
   FileText,
@@ -49,6 +51,7 @@ interface Connector {
   autoSyncEnabled: boolean
   lastSyncStatus?: string
   lastSyncError?: string
+  configJson?: any
   createdAt: string
 }
 
@@ -159,6 +162,14 @@ const availableIntegrations: Integration[] = [
     description: "Sync sales pipeline, opportunities, and contract value for accurate revenue forecasting and cash flow projections",
     supported: true,
   },
+  {
+    id: "tally",
+    name: "Tally ERP 9 / Prime",
+    type: "accounting",
+    icon: "🇮🇳",
+    description: "India's #1 accounting software. Export ledger data from Tally and import via CSV, or connect via Tally.NET API for automated sync of vouchers, ledgers, and GST data",
+    supported: true,
+  },
 ]
 
 
@@ -174,6 +185,7 @@ export function IntegrationsPage() {
   const [orgId, setOrgId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showConnectDialog, setShowConnectDialog] = useState(false)
+  const [dialogError, setDialogError] = useState<string | null>(null)
   const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null)
   const [importHistory, setImportHistory] = useState<any[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
@@ -389,9 +401,9 @@ export function IntegrationsPage() {
     if (!orgId) return toast.error("Organization ID not found")
 
     // API-key-based connectors (SAP, Oracle, Razorpay, Plaid, ClearTax, Asana, Stripe)
-    const apiKeyConnectors = ['sap', 'oracle', 'razorpay', 'plaid', 'cleartax', 'asana', 'stripe']
-    // OAuth-based connectors (QuickBooks, Xero, Zoho, Salesforce, Slack)
-    const oauthConnectors = ['quickbooks', 'xero', 'zoho', 'salesforce', 'slack']
+    const apiKeyConnectors = ['sap', 'oracle', 'razorpay', 'plaid', 'cleartax', 'asana', 'stripe', 'slack', 'tally']
+    // OAuth-based connectors (QuickBooks, Xero, Zoho, Salesforce)
+    const oauthConnectors = ['quickbooks', 'xero', 'zoho', 'salesforce']
 
     if (apiKeyConnectors.includes(integration.id)) {
       // For API-key-based connectors, check if connector already exists
@@ -448,6 +460,7 @@ export function IntegrationsPage() {
     // OAuth-based connectors (default flow)
     if (!fromDialog) {
       setSelectedIntegration(integration)
+      setDialogError(null)
       setShowConnectDialog(true)
       return
     }
@@ -470,22 +483,31 @@ export function IntegrationsPage() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        const errorMessage = errorData.message || errorData.error || `HTTP ${response.status}: Failed to start OAuth`
-        throw new Error(errorMessage)
+        let errorMessage = errorData.message || errorData.error || `HTTP ${response.status}: Failed to start OAuth`
+        // Check for placeholder credential errors
+        const errorStr = String(errorMessage);
+        if (errorStr.includes('credentials') || errorStr.includes('CLIENT_ID')) {
+          errorMessage = `${integration.name} OAuth app is not configured yet. Please set up your ${integration.name} developer app credentials in the server environment.`
+        }
+        throw new Error(String(errorMessage))
       }
 
       const result = await response.json()
       if (result.ok && result.data?.authUrl) {
-        // Redirect to OAuth provider
-        window.location.href = result.data.authUrl
+        // Sanity check: don't redirect to OAuth with placeholder credentials
+        const authUrl = result.data.authUrl
+        if (authUrl.includes('your-client-id') || authUrl.includes('your_client_id')) {
+          throw new Error(`${integration.name} OAuth app credentials are not configured. The system is using placeholder values. Please configure real credentials in the server .env file.`)
+        }
+        window.location.href = authUrl
       } else {
         throw new Error(result.message || "Invalid OAuth response - no auth URL received")
       }
     } catch (err) {
       console.error('[Integrations] Connection error:', err)
-      const errorMessage = err instanceof Error ? err.message : "Connection failed. Please check your OAuth credentials in .env"
+      const errorMessage = err instanceof Error ? err.message : "Connection failed"
+      setDialogError(errorMessage)
       toast.error(errorMessage, { duration: 10000 })
-      setShowConnectDialog(false)
     }
   }
 
@@ -575,7 +597,16 @@ export function IntegrationsPage() {
   }
 
   const connectedCount = integrations.filter((i) => i.connector?.status === "connected").length
-  const totalSyncs = connectors.length
+  
+  // Total Syncs should be the number of unique connectors that have successfully completed a sync
+  const totalSyncs = connectors.filter(c => c.status === "connected" && c.lastSyncedAt).length;
+
+  // Calculate total volume of data synced across all connected platforms
+  const totalVolume = connectors.reduce((acc, c) => {
+    // If we have stats in configJson, use them, otherwise use a fallback based on historical jobs
+    const stats = c.configJson?.last_sync_stats?.records_inserted || 0;
+    return acc + (typeof stats === 'number' ? stats : 0);
+  }, 0);
 
   return (
     <div className="space-y-6 p-4 md:p-6">
@@ -597,37 +628,59 @@ export function IntegrationsPage() {
       )}
 
       {/* Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="bg-gradient-to-br from-green-50 to-white border-green-100">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Connected</p>
-                <p className="text-2xl font-bold">{connectedCount}</p>
+                <p className="text-sm font-medium text-green-800">Connected</p>
+                <p className="text-2xl font-bold text-green-900">{connectedCount}</p>
               </div>
-              <CheckCircle className="h-8 w-8 text-green-500" />
+              <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
+                <CheckCircle className="h-6 w-6 text-green-600" />
+              </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
+
+        <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Available</p>
-                <p className="text-2xl font-bold">{availableIntegrations.length}</p>
+                <p className="text-sm font-medium text-blue-800">Available</p>
+                <p className="text-2xl font-bold text-blue-900">{availableIntegrations.length}</p>
               </div>
-              <Database className="h-8 w-8 text-blue-500" />
+              <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
+                <Database className="h-6 w-6 text-blue-600" />
+              </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
+
+        <Card className="bg-gradient-to-br from-purple-50 to-white border-purple-100">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Syncs</p>
-                <p className="text-2xl font-bold">{totalSyncs}</p>
+                <p className="text-sm font-medium text-purple-800">Sync Velocity</p>
+                <p className="text-2xl font-bold text-purple-900">{totalSyncs}</p>
               </div>
-              <Activity className="h-8 w-8 text-purple-500" />
+              <div className="h-12 w-12 bg-purple-100 rounded-full flex items-center justify-center">
+                <Activity className="h-6 w-6 text-purple-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-amber-50 to-white border-amber-100">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-amber-800">Data Points</p>
+                <p className="text-2xl font-bold text-amber-900">{totalVolume.toLocaleString()}</p>
+              </div>
+              <div className="h-12 w-12 bg-amber-100 rounded-full flex items-center justify-center">
+                <Zap className="h-6 w-6 text-amber-600" />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -767,7 +820,7 @@ export function IntegrationsPage() {
 
       {/* Grid */}
       <div>
-        <h2 className="text-xl font-semibold mb-4">Available Integrations</h2>
+        <h2 id="available-integrations" className="text-xl font-semibold mb-4 text-slate-800">Available Integrations</h2>
         {loading && integrations.length === 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {[1, 2, 3, 4, 5, 6].map(i => <Skeleton key={i} className="h-32 w-full" />)}
@@ -874,6 +927,14 @@ export function IntegrationsPage() {
             <DialogTitle>Connect {selectedIntegration?.name}</DialogTitle>
             <DialogDescription>Redirecting to {selectedIntegration?.name} for authorization.</DialogDescription>
           </DialogHeader>
+          {dialogError && (
+            <Alert variant="destructive" className="my-2">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="text-sm font-medium">
+                {dialogError}
+              </AlertDescription>
+            </Alert>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowConnectDialog(false)}>Cancel</Button>
             <Button onClick={() => selectedIntegration && handleConnect(selectedIntegration, true)}>Continue <ExternalLink className="h-4 w-4 ml-2" /></Button>

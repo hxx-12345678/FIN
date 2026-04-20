@@ -4,8 +4,37 @@ import { motion } from "framer-motion"
 import { Search, Book, MessageCircle, PlayCircle, HelpCircle, ExternalLink, ChevronRight, Mail, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { useState } from "react"
+
+const SUPPORT_CARDS = [
+  {
+    icon: Book,
+    title: "Knowledge Base",
+    desc: "Detailed documentation on our agentic modeling engine, DCF logic, and ERP sync.",
+    link: "/docs"
+  },
+  {
+    icon: PlayCircle,
+    title: "Video Tutorials",
+    desc: "Step-by-step visual guides on setting up your first autonomous financial model.",
+    link: "#"
+  },
+  {
+    icon: MessageCircle,
+    title: "Community Forum",
+    desc: "Join the strategic conversation with thousands of FinaPilot power users.",
+    link: "/community"
+  }
+]
 
 export default function SupportPage() {
+  const [searchQuery, setSearchQuery] = useState("")
+
+  const filteredCards = SUPPORT_CARDS.filter(card => 
+    card.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    card.desc.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
   return (
     <div className="min-h-screen bg-[#020305] text-white pt-32 pb-20 selection:bg-blue-500/30">
       {/* Background Glows */}
@@ -34,6 +63,8 @@ export default function SupportPage() {
             <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 group-focus-within:text-blue-500 transition-colors" />
             <Input 
               placeholder="Search the knowledge base..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="h-16 pl-14 pr-6 bg-slate-900/50 border-slate-800 rounded-2xl focus:border-blue-500/50 focus:ring-4 focus:ring-blue-500/10 transition-all text-lg font-medium"
             />
           </div>
@@ -41,24 +72,21 @@ export default function SupportPage() {
 
         {/* Support Options */}
         <div className="grid md:grid-cols-3 gap-8 mb-24">
-          <SupportCard 
-            icon={Book}
-            title="Knowledge Base"
-            desc="Detailed documentation on our agentic modeling engine, DCF logic, and ERP sync."
-            link="/docs"
-          />
-          <SupportCard 
-            icon={PlayCircle}
-            title="Video Tutorials"
-            desc="Step-by-step visual guides on setting up your first autonomous financial model."
-            link="#"
-          />
-          <SupportCard 
-            icon={MessageCircle}
-            title="Community Forum"
-            desc="Join the strategic conversation with thousands of FinaPilot power users."
-            link="#"
-          />
+          {filteredCards.length > 0 ? (
+            filteredCards.map((card, idx) => (
+              <SupportCard 
+                key={idx}
+                icon={card.icon}
+                title={card.title}
+                desc={card.desc}
+                link={card.link}
+              />
+            ))
+          ) : (
+            <div className="col-span-full py-12 text-center text-slate-500 font-bold uppercase tracking-widest">
+              No results found for "{searchQuery}"
+            </div>
+          )}
         </div>
 
         {/* Contact Support Section */}
@@ -78,11 +106,18 @@ export default function SupportPage() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
-                 <Button className="h-14 px-8 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl shadow-lg shadow-blue-600/20">
+                 <Button 
+                    className="h-14 px-8 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl shadow-lg shadow-blue-600/20"
+                    onClick={() => window.location.href = "mailto:support@finapilot.com"}
+                 >
                     <Mail className="w-5 h-5 mr-3" />
                     Email Support
                  </Button>
-                 <Button variant="outline" className="h-14 px-8 border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-white font-bold rounded-2xl">
+                 <Button 
+                    variant="outline" 
+                    className="h-14 px-8 border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-white font-bold rounded-2xl"
+                    onClick={() => window.open("https://calendly.com/finapilot/30min", "_blank")}
+                 >
                     Live Chat <ExternalLink className="w-4 h-4 ml-3 opacity-50" />
                  </Button>
               </div>

@@ -21,6 +21,7 @@ export const investorDashboardController = {
       }
 
       const { orgId } = req.params;
+      const { modelId } = req.query;
 
       // Note: requireOrgAccess middleware already verifies access, but keeping this as defense in depth
       const role = await prisma.userOrgRole.findUnique({
@@ -36,7 +37,7 @@ export const investorDashboardController = {
         throw new ValidationError('No access to this organization');
       }
 
-      const dashboardData = await investorDashboardService.getDashboardData(orgId);
+      const dashboardData = await investorDashboardService.getDashboardData(orgId, modelId as string);
 
       res.json({
         ok: true,

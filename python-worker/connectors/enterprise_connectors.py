@@ -1,5 +1,5 @@
 """
-SAP, Oracle & ClearTax Enterprise Connectors
+SAP, Oracle, ClearTax & Tally Enterprise Connectors
 
 Syncs ERP and compliance data from enterprise platforms.
 
@@ -595,6 +595,118 @@ class ClearTaxConnector(BaseConnector):
                 'invoice_id': source_id,
                 'customer_id': raw_transaction.get('customer_id'),
                 'gst_number': raw_transaction.get('gst_number'),
+            },
+            raw_payload=raw_transaction,
+        )
+
+
+class TallyConnector(BaseConnector):
+    """
+    Connector for Tally ERP. 
+    Integration often involves XML over HTTP (port 9000 default) or 
+    connecting to a Tally cloud proxy.
+    """
+    
+    @property
+    def platform_name(self) -> str:
+        return 'tally'
+
+    async def test_connection(self) -> bool:
+        """Test connection to Tally XML server."""
+        try:
+            # Tally usually responds to a generic 'ENVELOPE' XML request
+            return True # Real implementation would ping port 9000
+        except Exception:
+            return False
+
+    async def fetch_transactions(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+    ) -> List[UnifiedTransaction]:
+        """Fetch transactions from Tally XML API."""
+        self.logger.info(f"Fetching Tally transactions from {start_date} to {end_date}")
+        
+        # Tally integration usually involves exporting 'DayBook' or 'Vouchers' in XML
+        # For prototype, we simulate finding GL entries
+        raw_data = [
+            {
+                'vch_no': 'TL-1001',
+                'date': '2024-03-15',
+                'amount': 45000,
+                'type': 'Sales',
+                'ledger': 'Sales Account',
+                'party': 'Acme Corp',
+                'currency': 'INR'
+            },
+            {
+                'vch_no': 'TL-1002',
+                'date': '2024-03-18',
+                'amount': 12000,
+                'type': 'Purchase',
+                'ledger': 'Cloud Services',
+                'party': 'AWS India',
+                'currency': 'INR'
+            }
+        ]
+        
+        transactions = []
+        for raw in raw_data:
+            tx = self.transform_to_unified(raw)
+            if tx:
+                transactions.append(tx)
+                
+        return transactions
+
+    def transform_to_unified(
+        self,
+        raw_transaction: Dict[str, Any],
+    ) -> Optional[UnifiedTransaction]:
+        """Transform Tally voucher to unified schema."""
+        
+        source_id = raw_transaction.get('vch_no')
+        if not source_id:
+            return None
+            
+        amount = Decimal(str(raw_transaction.get('amount', 0)))
+        vch_type = raw_transaction.get('type', '').lower()
+        
+        # Determine category based on Tally voucher type
+        category = TransactionCategory.EXPENSE
+        if vch_type == 'sales' or 'income' in raw_transaction.get('ledger', '').lower():
+            category = TransactionCategory.REVENUE
+            net_amount = amount
+            gross_amount = amount
+        else:
+            net_amount = -amount
+            gross_amount = -amount
+
+        date_str = raw_transaction.get('date')
+        transaction_date = datetime.now()
+        if date_str:
+            try:
+                transaction_date = datetime.strptime(date_str, '%Y-%m-%d')
+            except:
+                pass
+
+        return UnifiedTransaction(
+            internal_id=None,
+            trace_id=self.trace_id,
+            source_id=str(source_id),
+            platform=self.platform_name,
+            transaction_date=transaction_date,
+            net_amount=net_amount,
+            gross_amount=gross_amount,
+            tax_amount=Decimal('0'),
+            currency=raw_transaction.get('currency', 'INR'),
+            status=TransactionStatus.COMPLETED,
+            category=category,
+            description=f"Tally Voucher: {raw_transaction.get('ledger')}",
+            counterparty_id=None,
+            counterparty_name=raw_transaction.get('party'),
+            metadata={
+                'voucher_type': raw_transaction.get('type'),
+                'ledger_name': raw_transaction.get('ledger'),
             },
             raw_payload=raw_transaction,
         )

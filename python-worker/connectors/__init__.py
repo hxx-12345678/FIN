@@ -29,7 +29,7 @@ from .xero_connector import XeroConnector
 from .plaid_connector import PlaidConnector
 from .zoho_connector import ZohoBooksConnector
 from .slack_asana_connector import SlackConnector, AsanaConnector
-from .enterprise_connectors import SAPConnector, OracleConnector, ClearTaxConnector
+from .enterprise_connectors import SAPConnector, OracleConnector, ClearTaxConnector, TallyConnector
 from .salesforce_connector import SalesforceConnector
 
 __all__ = [
@@ -53,6 +53,7 @@ __all__ = [
     'SAPConnector',
     'OracleConnector',
     'ClearTaxConnector',
+    'TallyConnector',
     'SalesforceConnector',
 ]
 
@@ -69,6 +70,7 @@ CONNECTOR_REGISTRY = {
     'sap': SAPConnector,
     'oracle': OracleConnector,
     'cleartax': ClearTaxConnector,
+    'tally': TallyConnector,
     'salesforce': SalesforceConnector,
 }
 

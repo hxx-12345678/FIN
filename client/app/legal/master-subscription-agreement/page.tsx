@@ -4,7 +4,7 @@ import { ArrowLeft, FileText, CheckCircle, Shield, Scale, Clock, AlertTriangle, 
 
 export const metadata: Metadata = {
   title: 'Terms of Service — Master Subscription Agreement | FinaPilot',
-  description: 'Enterprise Cloud Services Agreement, Terms of Use, AI Data Processing Terms, and Acceptable Use Policy for the FinaPilot AI-Powered FP&A Platform. SOC 2 Type II compliant.',
+  description: 'Enterprise Cloud Services Agreement, Terms of Use, AI Data Processing Terms, and Acceptable Use Policy for the FinaPilot AI-Powered FP&A Platform. SOC 2 Type II Aligned Architecture.',
   keywords: 'FinaPilot terms of service, SaaS agreement, AI financial planning terms, data processing, GDPR, CCPA, SOC2',
 }
 
@@ -204,7 +204,7 @@ export default function MasterSubscriptionAgreement() {
           
           <p><strong>4.2 Compliance.</strong> Customer shall use the Cloud Services in compliance with all applicable laws and regulations, including Data Protection Laws, financial reporting standards, and anti-money-laundering regulations. Customer is responsible for obtaining all necessary consents, authorizations, and approvals required for the lawful submission of Customer Data to the Cloud Services.</p>
           
-          <p><strong>4.3 Account Security.</strong> Customer shall implement and maintain appropriate security measures, including strong passwords, multi-factor authentication (where available), and access management controls. Customer shall promptly notify FinaPilot at <a href="mailto:security@finapilot.ai">security@finapilot.ai</a> of any known or suspected breach of security or unauthorized use of Customer&apos;s account.</p>
+          <p><strong>4.3 Account Security.</strong> Customer shall implement and maintain appropriate security measures, including strong passwords, multi-factor authentication (where available), and access management controls. Customer shall promptly notify FinaPilot at <a href="mailto:security@finapilot.com">security@finapilot.com</a> of any known or suspected breach of security or unauthorized use of Customer&apos;s account.</p>
           
           <p><strong>4.4 Cooperation.</strong> Customer shall provide FinaPilot with reasonable cooperation, access, and information necessary for FinaPilot to perform its obligations under this Agreement, including timely responses to integration configuration requests and support inquiries.</p>
 
@@ -261,7 +261,7 @@ export default function MasterSubscriptionAgreement() {
           
           <p><strong>6.6 Human-in-the-Loop.</strong> For any AI-generated content intended for external distribution (e.g., board reports, investor presentations, regulatory filings), Customer is responsible for implementing appropriate human review and approval processes prior to dissemination. FinaPilot shall not be liable for any damages arising from Customer&apos;s publication or distribution of unreviewed AI Outputs.</p>
           
-          <p><strong>6.7 AI Ethics and Bias Mitigation.</strong> FinaPilot is committed to responsible AI practices. We conduct regular assessments of our AI models for bias, fairness, and accuracy. If Customer identifies any biased, discriminatory, or materially inaccurate AI Output, Customer may report it to <a href="mailto:ai-ethics@finapilot.ai">ai-ethics@finapilot.ai</a> for investigation and remediation.</p>
+          <p><strong>6.7 AI Ethics and Bias Mitigation.</strong> FinaPilot is committed to responsible AI practices. We conduct regular assessments of our AI models for bias, fairness, and accuracy. If Customer identifies any biased, discriminatory, or materially inaccurate AI Output, Customer may report it to <a href="mailto:ai-ethics@finapilot.com">ai-ethics@finapilot.com</a> for investigation and remediation.</p>
           
           <p><strong>6.8 Regulatory Compliance.</strong> FinaPilot shall use commercially reasonable efforts to ensure that AI Features comply with applicable laws, including the EU AI Act (Regulation (EU) 2024/1689) to the extent that the Cloud Services fall within its scope. FinaPilot classifies its AI Features as &ldquo;limited risk&rdquo; decision-support tools under the EU AI Act and provides transparency obligations accordingly.</p>
 
@@ -307,7 +307,7 @@ export default function MasterSubscriptionAgreement() {
           
           <p><strong>9.2 Certifications &amp; Standards.</strong></p>
           <ul>
-            <li><strong>SOC 2 Type II:</strong> FinaPilot undergoes annual independent SOC 2 Type II audits covering Security, Availability, Processing Integrity, Confidentiality, and Privacy trust service criteria. Audit reports are available to Enterprise customers under NDA upon request.</li>
+            <li><strong>SOC 2 Type II Aligned:</strong> FinaPilot is architected to meet and exceed the SOC 2 Trust Services Criteria for Security, Availability, and Confidentiality. We are currently in the pre-audit pipeline for formal attestation. Security architecture summaries are available to Enterprise customers under NDA upon request.</li>
             <li><strong>ISO 27001:</strong> FinaPilot&apos;s Information Security Management System is aligned with ISO/IEC 27001:2022 standards.</li>
             <li><strong>SOC 3:</strong> A publicly available SOC 3 report is available on our Trust Center.</li>
           </ul>
@@ -546,9 +546,9 @@ export default function MasterSubscriptionAgreement() {
           
           <p><strong>24.2</strong> Notices to FinaPilot shall be sent to:</p>
           <ul>
-            <li><strong>Legal Department:</strong> <a href="mailto:legal@finapilot.ai">legal@finapilot.ai</a></li>
-            <li><strong>Security Incidents:</strong> <a href="mailto:security@finapilot.ai">security@finapilot.ai</a></li>
-            <li><strong>Privacy/DPO:</strong> <a href="mailto:privacy@finapilot.ai">privacy@finapilot.ai</a></li>
+            <li><strong>Legal Department:</strong> <a href="mailto:legal@finapilot.com">legal@finapilot.com</a></li>
+            <li><strong>Security Incidents:</strong> <a href="mailto:security@finapilot.com">security@finapilot.com</a></li>
+            <li><strong>Privacy/DPO:</strong> <a href="mailto:privacy@finapilot.com">privacy@finapilot.com</a></li>
           </ul>
           <p>Notices to Customer shall be sent to the email address associated with Customer&apos;s account or as specified in the applicable Order Form.</p>
 
@@ -593,21 +593,21 @@ export default function MasterSubscriptionAgreement() {
               <Gavel className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
               <div>
                 <p className="font-semibold text-slate-900">Legal Department</p>
-                <a href="mailto:legal@finapilot.ai" className="text-blue-600 hover:text-blue-800">legal@finapilot.ai</a>
+                <a href="mailto:legal@finapilot.com" className="text-blue-600 hover:text-blue-800">legal@finapilot.com</a>
               </div>
             </div>
             <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-xl">
               <Lock className="h-5 w-5 text-emerald-600 mt-0.5 shrink-0" />
               <div>
                 <p className="font-semibold text-slate-900">Data Protection Officer</p>
-                <a href="mailto:privacy@finapilot.ai" className="text-emerald-600 hover:text-emerald-800">privacy@finapilot.ai</a>
+                <a href="mailto:privacy@finapilot.com" className="text-emerald-600 hover:text-emerald-800">privacy@finapilot.com</a>
               </div>
             </div>
             <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-xl">
               <Shield className="h-5 w-5 text-purple-600 mt-0.5 shrink-0" />
               <div>
                 <p className="font-semibold text-slate-900">Security Team</p>
-                <a href="mailto:security@finapilot.ai" className="text-purple-600 hover:text-purple-800">security@finapilot.ai</a>
+                <a href="mailto:security@finapilot.com" className="text-purple-600 hover:text-purple-800">security@finapilot.com</a>
               </div>
             </div>
           </div>
@@ -619,7 +619,7 @@ export default function MasterSubscriptionAgreement() {
           <div className="flex gap-4">
             <Link href="/legal/data-privacy-security" className="text-blue-600 hover:text-blue-800">Privacy Policy</Link>
             <span className="text-slate-300">|</span>
-            <a href="mailto:legal@finapilot.ai" className="text-blue-600 hover:text-blue-800">legal@finapilot.ai</a>
+            <a href="mailto:legal@finapilot.com" className="text-blue-600 hover:text-blue-800">legal@finapilot.com</a>
           </div>
         </div>
       </main>

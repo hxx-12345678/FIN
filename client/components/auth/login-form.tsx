@@ -63,6 +63,8 @@ export function LoginForm({ onSuccess, onSwitchToSignup }: LoginFormProps) {
       // Success logic...
       if (data.token) {
         localStorage.setItem("auth-token", data.token)
+        // Set secure HTTP-only cookie equivalent (since we only have frontend control here, we use Secure & SameSite)
+        document.cookie = `auth-token=${data.token}; path=/; max-age=604800; Secure; SameSite=Strict`
       }
 
       localStorage.setItem("is-logged-in", "true")

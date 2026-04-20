@@ -65,7 +65,24 @@ export default function SecurityPage() {
             </div>
           </section>
 
-          <section className="p-8 md:p-12 rounded-[40px] bg-blue-600/5 border border-blue-500/20 mt-20">
+          <section className="p-8 md:p-12 rounded-[40px] bg-slate-900/40 border border-slate-800 mt-20">
+            <div className="flex flex-col md:flex-row gap-12 items-center justify-between">
+              <div className="space-y-4 text-center md:text-left">
+                <h3 className="text-2xl font-black text-white">Report Security Issues</h3>
+                <p className="text-base text-slate-400 max-w-lg">
+                  We take the security of our institutional platform with absolute seriousness. If you've identified a potential vulnerability, please report it immediately.
+                </p>
+              </div>
+              <button 
+                onClick={() => window.location.href = "mailto:support@finapilot.com?subject=Security%20Issue%20Report"}
+                className="px-10 py-4 bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white border border-red-500/20 hover:border-red-600 font-bold rounded-2xl transition-all whitespace-nowrap"
+              >
+                Report Sensitivity
+              </button>
+            </div>
+          </section>
+
+          <section className="p-8 md:p-12 rounded-[40px] bg-blue-600/5 border border-blue-500/20 mt-8">
             <div className="flex flex-col md:flex-row gap-12 items-center justify-between">
               <div className="space-y-4">
                 <h3 className="text-2xl font-black text-white">Institutional Security Pack</h3>
@@ -73,7 +90,10 @@ export default function SecurityPage() {
                   Need a full audit of our security protocols for your compliance department? Download our latest security whitepaper and SOC 2 overview.
                 </p>
               </div>
-              <button className="px-10 py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl transition-all shadow-lg shadow-blue-600/20 whitespace-nowrap">
+              <button 
+                onClick={() => window.location.href = "mailto:support@finapilot.com?subject=Audit%20Pack%20Request"}
+                className="px-10 py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl transition-all shadow-lg shadow-blue-600/20 whitespace-nowrap"
+              >
                 Request Audit Pack
               </button>
             </div>

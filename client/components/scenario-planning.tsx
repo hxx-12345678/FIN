@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dialog"
 import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { useOrg } from "@/lib/org-context"
+import { useModel } from "@/lib/model-context"
 
 // Scenario templates - static list for quick creation
 const scenarioTemplates = [
@@ -108,9 +109,8 @@ export function ScenarioPlanning() {
   const searchParams = useSearchParams()
   const currentTab = searchParams.get("tab") || "scenarios"
 
-  const [orgId, setOrgId] = useState<string | null>(null)
+  const { orgId, setOrgId, selectedModelId, setSelectedModelId } = useModel()
   const [models, setModels] = useState<Model[]>([])
-  const [selectedModelId, setSelectedModelId] = useState<string>("")
   const [scenarios, setScenarios] = useState<Scenario[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingScenarios, setLoadingScenarios] = useState(false)
@@ -129,10 +129,7 @@ export function ScenarioPlanning() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [aiResponse, setAiResponse] = useState("")
 
-  // Fetch orgId
-  useEffect(() => {
-    fetchOrgId()
-  }, [])
+
 
   // Fetch models when orgId is available
   useEffect(() => {
@@ -551,7 +548,7 @@ Format the response in clear, professional English with specific numbers and per
           <CardContent className="pt-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
               <Label htmlFor="model-select" className="whitespace-nowrap">Select Model:</Label>
-              <Select value={selectedModelId} onValueChange={setSelectedModelId}>
+              <Select value={selectedModelId ?? undefined} onValueChange={setSelectedModelId}>
                 <SelectTrigger id="model-select" className="w-full sm:w-[300px]">
                   <SelectValue placeholder="Select a model" />
                 </SelectTrigger>
@@ -948,22 +945,22 @@ Format the response in clear, professional English with specific numbers and per
 
         {/* Snapshots tab */}
         <TabsContent value="snapshots" className="space-y-4 overflow-x-auto overflow-y-visible">
-          <ScenarioSnapshotManager modelId={selectedModelId} orgId={orgId} />
+          <ScenarioSnapshotManager modelId={selectedModelId ?? undefined} orgId={orgId ?? undefined} />
         </TabsContent>
 
         {/* Comparison tab */}
         <TabsContent value="comparison" className="space-y-4 overflow-x-auto overflow-y-visible">
-          <ScenarioComparisonView modelId={selectedModelId} orgId={orgId} scenarios={scenarios} />
+          <ScenarioComparisonView modelId={selectedModelId ?? undefined} orgId={orgId ?? undefined} scenarios={scenarios} />
         </TabsContent>
 
         {/* Version History tab */}
         <TabsContent value="history" className="space-y-4 overflow-x-auto overflow-y-visible">
-          <ScenarioVersionHistory modelId={selectedModelId} orgId={orgId} />
+          <ScenarioVersionHistory modelId={selectedModelId ?? undefined} orgId={orgId ?? undefined} />
         </TabsContent>
 
         {/* Data Transparency tab */}
         <TabsContent value="transparency" className="space-y-4 overflow-x-auto overflow-y-visible">
-          <ScenarioDataTransparency modelId={selectedModelId} orgId={orgId} />
+          <ScenarioDataTransparency modelId={selectedModelId ?? undefined} orgId={orgId ?? undefined} />
         </TabsContent>
 
         <TabsContent value="sensitivity" className="space-y-4 overflow-x-auto overflow-y-visible">

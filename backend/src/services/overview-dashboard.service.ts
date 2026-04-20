@@ -138,7 +138,7 @@ export const overviewDashboardService = {
     // Try to get investor dashboard data (may return defaults if no baseline run)
     let investorData;
     try {
-      investorData = await investorDashboardService.getDashboardData(orgId);
+      investorData = await investorDashboardService.getDashboardData(orgId, modelId);
     } catch (error) {
       console.log(`[Overview] Error getting investor data, using fallback: ${error}`);
       investorData = null;

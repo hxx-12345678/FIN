@@ -424,7 +424,7 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
   }
 
   const handleContactSales = () => {
-    window.location.href = "mailto:sales@finapilot.ai?subject=FinaPilot%20Enterprise%20Inquiry"
+    window.location.href = "mailto:sales@finapilot.com?subject=FinaPilot%20Enterprise%20Inquiry"
   }
 
   const handleAccountSettings = () => {

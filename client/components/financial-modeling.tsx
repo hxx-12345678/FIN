@@ -132,6 +132,8 @@ export function FinancialModeling() {
   const [editingModelName, setEditingModelName] = useState<string>("")
   const [savingModelName, setSavingModelName] = useState(false)
   const [computationTraces, setComputationTraces] = useState<any[]>([])
+  const [importHistory, setImportHistory] = useState<any[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
 
   useEffect(() => {
     if (currentTab === 'explainability' && selectedModel) {
@@ -192,6 +194,7 @@ export function FinancialModeling() {
       fetchTransactions()
       fetchConnectors(orgId)
       fetchDataStatus(orgId)
+      fetchImportHistory(orgId)
     }
   }, [orgId])
 
@@ -211,6 +214,25 @@ export function FinancialModeling() {
       window.history.replaceState(null, '', `?${params.toString()}`)
     }
   }, [selectedModel, orgId])
+
+  const fetchImportHistory = async (targetOrgId: string) => {
+    try {
+      setLoadingHistory(true)
+      // Corrected endpoint to match backend job listing
+      const res = await fetch(`${API_BASE_URL}/jobs?orgId=${targetOrgId}&jobType=csv_import&limit=50`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      })
+      if (res.ok) {
+        const result = await res.json()
+        setImportHistory(result.data || [])
+      }
+    } catch (err) {
+      console.error("Error fetching import history:", err)
+    } finally {
+      setLoadingHistory(false)
+    }
+  }
 
   const fetchDataStatus = async (targetOrgId: string) => {
     try {
@@ -483,7 +505,7 @@ export function FinancialModeling() {
 
       const data = await res.json()
       if (data.ok) {
-        setConnectors(data.connectors)
+        setConnectors(data.data || data.connectors || [])
       }
     } catch (error) {
       console.error("Error fetching connectors:", error)
@@ -1985,8 +2007,15 @@ export function FinancialModeling() {
                         <p className="font-bold text-slate-900">ERP & SaaS Connectors</p>
                         <p className="text-xs text-slate-500">{dataStatus?.sources?.connectors?.length || 0} connections authorized</p>
                       </div>
+                      <Button variant="outline" size="sm" onClick={() => {
+                        window.dispatchEvent(new CustomEvent('navigate-view', { detail: { view: 'integrations' } }));
+                        // Smooth scroll to available integrations section after navigation
+                        setTimeout(() => {
+                          const el = document.getElementById('available-integrations');
+                          if (el) el.scrollIntoView({ behavior: 'smooth' });
+                        }, 300);
+                      }}>Configure Hub</Button>
                     </div>
-                    <Button variant="outline" size="sm" onClick={() => router.push('/settings/connectors')}>Configure Hub</Button>
                   </div>
                 </div>
               </CardContent>
@@ -2415,7 +2444,73 @@ export function FinancialModeling() {
             <DialogTitle>Data Onboarding Hub</DialogTitle>
             <DialogDescription>Centralized upload and connector management</DialogDescription>
           </DialogHeader>
-          <CSVImportWizard orgId={orgId} onImportComplete={() => { fetchDataStatus(orgId!); fetchTransactions(); }} />
+          
+          <Tabs defaultValue="upload" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsTrigger value="upload" className="gap-2">
+                <Upload className="h-4 w-4" /> New Upload
+              </TabsTrigger>
+              <TabsTrigger value="history" className="gap-2">
+                <HistoryIcon className="h-4 w-4" /> Import History
+              </TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="upload" className="space-y-4">
+              <CSVImportWizard orgId={orgId} onImportComplete={() => { fetchDataStatus(orgId!); fetchTransactions(); fetchImportHistory(orgId!); }} />
+            </TabsContent>
+            
+            <TabsContent value="history" className="space-y-4">
+              {loadingHistory ? (
+                <div className="space-y-4">
+                  {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
+                </div>
+              ) : importHistory.length > 0 ? (
+                <div className="space-y-3">
+                  {importHistory.map((job: any) => (
+                    <div key={job.id} className="p-4 border rounded-xl bg-slate-50 hover:bg-white transition-all group">
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-slate-900 capitalize">{job.type || 'CSV Import'}</span>
+                            <Badge variant={job.status === 'completed' || job.status === 'done' ? 'success' : job.status === 'failed' ? 'destructive' : 'secondary'} className="text-[9px] px-1.5 h-4">
+                              {job.status}
+                            </Badge>
+                          </div>
+                          <p className="text-[10px] text-slate-500">{new Date(job.createdAt).toLocaleString()}</p>
+                        </div>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <HelpCircle className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      
+                      <div className="mt-3 flex items-center gap-4 text-[10px] font-bold text-slate-600">
+                        <div className="flex items-center gap-1">
+                          <Database className="h-3 w-3 text-blue-500" />
+                          {job.rowsImported || job.metadata?.params?.rowsImported || 0} Rows
+                        </div>
+                        {job.status === 'completed' && (
+                          <div className="flex items-center gap-1 text-emerald-600">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Verified
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-20 text-center space-y-4">
+                  <div className="h-16 w-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto">
+                    <HistoryIcon className="h-8 w-8 text-slate-300" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">No Import History</h3>
+                    <p className="text-xs text-slate-500 mt-1">Upload a CSV or Excel file to start tracking ingestion.</p>
+                  </div>
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
     </div>

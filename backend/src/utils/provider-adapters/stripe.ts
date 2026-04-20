@@ -44,13 +44,12 @@ export class StripeAdapter implements ProviderAdapter {
     try {
       // Make a simple API call to validate the key
       // Using fetch instead of stripe library to keep dependencies minimal
-      const response = await fetch('https://api.stripe.com/v1/charges', {
+      const response = await fetch('https://api.stripe.com/v1/charges?limit=1', {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: 'limit=1',
       });
 
       if (response.status === 401) {

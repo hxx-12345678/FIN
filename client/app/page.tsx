@@ -296,6 +296,10 @@ function HomePageContent() {
       localStorage.removeItem("is-logged-in")
       localStorage.removeItem("userId")
       localStorage.removeItem("finapilot_active_view")
+      localStorage.removeItem("auth-token")
+      
+      // Clear secure cookie
+      document.cookie = "auth-token=; path=/; max-age=0; Secure; SameSite=Strict"
 
       // Remove hash and search params from URL and force standard reload for clean slate
       window.history.replaceState(null, "", "/")

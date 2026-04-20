@@ -40,24 +40,18 @@ export default function ContactPage() {
             </div>
 
             <div className="grid gap-8">
-               <ContactItem 
-                  icon={Mail}
-                  title="General Inquiries"
-                  desc="For general questions or partnership opportunities."
-                  value="hello@finapilot.ai"
-               />
-               <ContactItem 
-                  icon={MessageSquare}
-                  title="Technical Support"
-                  desc="Already a customer? Reach our mission-critical support desk."
-                  value="support@finapilot.ai"
-               />
-               <ContactItem 
-                  icon={Building2}
-                  title="Corporate Headquarters"
-                  desc="FinaPilot Technologies Inc."
-                  value="San Francisco, CA"
-               />
+                <ContactItem 
+                   icon={Mail}
+                   title="General Inquiries"
+                   desc="For general questions or partnership opportunities."
+                   value="founder@finapilot.com"
+                />
+                <ContactItem 
+                   icon={MessageSquare}
+                   title="Technical Support"
+                   desc="Already a customer? Reach our mission-critical support desk."
+                   value="support@finapilot.com"
+                />
             </div>
           </motion.div>
 
@@ -72,34 +66,44 @@ export default function ContactPage() {
               <p className="text-sm text-slate-400">Expect a response within 4 institutional business hours.</p>
             </div>
 
-            <form className="space-y-6">
+            <form 
+               className="space-y-6"
+               onSubmit={(e) => {
+                 e.preventDefault();
+                 const formData = new FormData(e.currentTarget as HTMLFormElement);
+                 const data = Object.fromEntries(formData.entries());
+                 const subject = encodeURIComponent("Strategy Session Request");
+                 const body = encodeURIComponent(`Name: ${data.firstname} ${data.lastname}\nEmail: ${data.email}\nCompany: ${data.company}\nMessage: ${data.message}`);
+                 window.location.href = `mailto:founder@finapilot.com?subject=${subject}&body=${body}`;
+               }}
+            >
               <div className="grid md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="first-name" className="text-xs font-bold uppercase tracking-widest text-slate-500">First Name</Label>
-                  <Input id="first-name" placeholder="John" className="bg-slate-950/50 border-slate-800 h-12 focus:border-blue-500 transition-colors" />
+                  <Label htmlFor="firstname" className="text-xs font-bold uppercase tracking-widest text-slate-500">First Name</Label>
+                  <Input id="firstname" name="firstname" placeholder="John" required className="bg-slate-950/50 border-slate-800 h-12 focus:border-blue-500 transition-colors" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="last-name" className="text-xs font-bold uppercase tracking-widest text-slate-500">Last Name</Label>
-                  <Input id="last-name" placeholder="Doe" className="bg-slate-950/50 border-slate-800 h-12 focus:border-blue-500 transition-colors" />
+                  <Label htmlFor="lastname" className="text-xs font-bold uppercase tracking-widest text-slate-500">Last Name</Label>
+                  <Input id="lastname" name="lastname" placeholder="Doe" required className="bg-slate-950/50 border-slate-800 h-12 focus:border-blue-500 transition-colors" />
                 </div>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-xs font-bold uppercase tracking-widest text-slate-500">Institutional Email</Label>
-                <Input id="email" type="email" placeholder="john@company.com" className="bg-slate-950/50 border-slate-800 h-12 focus:border-blue-500 transition-colors" />
+                <Input id="email" name="email" type="email" placeholder="john@company.com" required className="bg-slate-950/50 border-slate-800 h-12 focus:border-blue-500 transition-colors" />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="company" className="text-xs font-bold uppercase tracking-widest text-slate-500">Company Name</Label>
-                <Input id="company" placeholder="Acme Corp" className="bg-slate-950/50 border-slate-800 h-12 focus:border-blue-500 transition-colors" />
+                <Input id="company" name="company" placeholder="Acme Corp" required className="bg-slate-950/50 border-slate-800 h-12 focus:border-blue-500 transition-colors" />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="message" className="text-xs font-bold uppercase tracking-widest text-slate-500">How can we help?</Label>
-                <Textarea id="message" placeholder="Describe your financial modeling requirements..." className="bg-slate-950/50 border-slate-800 min-h-[120px] focus:border-blue-500 transition-colors" />
+                <Textarea id="message" name="message" placeholder="Describe your financial modeling requirements..." required className="bg-slate-950/50 border-slate-800 min-h-[120px] focus:border-blue-500 transition-colors" />
               </div>
 
-              <Button className="w-full h-14 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl shadow-lg shadow-blue-600/20 group">
+              <Button type="submit" className="w-full h-14 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl shadow-lg shadow-blue-600/20 group">
                 Request Strategy Session
                 <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
               </Button>

@@ -14,6 +14,7 @@ import { Loader2 } from "lucide-react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
+import { useModel } from "@/lib/model-context"
 import {
   LineChart,
   Line,
@@ -117,7 +118,7 @@ export function ReportsAnalytics() {
   const [selectedPeriod, setSelectedPeriod] = useState("last-30-days")
   const [selectedTemplate, setSelectedTemplate] = useState("executive-summary")
   const [isGenerating, setIsGenerating] = useState(false)
-  const [orgId, setOrgId] = useState<string | null>(null)
+  const { orgId, selectedModelId } = useModel()
   const [loading, setLoading] = useState(true)
   const [kpiData, setKpiData] = useState<any[]>([])
   const [revenueData, setRevenueData] = useState<any[]>([])
@@ -127,11 +128,6 @@ export function ReportsAnalytics() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [hasModels, setHasModels] = useState(false)
 
-  // Fetch orgId
-  useEffect(() => {
-    fetchOrgId()
-  }, [])
-
   // Fetch data when orgId is available
   useEffect(() => {
     if (orgId) {
@@ -139,7 +135,7 @@ export function ReportsAnalytics() {
       fetchExports()
       fetchModels()
     }
-  }, [orgId])
+  }, [orgId, selectedModelId])
 
   // Auto-refresh exports list for processing reports (with reduced frequency and proper cleanup)
   useEffect(() => {
@@ -174,7 +170,7 @@ export function ReportsAnalytics() {
     if (orgId) {
       fetchOverviewData()
     }
-  }, [selectedPeriod, orgId])
+  }, [selectedPeriod, orgId, selectedModelId])
 
   // Listen for CSV import completion to refresh data
   useEffect(() => {
@@ -201,36 +197,7 @@ export function ReportsAnalytics() {
     }
   }, [orgId])
 
-  const fetchOrgId = async () => {
-    const storedOrgId = localStorage.getItem("orgId")
-    if (storedOrgId) {
-      setOrgId(storedOrgId)
-      return
-    }
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/auth/me`, {
-        headers: getAuthHeaders(),
-        credentials: "include",
-      })
-
-      if (response.status === 401) {
-        handleUnauthorized()
-        return
-      }
-
-      if (response.ok) {
-        const userData = await response.json()
-        if (userData.orgs && userData.orgs.length > 0) {
-          const primaryOrgId = userData.orgs[0].id
-          localStorage.setItem("orgId", primaryOrgId)
-          setOrgId(primaryOrgId)
-        }
-      }
-    } catch (error) {
-      console.error("Failed to fetch orgId:", error)
-    }
-  }
 
   const fetchOverviewData = async () => {
     if (!orgId) return
@@ -257,7 +224,12 @@ export function ReportsAnalytics() {
           startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
       }
 
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/overview`, {
+      const url = new URL(`${API_BASE_URL}/orgs/${orgId}/overview`)
+      if (selectedModelId) {
+        url.searchParams.append("modelId", selectedModelId)
+      }
+
+      const response = await fetch(url.toString(), {
         headers: getAuthHeaders(),
         credentials: "include",
       })

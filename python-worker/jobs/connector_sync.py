@@ -154,14 +154,29 @@ def handle_connector_sync(job_id: str, org_id: str, object_id: str, params: Opti
         # Store results to database
         _store_sync_results(db, connector_id, sync_result)
         
-        # Update connector last_synced_at
         _update_connector_status(
             db,
             connector_id,
             sync_result.status,
             sync_result.errors[0]['message'] if sync_result.errors else None,
             sync_result.trace_id,
+            stats={
+                'records_fetched': sync_result.total_records_fetched,
+                'records_processed': sync_result.total_records_processed,
+                'records_inserted': sync_result.total_records_inserted,
+                'records_updated': sync_result.total_records_updated,
+                'last_sync_timestamp': datetime.now(timezone.utc).isoformat()
+            }
         )
+
+        # Trigger model run to update dashboards and insights automatically
+        if sync_result.status == 'completed':
+            try:
+                synced_by = params.get('syncedBy') if params else None
+                _trigger_model_run(db, org_id, synced_by)
+                logger.info(f"Queued model run for org {org_id} after sync")
+            except Exception as trigger_err:
+                logger.error(f"Failed to trigger model run after sync: {trigger_err}")
         
         # Log completion
         logger.info(
@@ -308,13 +323,20 @@ def _update_connector_status(
     status: str,
     error: Optional[str] = None,
     trace_id: Optional[str] = None,
+    stats: Optional[dict] = None,
 ) -> None:
-    """Update connector status in database."""
+    """Update connector status in database and optionally store stats in config_json."""
     try:
         cursor = db.cursor()
-        query = """
+        # If sync status is 'completed' or 'done', we should mark the main connector status as 'connected'
+        main_status_update = ""
+        if status in ['completed', 'done']:
+            main_status_update = "status = 'connected',"
+
+        query = f"""
             UPDATE connectors
-            SET last_synced_at = %s,
+            SET {main_status_update}
+                last_synced_at = %s,
                 last_sync_status = %s,
                 last_sync_error = %s,
                 config_json = config_json || %s::jsonb,
@@ -325,6 +347,8 @@ def _update_connector_status(
         additional_config = {}
         if trace_id:
             additional_config['last_trace_id'] = trace_id
+        if stats:
+            additional_config['last_sync_stats'] = stats
         
         cursor.execute(query, (
             datetime.now(timezone.utc),
@@ -343,4 +367,32 @@ def _update_connector_status(
         except:
             pass
 
-
+def _trigger_model_run(db, org_id: str, user_id: Optional[str] = None) -> None:
+    """Trigger a new model execution job for the organization."""
+    import uuid
+    try:
+        cursor = db.cursor()
+        params = {
+            "triggerType": "post_sync",
+            "orgId": org_id
+        }
+        if user_id:
+            params["userId"] = user_id
+            
+        query = """
+            INSERT INTO public.jobs (
+                id, job_type, "orgId", status, params, queue,
+                created_at, updated_at
+            ) VALUES (
+                gen_random_uuid(), 'auto_model_trigger', %s, 'queued', %s::jsonb, 'default',
+                NOW(), NOW()
+            )
+        """
+        cursor.execute(query, (org_id, json.dumps(params)))
+        db.commit()
+    except Exception as e:
+        logger.error(f"Failed to queue model run: {e}")
+        try:
+            db.rollback()
+        except:
+            pass

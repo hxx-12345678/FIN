@@ -59,7 +59,7 @@ import {
   AlertTriangle,
   Network as NetworkIcon
 } from "lucide-react"
-import { CookieManager } from "@/components/security/cookie-manager"
+
 
 // --- PROFESSIONAL DESIGN TOKENS ---
 const CleanBackground = () => (
@@ -227,7 +227,7 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
                            <Fingerprint className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
                            <div>
                               <p className="text-sm font-bold text-white mb-0.5">Audit-Grade Traceability</p>
-                              <p className="text-[10px] text-slate-400 leading-tight">DAG-backed cell lineages (SOC 2 level).</p>
+                              <p className="text-[10px] text-slate-400 leading-tight">DAG-backed cell lineages (SOC 2 Architecture).</p>
                            </div>
                         </div>
                         <div className="group/item flex gap-3 hover:bg-slate-800/50 p-2 rounded-xl transition-colors cursor-pointer">
@@ -468,7 +468,7 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
               {/* Verified Badge */}
               <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 px-5 py-1.5 rounded-full bg-slate-950/90 backdrop-blur-md border border-slate-800 shadow-2xl flex items-center gap-2.5 z-20 whitespace-nowrap">
                  <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
-                 <span className="text-[10px] font-black text-slate-300 tracking-[0.15em] uppercase">Enterprise-Grade Architecture Certified</span>
+                 <span className="text-[10px] font-black text-slate-300 tracking-[0.15em] uppercase">Enterprise-Grade Aligned Architecture</span>
               </div>
            </motion.div>
         </div>
@@ -682,9 +682,9 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
                  <h4 className="text-xs font-black text-white uppercase tracking-[0.2em]">Company</h4>
                  <ul className="space-y-4 text-sm font-bold">
                     <li><Link href="/contact" className="hover:text-blue-400 transition-colors">Contact Us</Link></li>
-                    <li><Link href="/#about" className="hover:text-blue-400 transition-colors">About Us</Link></li>
+                    <li><Link href="https://finapilot.com" className="hover:text-blue-400 transition-colors">About Us</Link></li>
                     <li><Link href="/#careers" className="hover:text-blue-400 transition-colors">Careers</Link></li>
-                    <li><Link href="/#partners" className="hover:text-blue-400 transition-colors">Partners</Link></li>
+                    <li><Link href="https://finapilot.com" className="hover:text-blue-400 transition-colors">Partner Program</Link></li>
                  </ul>
               </div>
 
@@ -708,7 +708,7 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
 
            <div className="pt-12 border-t border-slate-900 flex flex-col md:flex-row justify-between items-center gap-8 text-xs font-black uppercase tracking-widest text-slate-600">
               <div className="flex gap-8">
-                 <span>SOC 2 Type II Certified</span>
+                 <span>SOC 2 Type II Aligned Architecture</span>
                  <span>GDPR Ready Architecture</span>
               </div>
               <p>
@@ -718,7 +718,6 @@ export function LandingPage({ onGetStarted }: { onGetStarted: () => void }) {
         </div>
       </footer>
 
-      <CookieManager />
     </div>
   )
 }

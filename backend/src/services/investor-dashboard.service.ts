@@ -55,11 +55,12 @@ export const investorDashboardService = {
   /**
    * Get investor dashboard data for an organization
    */
-  getDashboardData: async (orgId: string): Promise<InvestorDashboardData> => {
+  getDashboardData: async (orgId: string, modelId?: string): Promise<InvestorDashboardData> => {
     // First try to get the latest model run with actual financial data
     let latestModelRun = await prisma.modelRun.findFirst({
       where: { 
         orgId, 
+        modelId: modelId || undefined,
         status: 'done',
         summaryJson: {
           path: ['arr'],
@@ -73,7 +74,7 @@ export const investorDashboardService = {
     // If no run with data, just grab the absolute latest
     if (!latestModelRun) {
       latestModelRun = await prisma.modelRun.findFirst({
-        where: { orgId, status: 'done' },
+        where: { orgId, modelId: modelId || undefined, status: 'done' },
         orderBy: { createdAt: 'desc' },
         include: { model: true }
       });

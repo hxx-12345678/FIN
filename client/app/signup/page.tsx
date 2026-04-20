@@ -70,7 +70,7 @@ function SignupPageContent() {
             <div className="pt-10 border-t border-slate-900 grid grid-cols-2 gap-4 text-[9px] text-slate-600 font-black uppercase tracking-[0.2em]">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                <span>SOC 2 Type II Certified</span>
+                <span>SOC 2 Type II Compatible Architecture</span>
               </div>
               <div className="flex items-center gap-2">
                 <Zap className="w-3.5 h-3.5 text-indigo-500" />
@@ -163,7 +163,7 @@ function SignupPageContent() {
           {/* Footer Metadata */}
           <div className="flex flex-col lg:flex-row justify-between items-center lg:items-end border-t border-white/5 pt-12 gap-8 text-slate-500 text-[10px] font-bold uppercase tracking-[0.15em]">
              <div className="flex flex-wrap justify-center gap-8">
-                <Link href="/legal/cookies" className="hover:text-white transition-colors border-b border-transparent hover:border-white pb-0.5">Privacy Statement</Link>
+                <Link href="/legal/data-privacy-security" className="hover:text-white transition-colors border-b border-transparent hover:border-white pb-0.5">Privacy Statement</Link>
                 <button type="button" onClick={openCookiePreferences} className="hover:text-white transition-colors border-b border-transparent hover:border-white pb-0.5 text-left">Cookie Preferences</button>
                 <Link href="/legal/security" className="hover:text-white transition-colors border-b border-transparent hover:border-white pb-0.5">Trust & Security</Link>
              </div>
