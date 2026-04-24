@@ -163,7 +163,7 @@ export async function generateCFOResponse(
   const llmConfig: LLMConfig = config || {
     provider: (process.env.LLM_PROVIDER as any) || (apiKeys.length > 0 ? 'gemini' : 'fallback'),
     apiKey: apiKeys[0],
-    model: process.env.GEMINI_MODEL || process.env.LLM_MODEL || 'gemini-2.5-flash',
+    model: process.env.GEMINI_MODEL || process.env.LLM_MODEL || 'gemini-2.0-flash',
   };
 
   if (!llmConfig.apiKey || llmConfig.provider === 'fallback' || apiKeys.length === 0) {
@@ -192,7 +192,7 @@ export async function generateCFOResponse(
             promptTemplate: systemPrompt,
             renderedPrompt: userPrompt,
             provider: llmConfig.provider,
-            modelUsed: llmConfig.model || 'gemini-1.5-flash',
+            modelUsed: llmConfig.model || 'gemini-2.0-flash',
             cached: false,
           },
         });

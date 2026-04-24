@@ -186,7 +186,7 @@ async function callGemini(request: LLMRequest, config: LLMConfig): Promise<LLMRe
   }
 
   // Prefer stable, high-availability Gemini model by default
-  const model = config.model || 'gemini-2.5-flash';
+  const model = config.model || 'gemini-2.0-flash';
   let lastError: Error | null = null;
 
   // Try each API key with retry logic

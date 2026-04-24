@@ -229,7 +229,7 @@ export const intentClassifierService = {
     const llmConfig: LLMConfig = config || {
       provider: (process.env.LLM_PROVIDER as any) || (apiKeys.length > 0 ? 'gemini' : 'fallback'),
       apiKey: apiKeys[0],
-      model: process.env.GEMINI_MODEL || process.env.LLM_MODEL || 'gemini-2.5-flash',
+      model: process.env.GEMINI_MODEL || process.env.LLM_MODEL || 'gemini-2.0-flash',
     };
 
     if (!llmConfig.apiKey || llmConfig.provider === 'fallback' || apiKeys.length === 0) {
