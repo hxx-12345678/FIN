@@ -232,6 +232,8 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
             localStorage.removeItem("auth-token")
             localStorage.removeItem("refresh-token")
             localStorage.removeItem("orgId")
+            localStorage.removeItem("is-logged-in")
+            localStorage.removeItem("finapilot_mode_selected")
             window.history.replaceState(null, "", "/")
             window.location.reload()
             return
