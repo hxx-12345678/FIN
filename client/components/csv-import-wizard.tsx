@@ -1306,7 +1306,7 @@ export function CSVImportWizard({ orgId: propOrgId, token: propToken, onImportCo
                       <Sparkles className="h-8 w-8 text-amber-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse" />
                     </div>
                     <div className="text-center space-y-2">
-                      <h3 className="text-xl font-bold">Gemini Intelligence Scanning...</h3>
+                      <h3 className="text-xl font-bold">AI Intelligence Scanning...</h3>
                       <p className="text-sm text-muted-foreground max-w-xs mx-auto">
                         Analyzing your dataset structure for accurate financial reconciliation.
                       </p>

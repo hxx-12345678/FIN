@@ -924,6 +924,17 @@ def polling_loop():
             logger.error(f"❌ Polling error: {str(e)}", exc_info=True)
             time.sleep(0.5)
 
+def keep_alive_loop():
+    import requests
+    while polling_active:
+        try:
+            backend_url = os.getenv("BACKEND_URL", "https://fin-k87e.onrender.com")
+            requests.get(f"{backend_url}/health", timeout=10)
+            logger.debug(f"Pinged backend {backend_url} to keep it awake")
+        except Exception as e:
+            logger.warning(f"Failed to ping backend: {e}")
+        time.sleep(300) # Sleep for 5 minutes
+
 @app.on_event("startup")
 def startup_event():
     """Start background polling on app startup"""
@@ -931,6 +942,9 @@ def startup_event():
     polling_active = True
     polling_thread = threading.Thread(target=polling_loop, daemon=True)
     polling_thread.start()
+    
+    keep_alive_thread = threading.Thread(target=keep_alive_loop, daemon=True)
+    keep_alive_thread.start()
 
 @app.on_event("shutdown")
 def shutdown_event():
