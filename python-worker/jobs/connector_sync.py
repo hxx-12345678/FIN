@@ -230,10 +230,10 @@ def _load_connector(db, org_id: str, connector_id: str) -> Optional[Dict]:
     try:
         cursor = db.cursor()
         query = """
-            SELECT id, type, "orgId", encrypted_config, config_json, status,
+            SELECT id, type, org_id, encrypted_config, config_json, status,
                    last_synced_at, created_at
             FROM connectors
-            WHERE id = %s AND "orgId" = %s
+            WHERE id = %s AND org_id = %s
         """
         cursor.execute(query, (connector_id, org_id))
         row = cursor.fetchone()
@@ -388,7 +388,7 @@ def _trigger_model_run(db, org_id: str, user_id: Optional[str] = None) -> None:
             
         query = """
             INSERT INTO public.jobs (
-                id, job_type, "orgId", status, logs, queue,
+                id, job_type, org_id, status, logs, queue,
                 created_at, updated_at
             ) VALUES (
                 gen_random_uuid(), 'auto_model_trigger', %s, 'queued', %s::jsonb, 'default',

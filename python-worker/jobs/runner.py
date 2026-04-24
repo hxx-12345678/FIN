@@ -51,14 +51,14 @@ def reserve_job(queue: str = 'default') -> Optional[Dict[str, Any]]:
         
         # Check which columns exist
         queue_exists = _check_column_exists(cursor, 'jobs', 'queue')
-        next_run_at_exists = _check_column_exists(cursor, 'jobs', 'nextRunAt')
-        visibility_expires_at_exists = _check_column_exists(cursor, 'jobs', 'visibilityExpiresAt')
-        cancel_requested_exists = _check_column_exists(cursor, 'jobs', 'cancelRequested')
-        worker_id_exists = _check_column_exists(cursor, 'jobs', 'workerId')
-        run_started_at_exists = _check_column_exists(cursor, 'jobs', 'runStartedAt')
+        next_run_at_exists = _check_column_exists(cursor, 'jobs', 'next_run_at')
+        visibility_expires_at_exists = _check_column_exists(cursor, 'jobs', 'visibility_expires_at')
+        cancel_requested_exists = _check_column_exists(cursor, 'jobs', 'cancel_requested')
+        worker_id_exists = _check_column_exists(cursor, 'jobs', 'worker_id')
+        run_started_at_exists = _check_column_exists(cursor, 'jobs', 'run_started_at')
         priority_exists = _check_column_exists(cursor, 'jobs', 'priority')
-        updated_at_exists = _check_column_exists(cursor, 'jobs', 'updatedAt')
-        created_at_exists = _check_column_exists(cursor, 'jobs', 'createdAt')
+        updated_at_exists = _check_column_exists(cursor, 'jobs', 'updated_at')
+        created_at_exists = _check_column_exists(cursor, 'jobs', 'created_at')
         attempts_exists = _check_column_exists(cursor, 'jobs', 'attempts')
         max_attempts_exists = _check_column_exists(cursor, 'jobs', 'max_attempts')
         last_error_exists = _check_column_exists(cursor, 'jobs', 'last_error')
@@ -111,9 +111,8 @@ def reserve_job(queue: str = 'default') -> Optional[Dict[str, Any]]:
         order_by = ', '.join(order_by_clauses) if order_by_clauses else 'id ASC'
         
         # Build RETURNING clause (use actual database column names)
-        # Note: orgId must be quoted because it's camelCase in the database
         returning_cols = [
-            'id', 'job_type', '"orgId"', 'object_id', 'status', 'progress', 'logs'
+            'id', 'job_type', 'org_id', 'object_id', 'status', 'progress', 'logs'
         ]
         if priority_exists:
             returning_cols.append('priority')
@@ -363,9 +362,9 @@ def extend_visibility(job_id: str) -> bool:
         cursor = conn.cursor()
         
         # Check which columns exist
-        visibility_expires_at_exists = _check_column_exists(cursor, 'jobs', 'visibilityExpiresAt')
-        updated_at_exists = _check_column_exists(cursor, 'jobs', 'updatedAt')
-        worker_id_exists = _check_column_exists(cursor, 'jobs', 'workerId')
+        visibility_expires_at_exists = _check_column_exists(cursor, 'jobs', 'visibility_expires_at')
+        updated_at_exists = _check_column_exists(cursor, 'jobs', 'updated_at')
+        worker_id_exists = _check_column_exists(cursor, 'jobs', 'worker_id')
         
         if not visibility_expires_at_exists:
             # Can't extend visibility if column doesn't exist
@@ -603,8 +602,8 @@ def complete_job(job_id: str, result: Optional[Dict[str, Any]] = None) -> bool:
             }]
         
         # Check which columns exist
-        finished_at_exists = _check_column_exists(cursor, 'jobs', 'finishedAt')
-        updated_at_exists = _check_column_exists(cursor, 'jobs', 'updatedAt')
+        finished_at_exists = _check_column_exists(cursor, 'jobs', 'finished_at')
+        updated_at_exists = _check_column_exists(cursor, 'jobs', 'updated_at')
         
         # Build SET clause
         set_clauses = [
@@ -719,12 +718,12 @@ def fail_job(
         })
         
         # Check which columns exist
-        next_run_at_exists = _check_column_exists(cursor, 'jobs', 'nextRunAt')
-        worker_id_exists = _check_column_exists(cursor, 'jobs', 'workerId')
-        run_started_at_exists = _check_column_exists(cursor, 'jobs', 'runStartedAt')
-        visibility_expires_at_exists = _check_column_exists(cursor, 'jobs', 'visibilityExpiresAt')
-        updated_at_exists = _check_column_exists(cursor, 'jobs', 'updatedAt')
-        finished_at_exists = _check_column_exists(cursor, 'jobs', 'finishedAt')
+        next_run_at_exists = _check_column_exists(cursor, 'jobs', 'next_run_at')
+        worker_id_exists = _check_column_exists(cursor, 'jobs', 'worker_id')
+        run_started_at_exists = _check_column_exists(cursor, 'jobs', 'run_started_at')
+        visibility_expires_at_exists = _check_column_exists(cursor, 'jobs', 'visibility_expires_at')
+        updated_at_exists = _check_column_exists(cursor, 'jobs', 'updated_at')
+        finished_at_exists = _check_column_exists(cursor, 'jobs', 'finished_at')
         
         # Check if should retry
         if should_retry(new_attempts, max_attempts, error):
@@ -833,8 +832,8 @@ def check_cancel_requested(job_id: str) -> bool:
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Check if cancelRequested column exists
-        cancel_requested_exists = _check_column_exists(cursor, 'jobs', 'cancelRequested')
+        # Check if cancel_requested column exists
+        cancel_requested_exists = _check_column_exists(cursor, 'jobs', 'cancel_requested')
         
         if not cancel_requested_exists:
             # Column doesn't exist, so cancellation not supported
@@ -921,8 +920,8 @@ def mark_cancelled(job_id: str) -> bool:
         })
         
         # Check which columns exist
-        finished_at_exists = _check_column_exists(cursor, 'jobs', 'finishedAt')
-        updated_at_exists = _check_column_exists(cursor, 'jobs', 'updatedAt')
+        finished_at_exists = _check_column_exists(cursor, 'jobs', 'finished_at')
+        updated_at_exists = _check_column_exists(cursor, 'jobs', 'updated_at')
         
         # Build SET clause
         set_clauses = [
@@ -981,10 +980,10 @@ def release_stuck_jobs(queue: str = 'default', timeout_minutes: int = 60) -> int
         
         # Check which columns exist
         queue_exists = _check_column_exists(cursor, 'jobs', 'queue')
-        visibility_expires_at_exists = _check_column_exists(cursor, 'jobs', 'visibilityExpiresAt')
-        run_started_at_exists = _check_column_exists(cursor, 'jobs', 'runStartedAt')
-        worker_id_exists = _check_column_exists(cursor, 'jobs', 'workerId')
-        updated_at_exists = _check_column_exists(cursor, 'jobs', 'updatedAt')
+        visibility_expires_at_exists = _check_column_exists(cursor, 'jobs', 'visibility_expires_at')
+        run_started_at_exists = _check_column_exists(cursor, 'jobs', 'run_started_at')
+        worker_id_exists = _check_column_exists(cursor, 'jobs', 'worker_id')
+        updated_at_exists = _check_column_exists(cursor, 'jobs', 'updated_at')
         
         timeout_threshold = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
         
@@ -1083,8 +1082,8 @@ def queue_job(
         # Check which columns exist
         queue_exists = _check_column_exists(cursor, 'jobs', 'queue')
         priority_exists = _check_column_exists(cursor, 'jobs', 'priority')
-        created_at_exists = _check_column_exists(cursor, 'jobs', 'createdAt')
-        updated_at_exists = _check_column_exists(cursor, 'jobs', 'updatedAt')
+        created_at_exists = _check_column_exists(cursor, 'jobs', 'created_at')
+        updated_at_exists = _check_column_exists(cursor, 'jobs', 'updated_at')
         
         # Prepare logs with params
         logs = []
@@ -1103,7 +1102,7 @@ def queue_job(
             })
         
         # Build INSERT columns and values
-        columns = ['job_type', '"orgId"', 'status', 'progress', 'logs']
+        columns = ['job_type', 'org_id', 'status', 'progress', 'logs']
         values = [job_type, org_id, 'queued', 0.0, json.dumps(logs)]
         
         if object_id:

@@ -162,7 +162,7 @@ export const groundingService = {
         category,
         description
       FROM raw_transactions
-      WHERE "orgId" = ${orgId}::uuid
+      WHERE "org_id" = ${orgId}::uuid
         AND date >= ${startOfPreviousYear}::date
       ORDER BY date DESC
       LIMIT 100

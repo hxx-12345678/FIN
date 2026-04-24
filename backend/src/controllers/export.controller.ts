@@ -184,8 +184,8 @@ export const exportController = {
       }>>`
         SELECT 
           e.id,
-          e."modelRunId",
-          e."orgId",
+          e."model_run_id" as "modelRunId",
+          e."org_id" as "orgId",
           e.type,
           e.s3_key as "s3Key",
           e.file_data as "fileData",

@@ -57,7 +57,7 @@ def fetch_additional_financial_data(cursor, conn, org_id: str, model_run_id: str
                 SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as expenses,
                 COUNT(*) as transaction_count
             FROM raw_transactions
-            WHERE "orgId" = %s
+            WHERE org_id = %s
             AND is_duplicate = false
             AND date >= NOW() - INTERVAL '12 months'
             GROUP BY DATE_TRUNC('month', date)
@@ -96,7 +96,7 @@ def fetch_additional_financial_data(cursor, conn, org_id: str, model_run_id: str
                 SUM(ABS(amount)) as total_expense,
                 COUNT(*) as transaction_count
             FROM raw_transactions
-            WHERE "orgId" = %s
+            WHERE org_id = %s
             AND is_duplicate = false
             AND amount < 0
             AND date >= NOW() - INTERVAL '3 months'
@@ -120,7 +120,7 @@ def fetch_additional_financial_data(cursor, conn, org_id: str, model_run_id: str
         # Get total transaction count
         cursor.execute("""
             SELECT COUNT(*) FROM raw_transactions
-            WHERE "orgId" = %s
+            WHERE org_id = %s
             AND is_duplicate = false
         """, (org_id,))
         
@@ -717,7 +717,7 @@ def fetch_provenance_summary(model_run_id: str, cursor, conn) -> str:
                    COUNT(DISTINCT "source_type"), 
                    AVG("confidence_score")
             FROM provenance_entries
-            WHERE "modelRunId" = %s
+            WHERE model_run_id = %s
         """, (model_run_id,))
         
         row = cursor.fetchone()
@@ -729,7 +729,7 @@ def fetch_provenance_summary(model_run_id: str, cursor, conn) -> str:
         cursor.execute("""
             SELECT "cell_key", "source_type", "confidence_score"
             FROM provenance_entries
-            WHERE "modelRunId" = %s
+            WHERE model_run_id = %s
             ORDER BY "confidence_score" ASC
             LIMIT 5
         """, (model_run_id,))
@@ -787,9 +787,9 @@ def handle_export_pdf(job_id: str, org_id: str, object_id: str, logs: dict):
             
             # Get export record with model run summary and meta_json
             cursor.execute("""
-                SELECT e.type, e."modelRunId", mr.summary_json, e."orgId", e.meta_json
+                SELECT e.type, e.model_run_id, mr.summary_json, e.org_id, e.meta_json
                 FROM exports e
-                LEFT JOIN model_runs mr ON e."modelRunId" = mr.id
+                LEFT JOIN model_runs mr ON e.model_run_id = mr.id
                 WHERE e.id = %s
             """, (export_id,))
             
@@ -1139,14 +1139,14 @@ def handle_export_pdf(job_id: str, org_id: str, object_id: str, logs: dict):
             try:
                 bucket_time = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
                 cursor.execute("""
-                    INSERT INTO billing_usage ("orgId", metric, value, bucket_time)
+                    INSERT INTO billing_usage (org_id, metric, value, bucket_time)
                     VALUES (%s, %s, %s, %s)
                     ON CONFLICT DO NOTHING
                 """, (org_id, 'export_cpu_seconds', float(cpu_seconds), bucket_time))
                 
                 if estimated_cost > 0:
                     cursor.execute("""
-                        INSERT INTO billing_usage ("orgId", metric, value, bucket_time)
+                        INSERT INTO billing_usage (org_id, metric, value, bucket_time)
                         VALUES (%s, %s, %s, %s)
                         ON CONFLICT DO NOTHING
                     """, (org_id, 'export_compute_cost', float(estimated_cost), bucket_time))

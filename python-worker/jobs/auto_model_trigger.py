@@ -57,7 +57,7 @@ def handle_auto_model_trigger(job_id: str, org_id: str, object_id: str, logs: di
         
         # Check if org has models - if not, create a default one
         cursor.execute("""
-            SELECT COUNT(*) FROM models WHERE "orgId" = %s
+            SELECT COUNT(*) FROM models WHERE org_id = %s
         """, (org_id,))
         
         model_count = cursor.fetchone()[0]
@@ -88,7 +88,7 @@ def handle_auto_model_trigger(job_id: str, org_id: str, object_id: str, logs: di
             }
             
             cursor.execute("""
-                INSERT INTO models (id, "orgId", name, model_json, version, created_at)
+                INSERT INTO models (id, org_id, name, model_json, version, created_at)
                 VALUES (gen_random_uuid(), %s, %s, %s::jsonb, 1, NOW())
                 RETURNING id
             """, (
@@ -105,7 +105,7 @@ def handle_auto_model_trigger(job_id: str, org_id: str, object_id: str, logs: di
             # Enterprise: Get ALL models for the org to update them all
             cursor.execute("""
                 SELECT id FROM models
-                WHERE "orgId" = %s
+                WHERE org_id = %s
             """, (org_id,))
             
             model_rows = cursor.fetchall()
@@ -123,7 +123,7 @@ def handle_auto_model_trigger(job_id: str, org_id: str, object_id: str, logs: di
         # Optional throttle check (prevent spam - at least 1 hour between runs for scheduled tasks)
         cursor.execute("""
             SELECT created_at FROM model_runs
-            WHERE "orgId" = %s AND "run_type" = 'baseline'
+            WHERE org_id = %s AND run_type = 'baseline'
             ORDER BY created_at DESC
             LIMIT 1
         """, (org_id,))
@@ -165,7 +165,7 @@ def handle_auto_model_trigger(job_id: str, org_id: str, object_id: str, logs: di
             # Check if there's already a running model run for this specific model
             cursor.execute("""
                 SELECT id FROM model_runs
-                WHERE "modelId" = %s AND status IN ('queued', 'running')
+                WHERE model_id = %s AND status IN ('queued', 'running')
                 LIMIT 1
             """, (model_id,))
             
@@ -175,7 +175,7 @@ def handle_auto_model_trigger(job_id: str, org_id: str, object_id: str, logs: di
 
             # Create model run
             cursor.execute("""
-                INSERT INTO model_runs (id, "modelId", "orgId", "run_type", "params_json", status, created_at)
+                INSERT INTO model_runs (id, model_id, org_id, run_type, params_json, status, created_at)
                 VALUES (gen_random_uuid(), %s, %s, 'baseline', %s::jsonb, 'queued', NOW())
                 RETURNING id
             """, (
@@ -211,7 +211,7 @@ def handle_auto_model_trigger(job_id: str, org_id: str, object_id: str, logs: di
             ]
             
             cursor.execute("""
-                INSERT INTO jobs (id, job_type, "orgId", object_id, status, priority, queue, logs, created_at, updated_at)
+                INSERT INTO jobs (id, job_type, org_id, object_id, status, priority, queue, logs, created_at, updated_at)
                 VALUES (gen_random_uuid(), 'model_run', %s, %s, 'queued', 40, 'default', %s::jsonb, NOW(), NOW())
                 RETURNING id
             """, (org_id, model_run_id, json.dumps(model_run_logs)))
@@ -220,7 +220,7 @@ def handle_auto_model_trigger(job_id: str, org_id: str, object_id: str, logs: di
             
             try:
                 cursor.execute("""
-                    INSERT INTO audit_logs ("orgId", action, object_type, object_id, meta_json, created_at)
+                    INSERT INTO audit_logs (org_id, action, object_type, object_id, meta_json, created_at)
                     VALUES (%s, 'auto_model_triggered', 'model_run', %s, %s::jsonb, NOW())
                 """, (org_id, model_run_id, json.dumps({
                     'modelId': model_id,

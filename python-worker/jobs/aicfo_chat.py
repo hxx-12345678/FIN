@@ -118,7 +118,7 @@ def handle_aicfo_chat(job_id: str, org_id: str, object_id: str, logs: dict):
         model_state = {}
         model_id = None
         if model_run_id:
-            cursor.execute('SELECT "modelId", summary_json FROM model_runs WHERE id = %s', (model_run_id,))
+            cursor.execute('SELECT model_id, summary_json FROM model_runs WHERE id = %s', (model_run_id,))
             row = cursor.fetchone()
             if row:
                 model_id = str(row[0])
@@ -142,8 +142,8 @@ def handle_aicfo_chat(job_id: str, org_id: str, object_id: str, logs: dict):
                 cursor.execute("""
                     SELECT d.id, d.name, d.category, f.expression 
                     FROM drivers d
-                    LEFT JOIN driver_formulas f ON d.id = f."driverId"
-                    WHERE d."modelId" = %s
+                    LEFT JOIN driver_formulas f ON d.id = f.driver_id
+                    WHERE d.model_id = %s
                 """, (model_id,))
                 node_rows = cursor.fetchall()
                 model_nodes = [{"id": str(r[0]), "name": r[1], "category": r[2], "formula": r[3]} for r in node_rows]

@@ -345,9 +345,9 @@ def handle_csv_import(job_id: str, org_id: str, object_id: str, logs: dict):
                 # Database columns: "orgId" (camelCase, quoted), raw_payload (snake_case, not quoted)
                 try:
                     cursor.execute("""
-                        INSERT INTO raw_transactions ("orgId", import_batch_id, source_id, date, amount, currency, category, description, raw_payload, is_duplicate)
+                        INSERT INTO raw_transactions (org_id, import_batch_id, source_id, date, amount, currency, category, description, raw_payload, is_duplicate)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, false)
-                        ON CONFLICT ("orgId", source_id) DO NOTHING
+                        ON CONFLICT (org_id, source_id) DO NOTHING
                     """, (
                         org_id,
                         import_batch_id,
@@ -469,7 +469,7 @@ def handle_csv_import(job_id: str, org_id: str, object_id: str, logs: dict):
         if not has_transactions:
             # Check if org has any transactions at all
             cursor.execute("""
-                SELECT COUNT(*) FROM raw_transactions WHERE "orgId" = %s AND is_duplicate = false
+                SELECT COUNT(*) FROM raw_transactions WHERE org_id = %s AND is_duplicate = false
             """, (org_id,))
             existing_count = cursor.fetchone()[0]
             has_transactions = existing_count > 0
@@ -514,7 +514,7 @@ def handle_csv_import(job_id: str, org_id: str, object_id: str, logs: dict):
                 ]
                 
                 cursor.execute("""
-                    INSERT INTO jobs (id, job_type, "orgId", object_id, status, priority, queue, logs, created_at, updated_at)
+                    INSERT INTO jobs (id, job_type, org_id, object_id, status, priority, queue, logs, created_at, updated_at)
                     VALUES (
                         gen_random_uuid(),
                         'auto_model_trigger',

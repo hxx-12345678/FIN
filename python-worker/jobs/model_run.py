@@ -330,13 +330,13 @@ def handle_model_run(job_id: str, org_id: str, object_id: str, logs: dict):
             if not model_run_id:
                 raise ValueError("Model run ID not found")
             
-            # Get model run - Fixed: Use quoted camelCase column names to match Prisma schema
+            # Get model run - Fixed: Use snake_case column names to match updated database schema
             cursor.execute("""
                 SELECT 
-                    mr.id, mr."modelId", mr."orgId", mr.run_type,
+                    mr.id, mr.model_id, mr.org_id, mr.run_type,
                     mr.params_json, mr.status, m.model_json
                 FROM model_runs mr
-                JOIN models m ON mr."modelId" = m.id
+                JOIN models m ON mr.model_id = m.id
                 WHERE mr.id = %s
             """, (model_run_id,))
             
@@ -465,7 +465,7 @@ def handle_model_run(job_id: str, org_id: str, object_id: str, logs: dict):
             try:
                 cursor.execute("""
                     INSERT INTO computation_traces 
-                        (id, "orgId", "modelId", trigger_node_id, affected_nodes, duration_ms)
+                        (id, org_id, model_id, trigger_node_id, affected_nodes, duration_ms)
                     VALUES 
                         (gen_random_uuid(), %s, %s, %s, %s::jsonb, %s)
                 """, (org_id, model_id, 'orchestrator', json.dumps(['model_run', 'consolidation', 'valuation']), int(cpu_seconds * 1000)))
@@ -492,16 +492,16 @@ def handle_model_run(job_id: str, org_id: str, object_id: str, logs: dict):
             # This is done AFTER commit so failures don't affect the main transaction
             try:
                 bucket_time = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
-                # Use quoted camelCase column name to match Prisma schema
+                # Use snake_case column name to match updated database schema
                 cursor.execute("""
-                    INSERT INTO billing_usage ("orgId", metric, value, bucket_time)
+                    INSERT INTO billing_usage (org_id, metric, value, bucket_time)
                     VALUES (%s, %s, %s, %s)
                     ON CONFLICT DO NOTHING
                 """, (org_id, 'model_run_cpu_seconds', float(cpu_seconds), bucket_time))
                 
                 if estimated_cost > 0:
                     cursor.execute("""
-                        INSERT INTO billing_usage ("orgId", metric, value, bucket_time)
+                        INSERT INTO billing_usage (org_id, metric, value, bucket_time)
                         VALUES (%s, %s, %s, %s)
                         ON CONFLICT DO NOTHING
                     """, (org_id, 'model_run_compute_cost', float(estimated_cost), bucket_time))
@@ -526,7 +526,7 @@ def handle_model_run(job_id: str, org_id: str, object_id: str, logs: dict):
             cursor.execute("""
                 SELECT id, date, amount, category
                 FROM raw_transactions
-                WHERE "orgId" = %s
+                WHERE org_id = %s
                   AND is_duplicate = false
                 ORDER BY date DESC
                 LIMIT 1000
@@ -793,7 +793,7 @@ def handle_model_run(job_id: str, org_id: str, object_id: str, logs: dict):
                 # In model_run, the entire model is often recomputed, so we record the job as trigger
                 cursor.execute("""
                     INSERT INTO computation_traces (
-                        id, "orgId", "modelId", trigger_node_id, 
+                        id, org_id, model_id, trigger_node_id, 
                         trigger_user_id, affected_nodes, duration_ms, created_at
                     )
                     VALUES (gen_random_uuid(), %s, %s, %s, %s, %s::jsonb, %s, NOW())
@@ -941,7 +941,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                     category,
                     description
                 FROM raw_transactions
-                WHERE "orgId" = %s
+                WHERE org_id = %s
                   AND import_batch_id = %s
                   AND is_duplicate = false
                 ORDER BY date ASC
@@ -955,7 +955,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                     category,
                     description
                 FROM raw_transactions
-                WHERE "orgId" = %s
+                WHERE org_id = %s
                   AND is_duplicate = false
                 ORDER BY date ASC
             """, (org_id,))
@@ -1055,7 +1055,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             try:
                 # Use a savepoint so we don't abort the global transaction if the table is missing
                 cursor.execute("SAVEPOINT check_drivers")
-                cursor.execute('SELECT id FROM drivers WHERE "modelId" = %s LIMIT 1', (current_model_id,))
+                cursor.execute('SELECT id FROM drivers WHERE model_id = %s LIMIT 1', (current_model_id,))
                 has_drivers = cursor.fetchone() is not None
                 cursor.execute("RELEASE SAVEPOINT check_drivers")
             except Exception as e:
@@ -1069,13 +1069,13 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             engine = DriverBasedEngine()
             
             # 1. Fetch all drivers
-            cursor.execute('SELECT id, name, type, category, is_calculated, formula FROM drivers WHERE "modelId" = %s', (current_model_id,))
+            cursor.execute('SELECT id, name, type, category, is_calculated, formula FROM drivers WHERE model_id = %s', (current_model_id,))
             drivers = cursor.fetchall()
             for d in drivers:
                 engine.add_driver(str(d[0]), d[1], d[2], d[3])
             
             # 2. Fetch all formulas
-            cursor.execute('SELECT "driverId", expression, dependencies FROM driver_formulas WHERE "modelId" = %s', (current_model_id,))
+            cursor.execute('SELECT driver_id, expression, dependencies FROM driver_formulas WHERE model_id = %s', (current_model_id,))
             formulas = cursor.fetchall()
             for f in formulas:
                 engine.add_formula(str(f[0]), f[1], f[2] if isinstance(f[2], list) else json.loads(f[2]))
@@ -1083,7 +1083,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             # 3. Fetch values for the current scenario
             # Use run_type or a specific scenario if provided in params
             scenario_name = params_json.get('scenarioName', 'Base')
-            cursor.execute('SELECT id FROM financial_scenarios WHERE "modelId" = %s AND name = %s', (current_model_id, scenario_name))
+            cursor.execute('SELECT id FROM financial_scenarios WHERE model_id = %s AND name = %s', (current_model_id, scenario_name))
             scenario_row = cursor.fetchone()
             if scenario_row:
                 scenario_id = scenario_row[0]
@@ -2253,7 +2253,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                 
                 # Clear previous cube data for this model to avoid stale data
                 cursor.execute("SAVEPOINT write_cubes")
-                cursor.execute('DELETE FROM metric_cube WHERE "modelId" = %s AND "orgId" = %s', 
+                cursor.execute('DELETE FROM metric_cube WHERE model_id = %s AND org_id = %s', 
                              (model_id_for_cubes, org_id))
                 
                 # Write each month's metrics to the cube
@@ -2267,7 +2267,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                             # Generate a unique ID for each cube entry
                             cube_id = str(uuid.uuid4())
                             cursor.execute("""
-                                INSERT INTO metric_cube (id, "orgId", "modelId", metric_name, month, value, updated_at)
+                                INSERT INTO metric_cube (id, org_id, model_id, metric_name, month, value, updated_at)
                                 VALUES (%s::uuid, %s::uuid, %s::uuid, %s, %s, %s, NOW())
                                 ON CONFLICT DO NOTHING
                             """, (
@@ -2292,7 +2292,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             model_id_for_dims = model_json.get('id') if isinstance(model_json, dict) else None
             if model_id_for_dims:
                 cursor.execute("SAVEPOINT check_dims")
-                cursor.execute('SELECT COUNT(*) FROM dimensions WHERE "orgId" = %s', (org_id,))
+                cursor.execute('SELECT COUNT(*) FROM dimensions WHERE org_id = %s', (org_id,))
                 dim_count = cursor.fetchone()[0]
                 
                 if dim_count == 0:
@@ -2307,13 +2307,13 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                         import uuid
                         dim_id = str(uuid.uuid4())
                         cursor.execute(
-                            'INSERT INTO dimensions (id, "orgId", "modelId", name, type) VALUES (%s, %s, %s, %s, %s)',
+                            'INSERT INTO dimensions (id, org_id, model_id, name, type) VALUES (%s, %s, %s, %s, %s)',
                             (dim_id, org_id, model_id_for_dims, dim_name, dim_type)
                         )
                         for member_name, member_code in members:
                             member_id = str(uuid.uuid4())
                             cursor.execute(
-                                'INSERT INTO dimension_members (id, "dimensionId", name, code) VALUES (%s, %s, %s, %s)',
+                                'INSERT INTO dimension_members (id, dimension_id, name, code) VALUES (%s, %s, %s, %s)',
                                 (member_id, dim_id, member_name, member_code)
                             )
                     logger.info("Auto-initialized 3 dimensions with members")

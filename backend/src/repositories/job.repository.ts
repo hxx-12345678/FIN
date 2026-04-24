@@ -117,18 +117,18 @@ export const jobRepository = {
       UPDATE jobs
       SET 
         status = 'running',
-        "workerId" = ${workerId},
-        "runStartedAt" = NOW(),
-        "visibilityExpiresAt" = ${visibilityExpiresAt}::timestamptz,
-        "updatedAt" = NOW()
+        "worker_id" = ${workerId}::uuid,
+        "run_started_at" = NOW(),
+        "visibility_expires_at" = ${visibilityExpiresAt}::timestamptz,
+        "updated_at" = NOW()
       WHERE id = (
         SELECT id
         FROM jobs
         WHERE status = 'queued'
           AND queue = ${queue}
-          AND ("nextRunAt" IS NULL OR "nextRunAt" <= NOW())
-          AND "cancelRequested" = false
-        ORDER BY priority DESC, "createdAt" ASC
+          AND ("next_run_at" IS NULL OR "next_run_at" <= NOW())
+          AND "cancel_requested" = false
+        ORDER BY priority DESC, "created_at" ASC
         LIMIT 1
         FOR UPDATE SKIP LOCKED
       )

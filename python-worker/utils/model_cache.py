@@ -56,11 +56,11 @@ def get_cached_model_run(
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Build query - use camelCase "orgId" as per Prisma schema
+        # Build query - use snake_case org_id as per updated database schema
         query = """
             SELECT id, summary_json, created_at, params_json
             FROM model_runs
-            WHERE "orgId" = %s
+            WHERE org_id = %s
             AND status = 'done'
             AND params_json::jsonb->>'inputHash' = %s
         """

@@ -123,7 +123,7 @@ model Connector {
   autoSyncEnabled    Boolean          @default(true) @map("auto_sync_enabled")
   lastSyncStatus     String?          @map("last_sync_status")
   lastSyncError      String?          @map("last_sync_error")
-  updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt          DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   org                Org              @relation(fields: [orgId], references: [id], onDelete: Cascade)
   rawTransactions    RawTransaction[]
 
@@ -280,7 +280,7 @@ model Driver {
   isCalculated    Boolean         @default(false) @map("is_calculated")
   version         Int             @default(1)
   createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt       DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   dependencies    Json?
   isLocked        Boolean         @default(false) @map("is_locked")
   maxRange        Decimal?        @map("max_range") @db.Decimal(20, 4)
@@ -302,7 +302,7 @@ model DriverValue {
   month      String
   value      Decimal           @db.Decimal(20, 4)
   createdAt  DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt  DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt  DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   driver     Driver            @relation(fields: [driverId], references: [id], onDelete: Cascade)
   scenario   FinancialScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
 
@@ -356,7 +356,7 @@ model Dimension {
   type         String
   displayOrder Int               @default(0) @map("display_order")
   createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt    DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   members      DimensionMember[]
 
   @@unique([orgId, modelId, name])
@@ -376,7 +376,7 @@ model DimensionMember {
   isActive     Boolean      @default(true) @map("is_active")
   metadata     Json?
   createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt    DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   dimension    Dimension    @relation(fields: [dimensionId], references: [id], onDelete: Cascade)
   cubeData     MetricCube[]
 
@@ -405,7 +405,7 @@ model MetricCube {
   formula      String?
   version      Int              @default(1)
   createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt    DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   geography    DimensionMember? @relation(fields: [geographyId], references: [id])
 
   @@index([orgId, modelId])
@@ -473,7 +473,7 @@ model Export {
   provenanceAppendix Json?     @map("provenance_appendix")
   fileData           Bytes?    @map("file_data")
   metaJson           Json?     @map("meta_json")
-  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdBy          User?     @relation("export_createdBy", fields: [createdById], references: [id])
   modelRun           ModelRun? @relation(fields: [modelRunId], references: [id])
   org                Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
@@ -1034,7 +1034,7 @@ model FinancialLedger {
   isAdjustment     Boolean  @default(false) @map("is_adjustment")
   adjustmentReason String?  @map("adjustment_reason")
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   org              Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@index([orgId])
@@ -1056,7 +1056,7 @@ model ApprovalRequest {
   comment     String?
   reviewedAt  DateTime? @map("reviewed_at") @db.Timestamptz(6)
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   approver    User?     @relation("approval_approver", fields: [approverId], references: [id])
   org         Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
   requester   User      @relation("approval_requester", fields: [requesterId], references: [id], onDelete: Cascade)

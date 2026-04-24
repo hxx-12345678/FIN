@@ -54,13 +54,13 @@ def handle_provenance_export(job_id: str, org_id: str, object_id: str, logs: dic
         # Get all provenance entries for this model run
         cursor.execute("""
             SELECT 
-                pe.id, pe."cell_key", pe."source_type", pe."source_ref",
-                pe."promptId", pe."confidence_score", pe."created_at",
-                p."rendered_prompt", p."response_text", p."provider", p."model_used"
+                pe.id, pe.cell_key, pe.source_type, pe.source_ref,
+                pe.prompt_id, pe.confidence_score, pe.created_at,
+                p.rendered_prompt, p.response_text, p.provider, p.model_used
             FROM provenance_entries pe
-            LEFT JOIN prompts p ON pe."promptId" = p.id
-            WHERE pe."modelRunId" = %s
-            ORDER BY pe."created_at" DESC
+            LEFT JOIN prompts p ON pe.prompt_id = p.id
+            WHERE pe.model_run_id = %s
+            ORDER BY pe.created_at DESC
         """, (model_run_id,))
         
         provenance_rows = cursor.fetchall()
@@ -95,7 +95,7 @@ def handle_provenance_export(job_id: str, org_id: str, object_id: str, logs: dic
         transactions = []
         if include_transactions and transaction_ids:
             cursor.execute("""
-                SELECT id, date, amount, currency, category, description, "source_id"
+                SELECT id, date, amount, currency, category, description, source_id
                 FROM raw_transactions
                 WHERE id = ANY(%s::uuid[])
                 ORDER BY date DESC
@@ -123,8 +123,8 @@ def handle_provenance_export(job_id: str, org_id: str, object_id: str, logs: dic
         prompts = []
         if prompt_ids:
             cursor.execute("""
-                SELECT id, "prompt_template", "rendered_prompt", "response_text",
-                       provider, "model_used", "tokens_used", created_at
+                SELECT id, prompt_template, rendered_prompt, response_text,
+                       provider, model_used, tokens_used, created_at
                 FROM prompts
                 WHERE id = ANY(%s::uuid[])
                 ORDER BY created_at DESC

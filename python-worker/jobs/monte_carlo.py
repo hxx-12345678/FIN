@@ -287,8 +287,8 @@ def handle_monte_carlo(job_id: str, org_id: str, object_id: str, logs: dict):
             cursor.execute("""
                 SELECT 
                     num_simulations, 
-                    "modelRunId",
-                    "orgId",
+                    model_run_id,
+                    org_id,
                     params_hash
                 FROM monte_carlo_jobs
                 WHERE id = %s
@@ -740,7 +740,7 @@ def load_model_snapshot(model_run_id: str, cursor) -> dict:
         cursor.execute("""
             SELECT mr.result_s3, m.model_json, mr.run_type
             FROM model_runs mr
-            JOIN models m ON mr."modelId" = m.id
+            JOIN models m ON mr.model_id = m.id
             WHERE mr.id = %s
         """, (model_run_id,))
         
@@ -767,6 +767,7 @@ def load_model_snapshot(model_run_id: str, cursor) -> dict:
         month_keys = [f"{current_year}-{i+1:02d}" for i in range(months)]
         
         return {
+            'model_run_id': model_run_id,
             'months': months,
             'monthKeys': month_keys,
             'baseline': model_json if model_json else {},
@@ -850,7 +851,7 @@ def run_vectorized_simulations_enhanced(
                         SELECT summary_json->>'cashBalance'
                         FROM model_runs
                         WHERE id = %s
-                    """, (model_run_id,))
+                    """, (model_data.get('model_run_id') if isinstance(model_data, dict) else None,))
                     row = cursor.fetchone()
                     if row and row[0] is not None:
                         baseline_cash = float(row[0])
@@ -878,7 +879,7 @@ def run_vectorized_simulations_enhanced(
                         summary_json->>'opex'
                     FROM model_runs
                     WHERE id = %s
-                """, (model_run_id,))
+                """, (model_data.get('model_run_id') if isinstance(model_data, dict) else None,))
                 srow = cursor.fetchone()
                 if srow:
                     if baseline_revenue is None:
@@ -1286,7 +1287,7 @@ def record_billing_usage(org_id: str, cpu_seconds: float, cursor, estimated_cost
         
         # Record CPU seconds
         cursor.execute("""
-            INSERT INTO billing_usage ("orgId", metric, value, bucket_time)
+            INSERT INTO billing_usage (org_id, metric, value, bucket_time)
             VALUES (%s, %s, %s, %s)
             ON CONFLICT DO NOTHING
         """, (org_id, 'monte_carlo_cpu_seconds', float(cpu_seconds), bucket_time))
@@ -1294,7 +1295,7 @@ def record_billing_usage(org_id: str, cpu_seconds: float, cursor, estimated_cost
         # Record estimated cost if provided
         if estimated_cost > 0:
             cursor.execute("""
-                INSERT INTO billing_usage ("orgId", metric, value, bucket_time)
+                INSERT INTO billing_usage (org_id, metric, value, bucket_time)
                 VALUES (%s, %s, %s, %s)
                 ON CONFLICT DO NOTHING
             """, (org_id, 'monte_carlo_compute_cost', float(estimated_cost), bucket_time))

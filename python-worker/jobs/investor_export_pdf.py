@@ -582,11 +582,10 @@ def handle_investor_export_pdf(job_id: str, org_id: str, object_id: str, logs: d
             update_progress(job_id, 10, {'status': 'fetching_data'})
             
             # Get export record with model run summary
-            # Note: Column name in database is meta_json (mapped) and modelRunId (not mapped, quoted)
             cursor.execute("""
-                SELECT e.type, e."modelRunId", mr.summary_json, mr."orgId", e."orgId", e.meta_json
+                SELECT e.type, e.model_run_id, mr.summary_json, mr.org_id, e.org_id, e.meta_json
                 FROM exports e
-                LEFT JOIN model_runs mr ON e."modelRunId" = mr.id
+                LEFT JOIN model_runs mr ON e.model_run_id = mr.id
                 WHERE e.id = %s
             """, (export_id,))
             
@@ -632,7 +631,7 @@ def handle_investor_export_pdf(job_id: str, org_id: str, object_id: str, logs: d
                 try:
                     cursor.execute("""
                         SELECT percentiles_json FROM monte_carlo_jobs
-                        WHERE "modelRunId" = %s
+                        WHERE model_run_id = %s
                         AND status = 'done'
                         ORDER BY finished_at DESC
                         LIMIT 1

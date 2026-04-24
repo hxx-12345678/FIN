@@ -375,7 +375,7 @@ async function detectDataQualityAnomalies(orgId: string): Promise<Anomaly[]> {
       date,
       COUNT(*) as count
     FROM raw_transactions
-    WHERE "orgId" = ${orgId}::uuid
+    WHERE "org_id" = ${orgId}::uuid
     GROUP BY description, amount, date
     HAVING COUNT(*) > 1
     LIMIT 10

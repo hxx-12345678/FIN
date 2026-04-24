@@ -142,7 +142,7 @@ export const simulationCreditService = {
         usageRecords = await tx.$queryRaw<Array<{ credits_used: bigint }>>`
           SELECT COALESCE(SUM(credits_used), 0) as credits_used
           FROM user_usage
-          WHERE "orgId" = ${orgId}::uuid
+          WHERE "org_id" = ${orgId}::uuid
             AND "created_at" >= ${periodStart}::timestamptz
             AND "created_at" <= ${periodEnd}::timestamptz
         `;
@@ -288,7 +288,7 @@ export const simulationCreditService = {
         usageCheck = await tx.$queryRaw<Array<{ credits_used: bigint }>>`
           SELECT COALESCE(SUM(credits_used), 0) as credits_used
           FROM user_usage
-            WHERE "orgId" = ${orgId}::uuid
+            WHERE "org_id" = ${orgId}::uuid
               AND "created_at" >= ${period.start}::timestamptz
               AND "created_at" <= ${period.end}::timestamptz
         `;

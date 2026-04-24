@@ -503,7 +503,7 @@ export const complianceService = {
     // Update org settings using raw SQL to update JSON field
     // Note: Column names are camelCase: orgId, updatedById (not org_id, updated_by_id)
     await prisma.$executeRawUnsafe(
-      `UPDATE org_settings SET compliance_json = $1::jsonb, "updatedById" = $2::uuid, updated_at = NOW() WHERE "orgId" = $3::uuid`,
+      `UPDATE org_settings SET compliance_json = $1::jsonb, "updated_by_id" = $2::uuid, updated_at = NOW() WHERE "org_id" = $3::uuid`,
       JSON.stringify(complianceJson),
       userId || null,
       orgId
@@ -644,7 +644,7 @@ export const complianceService = {
     // Update org settings using raw SQL to update JSON field
     // Note: Column names are camelCase: orgId, updatedById
     await prisma.$executeRawUnsafe(
-      `UPDATE org_settings SET security_controls_json = $1::jsonb, "updatedById" = $2::uuid, updated_at = NOW() WHERE "orgId" = $3::uuid`,
+      `UPDATE org_settings SET security_controls_json = $1::jsonb, "updated_by_id" = $2::uuid, updated_at = NOW() WHERE "org_id" = $3::uuid`,
       JSON.stringify(securityControlsJson),
       userId || null,
       orgId
@@ -901,7 +901,7 @@ export const complianceService = {
     // Update org settings using raw SQL to update JSON field
     // Note: Column names are camelCase: orgId, updatedById
     await prisma.$executeRawUnsafe(
-      `UPDATE org_settings SET policies_json = $1::jsonb, "updatedById" = $2::uuid, updated_at = NOW() WHERE "orgId" = $3::uuid`,
+      `UPDATE org_settings SET policies_json = $1::jsonb, "updated_by_id" = $2::uuid, updated_at = NOW() WHERE "org_id" = $3::uuid`,
       JSON.stringify(policiesJson),
       userId || null,
       orgId

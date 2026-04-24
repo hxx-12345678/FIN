@@ -305,10 +305,10 @@ def handle_monte_carlo(job_id: str, org_id: str, object_id: str, logs: dict):
             # Get Monte Carlo job with all parameters
             cursor.execute("""
                 SELECT 
-                    "numSimulations", 
-                    "modelRunId",
-                    "orgId",
-                    "paramsHash"
+                    num_simulations, 
+                    model_run_id,
+                    org_id,
+                    params_hash
                 FROM monte_carlo_jobs
                 WHERE id = %s
             """, (mc_job_id,))
@@ -393,7 +393,7 @@ def handle_monte_carlo(job_id: str, org_id: str, object_id: str, logs: dict):
                 if initial_cash == 0.0:
                     try:
                         cursor.execute("""
-                            SELECT "summaryJson"->>'cashBalance'
+                            SELECT summary_json->>'cashBalance'
                             FROM model_runs
                             WHERE id = %s
                         """, (model_run_id,))
@@ -457,10 +457,10 @@ def handle_monte_carlo(job_id: str, org_id: str, object_id: str, logs: dict):
             cursor.execute("""
                 UPDATE monte_carlo_jobs
                 SET status = 'done',
-                    "resultS3" = %s,
-                    "percentilesJson" = %s,
-                    "cpuSecondsEstimate" = %s,
-                    "finishedAt" = NOW()
+                    result_s3 = %s,
+                    percentiles_json = %s,
+                    cpu_seconds_estimate = %s,
+                    finished_at = NOW()
                 WHERE id = %s
             """, (result_key, json.dumps(percentiles_data['percentiles_table']), float(cpu_seconds), mc_job_id))
             
@@ -520,9 +520,9 @@ def load_model_snapshot(model_run_id: str, cursor) -> dict:
     """Load model snapshot from model_run or model"""
     try:
         cursor.execute("""
-            SELECT mr."resultS3", m."model_json", mr."run_type"
+            SELECT mr.result_s3, m.model_json, mr.run_type
             FROM model_runs mr
-            JOIN models m ON mr."modelId" = m.id
+            JOIN models m ON mr.model_id = m.id
             WHERE mr.id = %s
         """, (model_run_id,))
         
@@ -595,15 +595,15 @@ def run_vectorized_simulations_enhanced(
         
         # Baseline values
         baseline = model_data.get('baseline', {})
-        baseline_cash = model_data.get('cash', model_data.get('cashBalance', model_data.get('initialCash')))
+        baseline_cash = model_data.get('cash', model_data.get('cash_balance', model_data.get('initial_cash')))
 
         if baseline_cash is None:
             try:
                 cursor.execute("""
-                    SELECT "summaryJson"->>'cashBalance'
-                    FROM model_runs
-                    WHERE id = %s
-                """, (model_run_id,))
+                SELECT summary_json->>'cashBalance'
+                FROM model_runs
+                WHERE id = %s
+            """, (model_run_id,))
                 row = cursor.fetchone()
                 if row and row[0] is not None:
                     baseline_cash = float(row[0])
@@ -879,7 +879,7 @@ def record_billing_usage(org_id: str, cpu_seconds: float, cursor, estimated_cost
         
         # Record CPU seconds
         cursor.execute("""
-            INSERT INTO billing_usage ("orgId", metric, value, bucket_time)
+            INSERT INTO billing_usage (org_id, metric, value, bucket_time)
             VALUES (%s, %s, %s, %s)
             ON CONFLICT DO NOTHING
         """, (org_id, 'monte_carlo_cpu_seconds', float(cpu_seconds), bucket_time))
@@ -887,7 +887,7 @@ def record_billing_usage(org_id: str, cpu_seconds: float, cursor, estimated_cost
         # Record estimated cost if provided
         if estimated_cost > 0:
             cursor.execute("""
-                INSERT INTO billing_usage ("orgId", metric, value, bucket_time)
+                INSERT INTO billing_usage (org_id, metric, value, bucket_time)
                 VALUES (%s, %s, %s, %s)
                 ON CONFLICT DO NOTHING
             """, (org_id, 'monte_carlo_compute_cost', float(estimated_cost), bucket_time))

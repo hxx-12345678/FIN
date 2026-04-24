@@ -376,7 +376,7 @@ export const financialModelService = {
       transactions = await prisma.$queryRaw`
         SELECT date, amount, category, description
         FROM raw_transactions
-        WHERE "orgId" = ${orgId}::uuid
+        WHERE "org_id" = ${orgId}::uuid
           AND "import_batch_id" = ${importBatchId}::uuid
         ORDER BY date ASC
       ` as Array<{ date: Date; amount: number; category: string | null; description: string | null }>;
@@ -384,7 +384,7 @@ export const financialModelService = {
       transactions = await prisma.$queryRaw`
         SELECT date, amount, category, description
         FROM raw_transactions
-        WHERE "orgId" = ${orgId}::uuid
+        WHERE "org_id" = ${orgId}::uuid
           AND date >= ${twelveMonthsAgo}
         ORDER BY date ASC
       ` as Array<{ date: Date; amount: number; category: string | null; description: string | null }>;
@@ -400,7 +400,7 @@ export const financialModelService = {
           category,
           description
         FROM raw_transactions
-        WHERE "orgId" = ${orgId}::uuid
+        WHERE "org_id" = ${orgId}::uuid
         ORDER BY date DESC
       ` as Array<{ date: Date; amount: number; category: string | null; description: string | null }>;
     }

@@ -54,7 +54,7 @@ def handle_auto_model(job_id: str, org_id: str, object_id: str, logs: dict):
         
         # Get model
         cursor.execute("""
-            SELECT id, "orgId", name, model_json
+            SELECT id, org_id, name, model_json
             FROM models
             WHERE id = %s
         """, (model_id,))
@@ -102,7 +102,7 @@ def handle_auto_model(job_id: str, org_id: str, object_id: str, logs: dict):
                     category,
                     description
                 FROM raw_transactions
-                WHERE "orgId" = %s
+                WHERE org_id = %s
                   AND import_batch_id = %s
                   AND is_duplicate = false
                 ORDER BY date ASC
@@ -115,7 +115,7 @@ def handle_auto_model(job_id: str, org_id: str, object_id: str, logs: dict):
                     category,
                     description
                 FROM raw_transactions
-                WHERE "orgId" = %s
+                WHERE org_id = %s
                   AND is_duplicate = false
                 ORDER BY date ASC
             """, (org_id,))
@@ -180,7 +180,7 @@ def handle_auto_model(job_id: str, org_id: str, object_id: str, logs: dict):
         # STEP 4.5: Populate Drivers Table for Interactive Modeling
         # 1. Create Base Scenario
         cursor.execute("""
-            INSERT INTO financial_scenarios (id, "orgId", "modelId", name, is_default, created_at, updated_at)
+            INSERT INTO financial_scenarios (id, org_id, model_id, name, is_default, created_at, updated_at)
             VALUES (gen_random_uuid(), %s, %s, 'Base', true, NOW(), NOW())
             RETURNING id
         """, (org_id, model_id))
@@ -205,7 +205,7 @@ def handle_auto_model(job_id: str, org_id: str, object_id: str, logs: dict):
 
         for d_info in std_drivers:
             cursor.execute("""
-                INSERT INTO drivers (id, "orgId", "modelId", name, type, category, unit, is_calculated, created_at, updated_at)
+                INSERT INTO drivers (id, org_id, model_id, name, type, category, unit, is_calculated, created_at, updated_at)
                 VALUES (gen_random_uuid(), %s, %s, %s, %s, %s, %s, false, NOW(), NOW())
                 RETURNING id
             """, (org_id, model_id, d_info['name'], d_info['type'], d_info['category'], d_info['unit']))
@@ -224,7 +224,7 @@ def handle_auto_model(job_id: str, org_id: str, object_id: str, logs: dict):
             # Execute bulk insert
             from psycopg2.extras import execute_values
             execute_values(cursor, """
-                INSERT INTO driver_values (id, "driverId", "scenarioId", month, value, created_at, updated_at)
+                INSERT INTO driver_values (id, driver_id, scenario_id, month, value, created_at, updated_at)
                 VALUES %s
             """, [(v[0], v[1], v[2], v[3], v[4], datetime.now(timezone.utc), datetime.now(timezone.utc)) for v in values_to_insert])
 
@@ -260,7 +260,7 @@ def handle_auto_model(job_id: str, org_id: str, object_id: str, logs: dict):
                 }
 
             cursor.execute("""
-                INSERT INTO model_runs (id, "modelId", "orgId", "run_type", "params_json", status, created_at)
+                INSERT INTO model_runs (id, model_id, org_id, run_type, params_json, status, created_at)
                 VALUES (gen_random_uuid(), %s, %s, %s, %s::jsonb, 'queued', NOW())
                 RETURNING id
             """, (
@@ -295,7 +295,7 @@ def handle_auto_model(job_id: str, org_id: str, object_id: str, logs: dict):
             ]
 
             cursor.execute("""
-                INSERT INTO jobs (id, job_type, "orgId", object_id, status, priority, queue, logs, created_at, updated_at)
+                INSERT INTO jobs (id, job_type, org_id, object_id, status, priority, queue, logs, created_at, updated_at)
                 VALUES (%s, 'model_run', %s, %s, 'queued', 50, 'default', %s::jsonb, NOW(), NOW())
             """, (
                 str(uuid.uuid4()),

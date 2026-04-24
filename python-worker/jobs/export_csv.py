@@ -25,9 +25,9 @@ def handle_export_csv(job_id: str, org_id: str, object_id: str, logs: dict):
         
         # Get export record and model run data
         cursor.execute("""
-            SELECT e."modelRunId", mr.summary_json
+            SELECT e.model_run_id, mr.summary_json
             FROM exports e
-            LEFT JOIN model_runs mr ON e."modelRunId" = mr.id
+            LEFT JOIN model_runs mr ON e.model_run_id = mr.id
             WHERE e.id = %s
         """, (export_id,))
         

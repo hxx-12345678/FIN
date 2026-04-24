@@ -55,7 +55,7 @@ def handle_scheduled_auto_model(job_id: str, org_id: str, object_id: str, logs: 
                 
                 # Check if org has models
                 cursor.execute("""
-                    SELECT COUNT(*) FROM models WHERE "orgId" = %s
+                    SELECT COUNT(*) FROM models WHERE org_id = %s
                 """, (org_id_val,))
                 
                 model_count = cursor.fetchone()[0]
@@ -66,7 +66,7 @@ def handle_scheduled_auto_model(job_id: str, org_id: str, object_id: str, logs: 
                 # Check if there's already a running model run
                 cursor.execute("""
                     SELECT id FROM model_runs
-                    WHERE "orgId" = %s AND status IN ('queued', 'running')
+                    WHERE org_id = %s AND status IN ('queued', 'running')
                     LIMIT 1
                 """, (org_id_val,))
                 
@@ -77,7 +77,7 @@ def handle_scheduled_auto_model(job_id: str, org_id: str, object_id: str, logs: 
                 # Check last model run vs last transaction
                 cursor.execute("""
                     SELECT created_at FROM model_runs
-                    WHERE "orgId" = %s AND "run_type" = 'baseline'
+                    WHERE org_id = %s AND "run_type" = 'baseline'
                     ORDER BY created_at DESC
                     LIMIT 1
                 """, (org_id_val,))
@@ -85,10 +85,10 @@ def handle_scheduled_auto_model(job_id: str, org_id: str, object_id: str, logs: 
                 last_run = cursor.fetchone()
                 
                 cursor.execute("""
-                    SELECT "importedAt" FROM raw_transactions
-                    WHERE "orgId" = %s
+                    SELECT imported_at FROM raw_transactions
+                    WHERE org_id = %s
                       AND is_duplicate = false
-                    ORDER BY "importedAt" DESC
+                    ORDER BY imported_at DESC
                     LIMIT 1
                 """, (org_id_val,))
                 
@@ -112,7 +112,7 @@ def handle_scheduled_auto_model(job_id: str, org_id: str, object_id: str, logs: 
                     # Get primary model
                     cursor.execute("""
                         SELECT id FROM models
-                        WHERE "orgId" = %s
+                        WHERE org_id = %s
                         ORDER BY created_at DESC
                         LIMIT 1
                     """, (org_id_val,))
@@ -147,7 +147,7 @@ def handle_scheduled_auto_model(job_id: str, org_id: str, object_id: str, logs: 
                         ]
                         
                         cursor.execute("""
-                            INSERT INTO jobs (id, job_type, "orgId", object_id, status, priority, queue, logs, created_at, updated_at)
+                            INSERT INTO jobs (id, job_type, org_id, object_id, status, priority, queue, logs, created_at, updated_at)
                             VALUES (
                                 gen_random_uuid(),
                                 'auto_model_trigger',

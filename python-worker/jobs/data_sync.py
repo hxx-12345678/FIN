@@ -45,13 +45,13 @@ def handle_data_sync(job_id: str, org_id: str, object_id: str, logs: dict):
         # Stub: Check for connectors that need syncing
         # In production, this would query connectors table for scheduled syncs
         cursor.execute("""
-            SELECT id, type, "syncStatus", "lastSyncAt"
+            SELECT id, type, status, last_synced_at
             FROM connectors
-            WHERE "orgId" = %s
+            WHERE org_id = %s
               AND enabled = true
               AND (
-                  "lastSyncAt" IS NULL
-                  OR "lastSyncAt" < NOW() - INTERVAL '1 hour'
+                  last_synced_at IS NULL
+                  OR last_synced_at < NOW() - INTERVAL '1 hour'
               )
             LIMIT 10
         """, (org_id,))
@@ -82,8 +82,8 @@ def handle_data_sync(job_id: str, org_id: str, object_id: str, logs: dict):
                 # Update connector sync status
                 cursor.execute("""
                     UPDATE connectors
-                    SET "syncStatus" = 'syncing',
-                        "lastSyncAt" = NOW(),
+                    SET status = 'syncing',
+                        last_synced_at = NOW(),
                         updated_at = NOW()
                     WHERE id = %s
                 """, (connector_id_val,))
@@ -92,7 +92,7 @@ def handle_data_sync(job_id: str, org_id: str, object_id: str, logs: dict):
                 # For now, just mark as done
                 cursor.execute("""
                     UPDATE connectors
-                    SET "syncStatus" = 'done',
+                    SET status = 'done',
                         updated_at = NOW()
                     WHERE id = %s
                 """, (connector_id_val,))
@@ -106,7 +106,7 @@ def handle_data_sync(job_id: str, org_id: str, object_id: str, logs: dict):
                 try:
                     cursor.execute("""
                         UPDATE connectors
-                        SET "syncStatus" = 'failed',
+                        SET status = 'failed',
                             updated_at = NOW()
                         WHERE id = %s
                     """, (connector_id_val,))
@@ -156,7 +156,7 @@ def handle_data_sync(job_id: str, org_id: str, object_id: str, logs: dict):
                 ]
                 
                 cursor.execute("""
-                    INSERT INTO jobs (id, job_type, "orgId", object_id, status, priority, queue, logs, created_at, updated_at)
+                    INSERT INTO jobs (id, job_type, org_id, object_id, status, priority, queue, logs, created_at, updated_at)
                     VALUES (
                         gen_random_uuid(),
                         'auto_model_trigger',

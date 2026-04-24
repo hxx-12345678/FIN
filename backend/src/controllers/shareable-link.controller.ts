@@ -128,7 +128,7 @@ export const shareableLinkController = {
           e.type,
           e.s3_key as "s3Key",
           e.file_data as "fileData",
-          e."orgId"
+          e."org_id" as "orgId"
         FROM exports e
         WHERE e.id = ${result.exportId}::uuid
       `;

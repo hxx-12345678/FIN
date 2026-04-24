@@ -151,8 +151,8 @@ export const shareableLinkService = {
           e.type,
           e.status,
           e.created_at,
-          e."modelRunId",
-          e."orgId",
+          e."model_run_id",
+          e."org_id",
           e.meta_json
         FROM exports e
         WHERE e.status = 'completed'

@@ -27,7 +27,7 @@ def handle_alert_check(job_id: str, org_id: str, object_id: str, params: Dict[st
         cursor.execute("""
             SELECT id, metric, operator, threshold, notify_email, notify_slack, slack_webhook
             FROM alert_rules
-            WHERE "orgId" = %s AND enabled = true
+            WHERE org_id = %s AND enabled = true
         """, (org_id,))
         
         alerts = cursor.fetchall()
@@ -64,7 +64,7 @@ def handle_alert_check(job_id: str, org_id: str, object_id: str, params: Dict[st
         cursor.execute("""
             SELECT percentiles_json 
             FROM monte_carlo_jobs 
-            WHERE "modelRunId" = %s AND status = 'done' 
+            WHERE model_run_id = %s AND status = 'done' 
             ORDER BY created_at DESC LIMIT 1
         """, (model_run_id,))
         
@@ -173,7 +173,7 @@ def deliver_alert(conn, cursor, org_id, alert_id, metric, value, threshold, oper
     """
     # 1. Fetch alert details including severity and creator
     cursor.execute("""
-        SELECT name, severity, "createdById", slack_webhook
+        SELECT name, severity, created_by_id, slack_webhook
         FROM alert_rules 
         WHERE id = %s
     """, (alert_id,))
@@ -191,7 +191,7 @@ def deliver_alert(conn, cursor, org_id, alert_id, metric, value, threshold, oper
     try:
         cursor.execute("""
             INSERT INTO notifications (
-                id, "orgId", "userId", type, title, message, category, priority, read, created_at
+                id, org_id, user_id, type, title, message, category, priority, read, created_at
             ) VALUES (
                 gen_random_uuid(), %s, %s, %s, %s, %s, %s, %s, %s, NOW()
             )
@@ -237,7 +237,7 @@ def deliver_alert(conn, cursor, org_id, alert_id, metric, value, threshold, oper
         webhook_url = slack_webhook or webhook
         if not webhook_url:
             # Try to get org default slack webhook
-            cursor.execute("SELECT config_json FROM org_settings WHERE \"orgId\" = %s AND key = 'slack_webhook'", (org_id,))
+            cursor.execute("SELECT config_json FROM org_settings WHERE org_id = %s AND key = 'slack_webhook'", (org_id,))
             res = cursor.fetchone()
             if res:
                 # Handle both string and JSON config

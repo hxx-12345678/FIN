@@ -378,9 +378,9 @@ def handle_xlsx_import(job_id: str, org_id: str, object_id: str, logs: Dict[str,
                     cursor,
                     """
                     INSERT INTO raw_transactions 
-                    ("orgId", "connectorId", import_batch_id, source_id, date, amount, currency, category, description, raw_payload, imported_at, is_duplicate)
+                    (org_id, connector_id, import_batch_id, source_id, date, amount, currency, category, description, raw_payload, imported_at, is_duplicate)
                     VALUES %s
-                    ON CONFLICT ("orgId", source_id) DO NOTHING
+                    ON CONFLICT (org_id, source_id) DO NOTHING
                     """,
                     transaction_values,
                     template=None,
@@ -468,7 +468,7 @@ def _trigger_model_run(db, org_id: str, user_id: Optional[str] = None) -> None:
         cursor = db.cursor()
         params = {
             "triggerType": "xlsx_import",
-            "orgId": org_id
+            "org_id": org_id
         }
         if user_id:
             params["userId"] = user_id
@@ -482,7 +482,7 @@ def _trigger_model_run(db, org_id: str, user_id: Optional[str] = None) -> None:
             
         query = """
             INSERT INTO public.jobs (
-                id, job_type, "orgId", status, logs, queue,
+                id, job_type, org_id, status, logs, queue,
                 created_at, updated_at
             ) VALUES (
                 %s, 'auto_model_trigger', %s, 'queued', %s::jsonb, 'default',

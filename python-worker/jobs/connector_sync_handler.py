@@ -172,10 +172,10 @@ async def _load_connector(db, org_id: str, connector_id: str) -> Optional[Dict]:
     try:
         cursor = db.cursor()
         query = """
-            SELECT id, type, "orgId", encrypted_config, config_json, status,
+            SELECT id, type, org_id, encrypted_config, config_json, status,
                    last_synced_at, created_at
             FROM connectors
-            WHERE id = %s AND "orgId" = %s
+            WHERE id = %s AND org_id = %s
         """
         cursor.execute(query, (connector_id, org_id))
         row = cursor.fetchone()
@@ -288,15 +288,27 @@ async def _update_job_status(
         query = """
             UPDATE jobs
             SET status = %s,
-                result = %s,
-                completed_at = %s,
+                logs = CASE 
+                    WHEN logs IS NULL THEN %s::jsonb
+                    ELSE logs || %s::jsonb
+                END,
+                finished_at = %s,
                 updated_at = %s
             WHERE id = %s
         """
         
+        log_entry = {
+            'ts': datetime.utcnow().isoformat(),
+            'level': 'info',
+            'msg': f'Job {status}',
+            'meta': {'result': result}
+        }
+        log_json = json.dumps([log_entry])
+        
         cursor.execute(query, (
             status,
-            json.dumps(result) if result else None,
+            log_json,
+            log_json,
             datetime.utcnow() if status == 'completed' else None,
             datetime.utcnow(),
             job_id,

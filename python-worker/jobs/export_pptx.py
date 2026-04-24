@@ -65,11 +65,10 @@ def handle_export_pptx(job_id: str, org_id: str, object_id: str, logs: dict):
                 raise ValueError("Export ID not found")
             
             # Get export record with model run summary
-            # Note: Prisma uses camelCase (modelRunId) which needs to be quoted in PostgreSQL
             cursor.execute("""
-                SELECT e.type, e."modelRunId", mr.summary_json
+                SELECT e.type, e.model_run_id, mr.summary_json
                 FROM exports e
-                LEFT JOIN model_runs mr ON e."modelRunId" = mr.id
+                LEFT JOIN model_runs mr ON e.model_run_id = mr.id
                 WHERE e.id = %s
             """, (export_id,))
             
@@ -135,14 +134,14 @@ def handle_export_pptx(job_id: str, org_id: str, object_id: str, logs: dict):
             try:
                 bucket_time = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
                 cursor.execute("""
-                    INSERT INTO billing_usage ("orgId", metric, value, bucket_time)
+                    INSERT INTO billing_usage (org_id, metric, value, bucket_time)
                     VALUES (%s, %s, %s, %s)
                     ON CONFLICT DO NOTHING
                 """, (org_id, 'export_cpu_seconds', float(cpu_seconds), bucket_time))
                 
                 if estimated_cost > 0:
                     cursor.execute("""
-                        INSERT INTO billing_usage ("orgId", metric, value, bucket_time)
+                        INSERT INTO billing_usage (org_id, metric, value, bucket_time)
                         VALUES (%s, %s, %s, %s)
                         ON CONFLICT DO NOTHING
                     """, (org_id, 'export_compute_cost', float(estimated_cost), bucket_time))
