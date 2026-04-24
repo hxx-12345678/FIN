@@ -163,7 +163,7 @@ model RawTransaction {
 
 model DataImportBatch {
   id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId           String           @map("org_id") @db.Uuid
+  orgId           String @db.Uuid
   sourceType      String           @map("source_type")
   sourceRef       String?          @map("source_ref")
   fileHash        String?          @map("file_hash")
@@ -522,7 +522,7 @@ model Job {
 
 model BoardReportSchedule {
   id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId              String    @map("org_id") @db.Uuid
+  orgId              String @db.Uuid
   name               String
   template           String
   format             String
@@ -536,7 +536,7 @@ model BoardReportSchedule {
   nextRunAt          DateTime? @map("next_run_at") @db.Timestamptz(6)
   lastRunAt          DateTime? @map("last_run_at") @db.Timestamptz(6)
   metadata           Json?
-  createdById        String?   @map("created_by_id") @db.Uuid
+  createdById        String? @db.Uuid
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdBy          User?     @relation("boardSchedule_createdBy", fields: [createdById], references: [id])
@@ -615,7 +615,7 @@ model BillingUsage {
 
 model AlertRule {
   id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId         String    @map("org_id") @db.Uuid
+  orgId         String    @db.Uuid
   name          String
   description   String?
   metric        String
@@ -627,7 +627,7 @@ model AlertRule {
   notifySlack   Boolean   @default(false) @map("notify_slack")
   slackWebhook  String?   @map("slack_webhook")
   lastTriggered DateTime? @map("last_triggered") @db.Timestamptz(6)
-  createdById   String?   @map("created_by_id") @db.Uuid
+  createdById   String?   @db.Uuid
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdBy     User?     @relation("alert_createdBy", fields: [createdById], references: [id])
@@ -640,13 +640,13 @@ model AlertRule {
 
 model AICFOPlan {
   id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId       String    @map("org_id") @db.Uuid
-  modelRunId  String?   @map("model_run_id") @db.Uuid
+  orgId       String    @db.Uuid
+  modelRunId  String?   @db.Uuid
   name        String
   description String?
   planJson    Json      @map("plan_json")
   status      String    @default("draft")
-  createdById String?   @map("created_by_id") @db.Uuid
+  createdById String?   @db.Uuid
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdBy   User?     @relation("plan_createdBy", fields: [createdById], references: [id])
@@ -660,8 +660,8 @@ model AICFOPlan {
 
 model AICFOConversation {
   id        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId     String         @map("org_id") @db.Uuid
-  userId    String         @map("user_id") @db.Uuid
+  orgId     String         @db.Uuid
+  userId    String         @db.Uuid
   title     String?
   status    String         @default("active")
   createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -677,7 +677,7 @@ model AICFOConversation {
 
 model AICFOMessage {
   id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  conversationId  String            @map("conversation_id") @db.Uuid
+  conversationId  String @db.Uuid
   role            String
   content         String
   agentType       String?
@@ -845,7 +845,7 @@ model LocalizationSettings {
 
 model HeadcountPlan {
   id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId              String    @map("org_id") @db.Uuid
+  orgId              String @db.Uuid
   name               String
   department         String    @default("General")
   role               String
@@ -860,7 +860,7 @@ model HeadcountPlan {
   status             String    @default("planned")
   hiringStage        String?   @default("open") @map("hiring_stage")
   notes              String?
-  createdById        String?   @map("created_by_id") @db.Uuid
+  createdById        String? @db.Uuid
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   org                Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
@@ -874,7 +874,7 @@ model HeadcountPlan {
 
 model ConsolidationEntity {
   id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId           String   @map("org_id") @db.Uuid
+  orgId           String @db.Uuid
   name            String
   code            String?
   entityType      String   @default("subsidiary") @map("entity_type")
@@ -897,13 +897,13 @@ model ConsolidationEntity {
 
 model Budget {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId       String   @map("org_id") @db.Uuid
+  orgId       String @db.Uuid
   category    String
   month       String
   amount      Decimal  @db.Decimal(20, 4)
   currency    String   @default("USD")
   source      String   @default("manual")
-  createdById String?  @map("created_by_id") @db.Uuid
+  createdById String? @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   department  String?  @default("General")
@@ -920,7 +920,7 @@ model Budget {
 
 model ExcelSync {
   id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId        String        @map("org_id") @db.Uuid
+  orgId        String @db.Uuid
   fileName     String?       @map("file_name")
   fileHash     String?       @map("file_hash") @db.VarChar(64)
   mappingId    String?       @map("mapping_id") @db.Uuid
@@ -941,7 +941,7 @@ model ExcelSync {
 
 model ExcelMapping {
   id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId       String      @map("org_id") @db.Uuid
+  orgId       String @db.Uuid
   name        String
   description String?
   mappingJson Json        @map("mapping_json")
@@ -958,7 +958,7 @@ model ExcelMapping {
 
 model OrgQuota {
   id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId               String    @unique @map("org_id") @db.Uuid
+  orgId               String    @unique @db.Uuid
   monteCarloSimsLimit Int       @default(10000) @map("monte_carlo_sims_limit")
   monteCarloSimsUsed  Int       @default(0) @map("monte_carlo_sims_used")
   monteCarloResetAt   DateTime? @map("monte_carlo_reset_at") @db.Timestamptz(6)
@@ -976,8 +976,8 @@ model OrgQuota {
 
 model RealtimeSimulation {
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId         String   @map("org_id") @db.Uuid
-  userId        String   @map("user_id") @db.Uuid
+  orgId         String @db.Uuid
+  userId        String @db.Uuid
   name          String?  @db.VarChar(255)
   paramsJson    Json     @map("params_json")
   resultsJson   Json     @map("results_json")
@@ -1069,7 +1069,7 @@ model ApprovalRequest {
 
 model AccessRequest {
   id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId       String    @map("org_id") @db.Uuid
+  orgId       String @db.Uuid
   email       String
   domain      String
   status      String    @default("pending") @db.VarChar(50)

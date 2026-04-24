@@ -154,7 +154,7 @@ async function callAnthropic(request: LLMRequest, config: LLMConfig): Promise<LL
  */
 function getGeminiApiKeys(): string[] {
   const keys: string[] = [];
-  
+
   // Try multiple API keys
   if (process.env.GEMINI_API_KEY_1?.trim()) {
     keys.push(process.env.GEMINI_API_KEY_1.trim());
@@ -168,7 +168,7 @@ function getGeminiApiKeys(): string[] {
   if (process.env.LLM_API_KEY?.trim()) {
     keys.push(process.env.LLM_API_KEY.trim());
   }
-  
+
   return keys;
 }
 
@@ -180,19 +180,19 @@ async function callGemini(request: LLMRequest, config: LLMConfig): Promise<LLMRe
   const apiKeys = Array.from(
     new Set([...(config.apiKey ? [config.apiKey] : []), ...getGeminiApiKeys()].filter(Boolean))
   );
-  
+
   if (apiKeys.length === 0) {
     throw new ValidationError('Gemini API key not configured');
   }
 
   // Prefer stable, high-availability Gemini model by default
-  const model = config.model || 'gemini-2.0-flash-exp';
+  const model = config.model || 'gemini-2.5-flash';
   let lastError: Error | null = null;
 
   // Try each API key with retry logic
   for (const apiKey of apiKeys) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-    
+
     // Reduced retries for speed (2 attempts instead of 4)
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
@@ -225,7 +225,7 @@ async function callGemini(request: LLMRequest, config: LLMConfig): Promise<LLMRe
         if (!response.ok) {
           const error = await response.json().catch(() => ({ message: response.statusText })) as { error?: { message?: string }; message?: string };
           const errorMessage = error.error?.message || error.message || response.statusText;
-          
+
           // Handle rate limiting - backoff and retry same key, then try next key
           if (response.status === 429) {
             lastError = new ValidationError('Gemini API rate limit exceeded');
@@ -235,19 +235,19 @@ async function callGemini(request: LLMRequest, config: LLMConfig): Promise<LLMRe
             }
             break; // move to next key
           }
-          
+
           // Handle invalid API key - try next key
           if (response.status === 401) {
             lastError = new ValidationError('Gemini API key invalid');
             break; // Try next key
           }
-          
+
           // Handle quota exceeded - try next key
           if (response.status === 403) {
             lastError = new ValidationError('Gemini API quota exceeded');
             break; // Try next key
           }
-          
+
           // Other errors - retry same key
           lastError = new Error(`Gemini API error: ${errorMessage}`);
           continue; // Retry same key
@@ -289,7 +289,7 @@ async function callGemini(request: LLMRequest, config: LLMConfig): Promise<LLMRe
     }
     throw new Error(`All Gemini API keys failed. Last error: ${lastError.message}`);
   }
-  
+
   throw new ValidationError('No valid Gemini API keys available');
 }
 

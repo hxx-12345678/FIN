@@ -66,11 +66,11 @@ const INTENT_TYPES = [
 function fallbackIntentClassifier(input: string): IntentClassification {
   const lower = input.toLowerCase();
   const slots: Record<string, IntentSlot> = {};
-  
+
   // Extract numbers
   const numbers = input.match(/\d+(?:,\d{3})*(?:\.\d+)?/g) || [];
   const amounts = numbers.map(n => parseFloat(n.replace(/,/g, '')));
-  
+
   // Extract currency
   let currency: string | null = null;
   if (lower.includes('$') || lower.includes('usd') || lower.includes('dollar')) {
@@ -84,7 +84,7 @@ function fallbackIntentClassifier(input: string): IntentClassification {
   if (runwayMatch) {
     slots.runway_months = { value: runwayMatch[1], normalized_value: parseFloat(runwayMatch[1]), confidence: 0.8 };
   }
-  
+
   let cashMatch = input.match(/\$\s*(\d{1,3}(?:,\d{3})+)\s*(?:k|thousand|000)?\s*(?:cash|dollar)?/i);
   if (!cashMatch) {
     cashMatch = input.match(/\$(\d{1,3}(?:,\d{3})+)\s*(?:k|thousand|000)?\s*(?:cash|dollar)?/i);
@@ -92,7 +92,7 @@ function fallbackIntentClassifier(input: string): IntentClassification {
   if (!cashMatch) {
     cashMatch = input.match(/\$(\d+(?:,\d{3})*)\s*(?:k|thousand|000)?\s*(?:cash|dollar)?/i);
   }
-  
+
   if (cashMatch) {
     const cashVal = parseFloat(cashMatch[1].replace(/,/g, ''));
     slots.cash_amount = { value: cashMatch[0], normalized_value: cashVal, currency: 'USD', confidence: 0.9 };
@@ -140,7 +140,7 @@ function fallbackIntentClassifier(input: string): IntentClassification {
 async function callLLMAPI(prompt: string, config: LLMConfig): Promise<any> {
   try {
     const { llmClient } = await import('../llm/llm-client.service');
-    
+
     const systemPrompt = `You are a financial intent parser for a CFO assistant. Given a user query, return JSON with intent, slots, and confidence.
 
 Map to one of these intents: ${INTENT_TYPES.join(', ')}
@@ -201,7 +201,7 @@ export const intentClassifierService = {
   classify: async (input: string, config?: LLMConfig): Promise<IntentClassification> => {
     // OPTIMIZATION: Fast path for common queries using regex before calling LLM
     const query = input.toLowerCase().trim();
-    
+
     // Improved regex to handle "What is my cash runway?" and similar
     if (query.includes('runway') && (query.includes('what') || query.includes('check') || query.includes('tell') || query.includes('my') || query.includes('how long'))) {
       return { intent: 'runway_calculation', confidence: 0.98, slots: {}, model_used: 'fast_path_regex' };
@@ -229,7 +229,7 @@ export const intentClassifierService = {
     const llmConfig: LLMConfig = config || {
       provider: (process.env.LLM_PROVIDER as any) || (apiKeys.length > 0 ? 'gemini' : 'fallback'),
       apiKey: apiKeys[0],
-      model: process.env.GEMINI_MODEL || process.env.LLM_MODEL || 'gemini-2.0-flash-exp',
+      model: process.env.GEMINI_MODEL || process.env.LLM_MODEL || 'gemini-2.5-flash',
     };
 
     if (!llmConfig.apiKey || llmConfig.provider === 'fallback' || apiKeys.length === 0) {
@@ -238,7 +238,7 @@ export const intentClassifierService = {
 
     try {
       const result = await callLLMAPI(input, llmConfig);
-      
+
       if (result && result.intent && result.confidence >= 0.6) {
         return {
           ...result,
@@ -247,7 +247,7 @@ export const intentClassifierService = {
           fallback_used: false,
         };
       }
-      
+
       return fallbackIntentClassifier(input);
     } catch (error) {
       return fallbackIntentClassifier(input);
@@ -259,15 +259,15 @@ export const intentClassifierService = {
    */
   validate: (classification: IntentClassification): { valid: boolean; issues: string[] } => {
     const issues: string[] = [];
-    
+
     if (classification.confidence < 0.5) {
       issues.push('Low classification confidence');
     }
-    
+
     if (!classification.intent) {
       issues.push('Missing intent');
     }
-    
+
     return {
       valid: issues.length === 0,
       issues,

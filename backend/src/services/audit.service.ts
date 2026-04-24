@@ -13,13 +13,15 @@ export const auditService = {
     // REDACT sensitive info before storing in audit logs (SOC 2 CC7.1)
     const redactedMeta = params.metaJson ? redact(params.metaJson) : undefined;
 
+    const toUuid = (val?: string) => (val && val.trim() !== '' ? val : undefined);
+
     return await prisma.auditLog.create({
       data: {
-        actorUserId: params.actorUserId,
-        orgId: params.orgId,
+        actorUserId: toUuid(params.actorUserId),
+        orgId: toUuid(params.orgId),
         action: params.action,
         objectType: params.objectType,
-        objectId: params.objectId,
+        objectId: toUuid(params.objectId),
         metaJson: redactedMeta,
       },
     });
