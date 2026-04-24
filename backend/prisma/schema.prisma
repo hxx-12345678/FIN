@@ -646,9 +646,9 @@ model AICFOPlan {
   status        String    @default("draft")
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  createdById String?   @db.Uuid
-  modelRunId  String?   @db.Uuid
-  orgId       String    @db.Uuid
+  createdById String?   @map("created_by_id") @db.Uuid
+  modelRunId  String?   @map("model_run_id") @db.Uuid
+  orgId       String    @map("org_id") @db.Uuid
   createdBy User? @relation(fields: [createdById], references: [id])
   modelRun    ModelRun? @relation(fields: [modelRunId], references: [id])
   org          Org       @relation(fields: [orgId], references: [id], onDelete: Cascade)
@@ -697,7 +697,7 @@ model AICFOMessage {
 
 model ComputationTrace {
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId         String @map("org_id")   @db.Uuid
+  orgId         String   @db.Uuid
   modelId       String   @db.Uuid
   triggerNodeId String   @map("trigger_node_id")
   triggerUserId String?  @map("trigger_user_id") @db.Uuid
@@ -732,7 +732,7 @@ model Forecast {
 
 model Notification {
   id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId     String @map("org_id")    @db.Uuid
+  orgId     String    @db.Uuid
   userId    String?   @db.Uuid
   type      String
   title     String
@@ -1021,7 +1021,7 @@ model UserUsage {
 
 model FinancialLedger {
   id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId            String @map("org_id")   @db.Uuid
+  orgId            String   @db.Uuid
   transactionDate  DateTime @map("transaction_date") @db.Date
   amount           Decimal  @db.Decimal(20, 4)
   currency         String   @default("USD")

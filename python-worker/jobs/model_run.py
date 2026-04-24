@@ -330,13 +330,13 @@ def handle_model_run(job_id: str, org_id: str, object_id: str, logs: dict):
             if not model_run_id:
                 raise ValueError("Model run ID not found")
             
-            # Get model run - Fixed: Use snake_case column names to match updated database schema
+            # Get model run - Use exact database column names
             cursor.execute("""
                 SELECT 
-                    mr.id, mr.model_id, mr.org_id, mr.run_type,
+                    mr.id, mr."modelId", mr.org_id, mr.run_type,
                     mr.params_json, mr.status, m.model_json
                 FROM model_runs mr
-                JOIN models m ON mr.model_id = m.id
+                JOIN models m ON mr."modelId" = m.id
                 WHERE mr.id = %s
             """, (model_run_id,))
             
@@ -2253,7 +2253,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                 
                 # Clear previous cube data for this model to avoid stale data
                 cursor.execute("SAVEPOINT write_cubes")
-                cursor.execute('DELETE FROM metric_cube WHERE model_id = %s AND org_id = %s', 
+                cursor.execute('DELETE FROM metric_cube WHERE "modelId" = %s AND org_id = %s', 
                              (model_id_for_cubes, org_id))
                 
                 # Write each month's metrics to the cube
@@ -2267,7 +2267,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                             # Generate a unique ID for each cube entry
                             cube_id = str(uuid.uuid4())
                             cursor.execute("""
-                                INSERT INTO metric_cube (id, org_id, model_id, metric_name, month, value, updated_at)
+                                INSERT INTO metric_cube (id, org_id, "modelId", metric_name, month, value, updated_at)
                                 VALUES (%s::uuid, %s::uuid, %s::uuid, %s, %s, %s, NOW())
                                 ON CONFLICT DO NOTHING
                             """, (
@@ -2307,7 +2307,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                         import uuid
                         dim_id = str(uuid.uuid4())
                         cursor.execute(
-                            'INSERT INTO dimensions (id, org_id, model_id, name, type) VALUES (%s, %s, %s, %s, %s)',
+                            'INSERT INTO dimensions (id, org_id, "modelId", name, type) VALUES (%s, %s, %s, %s, %s)',
                             (dim_id, org_id, model_id_for_dims, dim_name, dim_type)
                         )
                         for member_name, member_code in members:

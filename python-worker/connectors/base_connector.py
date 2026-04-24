@@ -399,7 +399,7 @@ class BaseConnector(ABC):
         """
         query = """
             INSERT INTO audit_logs (
-                "orgId", action, object_type, object_id,
+                org_id, action, object_type, object_id,
                 meta_json, created_at
             ) VALUES (%s, %s, %s, %s, %s, NOW())
         """

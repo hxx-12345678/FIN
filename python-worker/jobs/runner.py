@@ -110,7 +110,8 @@ def reserve_job(queue: str = 'default') -> Optional[Dict[str, Any]]:
         
         order_by = ', '.join(order_by_clauses) if order_by_clauses else 'id ASC'
         
-        # Build RETURNING clause (use actual database column names)
+        # Build RETURNING clause (use exact database column names)
+        # Reality: jobs table has org_id (snake_case)
         returning_cols = [
             'id', 'job_type', 'org_id', 'object_id', 'status', 'progress', 'logs'
         ]
@@ -145,7 +146,7 @@ def reserve_job(queue: str = 'default') -> Optional[Dict[str, Any]]:
         if finished_at_exists:
             returning_cols.append('finished_at')
         
-        # Execute query (explicitly use public schema)
+        # Execute query (explicitly use public schema and snake_case)
         query = f"""
             UPDATE public.jobs
             SET {', '.join(set_clauses)}

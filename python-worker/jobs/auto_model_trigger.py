@@ -175,7 +175,7 @@ def handle_auto_model_trigger(job_id: str, org_id: str, object_id: str, logs: di
 
             # Create model run
             cursor.execute("""
-                INSERT INTO model_runs (id, model_id, org_id, run_type, params_json, status, created_at)
+                INSERT INTO model_runs (id, "modelId", org_id, run_type, params_json, status, created_at)
                 VALUES (gen_random_uuid(), %s, %s, 'baseline', %s::jsonb, 'queued', NOW())
                 RETURNING id
             """, (
