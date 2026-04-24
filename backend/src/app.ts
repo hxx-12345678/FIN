@@ -156,7 +156,9 @@ app.use(helmet({
 }));
 
 // Hide X-Powered-By to reduce attack surface
-app.disable('trust proxy');
+app.disable('x-powered-by');
+// Trust proxy is REQUIRED for secure cookies behind Render load balancer
+app.set('trust proxy', 1);
 
 // Request ID for audit trail (SOC 2 CC3.1 - System Operations)
 app.use((req, res, next) => {

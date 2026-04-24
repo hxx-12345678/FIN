@@ -100,6 +100,7 @@ def handle_auto_model_trigger(job_id: str, org_id: str, object_id: str, logs: di
             model_id = cursor.fetchone()[0]
             logger.info(f"Created default model {model_id} for org {org_id}")
             conn.commit()
+            model_ids = [model_id]
         else:
             # Enterprise: Get ALL models for the org to update them all
             cursor.execute("""
