@@ -27,7 +27,7 @@ def handle_alert_check(job_id: str, org_id: str, object_id: str, params: Dict[st
         cursor.execute("""
             SELECT id, metric, operator, threshold, notify_email, notify_slack, slack_webhook
             FROM alert_rules
-            WHERE org_id = %s AND enabled = true
+            WHERE "orgId" = %s AND enabled = true
         """, (org_id,))
         
         alerts = cursor.fetchall()
@@ -148,7 +148,7 @@ def handle_alert_check(job_id: str, org_id: str, object_id: str, params: Dict[st
                 """, (alert_id,))
                 
                 # Deliver alert
-                shapley = mc_data.get('risk_factors', []) if mc_data and isinstance(mc_data, dict) else []; deliver_alert(cursor, org_id, alert_id, metric_name, metric_val, threshold_value, operator, channels, webhook, shapley)
+                deliver_alert(conn, cursor, org_id, alert_id, metric_name, metric_val, threshold_value, operator, channels, webhook)
 
         conn.commit()
         complete_job(job_id, {
@@ -173,7 +173,7 @@ def deliver_alert(conn, cursor, org_id, alert_id, metric, value, threshold, oper
     """
     # 1. Fetch alert details including severity and creator
     cursor.execute("""
-        SELECT name, severity, "created_by_id", slack_webhook
+        SELECT name, severity, "createdById", slack_webhook
         FROM alert_rules 
         WHERE id = %s
     """, (alert_id,))
