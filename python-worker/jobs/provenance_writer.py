@@ -69,7 +69,7 @@ def write_provenance_entry(
         # Insert provenance entry
         cursor.execute("""
             INSERT INTO provenance_entries (
-                model_run_id, org_id, cell_key, source_type, 
+                "modelRunId", org_id, cell_key, source_type, 
                 source_ref, prompt_id, confidence_score, created_at
             )
             VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, NOW())
@@ -161,7 +161,7 @@ def write_provenance_batch(
             try:
                 cursor.execute("""
                     INSERT INTO provenance_entries (
-                        model_run_id, org_id, cell_key, source_type,
+                        "modelRunId", org_id, cell_key, source_type,
                         source_ref, prompt_id, confidence_score, created_at
                     )
                     VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, NOW())

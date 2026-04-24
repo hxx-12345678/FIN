@@ -806,7 +806,7 @@ model UserPreferences {
 
 model OrgDetails {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId       String @map("org_id")   @unique @db.Uuid
+  orgId       String   @unique @db.Uuid
   industry    String?
   companySize String?
   website     String?
@@ -1045,7 +1045,7 @@ model FinancialLedger {
 
 model ApprovalRequest {
   id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId       String @map("org_id")    @db.Uuid
+  orgId       String    @db.Uuid
   requesterId String    @db.Uuid
   approverId  String?   @db.Uuid
   status      String    @default("pending")

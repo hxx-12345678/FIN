@@ -465,7 +465,7 @@ def handle_model_run(job_id: str, org_id: str, object_id: str, logs: dict):
             try:
                 cursor.execute("""
                     INSERT INTO computation_traces 
-                        (id, org_id, model_id, trigger_node_id, affected_nodes, duration_ms)
+                        (id, "orgId", "modelId", trigger_node_id, affected_nodes, duration_ms)
                     VALUES 
                         (gen_random_uuid(), %s, %s, %s, %s::jsonb, %s)
                 """, (org_id, model_id, 'orchestrator', json.dumps(['model_run', 'consolidation', 'valuation']), int(cpu_seconds * 1000)))
@@ -793,7 +793,7 @@ def handle_model_run(job_id: str, org_id: str, object_id: str, logs: dict):
                 # In model_run, the entire model is often recomputed, so we record the job as trigger
                 cursor.execute("""
                     INSERT INTO computation_traces (
-                        id, org_id, model_id, trigger_node_id, 
+                        id, "orgId", "modelId", trigger_node_id, 
                         trigger_user_id, affected_nodes, duration_ms, created_at
                     )
                     VALUES (gen_random_uuid(), %s, %s, %s, %s, %s::jsonb, %s, NOW())
@@ -1055,7 +1055,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             try:
                 # Use a savepoint so we don't abort the global transaction if the table is missing
                 cursor.execute("SAVEPOINT check_drivers")
-                cursor.execute('SELECT id FROM drivers WHERE model_id = %s LIMIT 1', (current_model_id,))
+                cursor.execute('SELECT id FROM drivers WHERE "modelId" = %s LIMIT 1', (current_model_id,))
                 has_drivers = cursor.fetchone() is not None
                 cursor.execute("RELEASE SAVEPOINT check_drivers")
             except Exception as e:
@@ -1069,7 +1069,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             engine = DriverBasedEngine()
             
             # 1. Fetch all drivers
-            cursor.execute('SELECT id, name, type, category, is_calculated, formula FROM drivers WHERE model_id = %s', (current_model_id,))
+            cursor.execute('SELECT id, name, type, category, is_calculated, formula FROM drivers WHERE "modelId" = %s', (current_model_id,))
             drivers = cursor.fetchall()
             for d in drivers:
                 engine.add_driver(str(d[0]), d[1], d[2], d[3])
