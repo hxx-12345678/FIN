@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useMemo, useRef } from "react"
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,7 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts"
 import { VirtualizedTable } from "@/components/ui/virtualized-table"
 import { useChartPagination } from "@/hooks/use-chart-pagination"
-import { Download, Upload, Zap, TrendingUp, Calculator, Brain, Save, SearchIcon, Loader2, AlertCircle, Play, FileDown, FileText, HelpCircle, Pencil, Check, X, Sparkles, Plus, LineChart as LineChartIcon, CheckCircle2, ShieldCheck, Grid, ShieldAlert, Database, Activity, Target, LayoutDashboard, FileDiff, History as HistoryIcon, ArrowUpRight, ArrowDownRight, Scale, Flame, Clock, Landmark, Users, BarChart3, DollarSign, Combine } from "lucide-react"
+import { Download, Upload, Zap, TrendingUp, Calculator, Brain, Save, SearchIcon, Loader2, AlertCircle, Play, FileDown, FileText, HelpCircle, Pencil, Check, X, Sparkles, Plus, LineChart as LineChartIcon, CheckCircle2, ShieldCheck, Grid, ShieldAlert, Database, Activity, Target, LayoutDashboard, FileDiff, History as HistoryIcon, ArrowUpRight, ArrowDownRight, Scale, Flame, Clock, Landmark, Users, BarChart3, DollarSign, Combine, Trash2, RefreshCw, Info, TriangleAlert } from "lucide-react"
 import dynamic from "next/dynamic"
 
 // Dynamic imports for sub-components to optimize component chunking
@@ -98,6 +98,11 @@ export function FinancialModeling() {
   const searchParams = useSearchParams()
   const currentTab = searchParams.get("tab") || "dashboard"
   const { selectedModelId: selectedModel, setSelectedModelId: setSelectedModel, orgId: contextOrgId, setOrgId: setContextOrgId } = useModel()
+  
+  const [isManageFilesOpen, setIsManageFilesOpen] = useState(false)
+  const [importBatches, setImportBatches] = useState<any[]>([])
+  const [loadingBatches, setLoadingBatches] = useState(false)
+  const [deletingBatchId, setDeletingBatchId] = useState<string | null>(null)
 
   const [models, setModels] = useState<FinancialModel[]>([])
   const [modelRuns, setModelRuns] = useState<ModelRun[]>([])
@@ -134,6 +139,10 @@ export function FinancialModeling() {
   const [computationTraces, setComputationTraces] = useState<any[]>([])
   const [importHistory, setImportHistory] = useState<any[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
+  // ─── Data Stale Notification System ───────────────────────────────────
+  const [dataStale, setDataStale] = useState(false)
+  const [staleMetrics, setStaleMetrics] = useState<{ rowsAdded: number; source: string; importedAt?: string } | null>(null)
+  const [deletingBatch, setDeletingBatch] = useState<string | null>(null)
 
   useEffect(() => {
     if (currentTab === 'explainability' && selectedModel) {
@@ -218,14 +227,44 @@ export function FinancialModeling() {
   const fetchImportHistory = async (targetOrgId: string) => {
     try {
       setLoadingHistory(true)
-      // Corrected endpoint to match backend job listing
       const res = await fetch(`${API_BASE_URL}/jobs?orgId=${targetOrgId}&jobType=csv_import&limit=50`, {
         headers: getAuthHeaders(),
         credentials: "include",
       })
       if (res.ok) {
         const result = await res.json()
-        setImportHistory(result.data || [])
+        const history = result.data || []
+        setImportHistory(history)
+
+        // ── Enterprise: Detect data staleness (Anaplan-style auto-flag) ──
+        // If a successful import happened AFTER the last model run → flag as stale
+        if (history.length > 0) {
+          const latestDone = history.find((j: any) =>
+            j.status === 'done' || j.status === 'completed'
+          )
+          if (latestDone) {
+            const importDate = new Date(latestDone.updatedAt || latestDone.createdAt)
+            // Use currentRun from closure; or check via ref on next tick
+            setCurrentRun(prev => {
+              if (prev) {
+                const runDate = new Date(prev.createdAt)
+                if (importDate > runDate) {
+                  const logs = Array.isArray(latestDone.logs) ? latestDone.logs : [];
+                  const lastLogWithMeta = [...logs].reverse().find((l: any) => l?.meta?.params || l?.meta?.rowsImported || l?.meta?.transactionsCreated);
+                  
+                  const rowsAdded = (lastLogWithMeta?.meta?.params?.rowsImported || 
+                                    lastLogWithMeta?.meta?.params?.transactionsCreated ||
+                                    lastLogWithMeta?.meta?.rowsImported || 
+                                    lastLogWithMeta?.meta?.transactionsCreated || 
+                                    0);
+                  setDataStale(true)
+                  setStaleMetrics({ rowsAdded, source: 'csv_import', importedAt: latestDone.createdAt })
+                }
+              }
+              return prev
+            })
+          }
+        }
       }
     } catch (err) {
       console.error("Error fetching import history:", err)
@@ -490,6 +529,52 @@ export function FinancialModeling() {
     }
   }
 
+  const fetchImportBatches = useCallback(async () => {
+    if (!orgId) return
+    setLoadingBatches(true)
+    try {
+      const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/data/import-batches`, {
+        headers: getAuthHeaders(),
+        credentials: "include"
+      })
+      if (res.ok) {
+        const result = await res.json()
+        setImportBatches(result.data || [])
+      }
+    } catch (e) {
+      console.error("Failed to fetch import batches", e)
+    } finally {
+      setLoadingBatches(false)
+    }
+  }, [orgId])
+
+  const handleRemoveBatch = async (batchId: string) => {
+    if (!orgId || !window.confirm("Are you sure you want to remove all data from this import? This action cannot be undone.")) return
+    
+    setDeletingBatchId(batchId)
+    try {
+      const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/transactions/batch/${batchId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        credentials: "include"
+      })
+      
+      if (res.ok) {
+        toast.success("Import data removed successfully")
+        fetchImportBatches()
+        fetchTransactions()
+        if (selectedModel) handleRunModel(selectedModel)
+      } else {
+        toast.error("Failed to remove import data")
+      }
+    } catch (e) {
+      console.error("Error removing batch", e)
+      toast.error("Error removing batch")
+    } finally {
+      setDeletingBatchId(null)
+    }
+  }
+
   const fetchConnectors = async (targetOrgId: string) => {
     try {
       setLoadingConnectors(true)
@@ -520,6 +605,7 @@ export function FinancialModeling() {
 
     try {
       setRunningModel(true)
+      setDataStale(false) // Clear stale flag — user is recomputing
       const res = await fetch(`${API_BASE_URL}/models/${targetModelId}/run`, {
         method: "POST",
         headers: getAuthHeaders(),
@@ -1129,6 +1215,49 @@ export function FinancialModeling() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Data Stale Banner (enterprise-grade, Anaplan-style) ────────── */}
+      {dataStale && (
+        <div className="flex items-center justify-between gap-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+              <TriangleAlert className="h-4 w-4 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-amber-900">
+                New data available — models may need recomputing
+              </p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                {staleMetrics?.rowsAdded
+                  ? `${staleMetrics.rowsAdded.toLocaleString()} new transaction rows imported.`
+                  : 'New transactions imported.'}{' '}
+                Recompute to reflect the latest data in your projections.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-amber-700 border-amber-300 hover:bg-amber-100 h-8"
+              onClick={() => setDataStale(false)}
+            >
+              Dismiss
+            </Button>
+            <Button
+              size="sm"
+              className="bg-amber-600 hover:bg-amber-700 text-white h-8 shadow-sm shadow-amber-200"
+              onClick={() => { handleRunModel(); }}
+              disabled={runningModel || !selectedModel}
+            >
+              {runningModel
+                ? <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                : <Play className="h-3 w-3 mr-1 fill-current" />}
+              Recompute Now
+            </Button>
+          </div>
+        </div>
+      )}
 
       <Tabs
         value={currentTab}
@@ -2005,7 +2134,13 @@ export function FinancialModeling() {
                       </div>
                       <div>
                         <p className="font-bold text-slate-900">ERP & SaaS Connectors</p>
-                        <p className="text-xs text-slate-500">{dataStatus?.sources?.connectors?.length || 0} connections authorized</p>
+                        <p className="text-xs text-slate-500">
+                          {connectors.filter((c: any) => c.status === 'connected' || c.status === 'syncing').length || 0} active
+                          {connectors.length > 0 && connectors.filter((c: any) => c.status === 'connected' || c.status === 'syncing').length === 0
+                            ? <span className="ml-1 text-amber-500 font-medium">(setup required)</span>
+                            : null
+                          }
+                        </p>
                       </div>
                       <Button variant="outline" size="sm" onClick={() => {
                         window.dispatchEvent(new CustomEvent('navigate-view', { detail: { view: 'integrations' } }));
@@ -2056,13 +2191,65 @@ export function FinancialModeling() {
 
           <Card className="border shadow-lg">
             <CardHeader className="bg-slate-900 text-white rounded-t-xl">
-              <CardTitle className="flex items-center gap-2">
-                <Upload className="h-5 w-5" />
+              <CardTitle className="flex items-center gap-2 text-slate-900">
+                <Upload className="h-5 w-5 text-primary" />
                 Data Ingestion Portal
               </CardTitle>
-              <CardDescription className="text-slate-400">Securely ingest and map your financial datasets.</CardDescription>
+              <CardDescription className="text-slate-500">Securely ingest and map your financial datasets for the AI engine.</CardDescription>
             </CardHeader>
             <CardContent className="p-8">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <Card className="bg-white border-slate-100 shadow-sm overflow-hidden group hover:border-primary/20 transition-all">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                        <DollarSign className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Transactions</p>
+                        <h4 className="text-2xl font-bold text-slate-900">{transactions.length.toLocaleString()}</h4>
+                      </div>
+                    </div>
+                  </CardContent>
+                  <div className="h-1 w-full bg-blue-50">
+                    <div className="h-full bg-blue-600 w-[65%]" />
+                  </div>
+                </Card>
+
+                <Card className="bg-white border-slate-100 shadow-sm overflow-hidden group hover:border-primary/20 transition-all">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-lg bg-green-50 text-green-600 flex items-center justify-center group-hover:bg-green-600 group-hover:text-white transition-colors">
+                        <Combine className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Connected Sources</p>
+                        <h4 className="text-2xl font-bold text-slate-900">{connectors.filter(c => c.status === 'connected').length}</h4>
+                      </div>
+                    </div>
+                  </CardContent>
+                  <div className="h-1 w-full bg-green-50">
+                    <div className="h-full bg-green-600 w-[85%]" />
+                  </div>
+                </Card>
+
+                <Card className="bg-white border-slate-100 shadow-sm overflow-hidden group hover:border-primary/20 transition-all">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition-colors">
+                        <Activity className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Digital Twin Sync</p>
+                        <h4 className="text-2xl font-bold text-slate-900">{dataStale ? 'Stale' : '100% In Sync'}</h4>
+                      </div>
+                    </div>
+                  </CardContent>
+                  <div className={`h-1 w-full ${dataStale ? 'bg-amber-100' : 'bg-green-50'}`}>
+                    <div className={`h-full ${dataStale ? 'bg-amber-500 w-[30%]' : 'bg-green-600 w-full'}`} />
+                  </div>
+                </Card>
+              </div>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xl font-bold text-slate-900">Historical Journal Entry Feed</h3>
@@ -2070,6 +2257,18 @@ export function FinancialModeling() {
                     <Button variant="outline" size="sm" onClick={fetchTransactions} disabled={loadingTransactions}>
                       {loadingTransactions ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <TrendingUp className="mr-2 h-4 w-4" />}
                       Sync Pipeline
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="border-slate-700 text-slate-700 hover:bg-slate-50"
+                      onClick={() => {
+                        setIsManageFilesOpen(true)
+                        fetchImportBatches()
+                      }}
+                    >
+                      <FileDiff className="mr-2 h-4 w-4" />
+                      Manage Files
                     </Button>
                     <CSVImportWizard orgId={orgId} onImportComplete={() => { fetchDataStatus(orgId!); fetchTransactions(); }} />
                   </div>
@@ -2438,79 +2637,342 @@ export function FinancialModeling() {
         </DialogContent>
       </Dialog>
 
+      {/* ═══════════════════════════════════════════════════════════════
+          ENTERPRISE DATA SOURCE MANAGER
+          Anaplan/Planful-grade: upload, manage, delete, retry, lineage
+      ═══════════════════════════════════════════════════════════════ */}
       <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
         <DialogContent className="max-w-[95vw] sm:max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Data Onboarding Hub</DialogTitle>
-            <DialogDescription>Centralized upload and connector management</DialogDescription>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <Database className="h-5 w-5 text-primary" />
+              Data Source Manager
+            </DialogTitle>
+            <DialogDescription>Upload, manage, and audit all financial data sources powering your models.</DialogDescription>
           </DialogHeader>
-          
-          <Tabs defaultValue="upload" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6">
-              <TabsTrigger value="upload" className="gap-2">
-                <Upload className="h-4 w-4" /> New Upload
+
+          <Tabs defaultValue="files" className="w-full">
+            <TabsList className="grid w-full grid-cols-3 mb-6 bg-slate-100 p-1 rounded-lg">
+              <TabsTrigger value="files" className="gap-1.5 relative">
+                <Database className="h-3.5 w-3.5" />
+                My Files
+                {importHistory.filter((j: any) => j.status === 'done').length > 0 && (
+                  <span className="ml-1 h-4 w-4 rounded-full bg-primary text-white text-[9px] font-black flex items-center justify-center">
+                    {importHistory.filter((j: any) => j.status === 'done').length}
+                  </span>
+                )}
               </TabsTrigger>
-              <TabsTrigger value="history" className="gap-2">
-                <HistoryIcon className="h-4 w-4" /> Import History
+              <TabsTrigger value="upload" className="gap-1.5">
+                <Upload className="h-3.5 w-3.5" /> New Upload
+              </TabsTrigger>
+              <TabsTrigger value="history" className="gap-1.5">
+                <HistoryIcon className="h-3.5 w-3.5" /> Job Log
               </TabsTrigger>
             </TabsList>
-            
-            <TabsContent value="upload" className="space-y-4">
-              <CSVImportWizard orgId={orgId} onImportComplete={() => { fetchDataStatus(orgId!); fetchTransactions(); fetchImportHistory(orgId!); }} />
-            </TabsContent>
-            
-            <TabsContent value="history" className="space-y-4">
+
+            {/* ── MY FILES TAB ── */}
+            <TabsContent value="files" className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-slate-500 font-medium">
+                  {importHistory.filter((j: any) => j.status === 'done').length} verified dataset(s) &bull;
+                  {importHistory.filter((j: any) => j.status === 'failed').length > 0 && (
+                    <span className="text-red-500 ml-1">{importHistory.filter((j: any) => j.status === 'failed').length} failed</span>
+                  )}
+                  &nbsp;·&nbsp;Powers {models.length} model{models.length !== 1 ? 's' : ''}
+                </p>
+                <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => fetchImportHistory(orgId!)} disabled={loadingHistory}>
+                  {loadingHistory ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                  Refresh
+                </Button>
+              </div>
+
               {loadingHistory ? (
-                <div className="space-y-4">
-                  {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
-                </div>
+                <div className="space-y-3">{[1,2,3].map(i => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}</div>
               ) : importHistory.length > 0 ? (
-                <div className="space-y-3">
-                  {importHistory.map((job: any) => (
-                    <div key={job.id} className="p-4 border rounded-xl bg-slate-50 hover:bg-white transition-all group">
-                      <div className="flex justify-between items-start">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-bold text-slate-900 capitalize">{job.type || 'CSV Import'}</span>
-                            <Badge variant={job.status === 'completed' || job.status === 'done' ? 'success' : job.status === 'failed' ? 'destructive' : 'secondary'} className="text-[9px] px-1.5 h-4">
-                              {job.status}
-                            </Badge>
+                <div className="space-y-2">
+                  {importHistory.map((job: any) => {
+                    const rawKey = job.params?.uploadKey || ''
+                    const filename = rawKey.split('/').pop()?.replace(/\.csv$/i, '') ||
+                      job.params?.fileName ||
+                      `Import ${new Date(job.createdAt).toLocaleDateString()}`
+                    const rowsImported: number =
+                      job.params?.rowsImported ||
+                      (Array.isArray(job.logs) ? (job.logs as any[]).find((l: any) => l?.rowsImported)?.rowsImported : 0) ||
+                      (typeof job.logs === 'object' && job.logs !== null ? (job.logs as any).rowsImported : 0) || 0
+                    const isSuccess = job.status === 'done' || job.status === 'completed'
+                    const isFailed = job.status === 'failed'
+                    const batchId = job.params?.importBatchId
+                    const isDeleting = deletingBatch === (batchId || job.id)
+
+                    return (
+                      <div key={job.id}
+                        className={`p-4 border rounded-xl transition-all group hover:shadow-sm ${
+                          isSuccess ? 'bg-emerald-50/40 border-emerald-100 hover:border-emerald-200'
+                          : isFailed ? 'bg-red-50/40 border-red-100 hover:border-red-200'
+                          : 'bg-amber-50/40 border-amber-100'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className={`h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                            isSuccess ? 'bg-emerald-100 text-emerald-600'
+                            : isFailed ? 'bg-red-100 text-red-600'
+                            : 'bg-amber-100 text-amber-600'
+                          }`}>
+                            {isSuccess ? <CheckCircle2 className="h-5 w-5" /> : isFailed ? <AlertCircle className="h-5 w-5" /> : <Loader2 className="h-5 w-5 animate-spin" />}
                           </div>
-                          <p className="text-[10px] text-slate-500">{new Date(job.createdAt).toLocaleString()}</p>
-                        </div>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <HelpCircle className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      
-                      <div className="mt-3 flex items-center gap-4 text-[10px] font-bold text-slate-600">
-                        <div className="flex items-center gap-1">
-                          <Database className="h-3 w-3 text-blue-500" />
-                          {job.rowsImported || job.metadata?.params?.rowsImported || 0} Rows
-                        </div>
-                        {job.status === 'completed' && (
-                          <div className="flex items-center gap-1 text-emerald-600">
-                            <CheckCircle2 className="h-3 w-3" />
-                            Verified
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-bold text-slate-900 truncate max-w-xs">{filename}</p>
+                              <Badge
+                                className={`text-[9px] px-1.5 h-4 font-black ${
+                                  isSuccess ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                                  : isFailed ? 'bg-red-100 text-red-700 border-red-200'
+                                  : 'bg-amber-100 text-amber-700 border-amber-200'
+                                }`}
+                                variant="outline"
+                              >
+                                {isSuccess ? '✓ Verified' : isFailed ? '✗ Failed' : '⟳ Processing'}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1 text-[10px] text-slate-500">
+                              <span>{new Date(job.createdAt).toLocaleString()}</span>
+                              {rowsImported > 0 && (
+                                <span className="flex items-center gap-0.5 font-bold text-slate-700">
+                                  <Database className="h-2.5 w-2.5 text-blue-500" />
+                                  {rowsImported.toLocaleString()} rows
+                                </span>
+                              )}
+                              {batchId && (
+                                <span className="font-mono text-slate-300">#{batchId.slice(0,8)}</span>
+                              )}
+                            </div>
+                            {isSuccess && models.length > 0 && (
+                              <div className="mt-1.5 flex items-center gap-1 text-[10px] text-slate-500">
+                                <Activity className="h-2.5 w-2.5 text-blue-400" />
+                                <span>Powers {models.length} model{models.length !== 1 ? 's' : ''} in this organization</span>
+                              </div>
+                            )}
                           </div>
-                        )}
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            {isFailed && (
+                              <Button
+                                variant="outline" size="sm"
+                                className="h-7 text-xs border-orange-200 text-orange-700 hover:bg-orange-50"
+                                onClick={() => {
+                                  setShowImportDialog(false)
+                                  toast.info("Please use 'New Upload' tab to re-import the file.")
+                                  setTimeout(() => setShowImportDialog(true), 100)
+                                }}
+                              >
+                                <RefreshCw className="h-3 w-3 mr-1" /> Retry
+                              </Button>
+                            )}
+                            {isSuccess && (
+                              <Button
+                                variant="ghost" size="sm"
+                                className="h-7 text-xs text-slate-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
+                                disabled={isDeleting}
+                                onClick={async () => {
+                                  if (!confirm(`⚠️ Delete "${filename}" and its ${rowsImported} transaction rows?\n\nThis will affect all models using this data. Models will need to be recomputed.`)) return
+                                  setDeletingBatch(batchId || job.id)
+                                  try {
+                                    const endpoint = batchId
+                                      ? `${API_BASE_URL}/orgs/${orgId}/transactions/batch/${batchId}`
+                                      : `${API_BASE_URL}/jobs/${job.id}`
+                                    const res = await fetch(endpoint, {
+                                      method: 'DELETE',
+                                      headers: getAuthHeaders(),
+                                      credentials: 'include',
+                                    })
+                                    if (res.ok) {
+                                      toast.success(`"${filename}" removed. Recompute your models to update projections.`)
+                                      setDataStale(true)
+                                      setStaleMetrics({ rowsAdded: 0, source: 'delete' })
+                                    } else {
+                                      toast.warning('Import marked for cleanup. Recompute your models.')
+                                    }
+                                    fetchImportHistory(orgId!)
+                                    fetchDataStatus(orgId!)
+                                    fetchTransactions()
+                                  } catch {
+                                    toast.error('Could not delete import data')
+                                  } finally {
+                                    setDeletingBatch(null)
+                                  }
+                                }}
+                              >
+                                {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               ) : (
-                <div className="py-20 text-center space-y-4">
-                  <div className="h-16 w-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto">
-                    <HistoryIcon className="h-8 w-8 text-slate-300" />
+                <div className="py-16 text-center space-y-3 border-2 border-dashed border-slate-100 rounded-2xl">
+                  <div className="h-14 w-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto">
+                    <Database className="h-7 w-7 text-slate-300" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900">No Import History</h3>
-                    <p className="text-xs text-slate-500 mt-1">Upload a CSV or Excel file to start tracking ingestion.</p>
+                    <h3 className="text-sm font-bold text-slate-800">No Data Sources Yet</h3>
+                    <p className="text-xs text-slate-500 mt-1">Upload a CSV or connect an ERP to populate this workspace.</p>
                   </div>
                 </div>
               )}
             </TabsContent>
+
+            {/* ── NEW UPLOAD TAB ── */}
+            <TabsContent value="upload" className="space-y-4">
+              <CSVImportWizard
+                orgId={orgId}
+                onImportComplete={() => {
+                  fetchDataStatus(orgId!)
+                  fetchTransactions()
+                  fetchImportHistory(orgId!)
+                  setDataStale(true)
+                  setStaleMetrics({ rowsAdded: 0, source: 'csv_import' })
+                  toast.success('Data imported! Click Recompute Engine to update your model projections.')
+                }}
+              />
+            </TabsContent>
+
+            {/* ── JOB LOG TAB ── */}
+            <TabsContent value="history" className="space-y-4">
+              <div className="text-xs text-slate-500 mb-3 flex items-center gap-1.5">
+                <Info className="h-3.5 w-3.5" />
+                Full audit log of all data ingestion jobs for this organization.
+              </div>
+              {loadingHistory ? (
+                <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}</div>
+              ) : importHistory.length > 0 ? (
+                <div className="space-y-2">
+                  {importHistory.map((job: any) => {
+                    const rowsImported: number =
+                      job.params?.rowsImported ||
+                      (Array.isArray(job.logs) ? (job.logs as any[]).find((l: any) => l?.rowsImported)?.rowsImported : 0) ||
+                      (typeof job.logs === 'object' && job.logs !== null ? (job.logs as any).rowsImported : 0) || 0
+                    const isSuccess = job.status === 'done' || job.status === 'completed'
+                    return (
+                      <div key={job.id} className="p-3 border rounded-lg bg-slate-50 hover:bg-white transition-all flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <div className={`h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-black ${
+                            isSuccess ? 'bg-emerald-100 text-emerald-700' : job.status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                          }`}>
+                            {isSuccess ? '✓' : job.status === 'failed' ? '✗' : '⟳'}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-800 capitalize">{job.jobType || 'csv_import'}</p>
+                            <p className="text-[10px] text-slate-400">{new Date(job.createdAt).toLocaleString()} &bull; {job.id?.slice(0,10)}...</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0 text-[10px] font-bold text-slate-600">
+                          {rowsImported > 0 && (
+                            <span className="flex items-center gap-1">
+                              <Database className="h-2.5 w-2.5 text-blue-400" />
+                              {rowsImported.toLocaleString()}
+                            </span>
+                          )}
+                          <Badge
+                            className={`text-[9px] px-1.5 h-4 ${
+                              isSuccess ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : job.status === 'failed' ? 'bg-red-50 text-red-700 border-red-200'
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                            }`}
+                            variant="outline"
+                          >
+                            {job.status}
+                          </Badge>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="py-12 text-center">
+                  <HistoryIcon className="h-10 w-10 text-slate-200 mx-auto mb-3" />
+                  <p className="text-sm font-bold text-slate-500">No jobs yet</p>
+                </div>
+              )}
+            </TabsContent>
           </Tabs>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={isManageFilesOpen} onOpenChange={setIsManageFilesOpen}>
+        <DialogContent className="sm:max-w-[700px] max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Database className="h-5 w-5 text-primary" />
+              Manage Ingested Files
+            </DialogTitle>
+            <DialogDescription>
+              View and manage your imported financial datasets. Deleting an import will remove all associated transactions from your models.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto py-4">
+            {loadingBatches ? (
+              <div className="space-y-3">
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+              </div>
+            ) : importBatches.length > 0 ? (
+              <div className="space-y-4">
+                {importBatches.map((batch) => (
+                  <div key={batch.id} className="flex items-center justify-between p-4 border rounded-xl bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                    <div className="flex-1 min-w-0 pr-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <FileText className="h-4 w-4 text-slate-400" />
+                        <span className="font-bold text-slate-900 truncate">{batch.fileName}</span>
+                        <Badge variant={batch.status === 'completed' ? 'default' : 'secondary'} className={batch.status === 'completed' ? 'bg-green-100 text-green-700 border-green-200' : ''}>
+                          {batch.status}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-slate-500">
+                        <span className="flex items-center">
+                          <Clock className="mr-1 h-3 w-3" />
+                          {new Date(batch.createdAt).toLocaleDateString()}
+                        </span>
+                        <span>
+                          {batch.statsJson?.rowsImported ?? batch.statsJson?.transactionsCreated ?? 0} rows
+                        </span>
+                        {batch.sourceType && (
+                          <Badge variant="outline" className="text-[10px] py-0 h-4">
+                            {batch.sourceType}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="text-slate-400 hover:text-red-600 hover:bg-red-50"
+                      onClick={() => handleRemoveBatch(batch.id)}
+                      disabled={deletingBatchId === batch.id}
+                    >
+                      {deletingBatchId === batch.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 border-2 border-dashed rounded-xl border-slate-200 bg-slate-50/50">
+                <Database className="h-12 w-12 mx-auto mb-3 text-slate-300" />
+                <p className="font-bold text-slate-600">No imported files found</p>
+                <p className="text-sm text-slate-400">Use the import wizard to upload your first dataset.</p>
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter className="bg-slate-50 p-4 -m-6 mt-4 rounded-b-lg">
+            <Button variant="outline" onClick={() => setIsManageFilesOpen(false)}>Close</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

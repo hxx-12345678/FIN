@@ -368,7 +368,13 @@ export function IntegrationsPage() {
 
       if (targetOrgId) {
         console.log("[Integrations] CSV import completed, refreshing data...", { rowsImported, targetOrgId })
-        toast.success(`CSV import completed! Refreshing integrations...`)
+        toast.info("Data Refresh Triggered", {
+          description: "Ingested transactions are being mapped to your Digital Twin. Models will recompute automatically.",
+          action: {
+            label: "View Trace",
+            onClick: () => console.log("Open Trace")
+          }
+        })
 
         // Update orgId if it came from the event
         if (importedOrgId && importedOrgId !== orgId) {
@@ -601,11 +607,16 @@ export function IntegrationsPage() {
   // Total Syncs should be the number of unique connectors that have successfully completed a sync
   const totalSyncs = connectors.filter(c => c.status === "connected" && c.lastSyncedAt).length;
 
-  // Calculate total volume of data synced across all connected platforms
+  // Calculate total volume of data synced (Connectors + CSV Imports)
   const totalVolume = connectors.reduce((acc, c) => {
-    // If we have stats in configJson, use them, otherwise use a fallback based on historical jobs
     const stats = c.configJson?.last_sync_stats?.records_inserted || 0;
     return acc + (typeof stats === 'number' ? stats : 0);
+  }, 0) + importHistory.reduce((acc, job) => {
+    const logs = Array.isArray(job.logs) ? job.logs : [];
+    const meta = [...logs].reverse().find((l: any) => l?.meta?.params)?.meta?.params;
+    const legacy = [...logs].reverse().find((l: any) => l?.rowsImported || l?.transactionsCreated);
+    const rows = meta?.rowsImported || meta?.transactionsCreated || legacy?.rowsImported || legacy?.transactionsCreated || 0;
+    return acc + rows;
   }, 0);
 
   return (
@@ -616,7 +627,16 @@ export function IntegrationsPage() {
           <p className="text-muted-foreground">Connect your accounting systems, payment gateways, and banking services</p>
         </div>
         <div className="flex gap-2">
-          <CSVImportWizard />
+          <CSVImportWizard
+            orgId={orgId}
+            onImportComplete={() => fetchAllData(orgId!)}
+            triggerContent={
+              <Button size="sm" variant="outline">
+                <Upload className="mr-2 h-4 w-4" />
+                Import CSV
+              </Button>
+            }
+          />
         </div>
       </div>
 
@@ -772,31 +792,27 @@ export function IntegrationsPage() {
                         {new Date(job.createdAt).toLocaleString()}
                       </span>
                     </div>
-                    {job.logs && typeof job.logs === 'object' && (
-                      <div className="text-xs text-muted-foreground mt-1 space-x-3">
-                        {Array.isArray(job.logs) && job.logs.length > 0 && (
-                          <>
-                            <span>Rows Imported: {job.logs[job.logs.length - 1]?.meta?.rows_imported || job.logs[job.logs.length - 1]?.meta?.params?.rowsImported || 'N/A'}</span>
-                            {job.logs[job.logs.length - 1]?.meta?.rows_skipped && (
-                              <span className="text-orange-600">Duplicates Skipped: {job.logs[job.logs.length - 1]?.meta?.rows_skipped}</span>
-                            )}
-                            {job.logs[job.logs.length - 1]?.meta?.params?.initialCustomers && (
-                              <span className="text-blue-600">Active Customers: {job.logs[job.logs.length - 1]?.meta?.params?.initialCustomers}</span>
-                            )}
-                          </>
-                        )}
-                        {typeof job.logs === 'object' && job.logs.params && (
-                          <>
-                            {job.logs.params.rowsImported && (
-                              <span>Rows Imported: {job.logs.params.rowsImported}</span>
-                            )}
-                            {job.logs.params.initialCustomers && (
-                              <span className="text-blue-600">Active Customers: {job.logs.params.initialCustomers}</span>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    )}
+                    {/* Row count: read from params first (Python worker stores it there), then logs */}
+                    {(() => {
+                      const logs = Array.isArray(job.logs) ? job.logs : [];
+                      const meta = [...logs].reverse().find((l: any) => l?.meta?.params)?.meta?.params;
+                      const legacy = [...logs].reverse().find((l: any) => l?.rowsImported || l?.transactionsCreated);
+                      
+                      const rowsImported: number = meta?.rowsImported || meta?.transactionsCreated || legacy?.rowsImported || legacy?.transactionsCreated || 0;
+                      return rowsImported > 0 ? (
+                        <div className="text-xs text-muted-foreground mt-1 space-x-3">
+                          <span className="font-medium text-slate-700">
+                            📊 {Number(rowsImported).toLocaleString()} rows imported
+                          </span>
+                          {Array.isArray(job.logs) && job.logs.length > 0 && job.logs[job.logs.length - 1]?.meta?.rows_skipped > 0 && (
+                            <span className="text-orange-600">
+                              · {job.logs[job.logs.length - 1]?.meta?.rows_skipped} duplicates skipped
+                            </span>
+                          )}
+                        </div>
+                      ) : null
+                    })()}
+
                   </div>
                   <div className="text-right text-xs text-muted-foreground">
                     {job.finishedAt ? (

@@ -10,6 +10,65 @@ import { transactionService } from '../services/transaction.service';
 
 export const transactionController = {
   /**
+   * DELETE /api/v1/orgs/:orgId/transactions/batch/:batchId
+   * Delete all transactions belonging to a specific import batch.
+   * Enterprise feature: allows removing bad or duplicate CSVs.
+   */
+  deleteImportBatch: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        throw new ValidationError('User not authenticated');
+      }
+
+      const { orgId, batchId } = req.params;
+
+      // Verify user has access (admin or finance required for delete)
+      const role = await (await import('../config/database')).default.userOrgRole.findUnique({
+        where: { userId_orgId: { userId: req.user.id, orgId } },
+      });
+
+      if (!role || !['admin', 'finance'].includes(role.role)) {
+        throw new (await import('../utils/errors')).ForbiddenError('Only admins and finance users can delete import data');
+      }
+
+      // Count first so we can return a meaningful response
+      const count = await (await import('../config/database')).default.rawTransaction.count({
+        where: { orgId, importBatchId: batchId },
+      });
+
+      if (count === 0) {
+        return res.json({ ok: true, deleted: 0, message: 'No transactions found for this batch' });
+      }
+
+      // Perform deletion
+      const result = await (await import('../config/database')).default.rawTransaction.deleteMany({
+        where: { orgId, importBatchId: batchId },
+      });
+
+      // Also soft-mark the dataImportBatch record as archived if it exists
+      try {
+        const prismaAny = (await import('../config/database')).default as any;
+        if (prismaAny.dataImportBatch) {
+          await prismaAny.dataImportBatch.updateMany({
+            where: { id: batchId, orgId },
+            data: { status: 'deleted' },
+          });
+        }
+      } catch {
+        // dataImportBatch table may not exist in all envs — ignore
+      }
+
+      res.json({
+        ok: true,
+        deleted: result.count,
+        message: `Deleted ${result.count} transactions from import batch ${batchId}. Recompute your models to reflect this change.`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  /**
    * GET /api/v1/orgs/:orgId/transactions
    * List transactions for an organization
    */

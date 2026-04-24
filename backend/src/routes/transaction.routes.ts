@@ -5,6 +5,9 @@ import { requireOrgAccess } from '../middlewares/rbac';
 
 const router = Router();
 
+// Delete all transactions for a specific import batch (enterprise Manage Files feature)
+router.delete('/orgs/:orgId/transactions/batch/:batchId', authenticate, requireOrgAccess('orgId'), transactionController.deleteImportBatch);
+
 // List transactions
 router.get('/orgs/:orgId/transactions', authenticate, requireOrgAccess('orgId'), transactionController.listTransactions);
 

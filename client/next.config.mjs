@@ -106,7 +106,7 @@ const nextConfig = {
           },
           {
             key: 'Content-Security-Policy',
-            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://va.vercel-scripts.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' http://localhost:8000 https://finapilot-backend.onrender.com https://finapilot-mvp-backend.onrender.com https://fin-plum.vercel.app https://finapilot-mvp.vercel.app;",
+            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://va.vercel-scripts.com https://vitals.vercel-scripts.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' http://localhost:8000 https://finapilot-backend.onrender.com https://finapilot-mvp-backend.onrender.com https://fin-plum.vercel.app https://finapilot-mvp.vercel.app https://fin-k87e.onrender.com https://vitals.vercel-insights.com;",
           },
         ],
       },

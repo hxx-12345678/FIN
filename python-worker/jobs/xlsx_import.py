@@ -353,7 +353,8 @@ def handle_xlsx_import(job_id: str, org_id: str, object_id: str, logs: Dict[str,
                 # Prepare transaction
                 if not source_id_value:
                     # Deterministic fallback source_id for idempotency
-                    fp = f"{org_id}|{file_hash}|{sheet_name}|{row_index}|{date_value}|{amount_value}|{description_value}|{category_value}"
+                    # We exclude file_hash, sheet_name and row_index to allow cross-file deduplication
+                    fp = f"{org_id}|{date_value}|{amount_value}|{description_value}|{category_value}"
                     source_id_value = hashlib.sha256(fp.encode('utf-8')).hexdigest()
 
                 transaction_values.append((
@@ -472,16 +473,23 @@ def _trigger_model_run(db, org_id: str, user_id: Optional[str] = None) -> None:
         if user_id:
             params["userId"] = user_id
             
+        logs = [{
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "level": "info",
+            "msg": "Job queued from XLSX import",
+            "meta": {"params": params}
+        }]
+            
         query = """
             INSERT INTO public.jobs (
-                id, job_type, "orgId", status, params, queue,
+                id, job_type, "orgId", status, logs, queue,
                 created_at, updated_at
             ) VALUES (
                 %s, 'auto_model_trigger', %s, 'queued', %s::jsonb, 'default',
                 NOW(), NOW()
             )
         """
-        cursor.execute(query, (str(uuid.uuid4()), org_id, json.dumps(params)))
+        cursor.execute(query, (str(uuid.uuid4()), org_id, json.dumps(logs)))
         db.commit()
     except Exception as e:
         logger.error(f"Failed to queue model run: {e}")

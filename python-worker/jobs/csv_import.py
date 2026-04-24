@@ -193,13 +193,27 @@ def handle_csv_import(job_id: str, org_id: str, object_id: str, logs: dict):
         for idx, row in enumerate(rows):
             try:
                 # Map CSV columns to transaction fields using mappings
-                # mappings format: {'date': 'Date', 'amount': 'Amount', ...}
-                # row format: {'Date': '2024-01-15', 'Amount': '100.50', ...}
+                # mappings format could be: {'date': 'Date', ...} or {'date': {'csvColumn': 'Date'}, ...}
                 
                 date_column = mappings.get('date')
+                if isinstance(date_column, dict):
+                    date_column = date_column.get('csvColumn')
+                    
                 amount_column = mappings.get('amount')
+                if isinstance(amount_column, dict):
+                    amount_column = amount_column.get('csvColumn')
+                    
                 description_column = mappings.get('description')
+                if isinstance(description_column, dict):
+                    description_column = description_column.get('csvColumn')
+                    
                 category_column = mappings.get('category')
+                if isinstance(category_column, dict):
+                    category_column = category_column.get('csvColumn')
+                    
+                source_id_column = mappings.get('sourceId') or mappings.get('id')
+                if isinstance(source_id_column, dict):
+                    source_id_column = source_id_column.get('csvColumn')
                 
                 if not date_column or not amount_column:
                     logger.error(f"Row {idx+1}: Missing required mappings (date={date_column}, amount={amount_column}, mappings={mappings})")
@@ -253,6 +267,13 @@ def handle_csv_import(job_id: str, org_id: str, object_id: str, logs: dict):
                     for key, value in row.items():
                         if key and key.strip().lower() == category_column.strip().lower():
                             category = str(value).strip() if value is not None else None
+                            break
+                            
+                source_id_from_csv = None
+                if source_id_column:
+                    for key, value in row.items():
+                        if key and key.strip().lower() == source_id_column.strip().lower():
+                            source_id_from_csv = str(value).strip() if value is not None else None
                             break
                 
                 # Validate required fields
@@ -311,9 +332,14 @@ def handle_csv_import(job_id: str, org_id: str, object_id: str, logs: dict):
                 description_value = description or ''
 
                 # Compute deterministic source_id for idempotent imports (prevents duplicates on re-upload)
-                # If file_hash is available, dedupe is stable per-file; if not, still stable by content.
-                fingerprint_input = f"{org_id}|{file_hash}|{parsed_date.date().isoformat()}|{amount_value}|{description_value}|{category_value}"
-                source_id = hashlib.sha256(fingerprint_input.encode('utf-8')).hexdigest()
+                # If source_id_from_csv is available, use it directly (gold standard)
+                # Otherwise, compute a cross-file stable fingerprint. We exclude file_hash to allow 
+                # deduplication even if the same data is uploaded in different files (e.g. monthly vs quarterly)
+                if source_id_from_csv:
+                    source_id = source_id_from_csv
+                else:
+                    fingerprint_input = f"{org_id}|{parsed_date.date().isoformat()}|{amount_value}|{description_value}|{category_value}"
+                    source_id = hashlib.sha256(fingerprint_input.encode('utf-8')).hexdigest()
                 
                 # Insert transaction - match Prisma schema column names
                 # Database columns: "orgId" (camelCase, quoted), raw_payload (snake_case, not quoted)

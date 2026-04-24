@@ -24,12 +24,31 @@ export interface ReserveJobResult {
 
 export const jobRepository = {
   create: async (data: CreateJobData): Promise<Job> => {
-    const logs = data.logs || {};
-    if (data.params) {
-      logs.params = data.params;
+    let logs = data.logs || [];
+    
+    // If logs is an array and we have params, add a parameter log entry
+    if (Array.isArray(logs)) {
+      if (data.params) {
+        logs.push({
+          ts: new Date().toISOString(),
+          level: 'info',
+          msg: 'Job parameters set',
+          meta: { params: data.params }
+        });
+      }
+    } else {
+      // Legacy object format
+      if (data.params) {
+        logs.params = data.params;
+      }
     }
-    if (!logs.createdAt) {
-      logs.createdAt = new Date().toISOString();
+
+    if (Array.isArray(logs) && logs.length === 0) {
+      logs.push({
+        ts: new Date().toISOString(),
+        level: 'info',
+        msg: 'Job created'
+      });
     }
 
     // Build data object with only defined fields to avoid Prisma errors

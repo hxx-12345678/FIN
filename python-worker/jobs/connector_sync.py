@@ -379,16 +379,23 @@ def _trigger_model_run(db, org_id: str, user_id: Optional[str] = None) -> None:
         if user_id:
             params["userId"] = user_id
             
+        logs = [{
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "level": "info",
+            "msg": "Job queued from connector sync",
+            "meta": {"params": params}
+        }]
+            
         query = """
             INSERT INTO public.jobs (
-                id, job_type, "orgId", status, params, queue,
+                id, job_type, "orgId", status, logs, queue,
                 created_at, updated_at
             ) VALUES (
                 gen_random_uuid(), 'auto_model_trigger', %s, 'queued', %s::jsonb, 'default',
                 NOW(), NOW()
             )
         """
-        cursor.execute(query, (org_id, json.dumps(params)))
+        cursor.execute(query, (org_id, json.dumps(logs)))
         db.commit()
     except Exception as e:
         logger.error(f"Failed to queue model run: {e}")

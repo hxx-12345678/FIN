@@ -399,31 +399,29 @@ class BaseConnector(ABC):
         """
         query = """
             INSERT INTO audit_logs (
-                org_id, actor_id, action, resource_type, resource_id,
-                details, trace_id, created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                "orgId", action, object_type, object_id,
+                meta_json, created_at
+            ) VALUES (%s, %s, %s, %s, %s, NOW())
         """
         
         try:
             cursor = self.db.cursor()
-            audit_details = {
+            meta_json = {
                 'event_type': event_type,
                 'endpoint': endpoint,
                 'status_code': status_code,
                 'records_processed': records_processed,
                 'platform': self.platform_name,
+                'trace_id': self.trace_id,
                 **(details or {})
             }
             
             cursor.execute(query, (
                 self.org_id,
-                None,  # actor_id (system sync)
                 f'{self.platform_name}_sync',
                 'connector',
                 self.connector_id,
-                json.dumps(audit_details),
-                self.trace_id,
-                datetime.utcnow(),
+                json.dumps(meta_json),
             ))
             
             self.db.commit()

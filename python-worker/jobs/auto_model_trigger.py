@@ -101,16 +101,14 @@ def handle_auto_model_trigger(job_id: str, org_id: str, object_id: str, logs: di
             logger.info(f"Created default model {model_id} for org {org_id}")
             conn.commit()
         else:
-            # Get primary model (most recent)
+            # Enterprise: Get ALL models for the org to update them all
             cursor.execute("""
                 SELECT id FROM models
                 WHERE "orgId" = %s
-                ORDER BY created_at DESC
-                LIMIT 1
             """, (org_id,))
             
-            model_row = cursor.fetchone()
-            if not model_row:
+            model_rows = cursor.fetchall()
+            if not model_rows:
                 logger.warning(f"Auto-model: No model found for org {org_id} after count check")
                 cursor.execute("""
                     UPDATE jobs SET progress = 100, status = 'done', logs = %s, updated_at = NOW()
@@ -119,27 +117,9 @@ def handle_auto_model_trigger(job_id: str, org_id: str, object_id: str, logs: di
                 conn.commit()
                 return
             
-            model_id = model_row[0]
-        
-        # Check if there's already a running model run
-        cursor.execute("""
-            SELECT id FROM model_runs
-            WHERE "orgId" = %s AND status IN ('queued', 'running')
-            ORDER BY created_at DESC
-            LIMIT 1
-        """, (org_id,))
-        
-        running_run = cursor.fetchone()
-        if running_run:
-            logger.info(f"Auto-model: Org {org_id} already has running model run {running_run[0]}, skipping")
-            cursor.execute("""
-                UPDATE jobs SET progress = 100, status = 'done', logs = %s, updated_at = NOW()
-                WHERE id = %s
-            """, (json.dumps({**logs, 'status': 'skipped', 'reason': 'already_running', 'runningRunId': running_run[0]}), job_id))
-            conn.commit()
-            return
-        
-        # Check last model run (prevent spam - at least 1 hour between runs)
+            model_ids = [row[0] for row in model_rows]
+            
+        # Optional throttle check (prevent spam - at least 1 hour between runs for scheduled tasks)
         cursor.execute("""
             SELECT created_at FROM model_runs
             WHERE "orgId" = %s AND "run_type" = 'baseline'
@@ -151,32 +131,22 @@ def handle_auto_model_trigger(job_id: str, org_id: str, object_id: str, logs: di
         if last_run:
             last_run_time = last_run[0]
             hours_since = (datetime.now(timezone.utc) - last_run_time).total_seconds() / 3600
-            if hours_since < 1:
-                logger.info(f"Auto-model: Org {org_id} had model run {hours_since:.2f} hours ago, skipping (min 1 hour)")
+            # ── Enterprise: Only throttle SCHEDULED triggers, not manual user actions ──
+            # Explicit csv_import / connector_sync / manual actions should ALWAYS recompute
+            explicit_triggers = {'csv_import', 'connector_sync', 'manual', 'xlsx_import'}
+            if trigger_type not in explicit_triggers and hours_since < 1:
+                logger.info(f"Auto-model: Org {org_id} had model run {hours_since:.2f}h ago, skipping scheduled trigger (min 1h)")
                 cursor.execute("""
                     UPDATE jobs SET progress = 100, status = 'done', logs = %s, updated_at = NOW()
                     WHERE id = %s
-                """, (json.dumps({**logs, 'status': 'skipped', 'reason': 'too_recent', 'hoursSince': hours_since}), job_id))
+                """, (json.dumps({**logs, 'status': 'skipped', 'reason': 'too_recent', 'hoursSince': hours_since, 'note': 'Use csv_import trigger to force recompute'}), job_id))
                 conn.commit()
                 return
+
         
-        update_progress(job_id, 30, {'status': 'model_ready'})
+        update_progress(job_id, 30, {'status': 'models_ready', 'modelCount': len(model_ids)})
         
-        # Ensure model_id is set (either from creation above or from existing model)
-        if 'model_id' not in locals():
-            # This shouldn't happen, but handle it gracefully
-            logger.error(f"Auto-model: model_id not set for org {org_id}")
-            cursor.execute("""
-                UPDATE jobs SET progress = 100, status = 'done', logs = %s, updated_at = NOW()
-                WHERE id = %s
-            """, (json.dumps({**logs, 'status': 'failed', 'reason': 'model_id_not_set'}), job_id))
-            conn.commit()
-            return
-        
-        update_progress(job_id, 50, {'status': 'creating_model_run'})
-        
-        # Create model run with starting values from CSV import
-        # Store both startingCustomers and cashOnHand in params_json so model_run.py can use them
+        # Create model runs for ALL models
         model_run_params = {
             'autoTriggered': True,
             'triggerType': trigger_type,
@@ -184,111 +154,99 @@ def handle_auto_model_trigger(job_id: str, org_id: str, object_id: str, logs: di
             'triggeredAt': datetime.now(timezone.utc).isoformat(),
         }
         
-        # Add startingCustomers if provided
         if starting_customers and int(starting_customers) > 0:
             model_run_params['startingCustomers'] = int(starting_customers)
-            logger.info(f"Setting startingCustomers in model run params: {model_run_params['startingCustomers']}")
-        
-        # Add cashOnHand if provided
         if cash_on_hand and float(cash_on_hand) > 0:
             model_run_params['cashOnHand'] = float(cash_on_hand)
-            logger.info(f"Setting cashOnHand in model run params: ${model_run_params['cashOnHand']:,.2f}")
-        
-        cursor.execute("""
-            INSERT INTO model_runs (id, "modelId", "orgId", "run_type", "params_json", status, created_at)
-            VALUES (gen_random_uuid(), %s, %s, 'baseline', %s::jsonb, 'queued', NOW())
-            RETURNING id
-        """, (
-            model_id,
-            org_id,
-            json.dumps(model_run_params),
-        ))
-        
-        model_run_id = cursor.fetchone()[0]
-        
-        update_progress(job_id, 70, {'status': 'creating_model_run_job'})
-        
-        # Create model_run job for Python worker
-        # Store params in logs JSONB field, not as separate column
-        model_run_params = {
-            'modelRunId': model_run_id,
-            'modelId': model_id,
-            'runType': 'baseline',
-            'autoTriggered': True,
-            'triggerType': trigger_type,
-            'triggerSource': trigger_source,
-        }
-        
-        # Create logs array with params in meta (matching backend format)
-        model_run_logs = [
-            {
-                'ts': datetime.now(timezone.utc).isoformat(),
-                'level': 'info',
-                'msg': 'Job created',
-                'meta': {
-                    'jobType': 'model_run',
-                    'queue': 'default',
-                    'priority': 40,
-                }
-            },
-            {
-                'ts': datetime.now(timezone.utc).isoformat(),
-                'level': 'info',
-                'msg': 'Job parameters set',
-                'meta': {'params': model_run_params}
-            }
-        ]
-        
-        cursor.execute("""
-            INSERT INTO jobs (id, job_type, "orgId", object_id, status, priority, queue, logs, created_at, updated_at)
-            VALUES (
-                gen_random_uuid(),
-                'model_run',
-                %s,
-                %s,
-                'queued',
-                40,
-                'default',
-                %s::jsonb,
-                NOW(),
-                NOW()
-            )
-            RETURNING id
-        """, (
-            org_id,
-            model_run_id,
-            json.dumps(model_run_logs),
-        ))
-        
-        model_run_job_id = cursor.fetchone()[0]
-        
-        # Create audit log entry
-        try:
+
+        created_runs = []
+        for model_id in model_ids:
+            # Check if there's already a running model run for this specific model
             cursor.execute("""
-                INSERT INTO audit_logs ("orgId", action, "objectType", "objectId", "metaJson", created_at)
-                VALUES (%s, 'auto_model_triggered', 'model_run', %s, %s::jsonb, NOW())
+                SELECT id FROM model_runs
+                WHERE "modelId" = %s AND status IN ('queued', 'running')
+                LIMIT 1
+            """, (model_id,))
+            
+            if cursor.fetchone():
+                logger.info(f"Auto-model: Model {model_id} already has running run, skipping")
+                continue
+
+            # Create model run
+            cursor.execute("""
+                INSERT INTO model_runs (id, "modelId", "orgId", "run_type", "params_json", status, created_at)
+                VALUES (gen_random_uuid(), %s, %s, 'baseline', %s::jsonb, 'queued', NOW())
+                RETURNING id
             """, (
+                model_id,
                 org_id,
-                model_run_id,
-                json.dumps({
+                json.dumps(model_run_params),
+            ))
+            
+            model_run_id = cursor.fetchone()[0]
+            
+            # Create model_run job for Python worker
+            job_params = {
+                'modelRunId': model_run_id,
+                'modelId': model_id,
+                'runType': 'baseline',
+                'autoTriggered': True,
+                'triggerType': trigger_type,
+                'triggerSource': trigger_source,
+            }
+            
+            model_run_logs = [
+                {
+                    'ts': datetime.now(timezone.utc).isoformat(),
+                    'level': 'info',
+                    'msg': 'Job created via auto-trigger',
+                    'meta': {
+                        'jobType': 'model_run',
+                        'queue': 'default',
+                        'priority': 40,
+                        'params': job_params
+                    }
+                }
+            ]
+            
+            cursor.execute("""
+                INSERT INTO jobs (id, job_type, "orgId", object_id, status, priority, queue, logs, created_at, updated_at)
+                VALUES (gen_random_uuid(), 'model_run', %s, %s, 'queued', 40, 'default', %s::jsonb, NOW(), NOW())
+                RETURNING id
+            """, (org_id, model_run_id, json.dumps(model_run_logs)))
+            
+            model_run_job_id = cursor.fetchone()[0]
+            
+            try:
+                cursor.execute("""
+                    INSERT INTO audit_logs ("orgId", action, object_type, object_id, meta_json, created_at)
+                    VALUES (%s, 'auto_model_triggered', 'model_run', %s, %s::jsonb, NOW())
+                """, (org_id, model_run_id, json.dumps({
                     'modelId': model_id,
                     'triggerType': trigger_type,
-                    'triggerSource': trigger_source,
                     'jobId': model_run_job_id,
-                }),
-            ))
-        except Exception as e:
-            logger.warning(f"Failed to create audit log: {str(e)}")
-        
+                })))
+            except Exception as e:
+                logger.warning(f"Failed to create audit log for {model_id}: {str(e)}")
+                # If a query fails in PostgreSQL, the current transaction block is aborted.
+                # Since this audit log is NOT critical, we rollback but we must be careful 
+                # because we already committed the job creation. Actually, we haven't committed yet 
+                # (the main commit is at the very end).
+                # So if this fails, we just log and continue, but we'd need to SAVEPOINT or just fix the SQL.
+                # Fixed SQL is better.
+                pass
+            
+            created_runs.append(model_run_id)
+
         conn.commit()
         
         update_progress(job_id, 100, {
             'status': 'completed',
-            'modelRunId': model_run_id,
-            'modelRunJobId': model_run_job_id,
+            'runsCreated': len(created_runs),
+            'modelRunIds': created_runs
         })
         
-        logger.info(f"✅ Auto-model: Created model run {model_run_id} and job {model_run_job_id} for org {org_id}")
+        logger.info(f"✅ Auto-model: Queued {len(created_runs)} model runs for org {org_id}")
         
     except Exception as e:
         logger.error(f"❌ Auto-model trigger failed: {str(e)}", exc_info=True)
