@@ -80,6 +80,26 @@ interface DataStatus {
     isEnterpriseReady: boolean
     dataFreshness: string
   }
+  insight?: {
+    detectedMrr: number
+    detectedGrowth: number
+    confidence: string
+    summary: string
+    persona: string
+    recommendation: string
+    metrics: {
+      grossMargin: number
+      burnMultiple: number
+      ruleOf40: number
+      efficiencyScore: number
+    }
+    benchmarks: {
+      growth: string
+      efficiency: string
+      text: string
+    }
+    strategicPlan: string[]
+  }
 }
 
 interface CreateModelFormProps {
@@ -1408,10 +1428,11 @@ export function CreateModelForm({
                   </div>
                   <div>
                     <p className="text-[10px] font-bold text-slate-400 uppercase">Engine</p>
-                    <Badge variant="outline" className={`text-[10px] ${intelligenceEngine === "data-driven" ? "bg-blue-50 text-blue-700 border-blue-200" :
+                    <Badge variant="outline" className={`text-[10px] flex items-center gap-1 w-fit ${intelligenceEngine === "data-driven" ? "bg-blue-50 text-blue-700 border-blue-200" :
                       intelligenceEngine === "synthetic" ? "bg-purple-50 text-purple-700 border-purple-200" :
                         "bg-slate-50 text-slate-700 border-slate-200"
                       }`}>
+                      <Brain className="h-2.5 w-2.5" />
                       {intelligenceEngine === "data-driven" ? "Data-Driven" :
                         intelligenceEngine === "synthetic" ? "Synthetic AI" : "Manual"}
                     </Badge>
@@ -1424,18 +1445,46 @@ export function CreateModelForm({
 
                 {/* Show source authority summary for data-driven */}
                 {/* AI Model Architecture Summary */}
-                <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-xl space-y-3">
-                   <div className="flex items-center gap-2">
-                     <div className="p-1 bg-indigo-500 rounded text-white"><Sparkles className="h-3.5 w-3.5" /></div>
-                     <h4 className="text-[11px] font-black text-indigo-900 uppercase tracking-tighter">AI Architecture Reasoning</h4>
-                   </div>
-                   <p className="text-[11px] text-indigo-800 leading-relaxed font-medium">
-                     The AI has initialized an <strong>{formData.modelType?.toUpperCase()}</strong> architecture 
-                     using {intelligenceEngine === "data-driven" ? "verified data-points as the baseline" : "top-down industry benchmarks"}. 
-                     {formData.modelType === 'dcf' && " Cost of Equity is optimized for current market yields and sector-specific risk premiums."}
-                     {formData.modelType === 'lbo' && " Capital structure is optimized for maximum IRR while maintaining a sustainable leverage safety-margin."}
-                     {formData.modelType === 'accretion-dilution' && " Synergies are modeled with a 24-month linear phase-in to reflect realistic integration effort."}
-                   </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-xl space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1 bg-indigo-500 rounded text-white"><Sparkles className="h-3.5 w-3.5" /></div>
+                      <h4 className="text-[11px] font-black text-indigo-900 uppercase tracking-tighter">AI Architecture Reasoning</h4>
+                    </div>
+                    <p className="text-[11px] text-indigo-800 leading-relaxed font-medium">
+                      The AI has initialized an <strong>{formData.modelType?.toUpperCase()}</strong> architecture 
+                      using {intelligenceEngine === "data-driven" ? "verified data-points as the baseline" : "top-down industry benchmarks"}. 
+                      {formData.modelType === 'dcf' && " Cost of Equity is optimized for current market yields and sector-specific risk premiums."}
+                      {formData.modelType === 'lbo' && " Capital structure is optimized for maximum IRR while maintaining a sustainable leverage safety-margin."}
+                      {formData.modelType === 'accretion-dilution' && " Synergies are modeled with a 24-month linear phase-in to reflect realistic integration effort."}
+                    </p>
+                  </div>
+
+                  {intelligenceEngine === "data-driven" && dataStatus?.insight?.metrics && (
+                    <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-xl space-y-3">
+                       <div className="flex items-center justify-between">
+                         <div className="flex items-center gap-2">
+                           <div className="p-1 bg-emerald-500 rounded text-white"><ShieldCheck className="h-3.5 w-3.5" /></div>
+                           <h4 className="text-[11px] font-black text-emerald-900 uppercase tracking-tighter">Strategic Insight</h4>
+                         </div>
+                         <Badge className="bg-emerald-600 text-white border-0 text-[9px] uppercase">{dataStatus.insight.persona}</Badge>
+                       </div>
+                       <div className="grid grid-cols-3 gap-2">
+                         <div className="text-center p-1.5 bg-white rounded-lg border border-emerald-100">
+                           <p className="text-[9px] font-bold text-slate-400 uppercase">Gross Margin</p>
+                           <p className="text-xs font-black text-emerald-700">{(dataStatus.insight.metrics.grossMargin * 100).toFixed(0)}%</p>
+                         </div>
+                         <div className="text-center p-1.5 bg-white rounded-lg border border-emerald-100">
+                           <p className="text-[9px] font-bold text-slate-400 uppercase">Burn Mult.</p>
+                           <p className="text-xs font-black text-emerald-700">{dataStatus.insight.metrics.burnMultiple.toFixed(1)}x</p>
+                         </div>
+                         <div className="text-center p-1.5 bg-white rounded-lg border border-emerald-100">
+                           <p className="text-[9px] font-bold text-slate-400 uppercase">Rule of 40</p>
+                           <p className="text-xs font-black text-emerald-700">{dataStatus.insight.metrics.ruleOf40.toFixed(0)}</p>
+                         </div>
+                       </div>
+                    </div>
+                  )}
                 </div>
 
                 {intelligenceEngine === "data-driven" && Object.keys(sourceAuthMap).length > 0 && (
@@ -1475,24 +1524,47 @@ export function CreateModelForm({
                 <Label className="text-xs font-bold uppercase text-slate-500">Strategic Outlook</Label>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {[
-                    { id: "growth" as const, label: "Aggressive Growth", icon: Zap, color: "orange", desc: "Maximize MoM revenue scaling, accept higher burn." },
-                    { id: "stable" as const, label: "Sustainable", icon: Target, color: "blue", desc: "Balanced growth with controlled burn rate." },
-                    { id: "profitability" as const, label: "Efficiency First", icon: ShieldCheck, color: "green", desc: "Prioritize runway & unit economics." },
+                    { id: "growth" as const, label: "Aggressive Growth", icon: Zap, color: "orange", desc: "Maximize MoM revenue scaling.", impact: "Higher burn, +20% MRR target." },
+                    { id: "stable" as const, label: "Sustainable", icon: Target, color: "blue", desc: "Balanced growth and burn.", impact: "Cash flow neutral focus." },
+                    { id: "profitability" as const, label: "Efficiency First", icon: ShieldCheck, color: "green", desc: "Prioritize runway & unit econ.", impact: "Max. runway, LTV/CAC > 3x." },
                   ].map(opt => (
                     <button
                       key={opt.id}
                       onClick={() => setStrategicGoal(opt.id)}
                       className={`p-4 rounded-xl border-2 text-left transition-all ${strategicGoal === opt.id
-                        ? `border-${opt.color}-500 bg-${opt.color}-50 ring-2 ring-${opt.color}-500 ring-offset-1 shadow-md`
+                        ? `border-${opt.color}-500 bg-${opt.color}-50/50 ring-2 ring-${opt.color}-500/20 shadow-md`
                         : 'border-slate-100 bg-white hover:border-slate-200'
                         }`}
                     >
-                      <opt.icon className={`h-5 w-5 mb-2 ${strategicGoal === opt.id ? `text-${opt.color}-600` : 'text-slate-400'}`} />
+                      <div className="flex justify-between items-start mb-2">
+                        <opt.icon className={`h-5 w-5 ${strategicGoal === opt.id ? `text-${opt.color}-600` : 'text-slate-400'}`} />
+                        {strategicGoal === opt.id && <CheckCircle2 className={`h-4 w-4 text-${opt.color}-600`} />}
+                      </div>
                       <h5 className="font-bold text-sm text-slate-900">{opt.label}</h5>
-                      <p className="text-[11px] text-slate-500 mt-1">{opt.desc}</p>
+                      <p className="text-[11px] text-slate-500 mt-1 leading-tight">{opt.desc}</p>
+                      <div className={`mt-3 pt-2 border-t text-[9px] font-black uppercase ${strategicGoal === opt.id ? `text-${opt.color}-700 border-${opt.color}-200` : 'text-slate-400 border-slate-100'}`}>
+                        Impact: {opt.impact}
+                      </div>
                     </button>
                   ))}
                 </div>
+
+                {intelligenceEngine === "data-driven" && dataStatus?.insight?.strategicPlan && (
+                  <div className="p-4 bg-slate-900 text-white rounded-2xl space-y-3 shadow-xl">
+                    <div className="flex items-center gap-2">
+                      <Target className="h-4 w-4 text-indigo-400" />
+                      <h4 className="text-[11px] font-black uppercase tracking-widest text-slate-300">AI Strategic Roadmap</h4>
+                    </div>
+                    <div className="space-y-2">
+                      {dataStatus.insight.strategicPlan.map((item: string, i: number) => (
+                        <div key={i} className="flex items-start gap-2 group">
+                          <div className="mt-1 h-1.5 w-1.5 rounded-full bg-indigo-500 shrink-0 group-hover:scale-150 transition-transform" />
+                          <p className="text-[11px] text-slate-300 font-medium group-hover:text-white transition-colors">{item}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {/* Maturity & Governance */}
                 <div className="p-5 border-2 border-indigo-100 rounded-xl bg-indigo-50/10 space-y-4">
                   <h4 className="text-xs font-black text-indigo-700 uppercase tracking-widest flex items-center gap-2">

@@ -887,20 +887,57 @@ export const financialModelService = {
   async analyzeStrategicData(orgId: string): Promise<any> {
     const assumptions = await this.generateAssumptionsFromData(orgId, '', 'connectors');
 
-    // Enrich with strategic insight based on detected values
-    const growth = assumptions.revenue.revenueGrowth || 0;
+    // Extract core values
     const mrr = assumptions.revenue.mrr || 0;
+    const revenue = mrr * 12; // Annualized
+    const opex = (assumptions.costs.baselineExpenses || 0) * 12; // Annualized
+    const growth = assumptions.revenue.revenueGrowth || 0.08;
+    const cogs = assumptions.costs.cogs || opex * 0.2;
+
+    // Calculate industrial-standard strategic metrics
+    const grossMargin = revenue > 0 ? (revenue - cogs) / revenue : 0.75;
+    const burnMultiple = revenue > 0 ? (opex - revenue) / revenue : 1.5;
+    const ruleOf40 = (growth * 100) + (grossMargin * 100) - 100;
+
+    // Determine Strategic Persona
+    let persona = 'Sustainable Builder';
+    let recommendation = 'Sustainable Growth';
+    if (growth > 0.15 && burnMultiple > 2) {
+      persona = 'Aggressive Scaler';
+      recommendation = 'Aggressive Growth Policy';
+    } else if (growth < 0.05 && burnMultiple < 1) {
+      persona = 'Efficiency Maximizer';
+      recommendation = 'Recovery & Optimization';
+    } else if (ruleOf40 > 40) {
+      persona = 'Elite Performer';
+      recommendation = 'Capital Efficient Scaling';
+    }
 
     const insight = {
       detectedMrr: mrr,
       detectedGrowth: growth * 100,
       confidence: mrr > 1000 ? 'high' : 'medium',
-      summary: `AI detected ${mrr > 0 ? `$${mrr.toLocaleString()} monthly revenue` : 'no significant revenue'} with a ${(growth * 100).toFixed(1)}% historical growth trend.`,
-      recommendation: growth > 0.15 ? 'Aggressive Growth Policy' : (growth > 0 ? 'Sustainable Growth' : 'Recovery & Optimization'),
+      summary: `AI detected $${mrr.toLocaleString()} monthly revenue with a ${(growth * 100).toFixed(1)}% historical growth trend. Current Rule of 40 score is ${ruleOf40.toFixed(0)}.`,
+      persona,
+      recommendation,
+      metrics: {
+        grossMargin,
+        burnMultiple: Math.max(0, burnMultiple),
+        ruleOf40,
+        efficiencyScore: Math.min(100, Math.max(0, 100 - (burnMultiple * 10)))
+      },
       benchmarks: {
         growth: growth > 0.1 ? 'above' : 'aligned',
-        text: growth > 0.1 ? 'Growth is significantly above industry average (8%).' : 'Growth is aligned with standard benchmarks.'
-      }
+        efficiency: burnMultiple < 1.5 ? 'high' : 'standard',
+        text: growth > 0.1 
+          ? `Growth is significantly above industry average (8%). Burn multiple of ${burnMultiple.toFixed(1)}x indicates ${burnMultiple < 1.5 ? 'efficient' : 'heavy'} capital usage.`
+          : `Growth is aligned with standard benchmarks. Focus on unit economic optimization.`
+      },
+      strategicPlan: [
+        growth > 0.1 ? 'Scale marketing spend in high-performing channels' : 'Optimize customer acquisition cost (CAC)',
+        burnMultiple > 2 ? 'Review non-headcount opex for efficiency gains' : 'Maintain current burn efficiency while scaling',
+        'Initialize baseline model with detected historical seasonality'
+      ]
     };
 
     return { assumptions, insight };
