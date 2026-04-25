@@ -1053,7 +1053,9 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             """, (org_id,))
         
         transactions = cursor.fetchall()
-        logger.info(f"Found {len(transactions)} transactions")
+        logger.info(f"DIAGNOSTIC: Found {len(transactions)} total transactions for org {org_id}")
+        if len(transactions) > 0:
+            logger.info(f"DIAGNOSTIC: First tx: {transactions[0][0]}, Last tx: {transactions[-1][0]}")
         
         # Calculate baseline metrics from actual transactions
         baseline_monthly_revenue = {}
@@ -1239,6 +1241,12 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                     ledger_actuals[m_key]['ga'] += abs(tx_amount)
                     ledger_actuals[m_key]['opex'] += abs(tx_amount)
             ledger_actuals[m_key]['netIncome'] = ledger_actuals[m_key]['revenue'] - ledger_actuals[m_key]['expenses']
+        
+        logger.info(f"DIAGNOSTIC: ledger_actuals keys: {list(ledger_actuals.keys())}")
+        if '2026-04' in ledger_actuals:
+            logger.info(f"DIAGNOSTIC: 2026-04 actuals: {ledger_actuals['2026-04']}")
+        else:
+            logger.warning("DIAGNOSTIC: 2026-04 NOT FOUND in ledger_actuals")
 
         recent_transactions = baseline_transactions
         if len(recent_transactions) == 0 and len(transactions) > 0:
@@ -1513,6 +1521,9 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                 if 'opex' in overrides:
                     projected_opex = float(overrides['opex'])
                 logger.info(f"Month {month_key}: Applied manual overrides {overrides}")
+
+            if month_key == '2026-04':
+                logger.info(f"DIAGNOSTIC: month_key={month_key}, projected_revenue before max: {projected_revenue}, projected_opex: {projected_opex}")
 
             projected_revenue = max(0.0, float(projected_revenue or 0))
             
