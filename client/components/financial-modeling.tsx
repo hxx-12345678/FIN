@@ -459,28 +459,52 @@ export function FinancialModeling() {
               ? JSON.parse(latestRun.summaryJson)
               : latestRun.summaryJson
 
-            // Map summary.monthly or summary.statements.incomeStatement.monthly to financialData
+            // Map summary.monthly + summary.statements.incomeStatement.monthly → financialData
             const topLevelMonthly = summary.monthly || {}
             const statementMonthly = summary.statements?.incomeStatement?.monthly || {}
-            const allMonthKeys = Array.from(new Set([...Object.keys(topLevelMonthly), ...Object.keys(statementMonthly)]))
+            const allMonthKeys = Array.from(new Set([...Object.keys(topLevelMonthly), ...Object.keys(statementMonthly)])) as string[]
 
             if (allMonthKeys.length > 0) {
               const mappedData = allMonthKeys.map(monthKey => {
-                const monthData = {
-                  ...(topLevelMonthly[monthKey] || {}),
-                  ...(statementMonthly[monthKey] || {})
-                }
+                // Merge: statement data wins over top-level for detail fields
+                const base = topLevelMonthly[monthKey] || {}
+                const stmt = statementMonthly[monthKey] || {}
+                const monthData = { ...base, ...stmt }
+                // Revenue: use nullish coalescing so explicit 0 is preserved
+                const revenue = monthData.revenue ?? monthData.totalRevenue ?? monthData.sales ?? 0
+                const cogs = monthData.cogs ?? monthData.totalCogs ?? (revenue * 0.15)
+                const grossProfit = monthData.grossProfit ?? monthData.totalGrossProfit ?? (revenue - cogs)
+                const grossMargin = revenue > 0 ? grossProfit / revenue : 0
+                const operatingExpenses = monthData.operatingExpenses ?? monthData.opex ?? monthData.expenses ?? 0
+                const ebitda = monthData.ebitda ?? (grossProfit - operatingExpenses)
+                const depreciation = monthData.depreciation ?? 0
+                const ebit = monthData.ebit ?? (ebitda - depreciation)
+                const interestExpense = monthData.interestExpense ?? 0
+                const incomeTax = monthData.incomeTax ?? 0
+                const netIncome = monthData.netIncome ?? monthData.ebt ?? (ebit - interestExpense - incomeTax)
+                const cashBalance = monthData.cashBalance ?? monthData.endingCash ?? monthData.cash ?? monthData.cashFlow ?? 0
                 return {
-                  month: monthKey,
-                  monthKey: monthKey,
-                  revenue: monthData.revenue !== undefined && monthData.revenue !== 0 ? monthData.revenue : (monthData.totalRevenue || monthData.sales || 0),
-                  cogs: monthData.cogs !== undefined ? monthData.cogs : (monthData.totalCogs || 0),
-                  grossProfit: monthData.grossProfit !== undefined ? monthData.grossProfit : (monthData.totalGrossProfit || 0),
-                  opex: monthData.opex || monthData.operatingExpenses || monthData.totalExpenses || 0,
-                  netIncome: monthData.netIncome !== undefined ? monthData.netIncome : (monthData.ebt ? monthData.ebt * 0.75 : 0), // Basic tax inference if missing
-                  cashFlow: monthData.cashFlow || monthData.cashBalance || monthData.cash || 0,
+                  month: new Date(monthKey + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+                  monthKey,
+                  revenue,
+                  cogs,
+                  grossProfit,
+                  grossMargin,
+                  opex: operatingExpenses,
+                  operatingExpenses,
+                  ebitda,
+                  ebit,
+                  depreciation,
+                  interestExpense,
+                  incomeTax,
+                  netIncome,
+                  cashFlow: cashBalance,
+                  cashBalance,
+                  burnRate: monthData.burnRate ?? 0,
+                  runwayMonths: monthData.runwayMonths ?? 0,
+                  confidence: monthData.confidence ?? 95,
                 }
-              }).sort((a, b) => a.month.localeCompare(b.month))
+              }).sort((a, b) => a.monthKey.localeCompare(b.monthKey))
               setFinancialData(mappedData)
             }
           }
@@ -1897,43 +1921,70 @@ export function FinancialModeling() {
             <Card className="border shadow-sm">
               <CardHeader className="bg-slate-50/50 border-b pb-4">
                 <CardTitle className="text-lg">Profit & Loss Summary</CardTitle>
-                <CardDescription>Consolidated performance with provenance</CardDescription>
+                <CardDescription>Click any cell to view data provenance & audit trail</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="table-container-premium !border-0 !shadow-none">
+                <div className="table-container-premium !border-0 !shadow-none overflow-x-auto">
                   <Table>
                     <TableHeader className="bg-slate-50">
                       <TableRow>
-                        <TableHead className="w-[120px] font-bold">Month</TableHead>
-                        <TableHead className="text-right font-bold">Revenue</TableHead>
-                        <TableHead className="text-right font-bold">COGS</TableHead>
-                        <TableHead className="text-right font-bold">Gross Profit</TableHead>
-                        <TableHead className="text-right font-bold">Net Income</TableHead>
+                        <TableHead className="w-[90px] font-bold text-xs">Month</TableHead>
+                        <TableHead className="text-right font-bold text-xs">Revenue</TableHead>
+                        <TableHead className="text-right font-bold text-xs">COGS</TableHead>
+                        <TableHead className="text-right font-bold text-xs">Gross Profit</TableHead>
+                        <TableHead className="text-right font-bold text-xs">OpEx</TableHead>
+                        <TableHead className="text-right font-bold text-xs">EBITDA</TableHead>
+                        <TableHead className="text-right font-bold text-xs">Net Income</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {financialData.length > 0 ? (
                         financialData.map((row) => (
-                          <TableRow key={row.month} className="hover:bg-slate-50/50 cursor-pointer">
-                            <TableCell className="font-medium text-slate-700">{row.month}</TableCell>
-                            <TableCell className="text-right font-mono" onClick={() => handleCellClick("revenue", "Revenue", formatCurrency(row.revenue), row.monthKey)}>
+                          <TableRow key={row.monthKey} className="hover:bg-slate-50/50 cursor-pointer text-xs">
+                            <TableCell className="font-semibold text-slate-700 text-xs py-2">{row.month}</TableCell>
+                            <TableCell
+                              className="text-right font-mono text-emerald-700 cursor-pointer hover:bg-emerald-50 transition-colors py-2"
+                              onClick={() => handleCellClick("revenue", "Revenue", formatCurrency(row.revenue), row.monthKey)}
+                            >
                               {formatCurrency(row.revenue)}
                             </TableCell>
-                            <TableCell className="text-right font-mono" onClick={() => handleCellClick("cogs", "COGS", formatCurrency(row.cogs), row.monthKey)}>
+                            <TableCell
+                              className="text-right font-mono text-slate-600 cursor-pointer hover:bg-slate-50 transition-colors py-2"
+                              onClick={() => handleCellClick("cogs", "COGS", formatCurrency(row.cogs), row.monthKey)}
+                            >
                               {formatCurrency(row.cogs)}
                             </TableCell>
-                            <TableCell className="text-right font-mono font-bold text-slate-900" onClick={() => handleCellClick("grossProfit", "Gross Profit", formatCurrency(row.grossProfit), row.monthKey)}>
+                            <TableCell
+                              className={`text-right font-mono font-bold cursor-pointer hover:bg-slate-50 transition-colors py-2 ${(row.grossProfit ?? 0) >= 0 ? 'text-slate-900' : 'text-red-600'}`}
+                              onClick={() => handleCellClick("grossProfit", "Gross Profit", formatCurrency(row.grossProfit), row.monthKey)}
+                            >
                               {formatCurrency(row.grossProfit)}
                             </TableCell>
-                            <TableCell className="text-right font-mono font-bold text-blue-600" onClick={() => handleCellClick("netIncome", "Net Income", formatCurrency(row.netIncome), row.monthKey)}>
+                            <TableCell
+                              className="text-right font-mono text-slate-500 cursor-pointer hover:bg-slate-50 transition-colors py-2"
+                              onClick={() => handleCellClick("expenses", "Operating Expenses", formatCurrency(row.opex), row.monthKey)}
+                            >
+                              {formatCurrency(row.opex)}
+                            </TableCell>
+                            <TableCell
+                              className={`text-right font-mono font-bold cursor-pointer hover:bg-slate-50 transition-colors py-2 ${(row.ebitda ?? 0) >= 0 ? 'text-indigo-700' : 'text-red-600'}`}
+                              onClick={() => handleCellClick("ebitda", "EBITDA", formatCurrency(row.ebitda), row.monthKey)}
+                            >
+                              {formatCurrency(row.ebitda)}
+                            </TableCell>
+                            <TableCell
+                              className={`text-right font-mono font-bold cursor-pointer hover:bg-slate-50 transition-colors py-2 ${(row.netIncome ?? 0) >= 0 ? 'text-blue-600' : 'text-red-600'}`}
+                              onClick={() => handleCellClick("netIncome", "Net Income", formatCurrency(row.netIncome), row.monthKey)}
+                            >
                               {formatCurrency(row.netIncome)}
                             </TableCell>
                           </TableRow>
                         ))
                       ) : (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center py-20 text-slate-400">
+                          <TableCell colSpan={7} className="text-center py-20 text-slate-400">
                             No financial data available for the current model run.
+
                           </TableCell>
                         </TableRow>
                       )}

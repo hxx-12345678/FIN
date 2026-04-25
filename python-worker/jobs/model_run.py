@@ -1362,16 +1362,29 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             expense_growth = float(final_assumptions.get('expenseGrowth', 0.05))
         
         params_json = params_json or {}
-        # Priority: params_json > model_json metadata > default 'prophet'
+        # Priority: model_json metadata > params_json > default '3-statement'
+        # The model definition is the source of truth — not cached/stale run params
         model_type = str(
-            params_json.get('modelType') or 
-            params_json.get('model_type') or 
-            model_json.get('metadata', {}).get('modelType') or 
-            model_json.get('metadata', {}).get('model_type') or 
-            'prophet'
+            model_json.get('metadata', {}).get('modelType') or
+            model_json.get('metadata', {}).get('model_type') or
+            params_json.get('modelType') or
+            params_json.get('model_type') or
+            '3-statement'
         ).lower()
-        model_profile = MODEL_TYPE_PROFILES.get(model_type, MODEL_TYPE_PROFILES['prophet'])
-        horizon_raw = params_json.get('horizon') or params_json.get('forecast_horizon') or params_json.get('forecastMonths')
+        # Normalize legacy aliases
+        if model_type == 'prophet' or model_type == 'arima' or model_type == 'neural':
+            # These are algorithm types, not model types; default to 3-statement
+            # unless explicitly a different financial model type
+            pass  # keep the model_profile lookup which handles these
+        
+        model_profile = MODEL_TYPE_PROFILES.get(model_type, MODEL_TYPE_PROFILES['3-statement'])
+        logger.info(f"Using model type: {model_type}, profile confidence: {model_profile['confidence']}")
+        
+        # Forecast horizon: model metadata > params_json > default 12
+        duration_str = str(model_json.get('metadata', {}).get('duration') or '')
+        horizon_raw = (
+            int(duration_str) if duration_str.isdigit() else None
+        ) or params_json.get('horizon') or params_json.get('forecast_horizon') or params_json.get('forecastMonths')
         forecast_months = None
         if isinstance(horizon_raw, str):
             forecast_months = HORIZON_TO_MONTHS.get(horizon_raw.lower())
@@ -1380,9 +1393,11 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
         if not forecast_months:
             forecast_months = 12
         forecast_months = max(3, min(36, forecast_months))
+        logger.info(f"Forecast horizon: {forecast_months} months")
 
         revenue_growth *= model_profile['trend_multiplier']
         expense_growth *= model_profile['expense_multiplier']
+
         
         # STEP 2: Generate forward projections
         monthly_data = {}
