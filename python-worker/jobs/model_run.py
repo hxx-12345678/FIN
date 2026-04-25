@@ -595,8 +595,8 @@ def handle_model_run(job_id: str, org_id: str, object_id: str, logs: dict):
                                     })
                         
                         # Expenses provenance
-                        if 'expenses' in month_data:
-                            expense_value = month_data['expenses']
+                        if 'expenses' in month_data or 'operatingExpenses' in month_data:
+                            expense_value = month_data.get('expenses') or month_data.get('operatingExpenses')
                             if expense_value > 0:
                                 if transaction_ids:
                                     expense_txn_ids = [tid for tid, row in zip(transaction_ids, transaction_rows) 
