@@ -285,7 +285,8 @@ def generate_summary_json(result: Dict[str, Any], model_json: Dict, params_json:
                 'dataIngestedAt': datetime.now(timezone.utc).isoformat(),
                 'source': 'ai-modeler',
                 'completeness': 1.0,
-                'verified': True
+                'verified': True,
+                'code_version': 'Harden-v2-Audit-Final'
             },
             'modelType': params_json.get('modelType', result.get('modelType', 'baseline')),
             'forecastMonths': statements.get('metadata', {}).get('horizonMonths') or result.get('forecastMonths', 12),
