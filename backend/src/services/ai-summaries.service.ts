@@ -159,6 +159,12 @@ async function fetchFinancialData(request: SummaryRequest): Promise<any> {
     metrics.burnRate = Number(summary.burnRate || 0);
     metrics.runwayMonths = Number(summary.runwayMonths || 0);
     metrics.cashFlow = Number(summary.cashFlow || 0);
+    // SaaS Metrics
+    metrics.ltv = Number(summary.ltv || 0);
+    metrics.cac = Number(summary.cac || 0);
+    metrics.nrr = Number(summary.nrr || 0);
+    metrics.grr = Number(summary.grr || 0);
+    metrics.ruleOf40 = Number(summary.ruleOf40 || 0);
   }
 
   if (reportType === 'balance_sheet') {
@@ -219,6 +225,17 @@ function buildSummaryPrompt(reportType: string, financialData: any): string {
   }
   if (metrics.runwayMonths !== undefined) {
     prompt += `Runway: ${metrics.runwayMonths.toFixed(1)} months\n`;
+  }
+  if (metrics.ltv > 0) {
+    prompt += `Customer LTV: $${metrics.ltv.toLocaleString()}\n`;
+    prompt += `Customer CAC: $${metrics.cac.toLocaleString()}\n`;
+    prompt += `LTV/CAC Ratio: ${(metrics.ltv / (metrics.cac || 1)).toFixed(2)}x\n`;
+  }
+  if (metrics.nrr > 0) {
+    prompt += `NRR: ${metrics.nrr}%, GRR: ${metrics.grr}%\n`;
+  }
+  if (metrics.ruleOf40 !== undefined) {
+    prompt += `Rule of 40: ${metrics.ruleOf40.toFixed(1)}%\n`;
   }
 
   // Add trend analysis if monthly data available

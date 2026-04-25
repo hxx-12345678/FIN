@@ -422,12 +422,24 @@ class ThreeStatementEngine:
                     'totalEquity': round(total_equity, 2)
                 },
                 'balanceCheck': round(total_assets - (total_liabilities + total_equity), 2),
-                # Legacy flat structure for backward compatibility
+                # Legacy flat structure for backward compatibility with ThreeStatementViewer
                 'cash': round(running_cash, 2),
+                'accountsReceivable': round(running_ar, 2),
+                'inventory': round(running_inventory, 2),
+                'currentAssets': round(current_assets, 2),
+                'ppe': round(running_ppe, 2),
+                'accumulatedDepreciation': round(accumulated_depreciation, 2),
+                'fixedAssets': round(fixed_assets, 2),
                 'totalAssets': round(total_assets, 2),
+                'accountsPayable': round(running_ap, 2),
+                'currentLiabilities': round(current_liabilities, 2),
+                'longTermDebt': round(running_debt, 2),
                 'totalLiabilities': round(total_liabilities, 2),
+                'commonStock': round(running_equity, 2),
+                'retainedEarnings': round(running_retained_earnings, 2),
                 'totalEquity': round(total_equity, 2)
             }
+
 
 
         
