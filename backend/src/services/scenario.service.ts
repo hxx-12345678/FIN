@@ -353,7 +353,7 @@ export const scenarioService = {
     }
 
     // Get all scenario runs
-    const scenarios = await prisma.modelRun.findMany({
+    const allRuns = await prisma.modelRun.findMany({
       where: {
         modelId,
         orgId,
@@ -369,6 +369,19 @@ export const scenarioService = {
         createdAt: true,
         finishedAt: true,
       },
+    });
+
+    // Filter logic: Keep ONLY the latest baseline run, and ALL scenario runs
+    let baselineFound = false;
+    const scenarios = allRuns.filter(run => {
+      if (run.runType === 'baseline') {
+        if (!baselineFound) {
+          baselineFound = true;
+          return true;
+        }
+        return false;
+      }
+      return true;
     });
 
     // Get base model info
