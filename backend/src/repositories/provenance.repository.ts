@@ -81,7 +81,7 @@ export const provenanceRepository = {
     const results = await prisma.$queryRaw<ProvenanceEntryWithRelations[]>`
       SELECT DISTINCT pe.*
       FROM provenance_entries pe
-      LEFT JOIN prompts p ON pe."prompt_id" = p.id
+      LEFT JOIN prompts p ON pe."promptId" = p.id
       WHERE pe."org_id" = ${orgId}::uuid
         AND (
           pe."source_ref"::text ILIKE ${`%${query}%`}
