@@ -567,7 +567,10 @@ def handle_model_run(job_id: str, org_id: str, object_id: str, logs: dict):
                             revenue_value = month_data['revenue']
                             if transaction_ids and revenue_value > 0:
                                 revenue_txn_ids = [tid for tid, row in zip(transaction_ids, transaction_rows) 
-                                                  if float(row[2]) > 0][:10]
+                                                  if float(row[2]) > 0 and 
+                                                  # MATCH YEAR AND MONTH
+                                                  datetime.strptime(str(row[1]), '%Y-%m-%d').year == year and
+                                                  datetime.strptime(str(row[1]), '%Y-%m-%d').month == month][:10]
                                 provenance_entries.append({
                                     'cell_key': create_cell_key(year, month, 'revenue'),
                                     'source_type': 'txn',
@@ -625,7 +628,10 @@ def handle_model_run(job_id: str, org_id: str, object_id: str, logs: dict):
                             expense_value = month_data.get('expenses') or month_data.get('operatingExpenses', 0)
                             if transaction_ids and expense_value > 0:
                                 expense_txn_ids = [tid for tid, row in zip(transaction_ids, transaction_rows) 
-                                                  if float(row[2]) < 0][:10]
+                                                  if float(row[2]) < 0 and 
+                                                  # MATCH YEAR AND MONTH
+                                                  datetime.strptime(str(row[1]), '%Y-%m-%d').year == year and
+                                                  datetime.strptime(str(row[1]), '%Y-%m-%d').month == month][:10]
                                 provenance_entries.append({
                                     'cell_key': create_cell_key(year, month, 'expenses'),
                                     'source_type': 'txn',
@@ -1053,9 +1059,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             """, (org_id,))
         
         transactions = cursor.fetchall()
-        logger.info(f"DIAGNOSTIC: Found {len(transactions)} total transactions for org {org_id}")
-        if len(transactions) > 0:
-            logger.info(f"DIAGNOSTIC: First tx: {transactions[0][0]}, Last tx: {transactions[-1][0]}")
+        logger.info(f"Found {len(transactions)} transactions for org {org_id}")
         
         # Calculate baseline metrics from actual transactions
         baseline_monthly_revenue = {}
@@ -1242,11 +1246,9 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                     ledger_actuals[m_key]['opex'] += abs(tx_amount)
             ledger_actuals[m_key]['netIncome'] = ledger_actuals[m_key]['revenue'] - ledger_actuals[m_key]['expenses']
         
-        logger.info(f"DIAGNOSTIC: ledger_actuals keys: {list(ledger_actuals.keys())}")
-        if '2026-04' in ledger_actuals:
-            logger.info(f"DIAGNOSTIC: 2026-04 actuals: {ledger_actuals['2026-04']}")
-        else:
-            logger.warning("DIAGNOSTIC: 2026-04 NOT FOUND in ledger_actuals")
+        # Log available actuals for debugging
+        if start_month_str in ledger_actuals:
+            logger.info(f"Baseline month {start_month_str} actuals found: Rev={ledger_actuals[start_month_str]['revenue']:.2f}, Exp={ledger_actuals[start_month_str]['expenses']:.2f}")
 
         recent_transactions = baseline_transactions
         if len(recent_transactions) == 0 and len(transactions) > 0:
@@ -1487,27 +1489,33 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             
             if driver_results:
                 # Find drivers by name/type
+                # CRITICAL: Only use drivers if they are ABSOLUTE values, not growth rates
                 for d_id, m_data in driver_results.items():
                     d_meta = engine.drivers_meta.get(d_id, {})
                     d_name = d_meta.get('name', '').lower()
-                    if d_name == 'revenue' or d_meta.get('type') == 'revenue':
+                    d_type = d_meta.get('type', '').lower()
+                    
+                    # Skip growth rates/percentages - they should not be used as absolute values
+                    if any(k in d_name for k in ['growth', 'rate', 'churn', 'percentage', 'multiplier', '%']):
+                        continue
+
+                    if d_name == 'revenue' or (d_type == 'revenue' and d_name == 'revenue'):
                         projected_revenue = m_data.get(month_key)
-                    elif d_name == 'cogs' or 'cogs' in d_name:
+                    elif d_name == 'cogs' or (d_type == 'cost' and d_name == 'cogs'):
                         projected_cogs = m_data.get(month_key)
-                    elif d_name == 'opex' or 'operating expenses' in d_name or d_meta.get('type') == 'cost':
+                    elif d_name in ['opex', 'operating expenses', 'expenses'] or (d_type == 'cost' and d_name == 'expenses'):
                         if projected_opex is None: projected_opex = 0
-                        projected_opex += m_data.get(month_key, 0)
+                        projected_opex += float(m_data.get(month_key, 0))
 
             # Fallback to deterministic logic if driver not found
-            if projected_revenue is None:
-                # CHECK FOR ACTUALS IN LEDGER - This is crucial for verifying accuracy
-                if month_key in ledger_actuals:
-                    projected_revenue = ledger_actuals[month_key]['revenue']
-                    projected_cogs = ledger_actuals[month_key]['cogs']
-                    projected_opex = ledger_actuals[month_key]['opex']
-                    logger.debug(f"Month {month_key}: Using ledger actuals for revenue/expenses")
-                else:
-                    # DETERMINISM FIX: ALL run types now use clean, deterministic growth
+            # CRITICAL: If actuals exist for this month, they ALWAYS override drivers (Institutional Ground Truth)
+            if month_key in ledger_actuals:
+                projected_revenue = ledger_actuals[month_key]['revenue']
+                projected_cogs = ledger_actuals[month_key]['cogs']
+                projected_opex = ledger_actuals[month_key]['opex']
+                logger.info(f"Month {month_key}: Using ledger actuals (Institutional Ground Truth)")
+            elif projected_revenue is None:
+                # DETERMINISM FIX: ALL run types now use clean, deterministic growth
                     growth_multiplier = max(0.01, (1 + revenue_growth) ** i)
                     projected_revenue = starting_revenue * growth_multiplier
             
@@ -1521,9 +1529,6 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                 if 'opex' in overrides:
                     projected_opex = float(overrides['opex'])
                 logger.info(f"Month {month_key}: Applied manual overrides {overrides}")
-
-            if month_key == '2026-04':
-                logger.info(f"DIAGNOSTIC: month_key={month_key}, projected_revenue before max: {projected_revenue}, projected_opex: {projected_opex}")
 
             projected_revenue = max(0.0, float(projected_revenue or 0))
             
