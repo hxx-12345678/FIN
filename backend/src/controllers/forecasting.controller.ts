@@ -22,13 +22,20 @@ export const forecastingController = {
             const history = await forecastingService.getHistoricalMetricData(orgId, modelId, metricName);
 
             // 2. Run enterprise forecast (includes regime detection, sensitivity, etc)
-            const result = await forecastingService.generateEnterpriseForecast(orgId, modelId, {
-                metricName,
-                steps: steps || 12,
-                // Add default placeholders for drivers if needed, or pass from body
-                drivers: req.body.drivers || {},
-                assumptions: req.body.assumptions || {}
-            });
+            const result = method && method !== 'auto'
+                ? await forecastingService.generateForecast(orgId, modelId, {
+                    metricName,
+                    steps: steps || 12,
+                    method,
+                    runId
+                })
+                : await forecastingService.generateEnterpriseForecast(orgId, modelId, {
+                    metricName,
+                    steps: steps || 12,
+                    drivers: req.body.drivers || {},
+                    assumptions: req.body.assumptions || {},
+                    runId // Pass runId to enterprise too
+                });
 
             let metrics = null;
             if (result.backtest && result.backtest.best_method) {

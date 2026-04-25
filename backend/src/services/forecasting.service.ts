@@ -83,9 +83,10 @@ export const forecastingService = {
         drivers?: Record<string, any>;
         assumptions?: Record<string, number>;
         industryBenchmarks?: Record<string, number[]>;
+        runId?: string;
     }) => {
         try {
-            const history = await forecastingService.getHistoricalMetricData(orgId, modelId, params.metricName);
+            const history = await forecastingService.getHistoricalMetricData(orgId, modelId, params.metricName, params.runId);
 
             if (history.length === 0) {
                 return { error: 'Insufficient historical data' };
@@ -133,29 +134,32 @@ export const forecastingService = {
         try {
             // First try: Fetch from MetricCube (our multi-dimensional store)
             let cubeData: number[] = [];
-            try {
-                const entries = await (prisma as any).metricCube.findMany({
-                    where: {
-                        orgId,
-                        modelId,
-                        metricName
-                    },
-                    orderBy: {
-                        month: 'asc'
-                    }
-                });
+            // If runId is provided, we prefer model run data over cube because cube is shared
+            if (!runId) {
+                try {
+                    const entries = await (prisma as any).metricCube.findMany({
+                        where: {
+                            orgId,
+                            modelId,
+                            metricName
+                        },
+                        orderBy: {
+                            month: 'asc'
+                        }
+                    });
 
-                // Group by month and sum values (if multi-dimensional)
-                const monthlyData: Record<string, number> = {};
-                entries.forEach((e: any) => {
-                    monthlyData[e.month] = (monthlyData[e.month] || 0) + Number(e.value);
-                });
+                    // Group by month and sum values (if multi-dimensional)
+                    const monthlyData: Record<string, number> = {};
+                    entries.forEach((e: any) => {
+                        monthlyData[e.month] = (monthlyData[e.month] || 0) + Number(e.value);
+                    });
 
-                cubeData = Object.entries(monthlyData)
-                    .sort(([a], [b]) => a.localeCompare(b))
-                    .map(([_, val]) => val);
-            } catch (cubeError: any) {
-                console.warn('MetricCube lookup failed (table may not exist):', cubeError.message);
+                    cubeData = Object.entries(monthlyData)
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .map(([_, val]) => val);
+                } catch (cubeError: any) {
+                    console.warn('MetricCube lookup failed (table may not exist):', cubeError.message);
+                }
             }
 
             if (cubeData.length > 0) {
