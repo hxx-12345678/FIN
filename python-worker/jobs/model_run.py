@@ -562,148 +562,240 @@ def handle_model_run(job_id: str, org_id: str, object_id: str, logs: dict):
                     try:
                         year, month = map(int, month_key.split('-'))
                         
-                        # Revenue provenance
+                        # ── Revenue provenance ──────────────────────────────────
                         if 'revenue' in month_data:
                             revenue_value = month_data['revenue']
-                            if revenue_value > 0:
-                                # Link to transactions if available
-                                if transaction_ids:
-                                    # Find transactions that contributed to revenue
-                                    revenue_txn_ids = [tid for tid, row in zip(transaction_ids, transaction_rows) 
-                                                      if float(row[2]) > 0][:10]  # Top 10 revenue transactions
-                                    provenance_entries.append({
-                                        'cell_key': create_cell_key(year, month, 'revenue'),
-                                        'source_type': 'txn',
-                                        'source_ref': {
-                                            'transaction_ids': revenue_txn_ids,
-                                            'count': len(revenue_txn_ids),
-                                            'total_amount': revenue_value,
-                                        },
-                                        'confidence_score': 0.9 if revenue_txn_ids else 0.7,
-                                    })
-                                else:
-                                    # No transactions, link to assumption
-                                    provenance_entries.append({
-                                        'cell_key': create_cell_key(year, month, 'revenue'),
-                                        'source_type': 'assumption',
-                                        'source_ref': {
-                                            'assumption_id': 'baselineRevenue',
-                                            'value': assumptions.get('revenue', {}).get('baselineRevenue', 0),
-                                            'growth_rate': assumptions.get('revenue', {}).get('revenueGrowth', 0),
-                                        },
-                                        'confidence_score': 0.8,
-                                    })
+                            if transaction_ids and revenue_value > 0:
+                                revenue_txn_ids = [tid for tid, row in zip(transaction_ids, transaction_rows) 
+                                                  if float(row[2]) > 0][:10]
+                                provenance_entries.append({
+                                    'cell_key': create_cell_key(year, month, 'revenue'),
+                                    'source_type': 'txn',
+                                    'source_ref': {
+                                        'transaction_ids': revenue_txn_ids,
+                                        'count': len(revenue_txn_ids),
+                                        'total_amount': revenue_value,
+                                    },
+                                    'confidence_score': 0.9 if revenue_txn_ids else 0.7,
+                                })
+                            else:
+                                provenance_entries.append({
+                                    'cell_key': create_cell_key(year, month, 'revenue'),
+                                    'source_type': 'assumption',
+                                    'source_ref': {
+                                        'assumption_id': 'baselineRevenue',
+                                        'value': revenue_value,
+                                        'baseline': assumptions.get('revenue', {}).get('baselineRevenue', 0),
+                                        'growth_rate': assumptions.get('revenue', {}).get('revenueGrowth', 0),
+                                    },
+                                    'confidence_score': 0.8,
+                                })
                         
-                        # Expenses provenance
+                        # ── COGS provenance ─────────────────────────────────────
+                        if 'cogs' in month_data:
+                            cogs_value = month_data['cogs']
+                            provenance_entries.append({
+                                'cell_key': create_cell_key(year, month, 'cogs'),
+                                'source_type': 'assumption',
+                                'source_ref': {
+                                    'assumption_id': 'cogsPercentage',
+                                    'value': cogs_value,
+                                    'cogs_ratio': assumptions.get('costs', {}).get('cogsRatio', 0),
+                                    'calculated_from': ['revenue'],
+                                    'formula': 'cogs = revenue * cogsRatio',
+                                },
+                                'confidence_score': 0.8,
+                            })
+                        
+                        # ── Gross Profit provenance ─────────────────────────────
+                        if 'grossProfit' in month_data:
+                            provenance_entries.append({
+                                'cell_key': create_cell_key(year, month, 'grossProfit'),
+                                'source_type': 'assumption',
+                                'source_ref': {
+                                    'value': month_data['grossProfit'],
+                                    'calculated_from': ['revenue', 'cogs'],
+                                    'formula': 'grossProfit = revenue - cogs',
+                                },
+                                'confidence_score': 0.95,
+                            })
+                        
+                        # ── Operating Expenses / Expenses provenance ────────────
                         if 'expenses' in month_data or 'operatingExpenses' in month_data:
-                            expense_value = month_data.get('expenses') or month_data.get('operatingExpenses')
-                            if expense_value > 0:
-                                if transaction_ids:
-                                    expense_txn_ids = [tid for tid, row in zip(transaction_ids, transaction_rows) 
-                                                      if float(row[2]) < 0][:10]  # Top 10 expense transactions
-                                    provenance_entries.append({
-                                        'cell_key': create_cell_key(year, month, 'expenses'),
-                                        'source_type': 'txn',
-                                        'source_ref': {
-                                            'transaction_ids': expense_txn_ids,
-                                            'count': len(expense_txn_ids),
-                                            'total_amount': expense_value,
-                                        },
-                                        'confidence_score': 0.9 if expense_txn_ids else 0.7,
-                                    })
-                                else:
-                                    provenance_entries.append({
-                                        'cell_key': create_cell_key(year, month, 'expenses'),
-                                        'source_type': 'assumption',
-                                        'source_ref': {
-                                            'assumption_id': 'baselineExpenses',
-                                            'value': assumptions.get('costs', {}).get('baselineExpenses', 0),
-                                            'growth_rate': assumptions.get('costs', {}).get('expenseGrowth', 0),
-                                        },
-                                        'confidence_score': 0.8,
-                                    })
+                            expense_value = month_data.get('expenses') or month_data.get('operatingExpenses', 0)
+                            if transaction_ids and expense_value > 0:
+                                expense_txn_ids = [tid for tid, row in zip(transaction_ids, transaction_rows) 
+                                                  if float(row[2]) < 0][:10]
+                                provenance_entries.append({
+                                    'cell_key': create_cell_key(year, month, 'expenses'),
+                                    'source_type': 'txn',
+                                    'source_ref': {
+                                        'transaction_ids': expense_txn_ids,
+                                        'count': len(expense_txn_ids),
+                                        'total_amount': expense_value,
+                                    },
+                                    'confidence_score': 0.9 if expense_txn_ids else 0.7,
+                                })
+                            else:
+                                provenance_entries.append({
+                                    'cell_key': create_cell_key(year, month, 'expenses'),
+                                    'source_type': 'assumption',
+                                    'source_ref': {
+                                        'assumption_id': 'baselineExpenses',
+                                        'value': expense_value,
+                                        'baseline': assumptions.get('costs', {}).get('baselineExpenses', 0),
+                                        'growth_rate': assumptions.get('costs', {}).get('expenseGrowth', 0),
+                                    },
+                                    'confidence_score': 0.8,
+                                })
                         
-                        # Cash balance provenance
-                        if 'cashBalance' in month_data:
+                        # ── Depreciation provenance ─────────────────────────────
+                        if 'depreciation' in month_data:
+                            provenance_entries.append({
+                                'cell_key': create_cell_key(year, month, 'depreciation'),
+                                'source_type': 'assumption',
+                                'source_ref': {
+                                    'value': month_data['depreciation'],
+                                    'calculated_from': ['capex', 'useful_life'],
+                                    'formula': 'depreciation = capex / useful_life',
+                                },
+                                'confidence_score': 0.85,
+                            })
+                        
+                        # ── EBITDA provenance ───────────────────────────────────
+                        if 'ebitda' in month_data:
+                            provenance_entries.append({
+                                'cell_key': create_cell_key(year, month, 'ebitda'),
+                                'source_type': 'assumption',
+                                'source_ref': {
+                                    'value': month_data['ebitda'],
+                                    'calculated_from': ['grossProfit', 'operatingExpenses'],
+                                    'formula': 'ebitda = grossProfit - operatingExpenses',
+                                },
+                                'confidence_score': 0.95,
+                            })
+                        
+                        # ── EBIT provenance ─────────────────────────────────────
+                        if 'ebit' in month_data:
+                            provenance_entries.append({
+                                'cell_key': create_cell_key(year, month, 'ebit'),
+                                'source_type': 'assumption',
+                                'source_ref': {
+                                    'value': month_data['ebit'],
+                                    'calculated_from': ['ebitda', 'depreciation'],
+                                    'formula': 'ebit = ebitda - depreciation',
+                                },
+                                'confidence_score': 0.95,
+                            })
+                        
+                        # ── Interest Expense provenance ─────────────────────────
+                        if 'interestExpense' in month_data:
+                            provenance_entries.append({
+                                'cell_key': create_cell_key(year, month, 'interestExpense'),
+                                'source_type': 'assumption',
+                                'source_ref': {
+                                    'value': month_data['interestExpense'],
+                                    'calculated_from': ['debt', 'interest_rate'],
+                                    'formula': 'interestExpense = debt * rate / 12',
+                                },
+                                'confidence_score': 0.85,
+                            })
+                        
+                        # ── Income Tax provenance ───────────────────────────────
+                        if 'incomeTax' in month_data:
+                            provenance_entries.append({
+                                'cell_key': create_cell_key(year, month, 'incomeTax'),
+                                'source_type': 'assumption',
+                                'source_ref': {
+                                    'value': month_data['incomeTax'],
+                                    'calculated_from': ['ebt', 'tax_rate'],
+                                    'formula': 'incomeTax = max(0, ebt * taxRate)',
+                                },
+                                'confidence_score': 0.85,
+                            })
+                        
+                        # ── Net Income provenance ───────────────────────────────
+                        if 'netIncome' in month_data:
+                            provenance_entries.append({
+                                'cell_key': create_cell_key(year, month, 'netIncome'),
+                                'source_type': 'assumption',
+                                'source_ref': {
+                                    'value': month_data['netIncome'],
+                                    'calculated_from': ['revenue', 'cogs', 'operatingExpenses', 'depreciation', 'interestExpense', 'incomeTax'],
+                                    'formula': 'netIncome = revenue - cogs - opex - D&A - interest - tax',
+                                },
+                                'confidence_score': 0.95,
+                            })
+                        
+                        # ── Cash Balance provenance ─────────────────────────────
+                        if 'cashBalance' in month_data or 'endingCash' in month_data:
+                            cash_val = month_data.get('cashBalance') or month_data.get('endingCash', 0)
                             provenance_entries.append({
                                 'cell_key': create_cell_key(year, month, 'cashBalance'),
                                 'source_type': 'assumption',
                                 'source_ref': {
                                     'assumption_id': 'initialCash',
-                                    'value': assumptions.get('cash', {}).get('initialCash', 0),
+                                    'value': cash_val,
+                                    'initial_cash': assumptions.get('cash', {}).get('initialCash', 0),
                                     'calculated_from': ['revenue', 'expenses', 'netIncome'],
                                 },
                                 'confidence_score': 0.85,
                             })
                         
-                        # Burn rate provenance
+                        # ── Burn Rate provenance ────────────────────────────────
                         if 'burnRate' in month_data:
                             provenance_entries.append({
                                 'cell_key': create_cell_key(year, month, 'burnRate'),
                                 'source_type': 'assumption',
                                 'source_ref': {
+                                    'value': month_data['burnRate'],
                                     'calculated_from': ['expenses', 'revenue'],
                                     'formula': 'burnRate = expenses - revenue',
                                 },
                                 'confidence_score': 0.9,
                             })
                         
-                        # Runway provenance
+                        # ── Runway provenance ───────────────────────────────────
                         if 'runwayMonths' in month_data:
                             provenance_entries.append({
                                 'cell_key': create_cell_key(year, month, 'runwayMonths'),
                                 'source_type': 'assumption',
                                 'source_ref': {
+                                    'value': month_data['runwayMonths'],
                                     'calculated_from': ['cashBalance', 'burnRate'],
                                     'formula': 'runway = cashBalance / burnRate',
                                 },
                                 'confidence_score': 0.85,
                             })
                         
-                        # COGS provenance
-                        if 'cogs' in month_data:
-                            cogs_value = month_data['cogs']
-                            if cogs_value > 0:
-                                # COGS is typically calculated from revenue or is an assumption
+                        # ── Cash Flow Statement provenance ──────────────────────
+                        for cf_metric in ['operatingCashFlow', 'investingCashFlow', 'financingCashFlow', 'netCashFlow']:
+                            if cf_metric in month_data:
                                 provenance_entries.append({
-                                    'cell_key': create_cell_key(year, month, 'cogs'),
+                                    'cell_key': create_cell_key(year, month, cf_metric),
                                     'source_type': 'assumption',
                                     'source_ref': {
-                                        'assumption_id': 'cogsPercentage',
-                                        'value': cogs_value,
-                                        'calculated_from': ['revenue'],
-                                        'formula': 'cogs = revenue * cogsPercentage',
-                                    },
-                                    'confidence_score': 0.8,
-                                })
-                        
-                        # Gross Profit provenance
-                        if 'grossProfit' in month_data:
-                            gross_profit_value = month_data['grossProfit']
-                            if gross_profit_value != 0:
-                                provenance_entries.append({
-                                    'cell_key': create_cell_key(year, month, 'grossProfit'),
-                                    'source_type': 'assumption',
-                                    'source_ref': {
-                                        'calculated_from': ['revenue', 'cogs'],
-                                        'formula': 'grossProfit = revenue - cogs',
+                                        'value': month_data[cf_metric],
+                                        'calculated_from': ['netIncome', 'depreciation', 'workingCapital', 'capex', 'financing'],
+                                        'formula': f'{cf_metric} derived from statement linkages',
                                     },
                                     'confidence_score': 0.9,
                                 })
                         
-                        # Net Income provenance
-                        if 'netIncome' in month_data:
-                            net_income_value = month_data['netIncome']
-                            if net_income_value != 0:
+                        # ── Balance Sheet provenance ────────────────────────────
+                        for bs_metric in ['totalAssets', 'totalLiabilities', 'totalEquity']:
+                            if bs_metric in month_data:
                                 provenance_entries.append({
-                                    'cell_key': create_cell_key(year, month, 'netIncome'),
+                                    'cell_key': create_cell_key(year, month, bs_metric),
                                     'source_type': 'assumption',
                                     'source_ref': {
-                                        'calculated_from': ['revenue', 'cogs', 'expenses'],
-                                        'formula': 'netIncome = revenue - cogs - opex',
+                                        'value': month_data[bs_metric],
+                                        'calculated_from': ['cash', 'debt', 'equity', 'retainedEarnings'],
+                                        'formula': f'{bs_metric} = sum of components',
                                     },
-                                    'confidence_score': 0.9,
+                                    'confidence_score': 0.85,
                                 })
+                        
                     except Exception as e:
                         logger.warning(f"Error creating provenance for month {month_key}: {str(e)}")
                         continue
