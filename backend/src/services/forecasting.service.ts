@@ -201,7 +201,17 @@ export const forecastingService = {
 
                 const sortedMonths = Object.keys(monthly).sort();
                 const values = sortedMonths.map(m => {
-                    const val = monthly[m]?.[dataKey];
+                    let val = monthly[m]?.[dataKey];
+                    
+                    // Fallback for older python worker deployments that may not emit opex or headcount per month
+                    if (val === undefined && dataKey === 'opex') {
+                        val = (monthly[m]?.expenses || 0) - (monthly[m]?.cogs || 0);
+                    }
+                    if (val === undefined && dataKey === 'headcount') {
+                        // Estimate headcount based on operational expenses (avg $10k per head/month)
+                        val = Math.max(1, Math.floor((monthly[m]?.expenses || 0) / 10000));
+                    }
+                    
                     return typeof val === 'number' ? val : 0;
                 });
 
