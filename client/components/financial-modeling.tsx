@@ -1922,10 +1922,10 @@ export function FinancialModeling() {
                             <TableCell className="text-right font-mono" onClick={() => handleCellClick("cogs", "COGS", formatCurrency(row.cogs), row.monthKey)}>
                               {formatCurrency(row.cogs)}
                             </TableCell>
-                            <TableCell className="text-right font-mono font-bold text-slate-900" onClick={() => handleCellClick("gross_profit", "Gross Profit", formatCurrency(row.grossProfit), row.monthKey)}>
+                            <TableCell className="text-right font-mono font-bold text-slate-900" onClick={() => handleCellClick("grossProfit", "Gross Profit", formatCurrency(row.grossProfit), row.monthKey)}>
                               {formatCurrency(row.grossProfit)}
                             </TableCell>
-                            <TableCell className="text-right font-mono font-bold text-blue-600" onClick={() => handleCellClick("net_income", "Net Income", formatCurrency(row.netIncome), row.monthKey)}>
+                            <TableCell className="text-right font-mono font-bold text-blue-600" onClick={() => handleCellClick("netIncome", "Net Income", formatCurrency(row.netIncome), row.monthKey)}>
                               {formatCurrency(row.netIncome)}
                             </TableCell>
                           </TableRow>

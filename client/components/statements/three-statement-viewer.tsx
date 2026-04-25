@@ -399,7 +399,7 @@ export function ThreeStatementViewer({ orgId, modelId, runId, statements, modelR
                                                     <TableCell
                                                         key={period}
                                                         className="text-right text-red-600 cursor-pointer hover:bg-red-50"
-                                                        onClick={() => onCellClick?.(`${period}:operatingExpenses`, data?.operatingExpenses)}
+                                                        onClick={() => onCellClick?.(`${period}:expenses`, data?.operatingExpenses)}
                                                     >
                                                         ({formatValueLineItem(data?.operatingExpenses, currencySymbol)})
                                                     </TableCell>
