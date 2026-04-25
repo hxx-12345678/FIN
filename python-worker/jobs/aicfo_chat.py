@@ -118,7 +118,7 @@ def handle_aicfo_chat(job_id: str, org_id: str, object_id: str, logs: dict):
         model_state = {}
         model_id = None
         if model_run_id:
-            cursor.execute('SELECT model_id, summary_json FROM model_runs WHERE id = %s', (model_run_id,))
+            cursor.execute('SELECT "modelId", summary_json FROM model_runs WHERE id = %s', (model_run_id,))
             row = cursor.fetchone()
             if row:
                 model_id = str(row[0])

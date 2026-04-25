@@ -70,7 +70,7 @@ def write_provenance_entry(
         cursor.execute("""
             INSERT INTO provenance_entries (
                 "modelRunId", org_id, cell_key, source_type, 
-                source_ref, prompt_id, confidence_score, created_at
+                source_ref, "promptId", confidence_score, created_at
             )
             VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, NOW())
             RETURNING id
@@ -162,7 +162,7 @@ def write_provenance_batch(
                 cursor.execute("""
                     INSERT INTO provenance_entries (
                         "modelRunId", org_id, cell_key, source_type,
-                        source_ref, prompt_id, confidence_score, created_at
+                        source_ref, "promptId", confidence_score, created_at
                     )
                     VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, NOW())
                     ON CONFLICT DO NOTHING

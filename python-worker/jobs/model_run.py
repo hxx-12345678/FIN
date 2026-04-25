@@ -1075,7 +1075,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                 engine.add_driver(str(d[0]), d[1], d[2], d[3])
             
             # 2. Fetch all formulas
-            cursor.execute('SELECT driver_id, expression, dependencies FROM driver_formulas WHERE model_id = %s', (current_model_id,))
+            cursor.execute('SELECT "driverId", expression, dependencies FROM driver_formulas WHERE "modelId" = %s', (current_model_id,))
             formulas = cursor.fetchall()
             for f in formulas:
                 engine.add_formula(str(f[0]), f[1], f[2] if isinstance(f[2], list) else json.loads(f[2]))
@@ -1083,7 +1083,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             # 3. Fetch values for the current scenario
             # Use run_type or a specific scenario if provided in params
             scenario_name = params_json.get('scenarioName', 'Base')
-            cursor.execute('SELECT id FROM financial_scenarios WHERE model_id = %s AND name = %s', (current_model_id, scenario_name))
+            cursor.execute('SELECT id FROM financial_scenarios WHERE "modelId" = %s AND name = %s', (current_model_id, scenario_name))
             scenario_row = cursor.fetchone()
             if scenario_row:
                 scenario_id = scenario_row[0]
