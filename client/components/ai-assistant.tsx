@@ -91,6 +91,7 @@ interface DataSource {
   timestamp?: string
   confidence?: number
   snippet?: string
+  url?: string
 }
 
 interface AgentRecommendation {
@@ -1034,6 +1035,39 @@ export function AIAssistant() {
                                           </CollapsibleContent>
                                         </Collapsible>
                                       )}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Web Search Citations */}
+                                {message.dataSources && message.dataSources.some(ds => ds.type === 'web_search') && (
+                                  <div className="mt-8 space-y-4">
+                                    <h4 className="text-[11px] uppercase tracking-widest font-black text-muted-foreground flex items-center gap-2">
+                                      <Database className="h-3.5 w-3.5" />
+                                      Web Search Grounding
+                                    </h4>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                      {message.dataSources.filter(ds => ds.type === 'web_search').map((ds, idx) => (
+                                        <a
+                                          key={idx}
+                                          href={ds.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex flex-col p-4 rounded-xl border border-border/50 bg-muted/20 hover:bg-muted/40 hover:border-primary/30 transition-all group/source"
+                                        >
+                                          <div className="flex items-center justify-between mb-2">
+                                            <span className="text-[12px] font-bold text-foreground line-clamp-1 group-hover/source:text-primary transition-colors">
+                                              [{idx + 1}] {ds.name}
+                                            </span>
+                                            <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground group-hover/source:text-primary transition-colors flex-shrink-0" />
+                                          </div>
+                                          {ds.snippet && (
+                                            <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                                              {ds.snippet}
+                                            </p>
+                                          )}
+                                        </a>
+                                      ))}
                                     </div>
                                   </div>
                                 )}

@@ -37,12 +37,13 @@ export type AgentActionType =
 
 // Data source types for explainability
 export interface DataSource {
-  type: 'transaction' | 'connector' | 'model_run' | 'budget' | 'manual_input' | 'calculation' | 'reasoning_engine' | 'user_upload';
+  type: 'historical_run' | 'policy_document' | 'calculation' | 'monte_carlo' | 'system_logs' | 'user_upload' | 'web_search' | 'transaction' | 'connector' | 'model_run' | 'budget' | 'manual_input' | 'reasoning_engine';
   id: string;
   name: string;
   timestamp: Date;
   confidence: number;
   snippet?: string;
+  url?: string;
 }
 
 // Agent thought/reasoning step for explainability
@@ -569,6 +570,23 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
     agents: ['analytics', 'compliance'],
     complexity: 'moderate',
   },
+  'web_search': {
+    patterns: [
+      /\b(competitor|competitive|industry|benchmark|compare|comparison|versus|vs\.?)\b/i,
+      /\b(market\s+(share|position|leader)|peer\s+(group|comparison))\b/i,
+      /\b(interest\s+rate|fed\s+rate|inflation|cpi|gdp|recession|macro|economy|economic)\b/i,
+      /\b(tax\s+(law|reform|change|update|regulation)|compliance|regulation|regulatory)\b/i,
+      /\b(saas\s+metric|ndr|net\s+dollar\s+retention|arr\s+multiple|ltv.?cac)\b/i,
+      /\b(valuation\s+multiple|p.?e\s+ratio|ev.?ebitda)\b/i,
+      /\b(news|latest|recent|update|announce|announcement|headline)\b/i,
+      /\b(ipo|acquisition|merger|layoff|bankruptcy|funding\s+round)\b/i,
+      /\b(series\s+[a-f]|seed\s+round|vc\s+(activity|funding)|valuation\s+trend)\b/i,
+      /\b(search\s+(for|the\s+web|online|internet)|look\s+up|find\s+out|google)\b/i,
+      /https?:\/\//i
+    ],
+    agents: ['strategic', 'analytics'],
+    complexity: 'complex'
+  }
 };
 
 // Thresholds for human-in-the-loop

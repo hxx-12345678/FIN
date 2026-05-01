@@ -381,8 +381,8 @@ function validateFormula(formula: string): { isValid: boolean; errors: string[];
 
   // Check for circular references (basic check)
   if (formula.includes('{') && formula.includes('}')) {
-    const references = formula.match(/\{[^}]+\}/g) || [];
-    const selfReference = references.some(ref => {
+    const references = (formula.match(/\\{[^}]+\\}/g) || []) as string[];
+    const selfReference = references.some((ref: string) => {
       const cellRef = ref.replace(/[{}]/g, '');
       return formula.includes(cellRef) && cellRef.length > 0;
     });

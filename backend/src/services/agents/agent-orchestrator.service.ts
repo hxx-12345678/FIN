@@ -33,6 +33,7 @@ import { capitalAgent } from './capital-agent.service';
 import { riskAgent } from './risk-agent.service';
 import { strategicAgent } from './strategic-agent.service';
 import { complianceAgent } from './compliance-agent.service';
+import { webSearchService } from '../web-search.service';
 
 class AgentOrchestratorService {
   private agents: Map<AgentType, any> = new Map();
@@ -141,8 +142,67 @@ class AgentOrchestratorService {
 
       const intent = await this.classifyIntent(query);
 
+      // Step 2: Check if Web Search is needed for external intelligence
+      const searchCheck = webSearchService.shouldSearch(query, intent.primaryIntent);
+      let searchResults = null;
+      
+      if (searchCheck.shouldSearch) {
+        const searchThought: AgentThought = {
+          step: thoughts.length + 1,
+          thought: `Query requires external intelligence (${searchCheck.category}). Executing web search...`,
+          action: 'web_search',
+        };
+        thoughts.push(searchThought);
+        broadcast('thought', searchThought);
+
+        try {
+          searchResults = await webSearchService.search(query, searchCheck.category);
+          
+          if (searchResults.snippets.length > 0) {
+            const resultThought: AgentThought = {
+              step: thoughts.length + 1,
+              thought: `Retrieved ${searchResults.snippets.length} relevant external sources from ${searchResults.source === 'google_cse' ? 'Google Search' : 'Knowledge Base'}.`,
+              observation: `Top result: ${searchResults.snippets[0].title}`,
+            };
+            thoughts.push(resultThought);
+            broadcast('thought', resultThought);
+
+            // Add search results as data sources
+            const citations = webSearchService.extractCitations(searchResults);
+            citations.forEach(cit => {
+              dataSources.push({
+                type: 'web_search',
+                id: `web_${cit.index}`,
+                name: cit.title,
+                url: cit.url,
+                timestamp: new Date(),
+                confidence: 0.9,
+                snippet: cit.snippet
+              });
+            });
+
+            // Augment the query with the web context so downstream agents use it
+            const webContext = webSearchService.buildCitationContext(searchResults);
+            query += webContext;
+            
+            // Ensure strategic/analytics agents are included if we have web data
+            if (!intent.requiredAgents.includes('strategic')) {
+              intent.requiredAgents.push('strategic');
+            }
+          }
+        } catch (e: any) {
+          console.error('[AgentOrchestrator] Web search failed:', e);
+          const failThought: AgentThought = {
+            step: thoughts.length + 1,
+            thought: `Web search failed: ${e.message}. Proceeding with internal data only.`,
+          };
+          thoughts.push(failThought);
+          broadcast('thought', failThought);
+        }
+      }
+
       const step2Thought: AgentThought = {
-        step: 2,
+        step: thoughts.length + 1,
         thought: `Identified intent: ${intent.primaryIntent} (confidence: ${(intent.confidence * 100).toFixed(0)}%)`,
         observation: `Required agents: ${intent.requiredAgents.join(', ')}`,
       };
