@@ -21,6 +21,7 @@ const AIAssistant = dynamic(() => import("@/components/ai-assistant").then(mod =
 const ReportsAnalytics = dynamic(() => import("@/components/reports-analytics").then(mod => mod.ReportsAnalytics))
 const BoardReporting = dynamic(() => import("@/components/board-reporting").then(mod => mod.BoardReporting))
 const InvestorDashboard = dynamic(() => import("@/components/investor-dashboard").then(mod => mod.InvestorDashboard))
+const IntelligentInvestorDashboard = dynamic(() => import("@/components/intelligent-investor-dashboard").then(mod => mod.IntelligentInvestorDashboard))
 const UserManagement = dynamic(() => import("@/components/user-management").then(mod => mod.UserManagement))
 const IntegrationsPage = dynamic(() => import("@/components/integrations-page").then(mod => mod.IntegrationsPage))
 const NotificationsPage = dynamic(() => import("@/components/notifications-page").then(mod => mod.NotificationsPage))
@@ -134,7 +135,7 @@ function HomePageContent() {
       "forecasting", "assistant", "reports", "board-reporting", "investor",
       "users", "integrations", "notifications", "compliance",
       "settings", "onboarding", "collaboration", "job-queue", "export-queue",
-      "approvals", "ledger", "consolidation", "headcount"
+      "approvals", "ledger", "consolidation", "headcount", "intelligent-investor"
     ]
 
     // If user has auth token, NEVER show landing page
@@ -438,6 +439,8 @@ function HomePageContent() {
           return <BoardReporting />
         case "investor":
           return <InvestorDashboard />
+        case "intelligent-investor":
+          return <IntelligentInvestorDashboard />
         case "users":
           return <UserManagement />
         case "integrations":

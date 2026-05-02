@@ -20,7 +20,9 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
-import { TrendingUp, TrendingDown, Target, Share, Download, Eye, Loader2, AlertCircle, Sparkles } from "lucide-react"
+import { TrendingUp, TrendingDown, Target, Share, Download, Eye, Loader2, AlertCircle, Sparkles, BrainCircuit } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { IntelligentInvestorDashboard } from "./intelligent-investor-dashboard"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { FinancialTermTooltip } from "./financial-term-tooltip"
@@ -187,8 +189,29 @@ export function InvestorDashboard() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Investor Dashboard</h1>
-          <p className="text-sm md:text-base text-muted-foreground">Real-time insights for stakeholders and investors</p>
+          <p className="text-sm md:text-base text-muted-foreground">Institutional-grade insights for board members and capital partners.</p>
         </div>
+      </div>
+
+      <Tabs defaultValue="standard" className="w-full">
+        <TabsList className="grid w-full grid-cols-2 max-w-[400px]">
+          <TabsTrigger value="standard" className="flex items-center gap-2">
+            Standard View
+          </TabsTrigger>
+          <TabsTrigger value="intelligence" className="flex items-center gap-2 bg-primary/5 text-primary">
+            <BrainCircuit className="h-4 w-4" />
+            Intelligence Portal
+            <Badge variant="secondary" className="ml-1 px-1 py-0 h-4 text-[10px] bg-primary text-white border-none">BETA</Badge>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="standard" className="space-y-6 pt-4">
+          <Alert className="bg-muted/50 border-none">
+            <Target className="h-4 w-4" />
+            <AlertDescription className="text-xs font-medium">
+              Note: The values below reflect the <strong>Operating Plan</strong> (Source of Truth) as approved by the CFO.
+            </AlertDescription>
+          </Alert>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <Button 
             variant="outline" 
@@ -215,7 +238,6 @@ export function InvestorDashboard() {
                     description: "Link expires in 7 days."
                   });
                 } else {
-                  // Fallback to current URL if token creation fails
                   navigator.clipboard.writeText(window.location.href);
                   toast.success("Dashboard link copied to clipboard!");
                 }
@@ -261,7 +283,7 @@ export function InvestorDashboard() {
             <span className="sm:hidden">Export</span>
           </Button>
         </div>
-      </div>
+
 
       {/* Executive Summary */}
       <Card className="border-2 border-primary/20 bg-gradient-to-r from-primary/5 to-primary/10">
@@ -600,6 +622,19 @@ export function InvestorDashboard() {
           </div>
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="intelligence" className="pt-4">
+          <Alert className="bg-blue-500/10 border-blue-500/20 text-blue-700 dark:text-blue-400 mb-6">
+            <Sparkles className="h-4 w-4" />
+            <AlertDescription className="text-xs font-bold">
+              SIMULATION MODE: Adjusting drivers in this view performs a non-destructive Hyperblock recomputation for "What-If" analysis. 
+              The Operating Plan remains unchanged.
+            </AlertDescription>
+          </Alert>
+          <IntelligentInvestorDashboard />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

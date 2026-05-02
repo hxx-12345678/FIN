@@ -49,6 +49,25 @@ export interface InvestorDashboardData {
     burnMultiple: number;
     magicNumber: number;
   };
+  sensitivityAnalysis: Array<{
+    parameter: string;
+    impact_pct: number;
+    direction: 'up' | 'down' | 'neutral';
+    low_scenario: number;
+    high_scenario: number;
+  }> | null;
+  valuationSummary: Array<{
+    name: string;
+    low: number;
+    high: number;
+    color: string;
+  }> | null;
+  marketImplications: string[] | null;
+  aiNarrative: string | null;
+  competitiveBenchmark: {
+    summary: string;
+    dataSources: any[];
+  } | null;
 }
 
 export const investorDashboardService = {
@@ -330,6 +349,12 @@ export const investorDashboardService = {
         burnMultiple: Number(summary.burnMultiple || summary.kpis?.burnMultiple || 0),
         magicNumber: Number(summary.magicNumber || summary.kpis?.magicNumber || 0),
       },
+      // Grounding data for Intelligent Dashboard
+      sensitivityAnalysis: summary.sensitivityAnalysis || null,
+      valuationSummary: summary.valuationSummary || null,
+      marketImplications: summary.marketImplications || null,
+      aiNarrative: summary.aiNarrative || null,
+      competitiveBenchmark: summary.competitiveBenchmark || null,
     };
   },
 };
@@ -843,6 +868,11 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
       burnMultiple: 0,
       magicNumber: 0,
     },
+    sensitivityAnalysis: null,
+    valuationSummary: null,
+    marketImplications: null,
+    aiNarrative: null,
+    competitiveBenchmark: null,
   };
 }
 
@@ -876,6 +906,11 @@ function getDefaultDashboardData(): InvestorDashboardData {
       ltvCacRatio: 0,
       paybackPeriod: 0,
     },
+    sensitivityAnalysis: null,
+    valuationSummary: null,
+    marketImplications: null,
+    aiNarrative: null,
+    competitiveBenchmark: null,
   };
 }
 

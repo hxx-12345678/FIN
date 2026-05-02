@@ -30,7 +30,7 @@ interface ExportJob {
 }
 
 import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
-const POLL_INTERVAL = 2000
+const POLL_INTERVAL = 15000 // Increased to 15s to reduce API spam for institutional users
 
 export function ExportJobQueue() {
   const [jobs, setJobs] = useState<ExportJob[]>([])

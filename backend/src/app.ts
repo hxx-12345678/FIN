@@ -62,6 +62,7 @@ import approvalRoutes from './routes/approval.routes';
 import semanticLayerRoutes from './routes/semantic-layer.routes';
 import computeRoutes from './routes/compute.routes';
 import consolidationRoutes from './routes/consolidation.routes';
+import intelligentInvestorDashboardRoutes from './routes/intelligent-investor-dashboard.routes';
 
 dotenv.config();
 
@@ -303,6 +304,7 @@ app.use('/api/v1', budgetActualRoutes);
 app.use('/api/v1', scheduledAutoModelRoutes);
 app.use('/api/v1', investorExportRoutes);
 app.use('/api/v1', investorDashboardRoutes);
+app.use('/api/v1', intelligentInvestorDashboardRoutes);
 app.use('/api/v1', realtimeSimulationRoutes);
 app.use('/api/v1', transactionRoutes);
 app.use('/api/v1', boardReportingRoutes);

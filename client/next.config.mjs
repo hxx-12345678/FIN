@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'export',
+  trailingSlash: true,
   reactStrictMode: false,
   eslint: {
     ignoreDuringBuilds: true,
@@ -50,6 +52,11 @@ const nextConfig = {
       "@radix-ui/react-tooltip",
     ],
   },
+  /* 
+   * redirects() and headers() are not supported with output: 'export'.
+   * These have been moved to public/_redirects and public/_headers for Cloudflare Pages.
+   */
+  /*
   async redirects() {
     return [
       {
@@ -57,26 +64,7 @@ const nextConfig = {
         destination: '/#integrations',
         permanent: true,
       },
-      {
-        source: '/dashboard',
-        destination: '/#overview',
-        permanent: true,
-      },
-      {
-        source: '/scenarios',
-        destination: '/#scenarios',
-        permanent: true,
-      },
-      {
-        source: '/board-reporting',
-        destination: '/#board-reporting',
-        permanent: true,
-      },
-      {
-        source: '/investor',
-        destination: '/#investor',
-        permanent: true,
-      },
+      ...
     ]
   },
   async headers() {
@@ -84,34 +72,12 @@ const nextConfig = {
       {
         source: '/(.*)',
         headers: [
-          {
-            key: 'X-Frame-Options',
-            value: 'DENY',
-          },
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
-          },
-          {
-            key: 'Referrer-Policy',
-            value: 'origin-when-cross-origin',
-          },
-          {
-            key: 'X-XSS-Protection',
-            value: '1; mode=block',
-          },
-          {
-            key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
-          },
-          {
-            key: 'Content-Security-Policy',
-            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://va.vercel-scripts.com https://vitals.vercel-scripts.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' http://localhost:8000 https://finapilot-backend.onrender.com https://finapilot-mvp-backend.onrender.com https://fin-plum.vercel.app https://finapilot-mvp.vercel.app https://fin-k87e.onrender.com https://vitals.vercel-insights.com;",
-          },
+          ...
         ],
       },
     ]
   },
+  */
 }
 
 export default nextConfig

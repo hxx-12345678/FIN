@@ -130,6 +130,7 @@ const navigationItems = [
     key: "investor",
     badge: null,
   },
+
   {
     title: "Export Queue",
     icon: FileText,
@@ -315,11 +316,18 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
     return () => document.removeEventListener("mousemove", handleMouseMove)
   }, [isMobile, sidebarOpen])
 
-  // ── High-priority alert notification polling (30 s) ──────────────────────
+  // ── High-priority alert notification polling (60 s) ──────────────────────
+  const lastPollTimeRef = useRef<number>(0)
+  const isPollingRef = useRef<boolean>(false)
+
   useEffect(() => {
     if (!currentOrgId || !userData) return
 
     const pollNotifications = async () => {
+      // Prevent overlapping polls or spamming during re-renders
+      if (isPollingRef.current || Date.now() - lastPollTimeRef.current < 10000) return
+      
+      isPollingRef.current = true
       try {
         const res = await fetch(
           `${API_BASE_URL}/orgs/${currentOrgId}/notifications?read=false&limit=10`,
@@ -335,29 +343,31 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
         if (result.data.length > 0) {
           const latest = result.data[0]
           
-          // Check if this is truly "new" (not seen in this session)
           const seenIds = JSON.parse(sessionStorage.getItem("fina_seen_notifs") || "[]")
           if (!seenIds.includes(latest.id)) {
-            // Show custom sidebar toast
             setActiveNotificationToast(latest)
             setShowNotificationToast(true)
             
-            // Auto hide after 5 seconds
             setTimeout(() => {
               setShowNotificationToast(false)
             }, 5000)
             
-            // Mark as seen in session
             sessionStorage.setItem("fina_seen_notifs", JSON.stringify([...seenIds, latest.id]))
           }
         }
+        lastPollTimeRef.current = Date.now()
       } catch (err) {
         console.error("[Notification Poll] error:", err)
+      } finally {
+        isPollingRef.current = false
       }
     }
 
+    // Initial poll
     pollNotifications()
-    const timer = setInterval(pollNotifications, 30_000)
+    
+    // Slower interval for institutional stability
+    const timer = setInterval(pollNotifications, 60_000)
     return () => clearInterval(timer)
   }, [currentOrgId, userData])
 
