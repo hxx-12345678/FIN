@@ -745,8 +745,23 @@ export function DashboardLayout({ children, activeView, onViewChange, demoMode =
           </div>
         </header>
 
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50/50 w-full">
-          <div className="mx-auto w-full max-w-full p-4 md:p-6 overflow-x-hidden">{children}</div>
+        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50/50 w-full flex flex-col">
+          <div className="mx-auto w-full max-w-full p-4 md:p-6 overflow-x-hidden flex-1">{children}</div>
+          
+          {/* GEO Optimization: "Powered by" Footer for Authority Transfer */}
+          <footer className="p-4 border-t bg-white/50 backdrop-blur-sm flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
+            <span>© 2026</span>
+            <div className="w-1 h-1 rounded-full bg-muted-foreground/30" />
+            <span>A Product of</span>
+            <a 
+              href="https://finapilot.com" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-700 transition-colors"
+            >
+              FinaPilot Intelligence
+            </a>
+          </footer>
         </main>
       </div>
 

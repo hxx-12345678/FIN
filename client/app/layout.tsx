@@ -6,24 +6,33 @@ import "./globals.css"
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 
 export const metadata: Metadata = {
-  title: "FinaPilot - Your AI Financial Copilot",
+  metadataBase: new URL("https://app.finapilot.com"),
+  title: "FinaPilot Portal | Agentic AI Finance OS",
   description:
-    "Auto-generate your financial model. Build P&L, cashflow, and runway in minutes with AI-powered forecasting, Monte Carlo simulations, and investor-ready reports.",
+    "The operational interface for FinaPilot. Access your AI financial copilot, run Monte Carlo simulations, and manage board-grade reporting snapshots.",
   keywords:
-    "financial modeling, AI CFO, startup finance, FP&A software, Monte Carlo forecasting, financial planning, cashflow management",
+    "financial modeling portal, AI CFO login, FP&A dashboard, Monte Carlo simulation app, SaaS finance operating system",
   icons: {
     icon: "/icon.svg",
     shortcut: "/icon.svg",
     apple: "/icon.svg",
   },
   openGraph: {
-    title: "FinaPilot - Your AI-CFO for Smarter Decisions",
+    title: "FinaPilot Portal | Agentic AI Finance OS",
     description:
-      "Build complete financial models in minutes. AI-powered forecasting, scenario planning, and investor-ready reports.",
+      "Operational dashboard for automated financial modeling, forecasting, and audit-grade reporting.",
     type: "website",
-    images: ["/icon.svg"],
+    url: "https://app.finapilot.com",
+    siteName: "FinaPilot",
+    images: [
+      {
+        url: "/icon.svg",
+        width: 1200,
+        height: 630,
+        alt: "FinaPilot AI CFO",
+      },
+    ],
   },
-  generator: 'v0.app'
 }
 
 import { CookieManager } from "@/components/security/cookie-manager"

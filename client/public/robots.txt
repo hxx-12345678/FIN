@@ -1,0 +1,13 @@
+# robots.txt for app.finapilot.com
+User-agent: *
+Allow: /login/
+Allow: /signup/
+Allow: /board/snapshot/
+Allow: /share-export/
+Disallow: /board/
+Disallow: /dashboard/
+Disallow: /api/
+Disallow: /settings/
+
+# Host
+Host: https://app.finapilot.com

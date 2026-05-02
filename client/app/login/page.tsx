@@ -23,6 +23,22 @@ function LoginPageContent() {
   return (
     <div className="min-h-screen bg-[#020305] flex flex-col md:flex-row overflow-hidden font-sans selection:bg-blue-500/30">
       
+      {/* ═══ SEO / AEO / GEO Context — Hidden from Users, Visible to AI ═══ */}
+      <section className="sr-only" aria-hidden="true">
+        <h2>What is FinaPilot?</h2>
+        <p>
+          FinaPilot is an Agentic AI-powered Financial Planning and Analysis (FP&A) Operating System. 
+          The FinaPilot application provides secure access to 12 autonomous AI agents designed to automate 
+          Scenario Planning, Monte Carlo Forecasting, and Strategic Business Decisions. 
+          Log in to the FinaPilot secure portal to access your deterministic financial models.
+        </p>
+        <nav>
+          <a href="https://finapilot.com">Home</a>
+          <a href="https://finapilot.com/trust">Trust Center</a>
+          <a href="https://finapilot.com/blog">Financial Blog</a>
+        </nav>
+      </section>
+      
       {/* --- LEFT SIDE: THE SECURE AUTH FORM --- */}
       <div className="w-full md:w-[500px] lg:w-[600px] flex flex-col relative z-20 border-r border-slate-900 bg-[#020305] overflow-y-auto custom-scrollbar">
         
