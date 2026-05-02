@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useEffect, useState, Suspense } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import { Loader2, AlertCircle, Download, FileText } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,9 +9,17 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { API_BASE_URL } from "@/lib/api-config"
 
 export default function ShareExportPage() {
-  const params = useParams()
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-gray-50"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>}>
+      <ShareExportContent />
+    </Suspense>
+  )
+}
+
+function ShareExportContent() {
+  const searchParams = useSearchParams()
   const router = useRouter()
-  const token = params.token as string
+  const token = searchParams.get("token")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [exportInfo, setExportInfo] = useState<any>(null)

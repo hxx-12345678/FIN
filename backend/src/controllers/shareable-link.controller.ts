@@ -34,7 +34,7 @@ export const shareableLinkController = {
 
       // Generate full shareable URL
       const frontendUrl = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:3000';
-      const shareUrl = `${frontendUrl}/share-export/${shareableLink.token}`;
+      const shareUrl = `${frontendUrl}/share-export/?token=${shareableLink.token}`;
       const apiUrl = process.env.API_URL || 'http://localhost:8000';
       const downloadUrl = `${apiUrl}/api/v1/share-export/${shareableLink.token}/download`;
 
