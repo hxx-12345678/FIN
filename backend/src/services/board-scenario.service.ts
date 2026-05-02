@@ -50,7 +50,7 @@ export const boardScenarioService = {
     return {
       id: snapshot.id,
       token: snapshot.snapshotToken,
-      shareUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/board/snapshot/${token}`,
+      shareUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/board/snapshot/?token=${token}`,
       createdAt: snapshot.createdAt
     };
   },

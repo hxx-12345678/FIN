@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useParams } from "next/navigation"
+import { useEffect, useState, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -22,8 +22,16 @@ import {
 } from "recharts"
 
 export default function BoardSnapshotPage() {
-  const params = useParams()
-  const token = params.token as string
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>}>
+      <SnapshotContent />
+    </Suspense>
+  )
+}
+
+function SnapshotContent() {
+  const searchParams = useSearchParams()
+  const token = searchParams.get("token")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [snapshot, setSnapshot] = useState<any>(null)
