@@ -73,8 +73,8 @@ const app = express();
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3001',
-  'https://fin-plum.vercel.app',
-  'https://finapilot-mvp.vercel.app',
+  'https://app.finapilot.com',
+  'https://www.finapilot.com',
   process.env.FRONTEND_URL,
 ].filter(Boolean) as string[];
 
@@ -138,7 +138,7 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-eval'", "'unsafe-inline'", "https://va.vercel-scripts.com"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", 'data:', 'https:'],
-      connectSrc: ["'self'", ...allowedOrigins, "https://fin-plum.vercel.app", "https://finapilot-mvp.vercel.app"],
+      connectSrc: ["'self'", ...allowedOrigins],
       fontSrc: ["'self'", 'https://fonts.gstatic.com'],
       objectSrc: ["'none'"],
       frameAncestors: ["'none'"],
