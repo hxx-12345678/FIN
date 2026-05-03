@@ -75,7 +75,7 @@ model Org {
   headcount_plans        HeadcountPlan[]
   invitationTokens       InvitationToken[]
   jobs                   Job[]
-  localizationSettings   LocalizationSettings?   @map("localization_settings")
+  localizationSettings   LocalizationSettings?
   modelRuns              ModelRun[]
   models                 Model[]
   monteCarloJobs         MonteCarloJob[]
@@ -796,8 +796,8 @@ model UserPreferences {
   bio            String?
   avatarUrl      String?      @map("avatar_url")
   appearanceJson Json? @map("appearance_json")
-  createdAt @map("created_at")      DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt @map("updated_at")      DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @map("updated_at") @default(now()) @updatedAt @db.Timestamptz(6)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
@@ -806,14 +806,14 @@ model UserPreferences {
 
 model OrgDetails {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId @map("org_id")       String   @unique @db.Uuid
+  orgId String @map("org_id")   @unique @db.Uuid
   industry    String?
   companySize String? @map("company_size")
   website     String?
   address     String?
   taxId       String?       @map("tax_id")
-  createdAt @map("created_at")   DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt @map("updated_at")   DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @map("updated_at") @default(now()) @updatedAt @db.Timestamptz(6)
   org         Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@index([orgId])
@@ -823,20 +823,20 @@ model OrgDetails {
 model LocalizationSettings {
   id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orgId             String @map("org_id")   @unique @db.Uuid
-  baseCurrency @map("base_currency")      String   @default("USD")
-  displayCurrency @map("display_currency")   String   @default("USD")
+  baseCurrency String @map("base_currency")   @default("USD")
+  displayCurrency String @map("display_currency")   @default("USD")
   language          String   @default("en")
-  dateFormat @map("date_format")        String   @default("MM/DD/YYYY")
-  numberFormat @map("number_format")      String   @default("1,234.56")
+  dateFormat String @map("date_format")   @default("MM/DD/YYYY")
+  numberFormat String @map("number_format")   @default("1,234.56")
   timezone          String   @default("UTC")
-  autoFxUpdate @map("auto_fx_update")      Boolean  @default(true)
+  autoFxUpdate Boolean @map("auto_fx_update")  @default(true)
   fxRatesJson       Json?       @map("fx_rates_json")
-  gstEnabled @map("gst_enabled")        Boolean  @default(false)
-  tdsEnabled @map("tds_enabled")        Boolean  @default(false)
-  einvoicingEnabled @map("einvoicing_enabled") Boolean  @default(false)
+  gstEnabled Boolean @map("gst_enabled")  @default(false)
+  tdsEnabled Boolean @map("tds_enabled")  @default(false)
+  einvoicingEnabled Boolean @map("einvoicing_enabled")  @default(false)
   complianceJson    Json?    @map("compliance_json")
-  createdAt @map("created_at")         DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt @map("updated_at")         DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @map("updated_at") @default(now()) @updatedAt @db.Timestamptz(6)
   org               Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@index([orgId])
@@ -1045,7 +1045,7 @@ model FinancialLedger {
 
 model ApprovalRequest {
   id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId @map("org_id")       String    @db.Uuid
+  orgId String @map("org_id")    @db.Uuid
   requesterId String    @map("requester_id") @db.Uuid
   approverId  String?   @map("approver_id") @db.Uuid
   status      String    @default("pending")
