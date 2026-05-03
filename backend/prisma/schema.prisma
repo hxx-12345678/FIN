@@ -97,7 +97,7 @@ model Org {
 
 model UserOrgRole {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId    String   @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
   orgId     String @map("org_id")   @db.Uuid
   role      String
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -136,7 +136,7 @@ model Connector {
 model RawTransaction {
   id            String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orgId         String @map("org_id")           @db.Uuid
-  connectorId   String?          @db.Uuid
+  connectorId   String?          @map("connector_id") @db.Uuid
   sourceId      String?          @map("source_id")
   date          DateTime         @db.Date
   amount        Decimal          @db.Decimal(20, 4)
@@ -218,7 +218,7 @@ model Model {
 
 model ModelRun {
   id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  modelId        String            @db.Uuid
+  modelId        String            @map("model_id") @db.Uuid
   orgId          String @map("org_id")            @db.Uuid
   runType        String            @map("run_type")
   paramsJson     Json?             @map("params_json")
@@ -243,7 +243,7 @@ model ModelRun {
 
 model MonteCarloJob {
   id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  modelRunId         String    @db.Uuid
+  modelRunId         String    @map("model_run_id") @db.Uuid
   orgId              String @map("org_id")    @db.Uuid
   numSimulations     Int       @default(2000) @map("num_simulations")
   paramsHash         String?   @map("params_hash")
@@ -269,7 +269,7 @@ model MonteCarloJob {
 model Driver {
   id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orgId           String @map("org_id")          @db.Uuid
-  modelId         String          @db.Uuid
+  modelId         String          @map("model_id") @db.Uuid
   name            String
   description     String?
   type            String
@@ -297,8 +297,8 @@ model Driver {
 
 model DriverValue {
   id         String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  driverId   String            @db.Uuid
-  scenarioId String            @db.Uuid
+  driverId   String            @map("driver_id") @db.Uuid
+  scenarioId String            @map("scenario_id") @db.Uuid
   month      String
   value      Decimal           @db.Decimal(20, 4)
   createdAt  DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -315,7 +315,7 @@ model DriverValue {
 model FinancialScenario {
   id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orgId        String @map("org_id")        @db.Uuid
-  modelId      String        @db.Uuid
+  modelId      String        @map("model_id") @db.Uuid
   name         String
   color        String?
   isDefault    Boolean       @default(false) @map("is_default")
@@ -333,8 +333,8 @@ model FinancialScenario {
 model DriverFormula {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orgId        String @map("org_id")   @db.Uuid
-  modelId      String   @db.Uuid
-  driverId     String   @db.Uuid
+  modelId      String   @map("model_id") @db.Uuid
+  driverId     String   @map("driver_id") @db.Uuid
   expression   String
   dependencies Json
   version      Int      @default(1)
@@ -351,7 +351,7 @@ model DriverFormula {
 model Dimension {
   id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orgId        String @map("org_id")            @db.Uuid
-  modelId      String            @db.Uuid
+  modelId      String            @map("model_id") @db.Uuid
   name         String
   type         String
   displayOrder Int               @default(0) @map("display_order")
@@ -367,10 +367,10 @@ model Dimension {
 
 model DimensionMember {
   id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  dimensionId  String       @db.Uuid
+  dimensionId  String       @map("dimension_id") @db.Uuid
   name         String
   code         String?
-  parentId     String?      @db.Uuid
+  parentId     String?      @map("parent_id") @db.Uuid
   level        Int          @default(0)
   displayOrder Int          @default(0) @map("display_order")
   isActive     Boolean      @default(true) @map("is_active")
@@ -388,16 +388,16 @@ model DimensionMember {
 
 model MetricCube {
   id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId        String @map("org_id")           @db.Uuid
-  modelId      String           @db.Uuid
+  orgId        String           @map("org_id") @db.Uuid
+  modelId      String           @map("model_id") @db.Uuid
   metricName   String           @map("metric_name")
   month        String
-  geographyId  String?          @db.Uuid
-  productId    String?          @db.Uuid
-  departmentId String?          @db.Uuid
-  segmentId    String?          @db.Uuid
-  channelId    String?          @db.Uuid
-  scenarioId   String?          @db.Uuid
+  geographyId  String?          @map("geography_id") @db.Uuid
+  productId    String?          @map("product_id") @db.Uuid
+  departmentId String?          @map("department_id") @db.Uuid
+  segmentId    String?          @map("segment_id") @db.Uuid
+  channelId    String?          @map("channel_id") @db.Uuid
+  scenarioId   String?          @map("scenario_id") @db.Uuid
   customDim1Id String?          @map("custom_dim1_id") @db.Uuid
   customDim2Id String?          @map("custom_dim2_id") @db.Uuid
   value        Decimal          @db.Decimal(20, 4)
@@ -422,7 +422,7 @@ model MetricCube {
 model Prompt {
   id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orgId          String? @map("org_id")           @db.Uuid
-  userId         String?           @db.Uuid
+  userId         String?           @map("user_id") @db.Uuid
   promptTemplate String?           @map("prompt_template")
   renderedPrompt String?           @map("rendered_prompt")
   responseText   String?           @map("response_text")
@@ -442,12 +442,12 @@ model Prompt {
 
 model ProvenanceEntry {
   id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  modelRunId      String   @db.Uuid
-  orgId           String @map("org_id")   @db.Uuid
+  modelRunId      String   @map("model_run_id") @db.Uuid
+  orgId           String   @map("org_id")   @db.Uuid
   cellKey         String   @map("cell_key")
   sourceType      String   @map("source_type")
   sourceRef       Json?    @map("source_ref")
-  promptId        String?  @db.Uuid
+  promptId        String?  @map("prompt_id") @db.Uuid
   confidenceScore Decimal? @map("confidence_score") @db.Decimal(5, 4)
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   modelRun        ModelRun @relation(fields: [modelRunId], references: [id], onDelete: Cascade)
@@ -463,7 +463,7 @@ model ProvenanceEntry {
 
 model Export {
   id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  modelRunId         String?   @db.Uuid
+  modelRunId         String?   @map("model_run_id") @db.Uuid
   orgId              String @map("org_id")    @db.Uuid
   type               String
   s3Key              String?   @map("s3_key")
@@ -550,7 +550,7 @@ model BoardReportSchedule {
 
 model AuditLog {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  actorUserId String?  @db.Uuid
+  actorUserId String?  @map("actor_user_id") @db.Uuid
   orgId       String? @map("org_id")  @db.Uuid
   action      String
   objectType  String?  @map("object_type")
@@ -664,8 +664,8 @@ model AICFOConversation {
   status          String         @default("active")
   createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  orgId          String @map("org_id")         @db.Uuid
-  userId         String @map("user_id")         @db.Uuid
+  orgId           String         @map("org_id") @db.Uuid
+  userId          String         @map("user_id") @db.Uuid
   org            Org            @relation(fields: [orgId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages AICFOMessage[]
@@ -679,14 +679,14 @@ model AICFOMessage {
   id                   String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   role                 String
   content              String
-  agentType            String?
-  confidence           Decimal?          @db.Decimal(5, 4)
-  thoughts             Json?
-  dataSources          Json?
-  recommendations      Json?
-  calculations         Json?
-  visualizations       Json?
-  metadata             Json?
+  agentType            String?           @map("agent_type")
+  confidence           Decimal?          @map("confidence") @db.Decimal(5, 4)
+  thoughts             Json?             @map("thoughts")
+  dataSources          Json?             @map("data_sources")
+  recommendations      Json?             @map("recommendations")
+  calculations         Json?             @map("calculations")
+  visualizations       Json?             @map("visualizations")
+  metadata             Json?             @map("metadata")
   createdAt            DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   conversationId      String @map("conversation_id")            @db.Uuid
   ai_cfo_conversations AICFOConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -697,8 +697,8 @@ model AICFOMessage {
 
 model ComputationTrace {
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId         String   @db.Uuid
-  modelId       String   @db.Uuid
+  orgId         String   @map("org_id") @db.Uuid
+  modelId       String   @map("model_id") @db.Uuid
   triggerNodeId String   @map("trigger_node_id")
   triggerUserId String?  @map("trigger_user_id") @db.Uuid
   affectedNodes Json     @map("affected_nodes")
@@ -714,8 +714,8 @@ model ComputationTrace {
 
 model Forecast {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId          String @map("org_id")   @db.Uuid
-  modelId        String   @db.Uuid
+  orgId          String   @map("org_id")   @db.Uuid
+  modelId        String   @map("model_id")   @db.Uuid
   metricName     String   @map("metric_name")
   method         String
   forecastData   Json     @map("forecast_data")
@@ -732,8 +732,8 @@ model Forecast {
 
 model Notification {
   id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId     String    @db.Uuid
-  userId    String?   @db.Uuid
+  orgId     String    @map("org_id") @db.Uuid
+  userId    String?   @map("user_id") @db.Uuid
   type      String
   title     String
   message   String
@@ -755,7 +755,7 @@ model Notification {
 model NotificationChannel {
   id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orgId      String @map("org_id")   @db.Uuid
-  userId     String?  @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
   type       String
   enabled    Boolean  @default(true)
   configJson Json?    @map("config_json")
@@ -776,7 +776,7 @@ model OrgSettings {
   currency             String   @default("USD")
   timezone             String   @default("UTC")
   region               String   @default("global")
-  updatedById          String?  @db.Uuid
+  updatedById          String?  @map("updated_by_id") @db.Uuid
   updatedAt            DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   complianceJson       Json?    @map("compliance_json")
   securityControlsJson Json?    @map("security_controls_json")
@@ -790,7 +790,7 @@ model OrgSettings {
 
 model UserPreferences {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId         String   @unique @db.Uuid
+  userId         String   @unique @map("user_id") @db.Uuid
   phone          String?
   jobTitle       String?
   bio            String?
@@ -1000,7 +1000,7 @@ model RealtimeSimulation {
 model UserUsage {
   id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orgId           String @map("org_id")   @db.Uuid
-  userId          String?  @db.Uuid
+  userId          String?  @map("user_id") @db.Uuid
   simulationRunId String?  @map("simulation_run_id") @db.Uuid
   monteCarloJobId String?  @map("monte_carlo_job_id") @db.Uuid
   creditsUsed     Int      @default(0) @map("credits_used")
@@ -1021,7 +1021,7 @@ model UserUsage {
 
 model FinancialLedger {
   id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orgId            String   @db.Uuid
+  orgId            String   @map("org_id") @db.Uuid
   transactionDate  DateTime @map("transaction_date") @db.Date
   amount           Decimal  @db.Decimal(20, 4)
   currency         String   @default("USD")
@@ -1046,8 +1046,8 @@ model FinancialLedger {
 model ApprovalRequest {
   id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orgId       String    @db.Uuid
-  requesterId String    @db.Uuid
-  approverId  String?   @db.Uuid
+  requesterId String    @map("requester_id") @db.Uuid
+  approverId  String?   @map("approver_id") @db.Uuid
   status      String    @default("pending")
   type        String
   objectType  String    @map("object_type")
