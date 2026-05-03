@@ -197,6 +197,22 @@ BEGIN
             END;
         END IF;
     END IF;
+    -- Column: localizationSettings -> localization_settings
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('localizationSettings') OR LOWER(column_name) = LOWER('localization_settings'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'localization_settings' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "localization_settings"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'localization_settings';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'localization_settings';
+            END;
+        END IF;
+    END IF;
 
     -- Process Model: UserOrgRole (Target Table: user_org_roles)
     SELECT table_name INTO found_table_name 
@@ -4325,6 +4341,86 @@ BEGIN
             END;
         END IF;
     END IF;
+    -- Column: jobTitle -> job_title
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('jobTitle') OR LOWER(column_name) = LOWER('job_title'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'job_title' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "job_title"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'job_title';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'job_title';
+            END;
+        END IF;
+    END IF;
+    -- Column: avatarUrl -> avatar_url
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('avatarUrl') OR LOWER(column_name) = LOWER('avatar_url'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'avatar_url' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "avatar_url"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'avatar_url';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'avatar_url';
+            END;
+        END IF;
+    END IF;
+    -- Column: appearanceJson -> appearance_json
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('appearanceJson') OR LOWER(column_name) = LOWER('appearance_json'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'appearance_json' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "appearance_json"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'appearance_json';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'appearance_json';
+            END;
+        END IF;
+    END IF;
+    -- Column: createdAt -> created_at
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('createdAt') OR LOWER(column_name) = LOWER('created_at'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'created_at' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "created_at"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'created_at';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'created_at';
+            END;
+        END IF;
+    END IF;
+    -- Column: updatedAt -> updated_at
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('updatedAt') OR LOWER(column_name) = LOWER('updated_at'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'updated_at' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "updated_at"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'updated_at';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'updated_at';
+            END;
+        END IF;
+    END IF;
 
     -- Process Model: OrgDetails (Target Table: org_details)
     SELECT table_name INTO found_table_name 
@@ -4340,6 +4436,86 @@ BEGIN
         EXCEPTION WHEN OTHERS THEN
             RAISE NOTICE 'Could not rename table % to %', found_table_name, 'org_details';
         END;
+    END IF;
+    -- Column: orgId -> org_id
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('orgId') OR LOWER(column_name) = LOWER('org_id'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'org_id' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "org_id"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'org_id';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'org_id';
+            END;
+        END IF;
+    END IF;
+    -- Column: companySize -> company_size
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('companySize') OR LOWER(column_name) = LOWER('company_size'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'company_size' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "company_size"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'company_size';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'company_size';
+            END;
+        END IF;
+    END IF;
+    -- Column: taxId -> tax_id
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('taxId') OR LOWER(column_name) = LOWER('tax_id'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'tax_id' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "tax_id"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'tax_id';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'tax_id';
+            END;
+        END IF;
+    END IF;
+    -- Column: createdAt -> created_at
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('createdAt') OR LOWER(column_name) = LOWER('created_at'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'created_at' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "created_at"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'created_at';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'created_at';
+            END;
+        END IF;
+    END IF;
+    -- Column: updatedAt -> updated_at
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('updatedAt') OR LOWER(column_name) = LOWER('updated_at'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'updated_at' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "updated_at"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'updated_at';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'updated_at';
+            END;
+        END IF;
     END IF;
 
     -- Process Model: LocalizationSettings (Target Table: localization_settings)
@@ -4370,6 +4546,198 @@ BEGIN
                 RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'org_id';
             EXCEPTION WHEN OTHERS THEN
                 RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'org_id';
+            END;
+        END IF;
+    END IF;
+    -- Column: baseCurrency -> base_currency
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('baseCurrency') OR LOWER(column_name) = LOWER('base_currency'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'base_currency' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "base_currency"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'base_currency';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'base_currency';
+            END;
+        END IF;
+    END IF;
+    -- Column: displayCurrency -> display_currency
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('displayCurrency') OR LOWER(column_name) = LOWER('display_currency'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'display_currency' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "display_currency"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'display_currency';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'display_currency';
+            END;
+        END IF;
+    END IF;
+    -- Column: dateFormat -> date_format
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('dateFormat') OR LOWER(column_name) = LOWER('date_format'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'date_format' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "date_format"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'date_format';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'date_format';
+            END;
+        END IF;
+    END IF;
+    -- Column: numberFormat -> number_format
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('numberFormat') OR LOWER(column_name) = LOWER('number_format'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'number_format' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "number_format"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'number_format';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'number_format';
+            END;
+        END IF;
+    END IF;
+    -- Column: autoFxUpdate -> auto_fx_update
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('autoFxUpdate') OR LOWER(column_name) = LOWER('auto_fx_update'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'auto_fx_update' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "auto_fx_update"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'auto_fx_update';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'auto_fx_update';
+            END;
+        END IF;
+    END IF;
+    -- Column: fxRatesJson -> fx_rates_json
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('fxRatesJson') OR LOWER(column_name) = LOWER('fx_rates_json'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'fx_rates_json' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "fx_rates_json"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'fx_rates_json';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'fx_rates_json';
+            END;
+        END IF;
+    END IF;
+    -- Column: gstEnabled -> gst_enabled
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('gstEnabled') OR LOWER(column_name) = LOWER('gst_enabled'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'gst_enabled' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "gst_enabled"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'gst_enabled';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'gst_enabled';
+            END;
+        END IF;
+    END IF;
+    -- Column: tdsEnabled -> tds_enabled
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('tdsEnabled') OR LOWER(column_name) = LOWER('tds_enabled'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'tds_enabled' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "tds_enabled"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'tds_enabled';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'tds_enabled';
+            END;
+        END IF;
+    END IF;
+    -- Column: einvoicingEnabled -> einvoicing_enabled
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('einvoicingEnabled') OR LOWER(column_name) = LOWER('einvoicing_enabled'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'einvoicing_enabled' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "einvoicing_enabled"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'einvoicing_enabled';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'einvoicing_enabled';
+            END;
+        END IF;
+    END IF;
+    -- Column: complianceJson -> compliance_json
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('complianceJson') OR LOWER(column_name) = LOWER('compliance_json'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'compliance_json' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "compliance_json"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'compliance_json';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'compliance_json';
+            END;
+        END IF;
+    END IF;
+    -- Column: createdAt -> created_at
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('createdAt') OR LOWER(column_name) = LOWER('created_at'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'created_at' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "created_at"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'created_at';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'created_at';
+            END;
+        END IF;
+    END IF;
+    -- Column: updatedAt -> updated_at
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('updatedAt') OR LOWER(column_name) = LOWER('updated_at'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'updated_at' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "updated_at"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'updated_at';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'updated_at';
             END;
         END IF;
     END IF;
@@ -5700,6 +6068,22 @@ BEGIN
         EXCEPTION WHEN OTHERS THEN
             RAISE NOTICE 'Could not rename table % to %', found_table_name, 'approval_requests';
         END;
+    END IF;
+    -- Column: orgId -> org_id
+    IF found_table_name IS NOT NULL THEN
+        SELECT column_name INTO found_column_name 
+                   FROM information_schema.columns 
+                   WHERE table_name = found_table_name 
+                     AND (LOWER(column_name) = LOWER('orgId') OR LOWER(column_name) = LOWER('org_id'))
+                   LIMIT 1;
+        IF found_column_name IS NOT NULL AND found_column_name <> 'org_id' THEN
+            BEGIN
+                EXECUTE 'ALTER TABLE "' || found_table_name || '" RENAME COLUMN "' || found_column_name || '" TO "org_id"';
+                RAISE NOTICE 'Renamed column %.% to %', found_table_name, found_column_name, 'org_id';
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Could not rename column %.% to %', found_table_name, found_column_name, 'org_id';
+            END;
+        END IF;
     END IF;
     -- Column: requesterId -> requester_id
     IF found_table_name IS NOT NULL THEN
