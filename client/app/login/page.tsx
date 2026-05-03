@@ -79,7 +79,10 @@ function LoginPageContent() {
             </div>
 
             <LoginForm 
-              onSuccess={() => window.location.href = "/"} 
+              onSuccess={() => {
+                localStorage.setItem("finapilot_mode_selected", "true");
+                window.location.href = "/";
+              }} 
               onSwitchToSignup={() => window.location.href = "/signup"} 
             />
             

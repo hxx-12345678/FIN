@@ -48,7 +48,6 @@ export default function RootLayout({
       <body className="font-sans antialiased">
         {children}
         <CookieManager />
-        <CookieAwareAnalytics />
       </body>
     </html>
   )
