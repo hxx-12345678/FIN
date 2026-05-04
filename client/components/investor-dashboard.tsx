@@ -285,13 +285,16 @@ export function InvestorDashboard() {
                 
                 if (response.ok) {
                   const result = await response.json();
-                  const tokenValue = result.shareToken?.token || result.token;
-                  const shareUrl = `${window.location.origin}/share/${tokenValue}`;
-                  await navigator.clipboard.writeText(shareUrl);
-                  toast.success("Secure sharing link generated and copied to clipboard!", {
-
-                    description: "Link expires in 7 days."
-                  });
+                  if (result.ok && result.shareToken) {
+                    const shareUrl = result.shareToken.shareUrl || `${window.location.origin}/share/${result.shareToken.token}`;
+                    await navigator.clipboard.writeText(shareUrl);
+                    toast.success("Share link copied to clipboard and opening in new tab");
+                    
+                    // Open in new tab immediately for verification
+                    window.open(shareUrl, "_blank", "noopener,noreferrer");
+                  } else {
+                    toast.error("Failed to generate share link");
+                  }
                 } else {
                   navigator.clipboard.writeText(window.location.href);
                   toast.success("Dashboard link copied to clipboard!");

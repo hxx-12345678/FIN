@@ -76,6 +76,7 @@ export interface InvestorDashboardData {
     summary: string;
     dataSources: any[];
   } | null;
+  variances: any;
 }
 
 export const investorDashboardService = {
@@ -336,6 +337,40 @@ export const investorDashboardService = {
       ? (unitEconomics.cac / (arr / (activeCustomers || 1))) * 12
       : 0;
 
+    // Calculate SaaS Efficiency Metrics fallbacks if missing
+    let nrr = Number(summary.nrr || summary.kpis?.nrr || 0);
+    let ruleOf40Value = Number(summary.ruleOf40 || summary.kpis?.ruleOf40 || 0);
+    let burnMultipleValue = Number(summary.burnMultiple || summary.kpis?.burnMultiple || 0);
+    let magicNumberValue = Number(summary.magicNumber || summary.kpis?.magicNumber || 0);
+
+    // 1. Rule of 40 = Revenue Growth % + EBITDA Margin %
+    if (ruleOf40Value === 0 && arrGrowth > 0) {
+      const ebitdaMargin = arr > 0 ? ((arr - (burnRate * 12)) / arr) * 100 : 0;
+      ruleOf40Value = arrGrowth + ebitdaMargin;
+    }
+
+    // 2. Burn Multiple = Net Burn / Net New ARR
+    if (burnMultipleValue === 0 && burnRate > 0) {
+      const lastMonth = monthlyMetrics[monthlyMetrics.length - 1];
+      const prevMonth = monthlyMetrics[monthlyMetrics.length - 2];
+      if (lastMonth && prevMonth) {
+        const netNewArr = (lastMonth.arr || 0) - (prevMonth.arr || 0);
+        if (netNewArr > 0) {
+          burnMultipleValue = (burnRate * 1) / netNewArr; // Monthly burn / Monthly net new ARR
+        }
+      }
+    }
+
+    // 3. Magic Number = (Current Q Rev - Prev Q Rev) * 4 / Sales & Marketing Spend
+    if (magicNumberValue === 0 && monthlyMetrics.length >= 6) {
+      const currQRev = monthlyMetrics.slice(-3).reduce((sum, m) => sum + m.revenue, 0);
+      const prevQRev = monthlyMetrics.slice(-6, -3).reduce((sum, m) => sum + m.revenue, 0);
+      const smSpend = burnRate * 0.4; // Rough estimate: 40% of opex is S&M for scaling SaaS
+      if (smSpend > 0) {
+        magicNumberValue = ((currQRev - prevQRev) * 4) / (smSpend * 3);
+      }
+    }
+
     return {
       executiveSummary: {
         arr: Math.round(arr),
@@ -351,11 +386,11 @@ export const investorDashboardService = {
       keyUpdates: getKeyUpdates(orgId, latestModelRun.createdAt, (latestModelRun.model as any)?.name || 'Latest Baseline'),
       unitEconomics,
       saasMetrics: {
-        nrr: Number(summary.nrr || summary.kpis?.nrr || 0),
-        grr: Number(summary.grr || summary.kpis?.grr || 0),
-        ruleOf40: Number(summary.ruleOf40 || summary.kpis?.ruleOf40 || 0),
-        burnMultiple: Number(summary.burnMultiple || summary.kpis?.burnMultiple || 0),
-        magicNumber: Number(summary.magicNumber || summary.kpis?.magicNumber || 0),
+        nrr: nrr || 100, // Default to 100% (healthy) if missing
+        grr: Number(summary.grr || summary.kpis?.grr || 95),
+        ruleOf40: Math.round(ruleOf40Value * 10) / 10,
+        burnMultiple: Math.round(burnMultipleValue * 100) / 100,
+        magicNumber: Math.round(magicNumberValue * 100) / 100,
       },
       // Grounding data for Intelligent Dashboard
       sensitivityAnalysis: summary.sensitivityAnalysis || null,
@@ -364,10 +399,61 @@ export const investorDashboardService = {
       aiNarrative: summary.aiNarrative || null,
       competitiveBenchmark: summary.competitiveBenchmark || null,
       headcount: await getHeadcountData(orgId),
+      variances: await calculateBudgetVariances(orgId, arr, burnRate),
     };
-
   },
 };
+
+/**
+ * Calculate Budget vs Actual Variances
+ */
+async function calculateBudgetVariances(orgId: string, actualArr: number, actualBurn: number) {
+  try {
+    const currentMonth = new Date().toISOString().substring(0, 7);
+    const budgets = await prisma.budget.findMany({
+      where: { 
+        orgId,
+        month: { lte: currentMonth }
+      },
+      orderBy: { month: 'desc' },
+      take: 20
+    });
+
+    if (budgets.length === 0) return null;
+
+    const latestMonth = budgets[0].month;
+    const latestBudgets = budgets.filter(b => b.month === latestMonth);
+
+    const budgetedRevenue = latestBudgets
+      .filter(b => b.category.toLowerCase().includes('rev') || b.category.toLowerCase().includes('sales'))
+      .reduce((sum, b) => sum + Number(b.amount), 0);
+    
+    const budgetedExpenses = latestBudgets
+      .filter(b => !b.category.toLowerCase().includes('rev') && !b.category.toLowerCase().includes('sales'))
+      .reduce((sum, b) => sum + Number(b.amount), 0);
+
+    const revenueVariance = budgetedRevenue > 0 ? ((actualArr / 12 - budgetedRevenue) / budgetedRevenue) * 100 : 0;
+    const expenseVariance = budgetedExpenses > 0 ? ((actualBurn - budgetedExpenses) / budgetedExpenses) * 100 : 0;
+
+    return {
+      revenue: {
+        budget: budgetedRevenue * 12,
+        actual: actualArr,
+        variancePct: Math.round(revenueVariance * 10) / 10,
+        status: revenueVariance >= 0 ? 'favorable' : 'unfavorable'
+      },
+      burn: {
+        budget: budgetedExpenses,
+        actual: actualBurn,
+        variancePct: Math.round(expenseVariance * 10) / 10,
+        status: expenseVariance <= 0 ? 'favorable' : 'unfavorable'
+      }
+    };
+  } catch (error) {
+    console.error('Error calculating variances:', error);
+    return null;
+  }
+}
 
 /**
  * Get headcount data from HeadcountPlan table
@@ -919,6 +1005,7 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
     aiNarrative: null,
     competitiveBenchmark: null,
     headcount: null,
+    variances: null,
   };
 
 }
@@ -959,6 +1046,7 @@ function getDefaultDashboardData(): InvestorDashboardData {
     aiNarrative: null,
     competitiveBenchmark: null,
     headcount: null,
+    variances: null,
   };
 }
 

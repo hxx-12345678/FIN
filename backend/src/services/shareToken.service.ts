@@ -162,6 +162,20 @@ export const shareTokenService = {
     }
 
     // Return read-only data based on type
+    if (type === 'dashboard') {
+      const { investorDashboardService } = require('./investor-dashboard.service');
+      const dashboardData = await investorDashboardService.getDashboardData(shareToken.orgId);
+      
+      return {
+        org: {
+          id: org.id,
+          name: org.name,
+          currency: org.currency,
+        },
+        dashboardData,
+      };
+    }
+
     if (type === 'models') {
       const models = await prisma.model.findMany({
         where: { orgId: shareToken.orgId },

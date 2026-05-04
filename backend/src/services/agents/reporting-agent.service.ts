@@ -376,6 +376,12 @@ class ReportingAgentService {
         content: this.generateStrategicOutlook(data),
       });
 
+      // Strategic Asks & Board Input
+      sections.push({
+        title: 'Strategic Asks & Board Input',
+        content: this.generateStrategicAsks(data, stage),
+      });
+
       // Risks & Opportunities
       sections.push({
         title: 'Risks & Opportunities',
@@ -460,6 +466,36 @@ class ReportingAgentService {
       content += `• ${kpi.name}: ${kpi.formatted} ${statusIcon}\n`;
     }
     return content;
+  }
+
+  private generateStrategicAsks(data: any, stage: string): string {
+    const asks = [];
+    
+    switch (stage) {
+      case 'seed':
+        asks.push('Feedback on initial pricing models and early churn indicators.');
+        asks.push('Introductions to early-stage design partners in the Enterprise segment.');
+        break;
+      case 'series_a':
+        asks.push('Strategic input on scaling the outbound sales motion vs. inbound efficiency.');
+        asks.push('Approval for key hires in the GTM leadership team.');
+        break;
+      case 'series_b':
+        asks.push('Review of international expansion roadmap and capital allocation for non-US markets.');
+        asks.push('Input on M&A opportunities for functional tuck-ins.');
+        break;
+      case 'series_c':
+        asks.push('Corporate governance refinement in preparation for late-stage financing or IPO readiness.');
+        asks.push('Board-level review of functional unit profitability and long-term operating targets.');
+        break;
+    }
+
+    if (data.runway < 9) {
+      asks.push('Strategic discussion on the timeline and valuation triggers for the next financing round.');
+    }
+
+    return "Based on the company's current performance and growth stage, we request board input on the following:\n\n" + 
+      asks.map(ask => `*   **${ask}**`).join('\n');
   }
 
   private generateStrategicOutlook(data: any): string {

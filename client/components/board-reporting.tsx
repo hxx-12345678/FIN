@@ -50,6 +50,7 @@ import {
   History as HistoryIcon,
   RefreshCw,
   Send,
+  TrendingDown,
 } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import dynamic from "next/dynamic"
@@ -151,7 +152,7 @@ const formatMonthLabel = (date: Date) =>
 export function BoardReporting() {
   const { currencySymbol, formatCurrency, boardReportAiContent, setBoardReportAiContent } = useOrg()
   const [selectedTemplate, setSelectedTemplate] = useState("board-deck")
-  const [templates, setTemplates] = useState<BoardTemplate[]>(FALLBACK_TEMPLATES)
+  const [templates, setTemplates] = useState<BoardTemplate[]>([])
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>([])
   const [isGenerating, setIsGenerating] = useState(false)
   const isGeneratingRef = useRef(false)
@@ -308,15 +309,19 @@ export function BoardReporting() {
         const result = await response.json()
         if (result.ok && result.templates && result.templates.length > 0) {
           setTemplates(result.templates)
-          // Keep current selection if it exists in new list, otherwise pick first
           const currentExists = result.templates.find((t: BoardTemplate) => t.id === selectedTemplate)
           if (!currentExists) {
             setSelectedTemplate(result.templates[0]?.id)
           }
+        } else {
+          setTemplates(FALLBACK_TEMPLATES)
         }
+      } else {
+        setTemplates(FALLBACK_TEMPLATES)
       }
     } catch (error) {
       console.error("Failed to fetch templates", error)
+      setTemplates(FALLBACK_TEMPLATES)
     } finally {
       setLoadingTemplates(false)
     }
@@ -1076,61 +1081,83 @@ export function BoardReporting() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {templates.map((template) => {
-                const templateConfig: Record<string, { icon: any; color: string; bgColor: string; audience: string }> = {
-                  "board-deck": { icon: Presentation, color: "text-blue-600", bgColor: "bg-blue-50", audience: "Board of Directors" },
-                  "quarterly-review": { icon: BarChart2, color: "text-purple-600", bgColor: "bg-purple-50", audience: "Board & C-Suite" },
-                  "audit-compliance": { icon: ShieldCheck, color: "text-amber-600", bgColor: "bg-amber-50", audience: "Audit Committee" },
-                  "investor-update": { icon: Mail, color: "text-emerald-600", bgColor: "bg-emerald-50", audience: "Investors & LPs" },
-                }
-                const config = templateConfig[template.id] || { icon: FileText, color: "text-primary", bgColor: "bg-primary/5", audience: "General" }
-                const Icon = config.icon
-                return (
-                  <Card
-                    key={template.id}
-                    className={`cursor-pointer transition-all hover:shadow-lg relative overflow-hidden group ${selectedTemplate === template.id ? "ring-2 ring-primary bg-primary/[0.02] shadow-xl" : "hover:border-primary/40 bg-card"}`}
-                    onClick={() => setSelectedTemplate(template.id)}
-                  >
-                    {selectedTemplate === template.id && (
-                       <div className="absolute top-0 right-0 p-1 bg-primary text-white rounded-bl-lg z-20">
-                         <CheckCircle2 className="w-3.5 h-3.5" />
-                       </div>
-                    )}
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className={`p-2 rounded-lg transition-colors ${selectedTemplate === template.id ? "bg-primary text-white" : config.bgColor}`}>
-                          <Icon className={`h-5 w-5 ${selectedTemplate === template.id ? "text-white" : config.color}`} />
-                        </div>
-                        <Badge variant={template.status === "ready" ? "default" : "secondary"} className="text-[10px] uppercase font-bold tracking-tighter">{template.status}</Badge>
+              {loadingTemplates ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <Card key={i} className="animate-pulse bg-muted/20 border-muted">
+                    <CardContent className="p-4 space-y-4">
+                      <div className="flex justify-between">
+                        <div className="w-8 h-8 bg-muted rounded-lg" />
+                        <div className="w-12 h-4 bg-muted rounded" />
                       </div>
-                      <h3 className="font-bold mb-1 text-sm group-hover:text-primary transition-colors">{template.name}</h3>
-                      <p className="text-[11px] text-muted-foreground mb-3 line-clamp-2 leading-relaxed">{template.description}</p>
-                      
-                      <div className="space-y-1.5 text-[10px] text-muted-foreground border-t pt-3">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">Target Audience</span>
-                          <span className="font-bold text-foreground">{(template as any).audience || config.audience}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span>Complexity</span>
-                          <div className="flex gap-0.5">
-                            {[1, 2, 3].map(i => (
-                              <div key={i} className={`w-2.5 h-1 rounded-full ${i <= (template.slides > 12 ? 3 : template.slides > 8 ? 2 : 1) ? "bg-primary" : "bg-muted"}`} />
-                            ))}
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between mt-2">
-                          <Badge variant="outline" className={`text-[10px] h-5 uppercase font-extrabold flex items-center gap-1 border-2 ${template.type === 'pptx' || template.type === 'presentation' ? 'text-blue-600 border-blue-100 bg-blue-50/50' : template.type === 'pdf' ? 'text-amber-600 border-amber-100 bg-amber-50/50' : 'text-emerald-600 border-emerald-100 bg-emerald-50/50'}`}>
-                            {template.type}
-                          </Badge>
-                          <span className="opacity-70">{template.slides} {template.type === "pptx" ? "slides" : "pages"}</span>
-                        </div>
+                      <div className="space-y-2">
+                        <div className="w-2/3 h-4 bg-muted rounded" />
+                        <div className="w-full h-3 bg-muted rounded" />
+                      </div>
+                      <div className="pt-4 border-t space-y-2">
+                        <div className="w-full h-3 bg-muted rounded" />
+                        <div className="w-1/2 h-3 bg-muted rounded" />
                       </div>
                     </CardContent>
                   </Card>
-                )
-              })}
+                ))
+              ) : (
+                templates.map((template) => {
+                  const templateConfig: Record<string, { icon: any; color: string; bgColor: string; audience: string }> = {
+                    "board-deck": { icon: Presentation, color: "text-blue-600", bgColor: "bg-blue-50", audience: "Board of Directors" },
+                    "quarterly-review": { icon: BarChart2, color: "text-purple-600", bgColor: "bg-purple-50", audience: "Board & C-Suite" },
+                    "audit-compliance": { icon: ShieldCheck, color: "text-amber-600", bgColor: "bg-amber-50", audience: "Audit Committee" },
+                    "investor-update": { icon: Mail, color: "text-emerald-600", bgColor: "bg-emerald-50", audience: "Investors & LPs" },
+                  }
+                  const config = templateConfig[template.id] || { icon: FileText, color: "text-primary", bgColor: "bg-primary/5", audience: "General" }
+                  const Icon = config.icon
+                  return (
+                    <Card
+                      key={template.id}
+                      className={`cursor-pointer transition-all hover:shadow-lg relative overflow-hidden group ${selectedTemplate === template.id ? "ring-2 ring-primary bg-primary/[0.02] shadow-xl" : "hover:border-primary/40 bg-card"}`}
+                      onClick={() => setSelectedTemplate(template.id)}
+                    >
+                      {selectedTemplate === template.id && (
+                         <div className="absolute top-0 right-0 p-1 bg-primary text-white rounded-bl-lg z-20">
+                           <CheckCircle2 className="w-3.5 h-3.5" />
+                         </div>
+                      )}
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className={`p-2 rounded-lg transition-colors ${selectedTemplate === template.id ? "bg-primary text-white" : config.bgColor}`}>
+                            <Icon className={`h-5 w-5 ${selectedTemplate === template.id ? "text-white" : config.color}`} />
+                          </div>
+                          <Badge variant={template.status === "ready" ? "default" : "secondary"} className="text-[10px] uppercase font-bold tracking-tighter">{template.status}</Badge>
+                        </div>
+                        <h3 className="font-bold mb-1 text-sm group-hover:text-primary transition-colors">{template.name}</h3>
+                        <p className="text-[11px] text-muted-foreground mb-3 line-clamp-2 leading-relaxed">{template.description}</p>
+                        
+                        <div className="space-y-1.5 text-[10px] text-muted-foreground border-t pt-3">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">Target Audience</span>
+                            <span className="font-bold text-foreground">{(template as any).audience || config.audience}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>Complexity</span>
+                            <div className="flex gap-0.5">
+                              {[1, 2, 3].map(i => (
+                                <div key={i} className={`w-2.5 h-1 rounded-full ${i <= (template.slides > 12 ? 3 : template.slides > 8 ? 2 : 1) ? "bg-primary" : "bg-muted"}`} />
+                              ))}
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between mt-2">
+                            <Badge variant="outline" className={`text-[10px] h-5 uppercase font-extrabold flex items-center gap-1 border-2 ${template.type === 'pptx' || template.type === 'presentation' ? 'text-blue-600 border-blue-100 bg-blue-50/50' : template.type === 'pdf' ? 'text-amber-600 border-amber-100 bg-amber-50/50' : 'text-emerald-600 border-emerald-100 bg-emerald-50/50'}`}>
+                              {template.type}
+                            </Badge>
+                            <span className="opacity-70">{template.slides} {template.type === "pptx" ? "slides" : "pages"}</span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })
+              )}
             </div>
+
 
             <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6 border-t pt-6">
                <Card className="bg-muted/20 border-dashed">
@@ -1187,20 +1214,29 @@ export function BoardReporting() {
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {kpiMetrics.map((metric) => {
                   const isSelected = selectedMetrics.includes(metric.name);
+                  const hasVariance = metric.variance !== undefined;
+                  const varianceStatus = metric.varianceStatus || 'neutral';
                   return (
                     <div
                       key={metric.name}
-                      className={`p-4 border-2 rounded-xl cursor-pointer transition-all hover:scale-[1.02] ${isSelected ? "border-primary bg-primary/[0.03] shadow-md" : "border-muted bg-card hover:border-primary/40"}`}
+                      className={`p-4 border-2 rounded-xl cursor-pointer transition-all hover:scale-[1.02] relative ${isSelected ? "border-primary bg-primary/[0.03] shadow-md" : "border-muted bg-card hover:border-primary/40"}`}
                       onClick={() => handleMetricToggle(metric.name)}
                     >
+                      {hasVariance && (
+                        <Badge className={`absolute top-2 right-10 text-[8px] h-4 ${varianceStatus === 'favorable' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+                          {metric.variance > 0 ? '+' : ''}{metric.variance}% vs Plan
+                        </Badge>
+                      )}
                       <div className="flex items-center justify-between mb-3">
                         <div className={`p-1.5 rounded-lg ${isSelected ? "bg-primary text-white" : "bg-muted"}`}>
-                          {metric.trend === "up" ? <TrendingUp className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                          {metric.trend === "up" ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
                         </div>
                         <Checkbox checked={isSelected} />
                       </div>
                       <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest mb-1">{metric.name}</p>
-                      <p className="text-xl font-black">{metric.value}</p>
+                      <div className="flex items-baseline gap-2">
+                        <p className="text-xl font-black">{metric.value}</p>
+                      </div>
                       <p className={`text-[10px] font-bold mt-1 ${metric.trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>{metric.change}</p>
                     </div>
                   )

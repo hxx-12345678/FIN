@@ -2,6 +2,9 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
+import { CookieManager } from "@/components/security/cookie-manager"
+import { CookieAwareAnalytics } from "@/components/security/cookie-aware-analytics"
+import { ThemeProvider } from "@/components/theme-provider"
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 
@@ -35,9 +38,6 @@ export const metadata: Metadata = {
   },
 }
 
-import { CookieManager } from "@/components/security/cookie-manager"
-import { CookieAwareAnalytics } from "@/components/security/cookie-aware-analytics"
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -45,9 +45,20 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={inter.variable}>
-      <body className="font-sans antialiased">
-        {children}
-        <CookieManager />
+      <body className={inter.className}>
+        <script dangerouslySetInnerHTML={{ __html: `
+          window.addEventListener('error', function(e) {
+            if (e.message && e.message.includes('Loading chunk')) {
+              window.location.reload();
+            }
+          }, true);
+        `}} />
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+          <div className="font-sans antialiased">
+            {children}
+            <CookieManager />
+          </div>
+        </ThemeProvider>
       </body>
     </html>
   )
