@@ -62,7 +62,15 @@ export interface InvestorDashboardData {
     high: number;
     color: string;
   }> | null;
+  headcount: {
+    total: number;
+    byDepartment: Record<string, number>;
+    planned: number;
+    hired: number;
+  } | null;
   marketImplications: string[] | null;
+
+
   aiNarrative: string | null;
   competitiveBenchmark: {
     summary: string;
@@ -355,9 +363,46 @@ export const investorDashboardService = {
       marketImplications: summary.marketImplications || null,
       aiNarrative: summary.aiNarrative || null,
       competitiveBenchmark: summary.competitiveBenchmark || null,
+      headcount: await getHeadcountData(orgId),
     };
+
   },
 };
+
+/**
+ * Get headcount data from HeadcountPlan table
+ */
+async function getHeadcountData(orgId: string): Promise<any> {
+  const plans = await prisma.headcountPlan.findMany({
+    where: { orgId },
+  });
+
+  if (plans.length === 0) return null;
+
+  const byDepartment: Record<string, number> = {};
+  let total = 0;
+  let planned = 0;
+  let hired = 0;
+
+  for (const plan of plans) {
+    const dept = plan.department || 'General';
+    const qty = plan.quantity || 1;
+    
+    byDepartment[dept] = (byDepartment[dept] || 0) + qty;
+    total += qty;
+    
+    if (plan.status === 'active' || plan.status === 'hired') hired += qty;
+    else planned += qty;
+  }
+
+  return {
+    total,
+    byDepartment,
+    planned,
+    hired,
+  };
+}
+
 
 /**
  * Extract monthly metrics from model summary
@@ -873,7 +918,9 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
     marketImplications: null,
     aiNarrative: null,
     competitiveBenchmark: null,
+    headcount: null,
   };
+
 }
 
 /**
@@ -911,8 +958,10 @@ function getDefaultDashboardData(): InvestorDashboardData {
     marketImplications: null,
     aiNarrative: null,
     competitiveBenchmark: null,
+    headcount: null,
   };
 }
+
 
 /**
  * Extract vendor/customer name from transaction description or rawPayload

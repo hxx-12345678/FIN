@@ -107,6 +107,29 @@ def generate_investor_pdf_html(org_name: str, summary_json: dict, monte_carlo_da
         </div>
         """
     
+    # Pre-calculate Headcount HTML
+    headcount = summary_json.get('headcount', {})
+    total_hc = headcount.get('total', 0)
+    hired_hc = headcount.get('hired', 0)
+    planned_hc = headcount.get('planned', 0)
+    dept_hc = headcount.get('byDepartment', {})
+    
+    chr_hc_html = ""
+    if dept_hc:
+        max_dept = max(dept_hc.values()) or 1
+        for dept, count in dept_hc.items():
+            h = int((count / max_dept) * 100)
+            chr_hc_html += f"""
+            <div class="bar-wrapper">
+                <div class="bar-value">{count}</div>
+                <div class="bar" style="height: {h}%; background: #6366f1;"></div>
+                <div class="bar-label">{dept[:6]}</div>
+            </div>
+            """
+    else:
+        chr_hc_html = '<p style="font-size: 12px; color: #94a3b8;">No headcount data available</p>'
+
+    
     # Get AI recommendations if available
     recommendations = summary_json.get('recommendations', [])
     
@@ -376,6 +399,45 @@ def generate_investor_pdf_html(org_name: str, summary_json: dict, monte_carlo_da
                 <span>Slide 3</span>
             </div>
         </div>
+
+        <!-- SLIDE 4: HEADCOUNT & ORGANIZATIONAL SCALING -->
+        <div class="slide">
+            <div class="header">
+                <h1>Headcount & Talent</h1>
+                <div class="subtitle">{org_name} • Organizational Velocity</div>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Total Headcount</div>
+                    <div class="stat-value">{total_hc}</div>
+                    <div style="font-size: 12px; color: #64748b; margin-top: 4px;">{hired_hc} Hired / {planned_hc} Planned</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Hiring Velocity</div>
+                    <div class="stat-value">{(hired_hc/total_hc*100) if total_hc > 0 else 0:.0f}%</div>
+                    <div style="font-size: 12px; color: #10b981; margin-top: 4px;">Target: 100% by year end</div>
+                </div>
+            </div>
+
+            <div class="chart-container" style="margin-top: 1cm; height: 5cm;">
+                <div class="chart-title">Headcount by Department</div>
+                <div class="bar-chart">
+                    {chr_hc_html}
+                </div>
+            </div>
+
+            <div class="ai-box" style="margin-top: 1cm;">
+                <h3 style="margin: 0 0 0.3cm 0; font-size: 16px; color: #4338ca;">Strategic Talent Assessment</h3>
+                <p style="margin: 0; font-size: 14px; color: #1e1b4b;">The current organizational structure is heavily weighted towards R&D (Engineering), supporting the core product roadmap. We anticipate a shift towards Sales & Marketing hires in the next two quarters as we scale GTM motions.</p>
+            </div>
+            
+            <div class="footer">
+                <span>{org_name} Confidential</span>
+                <span>Slide 4</span>
+            </div>
+        </div>
+
     """
     
     if recommendations:
@@ -624,6 +686,37 @@ def handle_investor_export_pdf(job_id: str, org_id: str, object_id: str, logs: d
                 logger.warning(f"Export data validation errors: {errors}")
             
             summary_json = sanitize_summary_json(summary_json)
+            
+            # Fetch headcount data if not in summary
+            if 'headcount' not in summary_json:
+                try:
+                    cursor.execute("""
+                        SELECT department, quantity, status FROM headcount_plans
+                        WHERE org_id = %s
+                    """, (export_org_id,))
+                    hc_rows = cursor.fetchall()
+                    if hc_rows:
+                        by_dept = {}
+                        total = 0
+                        planned = 0
+                        hired = 0
+                        for row in hc_rows:
+                            dept = row[0] or 'General'
+                            qty = row[1] or 1
+                            status = row[2]
+                            by_dept[dept] = by_dept.get(dept, 0) + qty
+                            total += qty
+                            if status in ['active', 'hired']: hired += qty
+                            else: planned += qty
+                        summary_json['headcount'] = {
+                            'total': total,
+                            'byDepartment': by_dept,
+                            'planned': planned,
+                            'hired': hired
+                        }
+                except Exception as e:
+                    logger.warning(f"Could not fetch Headcount data: {str(e)}")
+
             
             # Get Monte Carlo data if requested
             monte_carlo_data = None

@@ -841,12 +841,22 @@ function getDefaultAlerts() {
 /**
  * Extract vendor/customer name from transaction description or rawPayload
  */
-function extractVendorFromDescription(description: string | null, rawPayload: any): string | null {
-  if (!description && !rawPayload) return null;
+function extractVendorFromDescription(description: string | null, rawPayload: any): string {
+  let result = 'Unknown';
 
-  // Try to extract from description (common patterns)
-  if (description) {
-    // Remove common prefixes/suffixes
+  // 1. Try to extract from rawPayload (highest accuracy)
+  if (rawPayload && typeof rawPayload === 'object') {
+    const vendorFields = ['vendor', 'merchant', 'payee', 'name', 'company', 'business'];
+    for (const field of vendorFields) {
+      if (rawPayload[field] && typeof rawPayload[field] === 'string') {
+        result = rawPayload[field].substring(0, 50);
+        break;
+      }
+    }
+  }
+
+  // 2. Fallback to description cleaning if result is still unknown
+  if (result === 'Unknown' && description) {
     let vendor = description.trim();
 
     // Remove transaction IDs, reference numbers
@@ -858,24 +868,65 @@ function extractVendorFromDescription(description: string | null, rawPayload: an
     // Remove dates
     vendor = vendor.replace(/\d{1,2}\/\d{1,2}\/\d{2,4}/g, '').trim();
 
-    // Take first meaningful words (usually vendor name is at the start)
+    // Take first meaningful words
     const words = vendor.split(/\s+/).filter(w => w.length > 2);
     if (words.length > 0) {
-      // Take first 2-3 words as vendor name
-      return words.slice(0, 3).join(' ').substring(0, 50);
+      result = words.slice(0, 3).join(' ').substring(0, 50);
+    } else {
+      result = description.substring(0, 50);
     }
   }
 
-  // Try to extract from rawPayload
-  if (rawPayload && typeof rawPayload === 'object') {
-    const vendorFields = ['vendor', 'merchant', 'payee', 'name', 'company', 'business'];
-    for (const field of vendorFields) {
-      if (rawPayload[field] && typeof rawPayload[field] === 'string') {
-        return rawPayload[field].substring(0, 50);
-      }
-    }
+  // 3. Normalization Layer (Professional Branding)
+  const lower = result.toLowerCase();
+  const normalizationMap: Record<string, string> = {
+    'aws': 'Amazon Web Services',
+    'amazon': 'Amazon Web Services',
+    'google cloud': 'Google Cloud',
+    'gcp': 'Google Cloud',
+    'google*': 'Google',
+    'slack': 'Slack',
+    'zoom': 'Zoom',
+    'github': 'GitHub',
+    'stripe': 'Stripe',
+    'twilio': 'Twilio',
+    'salesforce': 'Salesforce',
+    'hubspot': 'HubSpot',
+    'microsoft': 'Microsoft',
+    'azure': 'Microsoft Azure',
+    'digitalocean': 'DigitalOcean',
+    'cloudflare': 'Cloudflare',
+    'atlassian': 'Atlassian',
+    'jira': 'Atlassian (Jira)',
+    'confluence': 'Atlassian (Confluence)',
+    'notion': 'Notion',
+    'figma': 'Figma',
+    'canva': 'Canva',
+    'adobe': 'Adobe',
+    'mailchimp': 'Mailchimp',
+    'sendgrid': 'SendGrid (Twilio)',
+    'quickbooks': 'Intuit QuickBooks',
+    'xero': 'Xero',
+    'freshbooks': 'FreshBooks',
+    'gusto': 'Gusto',
+    'rippling': 'Rippling',
+    'deel': 'Deel',
+    'remote': 'Remote.com',
+    'bill.com': 'Bill.com',
+    'brex': 'Brex',
+    'ramp': 'Ramp',
+    'american express': 'American Express',
+    'chase': 'JPMorgan Chase',
+    'silicon valley bank': 'SVB',
+    'svb': 'SVB',
+  };
+
+  for (const [key, cleanName] of Object.entries(normalizationMap)) {
+    if (lower.includes(key)) return cleanName;
   }
 
-  return description ? description.substring(0, 50) : null;
+  return result;
 }
+
+
 

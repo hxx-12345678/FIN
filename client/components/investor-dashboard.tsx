@@ -66,7 +66,26 @@ interface DashboardData {
     ltvCacRatio: number
     paybackPeriod: number
   }
+  saasMetrics: {
+    nrr: number
+    grr: number
+    ruleOf40: number
+    burnMultiple: number
+    magicNumber: number
+  }
+  headcount: {
+    total: number
+    byDepartment: Record<string, number>
+    planned: number
+    hired: number
+  } | null
+  aiNarrative: string | null
+  competitiveBenchmark: {
+    summary: string
+    dataSources: any[]
+  } | null
 }
+
 
 export function InvestorDashboard() {
   const router = useRouter()
@@ -146,10 +165,22 @@ export function InvestorDashboard() {
       ltvCacRatio: 0,
       paybackPeriod: 0,
     },
+    saasMetrics: {
+      nrr: 0,
+      grr: 0,
+      ruleOf40: 0,
+      burnMultiple: 0,
+      magicNumber: 0,
+    },
+    headcount: null,
+    aiNarrative: null,
+    competitiveBenchmark: null,
   }
 
+
   const dashboardData = data || defaultData
-  const { executiveSummary, monthlyMetrics, milestones, keyUpdates, unitEconomics } = dashboardData
+  const { executiveSummary, monthlyMetrics, milestones, keyUpdates, unitEconomics, saasMetrics, headcount, aiNarrative, competitiveBenchmark } = dashboardData
+
 
   if (loading) {
     return (
@@ -212,6 +243,28 @@ export function InvestorDashboard() {
               Note: The values below reflect the <strong>Operating Plan</strong> (Source of Truth) as approved by the CFO.
             </AlertDescription>
           </Alert>
+
+          {/* AI Strategic Narrative */}
+          {aiNarrative && (
+            <Card className="border-l-4 border-l-indigo-500 shadow-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-indigo-500" />
+                  Strategic AI Narrative
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="prose prose-sm dark:prose-invert max-w-none text-slate-700 dark:text-slate-300">
+                  {aiNarrative.split('\n\n').map((para, i) => (
+                    <p key={i} className="mb-3 leading-relaxed">
+                      {para.startsWith('#') ? <strong className="text-slate-900 dark:text-white text-base block mt-4 mb-2">{para.replace(/#/g, '').trim()}</strong> : para}
+                    </p>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <Button 
             variant="outline" 
@@ -606,6 +659,106 @@ export function InvestorDashboard() {
           )}
         </CardContent>
       </Card>
+
+      {/* Headcount & SaaS Metrics */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>SaaS Efficiency Benchmarks</CardTitle>
+            <CardDescription>Capital efficiency and retention metrics</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900 border">
+                <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">NRR</p>
+                <p className="text-2xl font-bold">{saasMetrics.nrr}%</p>
+                <p className="text-[10px] text-slate-500 mt-1">Net Revenue Retention</p>
+              </div>
+              <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900 border">
+                <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Burn Multiple</p>
+                <p className="text-2xl font-bold">{saasMetrics.burnMultiple.toFixed(2)}x</p>
+                <p className="text-[10px] text-slate-500 mt-1">Net Burn / Net New ARR</p>
+              </div>
+              <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900 border">
+                <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Rule of 40</p>
+                <p className="text-2xl font-bold">{saasMetrics.ruleOf40.toFixed(1)}%</p>
+                <p className="text-[10px] text-slate-500 mt-1">Growth + Margin</p>
+              </div>
+              <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900 border">
+                <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Magic Number</p>
+                <p className="text-2xl font-bold">{saasMetrics.magicNumber.toFixed(2)}</p>
+                <p className="text-[10px] text-slate-500 mt-1">Sales Efficiency Ratio</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Headcount & Org Scaling</CardTitle>
+            <CardDescription>Team distribution and hiring progress</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {headcount ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-center flex-1 border-r">
+                    <p className="text-2xl font-bold text-indigo-600">{headcount.total}</p>
+                    <p className="text-xs text-muted-foreground">Total Headcount</p>
+                  </div>
+                  <div className="text-center flex-1">
+                    <p className="text-2xl font-bold text-emerald-600">{headcount.hired}</p>
+                    <p className="text-xs text-muted-foreground">Hired / Active</p>
+                  </div>
+                </div>
+                <div className="space-y-2 max-h-[160px] overflow-y-auto pr-2">
+                  {Object.entries(headcount.byDepartment).map(([dept, count], i) => (
+                    <div key={i} className="flex items-center justify-between text-sm">
+                      <span className="text-slate-600 dark:text-slate-400">{dept}</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-24 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-indigo-500" 
+                            style={{ width: `${(count / headcount.total) * 100}%` }}
+                          />
+                        </div>
+                        <span className="font-bold w-4 text-right">{count}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-48 text-muted-foreground text-sm italic">
+                Connect HRIS or update headcount plan to see organizational data.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Competitive Benchmark */}
+      {competitiveBenchmark && (
+        <Card className="bg-slate-900 text-white overflow-hidden border-none">
+          <CardHeader className="bg-slate-800/50">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-indigo-400" />
+              Market Context & Benchmarks
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <p className="text-slate-300 text-sm leading-relaxed mb-4">
+              {competitiveBenchmark.summary}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline" className="text-slate-400 border-slate-700">Top Quartile Growth</Badge>
+              <Badge variant="outline" className="text-slate-400 border-slate-700">Efficiency Optimized</Badge>
+              <Badge variant="outline" className="text-slate-400 border-slate-700">Series {dashboardData.executiveSummary.arr > 10000000 ? 'C' : dashboardData.executiveSummary.arr > 5000000 ? 'B' : 'A'} Leader</Badge>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
 
       {/* Access Notice */}
       <Card className="border-yellow-200 bg-yellow-50">

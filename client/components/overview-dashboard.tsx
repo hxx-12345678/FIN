@@ -113,7 +113,9 @@ interface ExpenseDetail {
   color: string
   percentage: number
   classification: ReturnType<typeof classifyExpenseCategory>
+  vendors?: Array<{ name: string; value: number }>
 }
+
 
 const defaultRevenueData = [
   { month: "Jan", revenue: 45000, forecast: 42000 },
@@ -465,15 +467,19 @@ export function OverviewDashboard() {
   const totalExpenseValue = expenseBreakdown.reduce((sum, item) => sum + item.value, 0)
 
   const handleExpenseClick = (data: any) => {
-    const classification = classifyExpenseCategory(data.name);
+    // Recharts data objects can be wrapped, try to get the original payload
+    const payload = data.payload || data;
+    const classification = classifyExpenseCategory(payload.name);
     setSelectedExpense({
-      name: data.name,
-      value: data.value,
-      color: data.color,
-      percentage: totalExpenseValue > 0 ? (data.value / totalExpenseValue) * 100 : 0,
+      name: payload.name,
+      value: payload.value,
+      color: payload.color,
+      percentage: totalExpenseValue > 0 ? (payload.value / totalExpenseValue) * 100 : 0,
       classification,
+      vendors: payload.vendors || [],
     });
   };
+
 
   return (
     <div className="w-full max-w-full space-y-4 md:space-y-6 overflow-x-hidden pb-8">
@@ -892,7 +898,10 @@ export function OverviewDashboard() {
                         outerRadius={80}
                         paddingAngle={5}
                         dataKey="value"
+                        onClick={(data) => handleExpenseClick(data)}
+                        className="cursor-pointer"
                       >
+
                         {expenseBreakdown.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
                         ))}
@@ -1142,10 +1151,34 @@ export function OverviewDashboard() {
                   <p className="text-muted-foreground">This is an <strong>operating expense</strong> below the gross profit line. It affects your <strong>operating margin</strong> but NOT your gross margin. Optimize for efficiency, not elimination.</p>
                 )}
               </div>
+              {/* Vendors List */}
+              {selectedExpense.vendors && selectedExpense.vendors.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                    <Users className="h-3 w-3" /> Top Vendors / Recipients
+                  </h4>
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                    {selectedExpense.vendors.map((vendor: any, idx: number) => (
+                      <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{vendor.name}</span>
+                        <span className="text-sm font-bold text-slate-900 dark:text-white">{formatCurrency(vendor.value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* View Ledger Button */}
+              <div className="pt-2">
+                <Button className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold uppercase tracking-widest py-6" onClick={() => window.dispatchEvent(new CustomEvent('navigate-view', { detail: { view: 'reports' } }))}>
+                  View In Ledger
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
+
     </div>
   )
 }

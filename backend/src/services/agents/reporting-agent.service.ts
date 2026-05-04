@@ -24,7 +24,14 @@ class ReportingAgentService {
     const calculations: Record<string, number> = {};
 
     const query = params.query || '';
-    const isBoardReport = query.toLowerCase().includes('board') || query.toLowerCase().includes('executive');
+    const isBoardReport = query.toLowerCase().includes('board') || query.toLowerCase().includes('executive') || query.toLowerCase().includes('investor');
+    
+    // Detect funding stage from metadata or query
+    const fundingStage: 'seed' | 'series_a' | 'series_b' | 'series_c' = 
+      params.fundingStage || (query.toLowerCase().includes('series a') ? 'series_a' : 
+      query.toLowerCase().includes('series b') ? 'series_b' : 
+      query.toLowerCase().includes('series c') ? 'series_c' : 'series_a');
+
 
     thoughts.push({
       step: 1,
@@ -58,7 +65,8 @@ class ReportingAgentService {
       action: 'narrative_generation',
     });
 
-    const narrative = this.generateNarrative(financialData, kpis, isBoardReport);
+    const narrative = this.generateNarrative(financialData, kpis, isBoardReport, fundingStage);
+
 
     // Generate visualizations
     const visualizations = this.generateVisualizations(financialData, kpis);
@@ -339,20 +347,21 @@ class ReportingAgentService {
   /**
    * Generate executive narrative
    */
-  private generateNarrative(data: any, kpis: any[], isBoardReport: boolean): any {
+  private generateNarrative(data: any, kpis: any[], isBoardReport: boolean, stage: string): any {
     const sections = [];
 
     // Executive Summary
     sections.push({
       title: 'Executive Summary',
-      content: this.generateExecutiveSummary(data, kpis),
+      content: this.generateExecutiveSummary(data, kpis, stage),
     });
 
-    // Financial Performance
+    // Financial Performance & Variance Attribution
     sections.push({
-      title: 'Financial Performance',
-      content: this.generateFinancialPerformance(data),
+      title: 'Performance & Attribution',
+      content: this.generateAttributionNarrative(data),
     });
+
 
     // Key Metrics
     sections.push({
@@ -377,16 +386,64 @@ class ReportingAgentService {
     return { sections, generatedAt: new Date() };
   }
 
-  private generateExecutiveSummary(data: any, kpis: any[]): string {
+  private generateExecutiveSummary(data: any, kpis: any[], stage: string): string {
     const runwayStatus = data.runway > 12 ? 'healthy' : data.runway > 6 ? 'adequate' : 'critical';
     const growthStatus = data.revenueGrowth > 0.1 ? 'strong' : data.revenueGrowth > 0 ? 'steady' : 'concerning';
 
-    return `The company shows ${growthStatus} revenue growth at ${(data.revenueGrowth * 100).toFixed(1)}% MoM, ` +
-      `with MRR of $${data.revenue.toLocaleString()} ($${data.arr.toLocaleString()} ARR). ` +
-      `Cash position remains ${runwayStatus} with ${data.runway.toFixed(1)} months of runway ` +
-      `based on current burn rate of $${Math.abs(data.netBurn).toLocaleString()}/month. ` +
-      `Customer base stands at ${data.customers} active accounts with ${(data.churnRate * 100).toFixed(1)}% monthly churn.`;
+    let focus = 'scaling product-market fit';
+    let stageContext = '';
+
+    switch (stage) {
+      case 'seed':
+        focus = 'product-market fit (PMF) and initial traction';
+        stageContext = 'Priority is on iterating based on early feedback and securing a repeatable customer acquisition channel.';
+        break;
+      case 'series_a':
+        focus = 'scaling go-to-market (GTM) motions and unit economic validation';
+        stageContext = 'Focus is on proving the sales model and establishing a clear path to $10M ARR.';
+        break;
+      case 'series_b':
+        focus = 'operational efficiency and market expansion';
+        stageContext = 'Priority is on scaling teams across functions while maintaining strong gross margins and managing burn.';
+        break;
+      case 'series_c':
+        focus = 'profitability, corporate governance, and path to liquidity';
+        stageContext = 'Emphasis is on predictability, functional drill-downs, and audit-ready financial reporting.';
+        break;
+    }
+
+    return `The company is in its **${stage.replace('_', ' ').toUpperCase()}** phase, focused on **${focus}**. ${stageContext}\n\n` +
+      `**Key Performance:** Performance shows **${growthStatus}** revenue growth at **${(data.revenueGrowth * 100).toFixed(1)}% MoM**, ` +
+      `with MRR of **$${data.revenue.toLocaleString()}** (**$${data.arr.toLocaleString()} ARR**). ` +
+      `**Runway:** Cash position remains **${runwayStatus}** with **${data.runway.toFixed(1)} months** of runway ` +
+      `based on current burn rate of **$${Math.abs(data.netBurn).toLocaleString()}**/month.`;
   }
+
+
+  private generateAttributionNarrative(data: any): string {
+    const variance = data.revenue - data.prevRevenue;
+    const isGrowth = variance > 0;
+    
+    // Attempt to attribute variance to specific drivers
+    const attributionDrivers = [];
+    if (isGrowth) {
+      if (data.activeCustomers > data.prevActiveCustomers) attributionDrivers.push('New Customer Acquisition');
+      if (data.revenuePerCustomer > data.prevRevenuePerCustomer) attributionDrivers.push('Expansion Revenue / Upsell');
+    } else {
+      if (data.activeCustomers < data.prevActiveCustomers) attributionDrivers.push('Customer Churn');
+      if (data.revenuePerCustomer < data.prevRevenuePerCustomer) attributionDrivers.push('Contraction / Downgrades');
+    }
+
+    const attribution = attributionDrivers.length > 0 ? attributionDrivers.join(' and ') : (isGrowth ? 'organic growth' : 'seasonal fluctuations');
+    
+    return `Monthly revenue reached **$${data.revenue.toLocaleString()}**, representing a **$${Math.abs(variance).toLocaleString()}** change. \n\n` +
+      `**Causal Attribution:** This variance is primarily attributed to **${attribution}**. ` +
+      `We observed a **${((data.revenuePerCustomer / data.prevRevenuePerCustomer - 1) * 100).toFixed(1)}%** shift in average revenue per account (ARPA).\n\n` +
+      `**Operating Leverage:** Expenses totaled **$${data.expenses.toLocaleString()}**, resulting in a net burn of **$${Math.abs(data.netBurn).toLocaleString()}**. ` +
+      `Gross margin of **${(data.grossMargin * 100).toFixed(0)}%** reflects the scaling efficiency of the core delivery model.`;
+  }
+
+
 
   private generateFinancialPerformance(data: any): string {
     return `Revenue reached $${data.revenue.toLocaleString()} this month, ` +
