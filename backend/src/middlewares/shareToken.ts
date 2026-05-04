@@ -21,8 +21,9 @@ export const authenticateShareToken = async (
   next: NextFunction
 ) => {
   try {
-    // Check for share token in query or header
+    // Check for share token in params, query or header
     const token =
+      (req.params.token as string) ||
       (req.query.token as string) ||
       (req.headers['x-share-token'] as string) ||
       (req.headers.authorization?.startsWith('ShareToken ')

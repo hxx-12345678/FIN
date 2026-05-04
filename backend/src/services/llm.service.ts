@@ -22,7 +22,11 @@ class LlmService {
         }
 
         // Use model from env or current best default
-        this.model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+        this.model = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
+        if (this.model === 'gemini-1.5-flash-latest' || this.model === 'gemini-1.5-flash') {
+            console.info(`[LlmService] Standardizing ${this.model} to gemini-2.5-flash-lite for improved v1beta compatibility.`);
+            this.model = 'gemini-2.5-flash-lite';
+        }
 
         console.info(`[LlmService] Initialized with model: ${this.model} and ${this.apiKeys.length} keys`);
         if (this.apiKeys.length === 0) {
@@ -43,9 +47,21 @@ class LlmService {
         // Try keys in sequence
         for (const key of this.apiKeys) {
             try {
-                // Using stable v1 API
-                const url = `https://generativelanguage.googleapis.com/v1/models/${this.model}:generateContent?key=${key}`;
+                // Reverting to v1beta to ensure compatibility with responseMimeType and newer models
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${key}`;
                 console.debug(`[LlmService] Calling URL: ${url.replace(key, 'REDACTED')}`);
+
+                const generationConfig: any = {
+                    temperature: 0.1,
+                    topP: 0.95,
+                    topK: 40,
+                    maxOutputTokens: 8192,
+                };
+
+                // Only add responseMimeType if in JSON mode to avoid 400 errors on older/stricter endpoints
+                if (jsonMode) {
+                    generationConfig.responseMimeType = "application/json";
+                }
 
                 const payload = {
                     contents: [{
@@ -53,13 +69,7 @@ class LlmService {
                             text: `${systemPrompt}\n\nUser Request: ${userPrompt}`
                         }]
                     }],
-                    generationConfig: {
-                        temperature: 0.1,
-                        topP: 0.95,
-                        topK: 40,
-                        maxOutputTokens: 8192,
-                        responseMimeType: jsonMode ? "application/json" : "text/plain"
-                    }
+                    generationConfig
                 };
 
                 const response = await fetch(url, {
@@ -101,8 +111,8 @@ class LlmService {
 
         for (const key of this.apiKeys) {
             try {
-                // Using stable v1 API for streaming
-                const sseUrl = `https://generativelanguage.googleapis.com/v1/models/${this.model}:streamGenerateContent?alt=sse&key=${key}`;
+                // Using v1beta for streaming as well
+                const sseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:streamGenerateContent?alt=sse&key=${key}`;
                 const payload = {
                     contents: [{ parts: [{ text: `${systemPrompt}\n\nUser Request: ${userPrompt}` }] }],
                     generationConfig: { temperature: 0.1, topP: 0.95, topK: 40, maxOutputTokens: 8192 }
@@ -118,7 +128,7 @@ class LlmService {
                     lastError = await sseResponse.text();
                     continue;
                 }
-
+                
                 const reader = sseResponse.body!.getReader();
                 const decoder = new TextDecoder("utf-8");
                 let fullText = "";
@@ -127,11 +137,11 @@ class LlmService {
                 while (true) {
                     const { value, done } = await reader.read();
                     if (done) break;
-
+                    
                     buffer += decoder.decode(value, { stream: true });
                     const lines = buffer.split("\n");
                     buffer = lines.pop() || "";
-
+                    
                     for (const line of lines) {
                         if (line.startsWith("data: ") && line.trim() !== "data: [DONE]") {
                             try {
@@ -141,7 +151,7 @@ class LlmService {
                                     fullText += textChunk;
                                     onChunk(textChunk);
                                 }
-                            } catch (e) { }
+                            } catch(e) {}
                         }
                     }
                 }
