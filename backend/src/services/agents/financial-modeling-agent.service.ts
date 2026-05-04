@@ -10,7 +10,7 @@ import { AgentResponse, AgentThought, DataSource, AgentRecommendation, AgentVisu
 import { v4 as uuidv4 } from 'uuid';
 import { reasoningService } from '../reasoning.service';
 
-class ForecastingAgentService {
+class FinancialModelingAgentService {
   /**
    * Execute forecasting-related tasks
    */
@@ -54,7 +54,7 @@ class ForecastingAgentService {
         action: 'integrity_block'
       });
       return {
-        agentType: 'forecasting',
+        agentType: 'financial_modeling',
         taskId: uuidv4(),
         status: 'failed',
         answer: `**CRITICAL DATA INTEGRITY ALERT:** Forecasting engine cannot proceed because the current MRR is $0. Please verify your ledger synchronization (NetSuite/QBO) before requesting institutional-grade projections.`,
@@ -94,7 +94,7 @@ class ForecastingAgentService {
     const answer = this.buildForecastAnswer(baselineData, forecast.p50);
 
     return {
-      agentType: 'forecasting',
+      agentType: 'financial_modeling',
       taskId: uuidv4(),
       status: 'completed',
       answer,
@@ -147,7 +147,7 @@ class ForecastingAgentService {
       `**Analysis:** The model captures ${(calibrationScore * 100).toFixed(0)}% of realized volatility within the projected probability bands. Bias is statistically insignificant, indicating no systematic over-projection.`;
 
     return {
-      agentType: 'forecasting',
+      agentType: 'financial_modeling',
       taskId: uuidv4(),
       status: 'completed',
       answer,
@@ -269,7 +269,7 @@ class ForecastingAgentService {
       `**Strategic Assessment:** A ${Math.abs(shock * 100)}% revenue ${shock < 0 ? 'shock' : 'uplift'} creates a significant delta in working capital requirements. Logic is **consistent** with current liquidity buffers.`;
 
     return {
-      agentType: 'forecasting',
+      agentType: 'financial_modeling',
       taskId: uuidv4(),
       status: 'completed',
       answer,
@@ -292,4 +292,4 @@ class ForecastingAgentService {
   }
 }
 
-export const forecastingAgent = new ForecastingAgentService();
+export const financialModelingAgent = new FinancialModelingAgentService();

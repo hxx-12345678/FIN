@@ -7,18 +7,19 @@
 
 // Agent types that specialize in different CFO functions
 export type AgentType =
-  | 'treasury'      // Cash management, runway, burn rate
-  | 'forecasting'   // Revenue predictions, scenario modeling
-  | 'analytics'     // Drill-down analysis, EBITDA variance
-  | 'anomaly'       // Duplicate detection, fraud scanning
-  | 'reporting'     // Board summaries, narrative generation
-  | 'tax'           // Tax compliance, filings
-  | 'procurement'   // Vendor analysis, cost optimization
-  | 'capital'       // Capital allocation, portfolio optimization
-  | 'risk'          // Stress testing, tail risk, black swan analysis
-  | 'compliance'    // Regulatory compliance, audit readiness
-  | 'strategic'     // M&A analysis, strategic recommendations
-  | 'orchestrator'; // Coordinates other agents
+  | 'risk_compliance'     // Risk & Compliance Agent: Stress-tests models against macro scenarios
+  | 'variance_analysis'   // Variance Analysis Agent: Explains plan vs actuals
+  | 'financial_modeling'  // Financial Modeling Agent: Builds 3-statement models
+  | 'reporting'           // Reporting Agent: Auto-drafts narratives and board presentations
+  | 'market_monitoring'   // Market Monitoring Agent: Watches macro indicators
+  | 'resource_allocation' // Resource Allocation Agent: Suggests optimal capital allocation
+  | 'data_cleaning'       // Data Cleaning Agent: Normalizes messy ERP/CSV data
+  | 'scenario_planning'   // Scenario Planning Agent: Runs Monte Carlo simulations
+  | 'cash_flow'           // Cash Flow Agent: Simulates daily runway/burn
+  | 'circular_logic'      // Circular Logic Agent: Resolves 3-statement circular references
+  | 'audit_provenance'    // Audit & Provenance Agent: Logs cell updates and provenance
+  | 'anomaly_detection'   // Anomaly Detection Agent: Spots unusual spending patterns
+  | 'orchestrator';       // Coordinates other agents
 
 // Agent execution status
 export type AgentStatus = 'idle' | 'thinking' | 'executing' | 'waiting_approval' | 'completed' | 'failed';
@@ -268,7 +269,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /institutional.*ready/i,
       /institutional.*grade/i,
     ],
-    agents: ['analytics', 'forecasting', 'risk', 'capital', 'compliance', 'reporting', 'treasury'],
+    agents: ['variance_analysis', 'financial_modeling', 'risk_compliance', 'resource_allocation', 'reporting', 'cash_flow', 'audit_provenance'],
     complexity: 'complex',
   },
   // SOC 2 Verification & Deep Analysis (Highest Priority)
@@ -280,7 +281,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /breach.*probab/i,
       /monte.*carlo/i,
     ],
-    agents: ['treasury', 'risk', 'analytics'],
+    agents: ['cash_flow', 'risk_compliance', 'variance_analysis', 'scenario_planning'],
     complexity: 'complex',
   },
   'liquidity_stress': {
@@ -291,7 +292,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /cash.*threshold/i,
       /interest.*burden/i,
     ],
-    agents: ['forecasting', 'treasury', 'risk'],
+    agents: ['financial_modeling', 'cash_flow', 'risk_compliance'],
     complexity: 'complex',
   },
   'structural_break_detection': {
@@ -301,7 +302,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /arima/i,
       /model.*retrain/i,
     ],
-    agents: ['analytics', 'forecasting'],
+    agents: ['variance_analysis', 'financial_modeling'],
     complexity: 'complex',
   },
   'governance_override': {
@@ -311,7 +312,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /governance.*delta/i,
       /log.*governance/i,
     ],
-    agents: ['compliance', 'analytics'],
+    agents: ['risk_compliance', 'variance_analysis', 'audit_provenance'],
     complexity: 'moderate',
   },
   'inflation_analysis': {
@@ -321,7 +322,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /margin.*compression/i,
       /pricing.*adjust/i,
     ],
-    agents: ['forecasting', 'analytics'],
+    agents: ['financial_modeling', 'variance_analysis', 'market_monitoring'],
     complexity: 'complex',
   },
   'consolidation_integrity': {
@@ -331,7 +332,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /double.*counting/i,
       /subsidiary/i,
     ],
-    agents: ['reporting', 'analytics'],
+    agents: ['reporting', 'variance_analysis', 'circular_logic'],
     complexity: 'complex',
   },
   'black_swan_resilience': {
@@ -341,7 +342,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /resilience/i,
       /simultaneous.*spike/i,
     ],
-    agents: ['risk', 'forecasting', 'treasury'],
+    agents: ['risk_compliance', 'financial_modeling', 'cash_flow', 'scenario_planning'],
     complexity: 'complex',
   },
   'governance_audit': {
@@ -354,7 +355,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /compliance/i,
       /manual.*increase/i,
     ],
-    agents: ['compliance'],
+    agents: ['risk_compliance', 'audit_provenance'],
     complexity: 'moderate',
   },
   'policy_compliance': {
@@ -365,7 +366,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /violation/i,
       /policy.*threshold/i,
     ],
-    agents: ['compliance', 'reporting'],
+    agents: ['risk_compliance', 'reporting'],
     complexity: 'moderate',
   },
   'forecast_calibration': {
@@ -378,7 +379,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /bias/i,
       /accurate/i,
     ],
-    agents: ['analytics', 'forecasting'],
+    agents: ['variance_analysis', 'financial_modeling'],
     complexity: 'moderate',
   },
 
@@ -393,7 +394,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /base.*upside.*downside/i,
       /p10.*p50.*p90/i,
     ],
-    agents: ['treasury', 'forecasting'],
+    agents: ['cash_flow', 'financial_modeling'],
     complexity: 'moderate',
   },
   'burn_rate': {
@@ -403,7 +404,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /spending.*month/i,
       /how\s*much.*spending/i,
     ],
-    agents: ['treasury'],
+    agents: ['cash_flow'],
     complexity: 'simple',
   },
   'variance_analysis': {
@@ -414,7 +415,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /forecast.*actual/i,
       /explain.*difference/i,
     ],
-    agents: ['analytics', 'forecasting'],
+    agents: ['variance_analysis', 'financial_modeling'],
     complexity: 'complex',
   },
   'scenario_modeling': {
@@ -437,7 +438,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /customer\s*leaves/i,
       /pay.*slower/i,
     ],
-    agents: ['forecasting', 'treasury', 'risk'],
+    agents: ['financial_modeling', 'cash_flow', 'risk_compliance', 'scenario_planning'],
     complexity: 'complex',
   },
   'anomaly_detection': {
@@ -449,7 +450,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /structural.*change/i,
       /business.*model.*change/i,
     ],
-    agents: ['anomaly', 'analytics'],
+    agents: ['anomaly_detection', 'variance_analysis'],
     complexity: 'complex',
   },
   'cost_structure': {
@@ -459,7 +460,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /cut.*burn/i,
       /burn.*reduction/i,
     ],
-    agents: ['analytics', 'strategic'],
+    agents: ['variance_analysis', 'resource_allocation'],
     complexity: 'moderate',
   },
   'pricing_power': {
@@ -469,7 +470,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /elasticity/i,
       /price.*churn/i,
     ],
-    agents: ['analytics', 'strategic'],
+    agents: ['variance_analysis', 'market_monitoring'],
     complexity: 'moderate',
   },
   'duplicate_detection': {
@@ -480,7 +481,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /fraud.*detect/i,
       /anomaly.*payment/i,
     ],
-    agents: ['anomaly'],
+    agents: ['anomaly_detection'],
     complexity: 'moderate',
   },
   'board_summary': {
@@ -491,7 +492,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /draft.*report/i,
       /prepare.*board/i,
     ],
-    agents: ['reporting', 'analytics', 'treasury'],
+    agents: ['reporting', 'variance_analysis', 'cash_flow'],
     complexity: 'complex',
   },
   'capital_allocation': {
@@ -505,7 +506,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /hedge.*currency/i,
       /fx.*hedge/i,
     ],
-    agents: ['capital', 'treasury', 'risk'],
+    agents: ['resource_allocation', 'cash_flow', 'risk_compliance'],
     complexity: 'complex',
   },
   'treasury_strategy': {
@@ -518,7 +519,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /allocation.*options/i,
       /npv.*return/i,
     ],
-    agents: ['strategic', 'treasury', 'capital'],
+    agents: ['resource_allocation', 'cash_flow', 'financial_modeling'],
     complexity: 'complex',
   },
   'stress_testing': {
@@ -532,7 +533,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /geopolitical.*risk/i,
       /how\s*safe/i,
     ],
-    agents: ['risk', 'forecasting', 'analytics'],
+    agents: ['risk_compliance', 'financial_modeling', 'variance_analysis', 'scenario_planning'],
     complexity: 'complex',
   },
   'tax_compliance': {
@@ -546,7 +547,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /gdpr/i,
       /sox.*compliance/i,
     ],
-    agents: ['compliance', 'analytics'],
+    agents: ['risk_compliance', 'variance_analysis'],
     complexity: 'complex',
   },
   'revenue_forecast': {
@@ -556,7 +557,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /revenue.*next/i,
       /growth.*projection/i,
     ],
-    agents: ['forecasting'],
+    agents: ['financial_modeling'],
     complexity: 'moderate',
   },
   'data_quality_assessment': {
@@ -566,8 +567,10 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /missing.*data/i,
       /temporal.*misalignment/i,
       /inconsistent.*driver/i,
+      /messy/i,
+      /normalize/i,
     ],
-    agents: ['analytics', 'compliance'],
+    agents: ['data_cleaning', 'variance_analysis', 'risk_compliance'],
     complexity: 'moderate',
   },
   'web_search': {
@@ -584,7 +587,7 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /\b(search\s+(for|the\s+web|online|internet)|look\s+up|find\s+out|google)\b/i,
       /https?:\/\//i
     ],
-    agents: ['strategic', 'analytics'],
+    agents: ['market_monitoring', 'variance_analysis'],
     complexity: 'complex'
   }
 };

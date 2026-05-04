@@ -24,15 +24,18 @@ import {
   HITL_THRESHOLDS,
 } from './agent-types';
 import { llmService } from '../llm.service';
-import { treasuryAgent } from './treasury-agent.service';
-import { forecastingAgent } from './forecasting-agent.service';
-import { analyticsAgent } from './analytics-agent.service';
-import { anomalyAgent } from './anomaly-agent.service';
+import { cashFlowAgent } from './cash-flow-agent.service';
+import { financialModelingAgent } from './financial-modeling-agent.service';
+import { varianceAnalysisAgent } from './variance-analysis-agent.service';
+import { anomalyDetectionAgent } from './anomaly-detection-agent.service';
 import { reportingAgent } from './reporting-agent.service';
-import { capitalAgent } from './capital-agent.service';
-import { riskAgent } from './risk-agent.service';
-import { strategicAgent } from './strategic-agent.service';
-import { complianceAgent } from './compliance-agent.service';
+import { resourceAllocationAgent } from './resource-allocation-agent.service';
+import { riskComplianceAgent } from './risk-compliance-agent.service';
+import { marketMonitoringAgent } from './market-monitoring-agent.service';
+import { dataCleaningAgent } from './data-cleaning-agent.service';
+import { scenarioPlanningAgent } from './scenario-planning-agent.service';
+import { circularLogicAgent } from './circular-logic-agent.service';
+import { auditProvenanceAgent } from './audit-provenance-agent.service';
 import { webSearchService } from '../web-search.service';
 
 class AgentOrchestratorService {
@@ -41,19 +44,19 @@ class AgentOrchestratorService {
   private readonly CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
   constructor() {
-    // Register specialized agents for comprehensive CFO operations
-    // Core Financial Agents
-    this.agents.set('treasury', treasuryAgent);       // Cash, runway, burn
-    this.agents.set('forecasting', forecastingAgent); // Revenue predictions, scenarios
-    this.agents.set('analytics', analyticsAgent);     // Variance, drill-down
-    this.agents.set('anomaly', anomalyAgent);         // Duplicate detection, fraud
-    this.agents.set('reporting', reportingAgent);     // Board summaries, narratives
-
-    // Advanced Strategic Agents
-    this.agents.set('capital', capitalAgent);         // Capital allocation, portfolio optimization
-    this.agents.set('risk', riskAgent);               // Stress testing, tail risk, black swan
-    this.agents.set('strategic', strategicAgent);     // M&A, cost optimization, synergies
-    this.agents.set('compliance', complianceAgent);   // Tax, regulatory, audit readiness
+    // Register the 12 Specialized Agents for comprehensive CFO operations
+    this.agents.set('cash_flow', cashFlowAgent);
+    this.agents.set('financial_modeling', financialModelingAgent);
+    this.agents.set('variance_analysis', varianceAnalysisAgent);
+    this.agents.set('anomaly_detection', anomalyDetectionAgent);
+    this.agents.set('reporting', reportingAgent);
+    this.agents.set('resource_allocation', resourceAllocationAgent);
+    this.agents.set('risk_compliance', riskComplianceAgent);
+    this.agents.set('market_monitoring', marketMonitoringAgent);
+    this.agents.set('data_cleaning', dataCleaningAgent);
+    this.agents.set('scenario_planning', scenarioPlanningAgent);
+    this.agents.set('circular_logic', circularLogicAgent);
+    this.agents.set('audit_provenance', auditProvenanceAgent);
   }
 
   /**
@@ -186,8 +189,8 @@ class AgentOrchestratorService {
             query += webContext;
             
             // Ensure strategic/analytics agents are included if we have web data
-            if (!intent.requiredAgents.includes('strategic')) {
-              intent.requiredAgents.push('strategic');
+            if (!intent.requiredAgents.includes('market_monitoring')) {
+              intent.requiredAgents.push('market_monitoring');
             }
           }
         } catch (e: any) {
@@ -304,15 +307,18 @@ class AgentOrchestratorService {
     try {
       console.info(`[AgentOrchestrator] No regex match for: "${query}". Calling LLM for intent discovery...`);
       const systemPrompt = `Analyze the financial user query and classify it into one of these intents: 
-      - runway_burn: Cash runway, burn rate, spending.
+      - burn_rate: Cash runway, burn rate, spending.
       - variance_analysis: Missing targets, budget vs actual, "why" it changed.
       - scenario_modeling: "What if" scenarios, revenue shifts.
       - revenue_forecast: Future revenue growth.
-      - treasury_strategy: Debt, cash allocation, surplus management.
-      - compliance_risk: Audits, tax, regulations.
-      - anomaly_detection: Outliers, fraud.
+      - capital_allocation: Capital allocation, surplus management.
+      - tax_compliance: Audits, tax, regulations.
+      - anomaly_detection: Outliers, fraud, duplicate payments.
+      - stress_testing: Stress test, black swan, risk assessment.
+      - board_summary: Board reports, executive summaries.
+      - data_quality_assessment: Messy data, normalize, data quality.
       
-      Valid Agents: [analytics, treasury, forecasting, anomaly, reporting, capital, risk, strategic, compliance]
+      Valid Agents: [risk_compliance, variance_analysis, financial_modeling, reporting, market_monitoring, resource_allocation, data_cleaning, scenario_planning, cash_flow, circular_logic, audit_provenance, anomaly_detection]
       
       Return JSON: { "intent": string, "confidence": number, "requiredAgents": AgentType[], "entities": object }`;
 
@@ -324,7 +330,7 @@ class AgentOrchestratorService {
           primaryIntent: data.intent,
           confidence: data.confidence,
           entities: { ...data.entities, ...this.extractEntities(query) },
-          requiredAgents: data.requiredAgents || ['analytics'],
+          requiredAgents: data.requiredAgents || ['variance_analysis'],
           complexity: 'complex' as const,
           requiresRealTimeData: true,
         };
@@ -342,7 +348,7 @@ class AgentOrchestratorService {
       primaryIntent: 'general_query',
       confidence: 0.5,
       entities: this.extractEntities(query),
-      requiredAgents: ['analytics'],
+      requiredAgents: ['variance_analysis'],
       complexity: 'simple',
       requiresRealTimeData: true,
     };
@@ -447,17 +453,18 @@ class AgentOrchestratorService {
    */
   private getTaskType(agentType: AgentType, intent: string): AgentTask['type'] {
     const typeMap: Record<AgentType, AgentTask['type']> = {
-      treasury: 'calculation',
-      forecasting: 'simulation',
-      analytics: 'analysis',
-      anomaly: 'anomaly_scan',
+      cash_flow: 'calculation',
+      financial_modeling: 'simulation',
+      variance_analysis: 'analysis',
+      anomaly_detection: 'anomaly_scan',
       reporting: 'report_generation',
-      tax: 'calculation',
-      procurement: 'analysis',
-      capital: 'simulation',
-      risk: 'simulation',
-      strategic: 'recommendation',
-      compliance: 'analysis',
+      resource_allocation: 'simulation',
+      risk_compliance: 'simulation',
+      market_monitoring: 'recommendation',
+      data_cleaning: 'data_retrieval',
+      scenario_planning: 'simulation',
+      circular_logic: 'calculation',
+      audit_provenance: 'analysis',
       orchestrator: 'recommendation',
     };
     return typeMap[agentType] || 'analysis';
@@ -743,26 +750,43 @@ class AgentOrchestratorService {
    * Normalize and map agent names to valid types
    */
   private normalizeAgentType(agentName: string): string {
-    const name = (agentName || '').toLowerCase();
+    const name = (agentName || '').toLowerCase().trim();
 
-    // Exact match
-    const validAgents = ['treasury', 'forecasting', 'analytics', 'anomaly', 'reporting', 'capital', 'risk', 'strategic', 'compliance'];
+    // Exact match against the 12 registered agents
+    const validAgents = [
+      'risk_compliance', 'variance_analysis', 'financial_modeling', 'reporting',
+      'market_monitoring', 'resource_allocation', 'data_cleaning', 'scenario_planning',
+      'cash_flow', 'circular_logic', 'audit_provenance', 'anomaly_detection'
+    ];
     if (validAgents.includes(name)) return name;
 
-    // Fuzzy mapping for LLM hallucinations
+    // Fuzzy mapping for LLM hallucinations and old agent names
     const mapping: Record<string, string> = {
-      'financial_modeling_agent': 'forecasting',
-      'investment_appraisal_agent': 'capital',
-      'debt_management_agent': 'treasury',
-      'cash_agent': 'treasury',
-      'strategy_agent': 'strategic',
-      'audit_agent': 'compliance',
-      'budget_agent': 'analytics',
-      'growth_agent': 'strategic',
-      'marketing_agent': 'strategic', // Strategic handles ROI comparisons
+      // Old names → New names
+      'treasury': 'cash_flow',
+      'forecasting': 'financial_modeling',
+      'analytics': 'variance_analysis',
+      'anomaly': 'anomaly_detection',
+      'capital': 'resource_allocation',
+      'risk': 'risk_compliance',
+      'compliance': 'risk_compliance',
+      'strategic': 'market_monitoring',
+      // LLM hallucination guard
+      'financial_modeling_agent': 'financial_modeling',
+      'investment_appraisal_agent': 'resource_allocation',
+      'debt_management_agent': 'cash_flow',
+      'cash_agent': 'cash_flow',
+      'strategy_agent': 'market_monitoring',
+      'audit_agent': 'audit_provenance',
+      'budget_agent': 'variance_analysis',
+      'growth_agent': 'market_monitoring',
+      'marketing_agent': 'market_monitoring',
+      'data_agent': 'data_cleaning',
+      'scenario_agent': 'scenario_planning',
+      'circular_agent': 'circular_logic',
     };
 
-    return mapping[name] || 'analytics'; // Default to analytics for reasoning
+    return mapping[name] || 'variance_analysis';
   }
 
   /**
@@ -1151,14 +1175,14 @@ class AgentOrchestratorService {
     }
 
     // 2. Probabilistic Forecast Engine Validation
-    const forecast = results.find(r => r.agentType === 'forecasting');
+    const forecast = results.find(r => r.agentType === 'financial_modeling');
     if (forecast?.confidenceIntervals) {
       const ci = forecast.confidenceIntervals;
       let forecastText = `**Monte Carlo Simulation (Iterations: 5,000):**\n`;
       forecastText += `• **Scenario Tree Architecture:** Weighted P10/P50/P90 distributions active.\n`;
       forecastText += `• Distribution: Log-normal | Skewness: ${ci.skewness || '0.45'} | StdDev: ${ci.stdDev?.toLocaleString() || '0.0448'}\n`;
       forecastText += `• P10 (Downside): $${ci.p10.toLocaleString()} | P50 (Base): $${ci.p50.toLocaleString()} | P90 (Upside): $${ci.p90.toLocaleString()}\n`;
-      const riskSurvival = (results.find(r => r.agentType === 'risk') as any)?.calculations?.survival_prob;
+      const riskSurvival = (results.find(r => r.agentType === 'risk_compliance') as any)?.calculations?.survival_prob;
       if (typeof riskSurvival === 'number') {
         const insolvency = Math.max(0, Math.min(1, 1 - riskSurvival));
         forecastText += `• **Implied Probability of Insolvency (scenario-derived):** ${(insolvency * 100).toFixed(1)}%\n`;
@@ -1196,7 +1220,7 @@ class AgentOrchestratorService {
     sections.push(`### SECTION 4 — Model Risk Management & Drift Detection\n${govText}`);
 
     // 5. Capital Allocation Engine
-    const capital = results.find(r => r.agentType === 'capital');
+    const capital = results.find(r => r.agentType === 'resource_allocation');
     if (capital) {
       sections.push(`### SECTION 5 — Capital Allocation Engine\n${capital.answer.split('**Recommended Strategy')[1]?.split('\n\n')[0] || capital.executiveSummary || 'Portfolio optimization identifies optimal WACC-adjusted deployment.'}`);
     } else {
@@ -1205,7 +1229,7 @@ class AgentOrchestratorService {
 
     // 6. Anomaly & Structural Break Detection
     let section6Text = '';
-    const breakResult = results.find(r => r.agentType === 'analytics' && r.answer.includes('Structural Break'));
+    const breakResult = results.find(r => r.agentType === 'variance_analysis' && r.answer.includes('Structural Break'));
     if (breakResult) {
       section6Text = breakResult.answer.split('**Structural Break')[1] || 'No regime shifts detected.';
     } else {
@@ -1232,7 +1256,7 @@ class AgentOrchestratorService {
     sections.push(`### SECTION 7 — Governance Policy & Compliance Mapping\n${policyText}`);
 
     // 8. Liquidity Crisis Simulation (Scenario Trees)
-    const risk = results.find(r => r.agentType === 'risk');
+    const risk = results.find(r => r.agentType === 'risk_compliance');
     if (risk?.liquidityMetrics) {
       const liq = risk.liquidityMetrics;
       let liqText = `**Probabilistic Crisis Scenario Architecture:**\n`;
@@ -1397,7 +1421,7 @@ class AgentOrchestratorService {
       calc: r.calculations,
       stats: r.statisticalMetrics,
       confidence: r.confidenceIntervals,
-      risk: r.risks,
+      risk_risk_compliance: r.risks,
       recs: r.recommendations,
       integrity: r.financialIntegrity,
       liquidity: r.liquidityMetrics

@@ -25,6 +25,8 @@ export interface OverviewDashboardData {
     name: string;
     value: number;
     color: string;
+    type: 'COGS' | 'R&D' | 'S&M' | 'G&A';
+    vendors: Array<{ name: string; value: number }>;
   }>;
   burnRateData: Array<{
     month: string;
@@ -47,6 +49,12 @@ export interface OverviewDashboardData {
     name: string;
     amount: number;
   }>;
+  costSegregation: {
+    direct: number; // COGS
+    indirect: number; // OpEx
+    grossMargin: number;
+    operatingMargin: number;
+  };
 }
 
 export const overviewDashboardService = {
@@ -463,14 +471,15 @@ export const overviewDashboardService = {
     }
 
     // Generate expense breakdown from actual transactions
-    const expenseBreakdownMap = new Map<string, number>();
+    const expenseBreakdownMap = new Map<string, { total: number, vendors: Map<string, number> }>();
 
     for (const tx of transactions) {
       const amount = Number(tx.amount);
       const category = tx.category || 'Uncategorized';
+      const description = tx.description || 'Unknown';
       const categoryLower = category.toLowerCase();
 
-      // Determine if revenue or expense based on category keywords + sign
+      // Determine if revenue or expense
       let isTxRevenue = amount > 0;
       if (revenueKeywords.some(k => categoryLower.includes(k))) {
         isTxRevenue = true;
@@ -479,39 +488,77 @@ export const overviewDashboardService = {
       }
 
       if (!isTxRevenue) {
-        expenseBreakdownMap.set(category, (expenseBreakdownMap.get(category) || 0) + Math.abs(amount));
+        const absAmount = Math.abs(amount);
+        if (!expenseBreakdownMap.has(category)) {
+          expenseBreakdownMap.set(category, { total: 0, vendors: new Map() });
+        }
+        const catData = expenseBreakdownMap.get(category)!;
+        catData.total += absAmount;
+        
+        // Extract vendor from description
+        const vendor = extractVendorFromDescription(description, tx.rawPayload as any);
+        catData.vendors.set(vendor, (catData.vendors.get(vendor) || 0) + absAmount);
       }
     }
 
-    let expenseBreakdown: Array<{ name: string; value: number; color: string }> = [];
+    // Helper for cost classification
+    const classify = (name: string): 'COGS' | 'R&D' | 'S&M' | 'G&A' => {
+      const lower = name.toLowerCase();
+      const COGS_KEYWORDS = ['hosting', 'cloud', 'aws', 'azure', 'gcp', 'infrastructure', 'devops', 'sre', 'support', 'customer success', 'onboarding', 'implementation', 'cogs', 'server', 'bandwidth', 'cdn', 'api', 'third-party', 'payment processing', 'stripe', 'twilio'];
+      const OPEX_RD_KEYWORDS = ['r&d', 'engineering', 'product', 'development', 'research'];
+      const OPEX_SM_KEYWORDS = ['marketing', 'sales', 'ads', 'advertising', 'commission', 'lead gen', 'seo', 'content'];
+      
+      if (COGS_KEYWORDS.some(k => lower.includes(k))) return 'COGS';
+      if (OPEX_RD_KEYWORDS.some(k => lower.includes(k))) return 'R&D';
+      if (OPEX_SM_KEYWORDS.some(k => lower.includes(k))) return 'S&M';
+      return 'G&A';
+    };
+
+    let expenseBreakdown: OverviewDashboardData['expenseBreakdown'] = [];
     const colors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#00ff88', '#0088fe', '#00c49f'];
 
+    let directCosts = 0;
+    let indirectCosts = 0;
+
     if (expenseBreakdownMap.size > 0) {
-      // Use actual categories from transactions
       let colorIndex = 0;
-      for (const [category, value] of expenseBreakdownMap.entries()) {
+      for (const [category, data] of expenseBreakdownMap.entries()) {
+        const type = classify(category);
+        if (type === 'COGS') directCosts += data.total;
+        else indirectCosts += data.total;
+
+        const vendors = Array.from(data.vendors.entries())
+          .map(([name, value]) => ({ name, value: Math.round(value) }))
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 5);
+
         expenseBreakdown.push({
           name: category,
-          value: Math.round(value),
+          value: Math.round(data.total),
           color: colors[colorIndex % colors.length],
+          type,
+          vendors
         });
         colorIndex++;
       }
-      // Sort by value descending
       expenseBreakdown.sort((a, b) => b.value - a.value);
-      // Limit to top 5
-      expenseBreakdown = expenseBreakdown.slice(0, 5);
+      expenseBreakdown = expenseBreakdown.slice(0, 8); // Keep more categories for drill-down
     } else {
-      // Fallback to default breakdown
+      // Default fallback
       const totalExpenses = monthlyBurnRate;
       expenseBreakdown = [
-        { name: 'Payroll', value: Math.round(totalExpenses * 0.55), color: '#8884d8' },
-        { name: 'Marketing', value: Math.round(totalExpenses * 0.20), color: '#82ca9d' },
-        { name: 'Operations', value: Math.round(totalExpenses * 0.15), color: '#ffc658' },
-        { name: 'R&D', value: Math.round(totalExpenses * 0.08), color: '#ff7300' },
-        { name: 'Other', value: Math.round(totalExpenses * 0.02), color: '#00ff88' },
+        { name: 'Payroll', value: Math.round(totalExpenses * 0.55), color: '#8884d8', type: 'G&A', vendors: [] },
+        { name: 'Marketing', value: Math.round(totalExpenses * 0.20), color: '#82ca9d', type: 'S&M', vendors: [] },
+        { name: 'Cloud Hosting', value: Math.round(totalExpenses * 0.15), color: '#ffc658', type: 'COGS', vendors: [{ name: 'AWS', value: Math.round(totalExpenses * 0.15) }] },
+        { name: 'R&D', value: Math.round(totalExpenses * 0.08), color: '#ff7300', type: 'R&D', vendors: [] },
+        { name: 'Other', value: Math.round(totalExpenses * 0.02), color: '#00ff88', type: 'G&A', vendors: [] },
       ];
+      directCosts = totalExpenses * 0.15;
+      indirectCosts = totalExpenses * 0.85;
     }
+
+    const grossMargin = monthlyRevenue > 0 ? ((monthlyRevenue - directCosts) / monthlyRevenue) * 100 : 0;
+    const operatingMargin = monthlyRevenue > 0 ? ((monthlyRevenue - directCosts - indirectCosts) / monthlyRevenue) * 100 : 0;
 
     // Calculate changes BEFORE generating alerts (needed for burnRateChange alerts)
     let burnRateChange = 0;
@@ -716,26 +763,9 @@ export const overviewDashboardService = {
       }
     }
 
-    // Keep expenseBreakdown in original format for frontend compatibility: { name, value, color }
     // Ensure we always return at least default breakdown so charts aren't empty
-    let finalExpenseBreakdown = expenseBreakdown.length > 0 ? expenseBreakdown : [];
+    const finalExpenseBreakdown = expenseBreakdown;
 
-    // If no expenses, provide default breakdown based on monthly burn rate
-    if (finalExpenseBreakdown.length === 0 && monthlyBurnRate > 0) {
-      const colors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#00ff88', '#0088fe', '#00c49f'];
-      finalExpenseBreakdown = [
-        { name: 'Payroll', value: Math.round(monthlyBurnRate * 0.55), color: colors[0] },
-        { name: 'Marketing', value: Math.round(monthlyBurnRate * 0.20), color: colors[1] },
-        { name: 'Operations', value: Math.round(monthlyBurnRate * 0.15), color: colors[2] },
-        { name: 'R&D', value: Math.round(monthlyBurnRate * 0.08), color: colors[3] },
-        { name: 'Other', value: Math.round(monthlyBurnRate * 0.02), color: colors[4] },
-      ].filter(item => item.value > 0); // Remove zero values
-    }
-
-    // If still empty, use empty array (don't provide fake values)
-    if (finalExpenseBreakdown.length === 0) {
-      finalExpenseBreakdown = [];
-    }
 
     // Get top vendors from transactions
     const vendorMap = new Map<string, number>();
@@ -774,16 +804,18 @@ export const overviewDashboardService = {
       revenueGrowth: Math.round(revenueGrowth * 10) / 10,
       burnRateChange: Math.round(burnRateChange * 10) / 10,
       runwayChange: runwayChange,
-      // Frontend-compatible format (what overview-dashboard.tsx expects)
-      revenueData: finalRevenueData, // { month, revenue, forecast } - Always array, never null
-      expenseBreakdown: finalExpenseBreakdown, // { name, value, color } - Always array, never null
-      burnRateData: burnRateData.length > 0 ? burnRateData : getDefaultBurnRateData(), // Always array, never null
-      alerts: alerts.length > 0 ? alerts : getDefaultAlerts(), // Always array, never null
-      // Standardized response shape (for other components)
-      cashRunwayMonths: Math.round(runwayMonths * 10) / 10, // Alias for cashRunway
-      burnRate: Math.round(monthlyBurnRate), // Alias for monthlyBurnRate
-      topVendors: topVendors.length > 0 ? topVendors : [], // Always array, never null
-      topCustomers: topCustomers.length > 0 ? topCustomers : [], // Always array, never null
+      revenueData: finalRevenueData,
+      expenseBreakdown: finalExpenseBreakdown,
+      burnRateData: burnRateData.length > 0 ? burnRateData : getDefaultBurnRateData(),
+      alerts: alerts.length > 0 ? alerts : getDefaultAlerts(),
+      topVendors: finalExpenseBreakdown.flatMap(e => e.vendors).map(v => ({ name: v.name, amount: v.value })).sort((a, b) => b.amount - a.amount).slice(0, 10),
+      topCustomers: topCustomers.length > 0 ? topCustomers : [],
+      costSegregation: {
+        direct: Math.round(directCosts),
+        indirect: Math.round(indirectCosts),
+        grossMargin: Math.round(grossMargin * 10) / 10,
+        operatingMargin: Math.round(operatingMargin * 10) / 10,
+      }
     };
   },
 };

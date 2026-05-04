@@ -19,7 +19,7 @@ interface TransactionAnomaly {
   recommendation: string;
 }
 
-class AnomalyAgentService {
+class AnomalyDetectionAgentService {
   /**
    * Execute anomaly detection tasks
    */
@@ -73,7 +73,7 @@ class AnomalyAgentService {
     const answer = this.buildAnswer(anomalies, transactions.length);
 
     return {
-      agentType: 'anomaly',
+      agentType: 'anomaly_detection',
       taskId: uuidv4(),
       status: 'completed',
       answer,
@@ -411,4 +411,4 @@ class AnomalyAgentService {
   }
 }
 
-export const anomalyAgent = new AnomalyAgentService();
+export const anomalyDetectionAgent = new AnomalyDetectionAgentService();

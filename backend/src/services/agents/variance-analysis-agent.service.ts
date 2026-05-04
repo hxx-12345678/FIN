@@ -13,7 +13,7 @@ import { AgentResponse, AgentThought, DataSource, AgentRecommendation } from './
 import { v4 as uuidv4 } from 'uuid';
 import { reasoningService } from '../reasoning.service';
 
-class AnalyticsAgentService {
+class VarianceAnalysisAgentService {
   /**
    * Execute analytics-related tasks
    */
@@ -68,7 +68,7 @@ class AnalyticsAgentService {
     const answer = analysisResult.answer || this.buildAnswer(intent, query, analysisResult, financialData);
 
     return {
-      agentType: 'analytics',
+      agentType: 'variance_analysis',
       taskId: uuidv4(),
       status: 'completed',
       answer,
@@ -300,4 +300,4 @@ class AnalyticsAgentService {
   }
 }
 
-export const analyticsAgent = new AnalyticsAgentService();
+export const varianceAnalysisAgent = new VarianceAnalysisAgentService();

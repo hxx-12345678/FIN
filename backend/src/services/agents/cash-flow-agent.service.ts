@@ -9,7 +9,7 @@ import prisma from '../../config/database';
 import { AgentResponse, AgentThought, DataSource, AgentRecommendation } from './agent-types';
 import { v4 as uuidv4 } from 'uuid';
 
-class TreasuryAgentService {
+class CashFlowAgentService {
   /**
    * Execute treasury-related tasks
    */
@@ -99,7 +99,7 @@ class TreasuryAgentService {
       : 'treasury runway heuristic';
 
     return {
-      agentType: 'treasury',
+      agentType: 'cash_flow',
       taskId: uuidv4(),
       status: 'completed',
       answer,
@@ -474,4 +474,4 @@ class TreasuryAgentService {
   }
 }
 
-export const treasuryAgent = new TreasuryAgentService();
+export const cashFlowAgent = new CashFlowAgentService();

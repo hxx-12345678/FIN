@@ -23,7 +23,7 @@ interface AllocationStrategy {
   sharpeRatio: number;
 }
 
-class CapitalAgentService {
+class ResourceAllocationAgentService {
   /**
    * Execute capital allocation tasks
    */
@@ -93,7 +93,7 @@ class CapitalAgentService {
     const answer = this.buildAnswer(financialData, optimalStrategy, fxAnalysis, calculations);
 
     return {
-      agentType: 'capital',
+      agentType: 'resource_allocation',
       taskId: uuidv4(),
       status: 'completed',
       answer,
@@ -460,4 +460,4 @@ class CapitalAgentService {
   }
 }
 
-export const capitalAgent = new CapitalAgentService();
+export const resourceAllocationAgent = new ResourceAllocationAgentService();

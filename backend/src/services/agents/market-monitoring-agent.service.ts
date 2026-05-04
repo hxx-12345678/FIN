@@ -38,7 +38,7 @@ interface MAAnalysis {
   conditions: string[];
 }
 
-class StrategicAgentService {
+class MarketMonitoringAgentService {
   /**
    * Execute strategic analysis tasks
    */
@@ -132,7 +132,7 @@ class StrategicAgentService {
     }
 
     return {
-      agentType: 'strategic',
+      agentType: 'market_monitoring',
       taskId: uuidv4(),
       status: 'completed',
       answer,
@@ -796,4 +796,4 @@ class StrategicAgentService {
   }
 }
 
-export const strategicAgent = new StrategicAgentService();
+export const marketMonitoringAgent = new MarketMonitoringAgentService();

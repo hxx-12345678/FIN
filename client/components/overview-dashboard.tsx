@@ -7,6 +7,9 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
 import { useChartPagination } from "@/hooks/use-chart-pagination"
 import {
   LineChart,
@@ -33,6 +36,8 @@ import {
   Clock,
   Zap,
   Loader2,
+  Scale,
+  ShieldCheck,
 } from "lucide-react"
 import { toast } from "sonner"
 import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
@@ -65,12 +70,49 @@ interface OverviewData {
     name: string
     value: number
     color: string
+    type: 'COGS' | 'R&D' | 'S&M' | 'G&A'
+    vendors: Array<{ name: string; value: number }>
   }>
   alerts: Array<{
     type: "warning" | "success" | "info"
     title: string
     message: string
   }>
+  topVendors?: Array<{ name: string; value: number }>
+  costSegregation: {
+    direct: number
+    indirect: number
+    grossMargin: number
+    operatingMargin: number
+  }
+}
+
+// SaaS FP&A standard cost classification (COGS vs OpEx)
+const COGS_KEYWORDS = ['hosting', 'cloud', 'aws', 'azure', 'gcp', 'infrastructure', 'devops', 'sre', 'support', 'customer success', 'onboarding', 'implementation', 'cogs', 'server', 'bandwidth', 'cdn', 'api', 'third-party', 'payment processing', 'stripe', 'twilio'];
+const OPEX_RD_KEYWORDS = ['r&d', 'engineering', 'product', 'development', 'research'];
+const OPEX_SM_KEYWORDS = ['marketing', 'sales', 'ads', 'advertising', 'commission', 'lead gen', 'seo', 'content'];
+const OPEX_GA_KEYWORDS = ['admin', 'general', 'office', 'rent', 'legal', 'hr', 'insurance', 'utilities', 'accounting', 'finance', 'executive', 'payroll', 'salary', 'benefits', 'miscellaneous', 'other'];
+
+function classifyExpenseCategory(name: string): { type: 'COGS' | 'R&D' | 'S&M' | 'G&A', label: string, color: string, description: string } {
+  const lower = name.toLowerCase();
+  if (COGS_KEYWORDS.some(k => lower.includes(k))) {
+    return { type: 'COGS', label: 'Cost of Revenue (COGS)', color: 'text-blue-600 dark:text-blue-400', description: 'Direct cost of delivering the SaaS product — hosting, support, payment processing. Disappears if you stop serving customers.' };
+  }
+  if (OPEX_RD_KEYWORDS.some(k => lower.includes(k))) {
+    return { type: 'R&D', label: 'R&D (OpEx)', color: 'text-violet-600 dark:text-violet-400', description: 'Research & Development — building new features and product innovation. Strategic investment, not delivery cost.' };
+  }
+  if (OPEX_SM_KEYWORDS.some(k => lower.includes(k))) {
+    return { type: 'S&M', label: 'Sales & Marketing (OpEx)', color: 'text-amber-600 dark:text-amber-400', description: 'Customer acquisition costs — ads, commissions, lead generation. Drives growth but not required for current service delivery.' };
+  }
+  return { type: 'G&A', label: 'General & Admin (OpEx)', color: 'text-emerald-600 dark:text-emerald-400', description: 'Overhead — rent, legal, HR, executive comp. Required to run the company, but not tied to product delivery.' };
+}
+
+interface ExpenseDetail {
+  name: string
+  value: number
+  color: string
+  percentage: number
+  classification: ReturnType<typeof classifyExpenseCategory>
 }
 
 const defaultRevenueData = [
@@ -91,12 +133,12 @@ const defaultBurnRateData = [
   { month: "Jun", burn: 44000, runway: 13 },
 ]
 
-const defaultExpenseBreakdown = [
-  { name: "Payroll", value: 180000, color: "#8884d8" },
-  { name: "Marketing", value: 45000, color: "#82ca9d" },
-  { name: "Operations", value: 32000, color: "#ffc658" },
-  { name: "R&D", value: 28000, color: "#ff7300" },
-  { name: "Other", value: 15000, color: "#00ff88" },
+const defaultExpenseBreakdown: OverviewData['expenseBreakdown'] = [
+  { name: "Payroll", value: 180000, color: "#8884d8", type: 'G&A', vendors: [] },
+  { name: "Marketing", value: 45000, color: "#82ca9d", type: 'S&M', vendors: [] },
+  { name: "Operations", value: 32000, color: "#ffc658", type: 'G&A', vendors: [] },
+  { name: "R&D", value: 28000, color: "#ff7300", type: 'R&D', vendors: [] },
+  { name: "Other", value: 15000, color: "#00ff88", type: 'G&A', vendors: [] },
 ]
 
 export function OverviewDashboard() {
@@ -108,6 +150,7 @@ export function OverviewDashboard() {
   const [error, setError] = useState<string | null>(null)
   const [orgId, setOrgId] = useState<string | null>(contextOrgId)
   const [models, setModels] = useState<any[]>([])
+  const [selectedExpense, setSelectedExpense] = useState<ExpenseDetail | null>(null)
 
   const fetchOrgId = async () => {
     const storedOrgId = localStorage.getItem("orgId")
@@ -387,7 +430,7 @@ export function OverviewDashboard() {
     )
   }
 
-  const overviewData = data || {
+  const overviewData: OverviewData = data || {
     healthScore: 0,
     monthlyRevenue: 0,
     monthlyBurnRate: 0,
@@ -406,11 +449,31 @@ export function OverviewDashboard() {
         message: "Connect an integration or import a CSV to see your financial overview."
       }
     ],
+    costSegregation: {
+      direct: 0,
+      indirect: 0,
+      grossMargin: 0,
+      operatingMargin: 0
+    }
   }
 
   const revenueData = overviewData.revenueData
   const burnRateData = overviewData.burnRateData
   const expenseBreakdown = overviewData.expenseBreakdown
+
+  // Calculate total expense for percentage math
+  const totalExpenseValue = expenseBreakdown.reduce((sum, item) => sum + item.value, 0)
+
+  const handleExpenseClick = (data: any) => {
+    const classification = classifyExpenseCategory(data.name);
+    setSelectedExpense({
+      name: data.name,
+      value: data.value,
+      color: data.color,
+      percentage: totalExpenseValue > 0 ? (data.value / totalExpenseValue) * 100 : 0,
+      classification,
+    });
+  };
 
   return (
     <div className="w-full max-w-full space-y-4 md:space-y-6 overflow-x-hidden pb-8">
@@ -513,6 +576,74 @@ export function OverviewDashboard() {
                 <div className="font-medium text-orange-600">Customers</div>
                 <div className="text-muted-foreground">{overviewData.activeCustomers.toLocaleString()}</div>
               </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Profitability Structure - Standard FP&A View */}
+      <Card className="border-t-4 border-t-violet-500 shadow-lg bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm mb-6">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-semibold text-slate-500 flex items-center gap-2">
+              <Scale className="h-4 w-4 text-violet-500" />
+              Profitability Structure
+            </CardTitle>
+            <Badge variant="outline" className="bg-violet-50 text-violet-700 border-violet-200">
+              SaaS Standard
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div>
+              <div className="flex justify-between items-end mb-2">
+                <span className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                  {overviewData.costSegregation.grossMargin}%
+                </span>
+                <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">Gross Margin</span>
+              </div>
+              <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
+                <div 
+                  className="h-full bg-violet-500" 
+                  style={{ width: `${Math.max(0, overviewData.costSegregation.grossMargin)}%` }}
+                />
+              </div>
+              <div className="flex justify-between mt-1 text-[10px] text-slate-400">
+                <span>Direct Costs: {formatCurrency(overviewData.costSegregation.direct)}</span>
+                <span>Target: 80%+</span>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex justify-between items-end mb-2">
+                <span className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                  {overviewData.costSegregation.operatingMargin}%
+                </span>
+                <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">Op Margin</span>
+              </div>
+              <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full ${overviewData.costSegregation.operatingMargin > 0 ? 'bg-emerald-500' : 'bg-rose-500'}`} 
+                  style={{ width: `${Math.min(100, Math.abs(overviewData.costSegregation.operatingMargin))}%` }}
+                />
+              </div>
+              <div className="flex justify-between mt-1 text-[10px] text-slate-400">
+                <span>Indirect Costs: {formatCurrency(overviewData.costSegregation.indirect)}</span>
+                <span>{overviewData.costSegregation.operatingMargin > 0 ? 'Profitable' : 'Cash Burn'}</span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+              <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Direct Costs (COGS)</p>
+              <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{formatCurrency(overviewData.costSegregation.direct)}</p>
+              <p className="text-[9px] text-slate-400 mt-1">Hosting, Success, Payment Proc.</p>
+            </div>
+            
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+              <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Indirect Costs (OpEx)</p>
+              <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{formatCurrency(overviewData.costSegregation.indirect)}</p>
+              <p className="text-[9px] text-slate-400 mt-1">R&D, S&M, G&A</p>
             </div>
           </div>
         </CardContent>
@@ -629,16 +760,22 @@ export function OverviewDashboard() {
                 <LineChart data={revenueData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip formatter={(value: any) => [formatCurrency(value), ""]} />
-                  <Line type="monotone" dataKey="revenue" stroke="#8884d8" strokeWidth={2} name="Actual Revenue" />
+                  <YAxis tickFormatter={(v) => `${currencySymbol}${(v/1000).toFixed(0)}k`} />
+                  <Tooltip
+                    formatter={(value: any, name: string) => [
+                      formatCurrency(value as number),
+                      name === 'revenue' ? 'Actual Revenue' : name === 'forecast' ? (selectedModelId ? 'AI Forecast' : 'Estimated Growth') : name
+                    ]}
+                    labelFormatter={(label) => `Month: ${label}`}
+                  />
+                  <Line type="monotone" dataKey="revenue" stroke="#8884d8" strokeWidth={2} name="revenue" />
                   <Line
                     type="monotone"
                     dataKey="forecast"
                     stroke="#82ca9d"
                     strokeWidth={2}
                     strokeDasharray="5 5"
-                    name={selectedModelId ? "AI Forecast" : "Estimated Growth"}
+                    name="forecast"
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -661,8 +798,14 @@ export function OverviewDashboard() {
                 <AreaChart data={burnRateData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
+                  <YAxis tickFormatter={(v) => `${currencySymbol}${(v/1000).toFixed(0)}k`} />
+                  <Tooltip
+                    formatter={(value: any, name: string) => [
+                      name === 'runway' ? `${value} months` : formatCurrency(value as number),
+                      name === 'burn' ? 'Monthly Burn' : 'Runway (months)'
+                    ]}
+                    labelFormatter={(label) => `Month: ${label}`}
+                  />
                   <Area
                     type="monotone"
                     dataKey="burn"
@@ -670,7 +813,7 @@ export function OverviewDashboard() {
                     stroke="#ff7300"
                     fill="#ff7300"
                     fillOpacity={0.6}
-                    name="Monthly Burn"
+                    name="burn"
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -685,41 +828,207 @@ export function OverviewDashboard() {
 
       {/* Expense Breakdown and Alerts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        <Card>
+        <Card className="border-t-4 border-t-blue-500">
           <CardHeader>
-            <CardTitle>Expense Breakdown</CardTitle>
-            <CardDescription>Current month expense distribution</CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Expense Breakdown</CardTitle>
+                <CardDescription>Current month expense distribution</CardDescription>
+              </div>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" size="sm" className="text-blue-600 font-bold text-xs uppercase tracking-wider">
+                    Full Ledger View
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Complete Expense Ledger</DialogTitle>
+                    <DialogDescription>Itemized view of all recognized expenses for the period.</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Category</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead className="text-right">% of Total</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {expenseBreakdown.map((entry, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell className="font-medium">{entry.name}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className={classifyExpenseCategory(entry.name).color}>
+                                {classifyExpenseCategory(entry.name).type}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right font-bold">{formatCurrency(entry.value)}</TableCell>
+                            <TableCell className="text-right">
+                              {((entry.value / totalExpenseValue) * 100).toFixed(1)}%
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
           </CardHeader>
           <CardContent>
-            {expenseBreakdown && expenseBreakdown.length > 0 ? (
-              <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
-                <PieChart>
-                  <Pie
-                    data={expenseBreakdown}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={(props: any) => {
-                      const name = props.name ?? ''
-                      const percent = props.percent ?? 0
-                      return `${name} ${(percent * 100).toFixed(0)}%`
-                    }}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {expenseBreakdown.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => [formatCurrency(value as number), ""]} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground text-sm px-4 text-center">
-                No expense data available. Promote transactions to the ledger to see breakdown.
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+              {expenseBreakdown && expenseBreakdown.length > 0 ? (
+                <div className="h-[250px] sm:h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={expenseBreakdown}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {expenseBreakdown.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0].payload;
+                            return (
+                              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-xl shadow-2xl">
+                                <p className="text-xs font-bold text-slate-500 uppercase mb-1">{data.name}</p>
+                                <p className="text-lg font-black text-slate-900 dark:text-white">{formatCurrency(data.value)}</p>
+                                <div className="mt-2 flex items-center gap-2">
+                                  <Badge className={`text-[10px] ${classifyExpenseCategory(data.name).color} border-current/20`}>
+                                    {classifyExpenseCategory(data.name).type}
+                                  </Badge>
+                                  <span className="text-[10px] text-slate-400 font-medium">
+                                    {((data.value / totalExpenseValue) * 100).toFixed(1)}% of total
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground text-sm px-4 text-center">
+                  No expense data available.
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {expenseBreakdown.map((entry, index) => (
+                  <Dialog key={index}>
+                    <DialogTrigger asChild>
+                      <div className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-all border border-transparent hover:border-slate-100 dark:hover:border-slate-700 group">
+                        <div className="flex items-center gap-3">
+                          <div className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
+                          <div>
+                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 group-hover:text-blue-600 transition-colors">
+                              {entry.name}
+                            </span>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-tighter">
+                                {classifyExpenseCategory(entry.name).type}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                            {formatCurrency(entry.value)}
+                          </span>
+                          <p className="text-[10px] font-medium text-slate-400">
+                            {((entry.value / totalExpenseValue) * 100).toFixed(1)}%
+                          </p>
+                        </div>
+                      </div>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[500px]">
+                      <DialogHeader className="pb-4 border-b">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-xl flex items-center justify-center bg-slate-50 dark:bg-slate-800" style={{ color: entry.color }}>
+                            <Scale className="h-6 w-6" />
+                          </div>
+                          <div>
+                            <DialogTitle className="text-xl font-bold">{entry.name} Breakdown</DialogTitle>
+                            <DialogDescription>SaaS Cost Segregation Analysis</DialogDescription>
+                          </div>
+                        </div>
+                      </DialogHeader>
+
+                      <div className="py-6 space-y-6">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Amount</p>
+                            <p className="text-2xl font-black text-slate-900 dark:text-white">{formatCurrency(entry.value)}</p>
+                          </div>
+                          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Contribution</p>
+                            <p className="text-2xl font-black text-slate-900 dark:text-white">
+                              {((entry.value / totalExpenseValue) * 100).toFixed(1)}%
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="p-4 rounded-2xl bg-blue-50/50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Badge className={`h-5 ${classifyExpenseCategory(entry.name).color} border-current/20`}>
+                              {classifyExpenseCategory(entry.name).label}
+                            </Badge>
+                            <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase">Audit Classification</span>
+                          </div>
+                          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                            {classifyExpenseCategory(entry.name).description}
+                          </p>
+                        </div>
+
+                        {entry.vendors && entry.vendors.length > 0 && (
+                          <div className="space-y-3">
+                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                              <Users className="h-3 w-3" /> Top Vendors / Recipients
+                            </h4>
+                            <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                              {entry.vendors.map((vendor: any, idx: number) => (
+                                <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+                                  <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{vendor.name}</span>
+                                  <span className="text-sm font-bold text-slate-900 dark:text-white">{formatCurrency(vendor.value)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800/50">
+                          <ShieldCheck className="h-4 w-4 shrink-0" />
+                          <p className="text-[10px] font-medium italic">
+                            "Audit verified: This category directly impacts your <strong>{classifyExpenseCategory(entry.name).type === 'COGS' ? 'Gross Margin' : 'Operating Margin'}</strong>."
+                          </p>
+                        </div>
+                      </div>
+
+                      <DialogFooter className="pt-4 border-t">
+                        <Button className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold uppercase tracking-widest py-6">
+                          View In Ledger
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                ))}
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
 
@@ -783,6 +1092,60 @@ export function OverviewDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Expense Drill-Down Dialog */}
+      <Dialog open={!!selectedExpense} onOpenChange={(open) => !open && setSelectedExpense(null)}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: selectedExpense?.color }} />
+              {selectedExpense?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Expense category deep-dive — click any segment on the pie chart.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedExpense && (
+            <div className="space-y-4 pt-2">
+              {/* Amount & Percentage */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Total Amount</p>
+                  <p className="text-xl font-bold">{formatCurrency(selectedExpense.value)}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">% of Total Expenses</p>
+                  <p className="text-xl font-bold">{selectedExpense.percentage.toFixed(1)}%</p>
+                </div>
+              </div>
+
+              {/* Classification Badge */}
+              <div className="rounded-lg border p-3">
+                <p className="text-xs text-muted-foreground mb-1">Cost Classification (SaaS FP&A Standard)</p>
+                <Badge variant="outline" className={`text-sm font-semibold ${selectedExpense.classification.color}`}>
+                  {selectedExpense.classification.label}
+                </Badge>
+              </div>
+
+              {/* Accountant Note */}
+              <div className="rounded-lg bg-muted p-3 text-sm">
+                <p className="font-medium mb-1">📋 Auditor Note</p>
+                <p className="text-muted-foreground">{selectedExpense.classification.description}</p>
+              </div>
+
+              {/* Gross Margin Impact */}
+              <div className="rounded-lg border p-3 text-sm">
+                <p className="font-medium mb-1">Impact on Gross Margin</p>
+                {selectedExpense.classification.type === 'COGS' ? (
+                  <p className="text-muted-foreground">This is a <strong>direct delivery cost</strong>. Reducing it improves your <strong>gross margin</strong> — the #1 metric investors use to evaluate SaaS unit economics. Target: 70-90% gross margin.</p>
+                ) : (
+                  <p className="text-muted-foreground">This is an <strong>operating expense</strong> below the gross profit line. It affects your <strong>operating margin</strong> but NOT your gross margin. Optimize for efficiency, not elimination.</p>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
