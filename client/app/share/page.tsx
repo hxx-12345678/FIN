@@ -50,8 +50,8 @@ function SharedDashboardContent() {
       const result = await response.json()
 
       if (response.ok && result.ok) {
-        setData(result.dashboardData)
-        setOrgInfo(result.org)
+        setData(result.data?.dashboardData)
+        setOrgInfo(result.data?.org)
       } else {
         setError(result.error?.message || "Failed to load shared dashboard")
       }
