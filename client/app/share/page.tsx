@@ -101,6 +101,15 @@ function SharedDashboardContent() {
     }).format(val)
   }
 
+  if (!data || !data.executiveSummary) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center space-y-4">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="text-sm font-medium text-muted-foreground animate-pulse">Syncing dashboard data...</p>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
       {/* Public Header */}
