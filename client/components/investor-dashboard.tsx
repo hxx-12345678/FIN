@@ -285,9 +285,11 @@ export function InvestorDashboard() {
                 
                 if (response.ok) {
                   const result = await response.json();
-                  const shareUrl = `${window.location.origin}/share/${result.token}`;
+                  const tokenValue = result.shareToken?.token || result.token;
+                  const shareUrl = `${window.location.origin}/share/${tokenValue}`;
                   await navigator.clipboard.writeText(shareUrl);
                   toast.success("Secure sharing link generated and copied to clipboard!", {
+
                     description: "Link expires in 7 days."
                   });
                 } else {

@@ -161,6 +161,9 @@ export function BoardReporting() {
   const [showExportModal, setShowExportModal] = useState(false)
   const { orgId, setOrgId, selectedModelId } = useModel()
   const [loading, setLoading] = useState(true)
+  const [loadingTemplates, setLoadingTemplates] = useState(true)
+  const [activeStep, setActiveStep] = useState(1)
+
   const [kpiMetrics, setKpiMetrics] = useState<any[]>([])
   const [chartData, setChartData] = useState<any[]>([])
   const [recentReports, setRecentReports] = useState<any[]>([])
@@ -289,6 +292,7 @@ export function BoardReporting() {
   const fetchBoardTemplates = async () => {
     try {
       if (!orgId) return
+      setLoadingTemplates(true)
 
       const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/board-reports/templates`, {
         headers: getAuthHeaders(),
@@ -302,17 +306,22 @@ export function BoardReporting() {
 
       if (response.ok) {
         const result = await response.json()
-        if (result.ok && result.templates) {
+        if (result.ok && result.templates && result.templates.length > 0) {
           setTemplates(result.templates)
-          if (!result.templates.find((t: BoardTemplate) => t.id === selectedTemplate)) {
-            setSelectedTemplate(result.templates[0]?.id ?? "board-deck")
+          // Keep current selection if it exists in new list, otherwise pick first
+          const currentExists = result.templates.find((t: BoardTemplate) => t.id === selectedTemplate)
+          if (!currentExists) {
+            setSelectedTemplate(result.templates[0]?.id)
           }
         }
       }
     } catch (error) {
       console.error("Failed to fetch templates", error)
+    } finally {
+      setLoadingTemplates(false)
     }
   }
+
 
   const fetchInvestorDashboardData = async () => {
     if (!orgId) return
@@ -983,142 +992,427 @@ export function BoardReporting() {
   }, [selectedTemplate])
 
   return (
-    <div className="space-y-4 md:space-y-6 p-4 md:p-0 overflow-x-hidden">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Board Reporting</h1>
-          <p className="text-sm md:text-base text-muted-foreground">Generate scheduled board packs, investor updates, and stakeholder reports.</p>
-        </div>
-        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          <Button variant="outline" onClick={() => setScheduleDialogOpen(true)} className="w-full sm:w-auto">
-            <Calendar className="mr-2 h-4 w-4" />
-            <span className="hidden sm:inline">Schedule Report</span>
-            <span className="sm:hidden">Schedule</span>
-          </Button>
-          <Button onClick={handleGenerateReport} disabled={isGenerating} className="w-full sm:w-auto">
-            {isGenerating ? (
-              <>
-                <Zap className="mr-2 h-4 w-4 animate-spin" />
-                <span className="hidden sm:inline">Generating...</span>
-                <span className="sm:hidden">Generating</span>
-              </>
-            ) : (
-              <>
-                <Presentation className="mr-2 h-4 w-4" />
-                <span className="hidden sm:inline">Generate Report</span>
-                <span className="sm:hidden">Generate</span>
-              </>
-            )}
-          </Button>
+    <div className="space-y-4 md:space-y-6 p-4 md:p-0 overflow-x-hidden pb-12">
+      {/* Progress Stepper */}
+      <div className="mb-8 overflow-x-auto pb-4">
+        <div className="flex items-center justify-between min-w-[600px] px-4 relative">
+          <div className="absolute top-1/2 left-0 w-full h-0.5 bg-muted -translate-y-1/2 z-0" />
+          {[
+            { step: 1, title: "Template", icon: Presentation },
+            { step: 2, title: "Metrics", icon: BarChart2 },
+            { step: 3, title: "Narrative", icon: Zap },
+            { step: 4, title: "Review", icon: FileText }
+          ].map((s) => (
+            <div 
+              key={s.step} 
+              className="relative z-10 flex flex-col items-center gap-2 cursor-pointer group"
+              onClick={() => setActiveStep(s.step)}
+            >
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                activeStep === s.step ? "bg-primary text-white scale-110 shadow-lg ring-4 ring-primary/20" : 
+                activeStep > s.step ? "bg-green-500 text-white" : "bg-muted text-muted-foreground group-hover:bg-muted-foreground/20"
+              }`}>
+                {activeStep > s.step ? <CheckCircle2 className="h-5 w-5" /> : <s.icon className="h-5 w-5" />}
+              </div>
+              <span className={`text-xs font-bold uppercase tracking-tighter ${activeStep === s.step ? "text-primary" : "text-muted-foreground"}`}>
+                {s.title}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Report Templates</CardTitle>
-          <CardDescription>Pick the structure that best matches your audience</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {templates.map((template) => {
-              const templateConfig: Record<string, { icon: any; color: string; bgColor: string; audience: string }> = {
-                "board-deck": { icon: Presentation, color: "text-blue-600", bgColor: "bg-blue-50", audience: "Board of Directors" },
-                "quarterly-review": { icon: BarChart2, color: "text-purple-600", bgColor: "bg-purple-50", audience: "Board & C-Suite" },
-                "audit-compliance": { icon: ShieldCheck, color: "text-amber-600", bgColor: "bg-amber-50", audience: "Audit Committee" },
-                "investor-update": { icon: Mail, color: "text-emerald-600", bgColor: "bg-emerald-50", audience: "Investors & LPs" },
-              }
-              const config = templateConfig[template.id] || { icon: FileText, color: "text-primary", bgColor: "bg-primary/5", audience: "General" }
-              const Icon = config.icon
-              return (
-                <Card
-                  key={template.id}
-                  className={`cursor-pointer transition-all hover:shadow-md ${selectedTemplate === template.id ? "ring-2 ring-primary shadow-lg" : "hover:border-primary/30"}`}
-                  onClick={() => setSelectedTemplate(template.id)}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className={`p-2 rounded-lg ${config.bgColor}`}>
-                        <Icon className={`h-5 w-5 ${config.color}`} />
+
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold">Board Reporting</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Step {activeStep} of 4: {
+            activeStep === 1 ? " Audience & Template Selection" : 
+            activeStep === 2 ? " Financial Metric Verification" : 
+            activeStep === 3 ? " AI-Driven Strategic Narrative" : 
+            " Final Review & Multi-Channel Distribution"
+          }</p>
+        </div>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          {activeStep > 1 && (
+            <Button variant="outline" onClick={() => setActiveStep(prev => prev - 1)} className="w-full sm:w-auto">
+              Previous Step
+            </Button>
+          )}
+          {activeStep < 4 ? (
+            <Button onClick={() => setActiveStep(prev => prev + 1)} className="w-full sm:w-auto">
+              Continue to Step {activeStep + 1}
+            </Button>
+          ) : (
+            <Button onClick={handleGenerateReport} disabled={isGenerating} className="w-full sm:w-auto bg-primary hover:bg-primary/90 shadow-lg">
+              {isGenerating ? (
+                <>
+                  <Zap className="mr-2 h-4 w-4 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Presentation className="mr-2 h-4 w-4" />
+                  Finalize & Export Report
+                </>
+              )}
+            </Button>
+          )}
+        </div>
+      </div>
+
+
+      {activeStep === 1 && (
+        <Card className="border-2 border-primary/10 shadow-xl overflow-hidden">
+          <div className="h-1.5 w-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600" />
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Step 1: Select Your Audience & Report Type</CardTitle>
+                <CardDescription>Choose the institutional structure that best matches your stakeholder group.</CardDescription>
+              </div>
+              {loadingTemplates && <Loader2 className="h-5 w-5 animate-spin text-primary" />}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {templates.map((template) => {
+                const templateConfig: Record<string, { icon: any; color: string; bgColor: string; audience: string }> = {
+                  "board-deck": { icon: Presentation, color: "text-blue-600", bgColor: "bg-blue-50", audience: "Board of Directors" },
+                  "quarterly-review": { icon: BarChart2, color: "text-purple-600", bgColor: "bg-purple-50", audience: "Board & C-Suite" },
+                  "audit-compliance": { icon: ShieldCheck, color: "text-amber-600", bgColor: "bg-amber-50", audience: "Audit Committee" },
+                  "investor-update": { icon: Mail, color: "text-emerald-600", bgColor: "bg-emerald-50", audience: "Investors & LPs" },
+                }
+                const config = templateConfig[template.id] || { icon: FileText, color: "text-primary", bgColor: "bg-primary/5", audience: "General" }
+                const Icon = config.icon
+                return (
+                  <Card
+                    key={template.id}
+                    className={`cursor-pointer transition-all hover:shadow-lg relative overflow-hidden group ${selectedTemplate === template.id ? "ring-2 ring-primary bg-primary/[0.02] shadow-xl" : "hover:border-primary/40 bg-card"}`}
+                    onClick={() => setSelectedTemplate(template.id)}
+                  >
+                    {selectedTemplate === template.id && (
+                       <div className="absolute top-0 right-0 p-1 bg-primary text-white rounded-bl-lg z-20">
+                         <CheckCircle2 className="w-3.5 h-3.5" />
+                       </div>
+                    )}
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className={`p-2 rounded-lg transition-colors ${selectedTemplate === template.id ? "bg-primary text-white" : config.bgColor}`}>
+                          <Icon className={`h-5 w-5 ${selectedTemplate === template.id ? "text-white" : config.color}`} />
+                        </div>
+                        <Badge variant={template.status === "ready" ? "default" : "secondary"} className="text-[10px] uppercase font-bold tracking-tighter">{template.status}</Badge>
                       </div>
-                      <Badge variant={template.status === "ready" ? "default" : "secondary"}>{template.status}</Badge>
-                    </div>
-                    <h3 className="font-semibold mb-1">{template.name}</h3>
-                    <p className="text-sm text-muted-foreground mb-3">{template.description}</p>
-                    <div className="space-y-1.5 text-xs text-muted-foreground">
-                      <div className="flex items-center justify-between">
-                        <span>Audience</span>
-                        <span className="font-medium text-foreground">{(template as any).audience}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span>{template.type === "pptx" ? "Slides" : "Pages"}</span>
-                        <span className="font-medium text-foreground">{template.slides}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span>Format</span>
-                        <Badge variant="outline" className={`text-[10px] h-5 uppercase font-bold flex items-center gap-1 ${template.type === 'pptx' || template.type === 'presentation' ? 'text-blue-600 border-blue-200' : template.type === 'pdf' ? 'text-amber-600 border-amber-200' : 'text-emerald-600 border-emerald-200'}`}>
-                          {template.type === 'pptx' || template.type === 'presentation' ? <Presentation className="w-3 h-3"/> : template.type === 'pdf' ? <FileText className="w-3 h-3"/> : <Mail className="w-3 h-3"/>}
-                          {template.type}
-                        </Badge>
-                      </div>
-                    </div>
-                    {/* Visual Layout Preview */}
-                    <div className="mt-4 pt-4 border-t relative group/preview">
-                      <div className="flex justify-center h-[60px] opacity-60 group-hover/preview:opacity-100 transition-opacity">
-                        {(template.type === 'pptx' || template.type === 'presentation') ? (
-                          <div className="flex gap-2 w-full max-w-[120px]">
-                            <div className="w-2/3 h-full bg-blue-100 rounded border border-blue-200 p-1 flex flex-col gap-1">
-                              <div className="w-full h-1/4 bg-blue-200 rounded-sm"></div>
-                              <div className="w-full flex-1 bg-blue-200/50 rounded-sm"></div>
-                            </div>
-                            <div className="w-1/3 flex flex-col gap-1.5 h-full">
-                              <div className="w-full flex-1 bg-blue-100 rounded border border-blue-200"></div>
-                              <div className="w-full flex-1 bg-blue-100 rounded border border-blue-200"></div>
-                            </div>
+                      <h3 className="font-bold mb-1 text-sm group-hover:text-primary transition-colors">{template.name}</h3>
+                      <p className="text-[11px] text-muted-foreground mb-3 line-clamp-2 leading-relaxed">{template.description}</p>
+                      
+                      <div className="space-y-1.5 text-[10px] text-muted-foreground border-t pt-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">Target Audience</span>
+                          <span className="font-bold text-foreground">{(template as any).audience || config.audience}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span>Complexity</span>
+                          <div className="flex gap-0.5">
+                            {[1, 2, 3].map(i => (
+                              <div key={i} className={`w-2.5 h-1 rounded-full ${i <= (template.slides > 12 ? 3 : template.slides > 8 ? 2 : 1) ? "bg-primary" : "bg-muted"}`} />
+                            ))}
                           </div>
-                        ) : template.type === 'pdf' ? (
-                          <div className="flex gap-2 h-full">
-                            <div className="w-10 h-full bg-amber-100 rounded border border-amber-200 flex flex-col items-center justify-start p-1.5 gap-1.5">
-                              <div className="w-full h-1 bg-amber-300 rounded-full"></div>
-                              <div className="w-full h-1 bg-amber-200 rounded-full"></div>
-                              <div className="w-3/4 h-1 bg-amber-200 rounded-full shrink-0"></div>
-                            </div>
-                            <div className="w-10 h-full bg-amber-100 rounded border border-amber-200 flex flex-col items-center justify-start p-1.5 gap-1.5">
-                              <div className="w-full h-1 bg-amber-300 rounded-full"></div>
-                              <div className="w-full h-3 bg-amber-200 rounded-sm"></div>
-                              <div className="w-full h-1 bg-amber-200 rounded-full"></div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="w-full max-w-[100px] h-full bg-emerald-50 rounded border border-emerald-200 p-2 flex flex-col gap-1.5">
-                            <div className="flex items-center gap-2">
-                               <div className="w-3 h-3 rounded-full bg-emerald-200"></div>
-                               <div className="w-12 h-1.5 bg-emerald-200 rounded-full"></div>
-                            </div>
-                            <div className="w-full h-1 bg-emerald-100 rounded-full mt-1"></div>
-                            <div className="w-full h-1 bg-emerald-100 rounded-full"></div>
-                            <div className="w-2/3 h-1 bg-emerald-100 rounded-full"></div>
-                          </div>
-                        )}
+                        </div>
+                        <div className="flex items-center justify-between mt-2">
+                          <Badge variant="outline" className={`text-[10px] h-5 uppercase font-extrabold flex items-center gap-1 border-2 ${template.type === 'pptx' || template.type === 'presentation' ? 'text-blue-600 border-blue-100 bg-blue-50/50' : template.type === 'pdf' ? 'text-amber-600 border-amber-100 bg-amber-50/50' : 'text-emerald-600 border-emerald-100 bg-emerald-50/50'}`}>
+                            {template.type}
+                          </Badge>
+                          <span className="opacity-70">{template.slides} {template.type === "pptx" ? "slides" : "pages"}</span>
+                        </div>
                       </div>
-                      <Button
-                        variant="secondary"
-                        size="icon"
-                        className="absolute inset-0 m-auto h-8 w-8 rounded-full shadow-lg scale-0 group-hover/preview:scale-100 transition-transform bg-primary text-primary-foreground hover:bg-primary/90"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setTemplatePreviewId(template.id);
-                        }}
-                      >
-                        <Search className="h-4 w-4" />
-                      </Button>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+
+            <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6 border-t pt-6">
+               <Card className="bg-muted/20 border-dashed">
+                 <CardHeader className="pb-2">
+                   <CardTitle className="text-sm">Strategic Context</CardTitle>
+                 </CardHeader>
+                 <CardContent>
+                   <p className="text-xs text-muted-foreground leading-relaxed italic">
+                     {selectedTemplate === "board-deck" ? "Tailored for quarterly governance, focusing on capital allocation and long-term scaling strategy." :
+                      selectedTemplate === "investor-update" ? "Optimized for speed and transparency, highlighting monthly growth milestones and burn efficiency." :
+                      "Designed for formal financial audits and rigorous compliance reporting."}
+                   </p>
+                 </CardContent>
+               </Card>
+               <div className="lg:col-span-2 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">General Report Settings</Label>
+                    <div className="flex-1 h-px bg-muted" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="reportTitleMain" className="text-xs">Report Title</Label>
+                      <Input id="reportTitleMain" value={reportTitle} onChange={(e) => setReportTitle(e.target.value)} className="h-8 text-xs" />
                     </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
-        </CardContent>
-      </Card>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="periodMain" className="text-xs">Reporting Period</Label>
+                      <Select value={reportingPeriod} onValueChange={setReportingPeriod}>
+                        <SelectTrigger id="periodMain" className="h-8 text-xs">
+                          <SelectValue placeholder="Select period" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="current">Current Period (Actuals)</SelectItem>
+                          <SelectItem value="quarter">Current Quarter (Projection)</SelectItem>
+                          {availablePeriods.map(p => (
+                            <SelectItem key={p} value={p}>{p}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+               </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {activeStep === 2 && (
+        <Card className="border-2 shadow-lg">
+          <CardHeader>
+             <CardTitle>Step 2: Verify Financial Metrics</CardTitle>
+             <CardDescription>Select the specific KPIs you want to highlight for the board. These will drive the AI analysis.</CardDescription>
+          </CardHeader>
+          <CardContent>
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {kpiMetrics.map((metric) => {
+                  const isSelected = selectedMetrics.includes(metric.name);
+                  return (
+                    <div
+                      key={metric.name}
+                      className={`p-4 border-2 rounded-xl cursor-pointer transition-all hover:scale-[1.02] ${isSelected ? "border-primary bg-primary/[0.03] shadow-md" : "border-muted bg-card hover:border-primary/40"}`}
+                      onClick={() => handleMetricToggle(metric.name)}
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <div className={`p-1.5 rounded-lg ${isSelected ? "bg-primary text-white" : "bg-muted"}`}>
+                          {metric.trend === "up" ? <TrendingUp className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                        </div>
+                        <Checkbox checked={isSelected} />
+                      </div>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest mb-1">{metric.name}</p>
+                      <p className="text-xl font-black">{metric.value}</p>
+                      <p className={`text-[10px] font-bold mt-1 ${metric.trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>{metric.change}</p>
+                    </div>
+                  )
+                })}
+             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {activeStep === 3 && (
+        <Card className="border-2 shadow-xl overflow-hidden">
+          <CardHeader className="bg-slate-50 border-b">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                   <Zap className="h-5 w-5 text-primary" />
+                   Step 3: Strategic Narrative Analysis
+                </CardTitle>
+                <CardDescription>AI-generated context for your board deck based on selected metrics.</CardDescription>
+              </div>
+              <Button onClick={fetchAIContent} disabled={loadingAiContent} size="sm" variant="outline" className="bg-white">
+                {loadingAiContent ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                Regenerate AI Analysis
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-6">
+            {loadingAiContent ? (
+               <div className="py-20 flex flex-col items-center justify-center text-center space-y-4">
+                  <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                  <div className="space-y-1">
+                    <p className="font-bold">Analyzing Financial Drivers...</p>
+                    <p className="text-xs text-muted-foreground">Identifying causal attribution for current period variance.</p>
+                  </div>
+               </div>
+            ) : boardReportAiContent ? (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2 space-y-4">
+                    <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 shadow-inner">
+                       <Label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2 block">Executive Narrative</Label>
+                       <div className="text-sm leading-relaxed text-slate-800 whitespace-pre-wrap">
+                         {boardReportAiContent.executiveSummary}
+                       </div>
+                    </div>
+                    <div className="p-5 rounded-xl bg-amber-50/50 border border-amber-100">
+                       <Label className="text-[10px] font-bold uppercase tracking-widest text-amber-600 mb-2 block">Risks & Strategic Focus</Label>
+                       <div className="text-sm leading-relaxed text-amber-900 whitespace-pre-wrap italic">
+                         {boardReportAiContent.areasOfFocus || boardReportAiContent.risks}
+                       </div>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <Card className="bg-indigo-600 text-white border-none shadow-lg">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4" />
+                          Key Highlights
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ul className="space-y-3">
+                          {boardReportAiContent.keyHighlights?.slice(0, 5).map((h: any, i: number) => (
+                            <li key={i} className="text-xs flex gap-2 leading-snug">
+                              <span className="opacity-60 font-bold">{i+1}.</span>
+                              {typeof h === 'string' ? h : (h.title || h.summary)}
+                            </li>
+                          ))}
+                        </ul>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-slate-900 text-slate-300 border-none">
+                       <CardHeader className="pb-2">
+                         <CardTitle className="text-[10px] uppercase font-bold tracking-widest">Provenance</CardTitle>
+                       </CardHeader>
+                       <CardContent className="space-y-3">
+                          <div className="flex items-center justify-between text-xs">
+                             <span>Verification Status</span>
+                             <span className="text-emerald-400 font-bold">100% ERP-Matched</span>
+                          </div>
+                          <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                             <div className="h-full w-full bg-emerald-500" />
+                          </div>
+                          <p className="text-[9px] opacity-60">Narrative is grounded in immutable accounting snapshots.</p>
+                       </CardContent>
+                    </Card>
+                  </div>
+                </div>
+              </div>
+            ) : (
+               <div className="py-20 text-center space-y-4 border-2 border-dashed rounded-xl">
+                  <Zap className="h-10 w-10 text-muted-foreground mx-auto" />
+                  <p className="text-sm text-muted-foreground">AI Narrative is ready to be drafted.</p>
+                  <Button onClick={fetchAIContent} variant="outline" size="sm">Generate First Draft</Button>
+               </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {activeStep === 4 && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+           <div className="lg:col-span-2 space-y-6">
+              <Card className="overflow-hidden border-2 border-primary/20 shadow-xl">
+                <CardHeader className="bg-slate-50 border-b">
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <CardTitle>Final Review</CardTitle>
+                       <CardDescription>Reviewing {reportTitle} before distribution</CardDescription>
+                     </div>
+                     <Badge className="bg-primary">{reportFormat.toUpperCase()} Format</Badge>
+                   </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                   <div className="aspect-[16/9] bg-slate-100 flex items-center justify-center group cursor-pointer relative">
+                      <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100 z-10">
+                         <Button variant="secondary" className="gap-2">
+                           <Eye className="h-4 w-4" />
+                           Full Preview
+                         </Button>
+                      </div>
+                      <div className="w-4/5 h-4/5 bg-white shadow-2xl rounded p-8 flex flex-col gap-4">
+                         <div className="h-8 w-48 bg-slate-200 rounded animate-pulse" />
+                         <div className="h-px w-full bg-slate-100" />
+                         <div className="grid grid-cols-3 gap-4 mt-4">
+                            <div className="h-24 bg-slate-50 rounded border border-slate-100" />
+                            <div className="h-24 bg-slate-50 rounded border border-slate-100" />
+                            <div className="h-24 bg-slate-50 rounded border border-slate-100" />
+                         </div>
+                         <div className="flex-1 mt-4 space-y-2">
+                            <div className="h-3 w-full bg-slate-50 rounded" />
+                            <div className="h-3 w-5/6 bg-slate-50 rounded" />
+                            <div className="h-3 w-4/6 bg-slate-50 rounded" />
+                         </div>
+                      </div>
+                   </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                 <CardHeader className="pb-2">
+                   <CardTitle className="text-sm">Enabled Report Components</CardTitle>
+                 </CardHeader>
+                 <CardContent>
+                    <div className="flex flex-wrap gap-2">
+                       {activeSections.map(s => (
+                         <Badge key={s} variant="secondary" className="px-3 py-1 bg-emerald-50 text-emerald-700 border-emerald-100 font-bold flex items-center gap-1.5">
+                            <CheckCircle2 className="h-3 w-3" />
+                            {s}
+                         </Badge>
+                       ))}
+                    </div>
+                 </CardContent>
+              </Card>
+           </div>
+
+           <div className="space-y-6">
+              <Card className="bg-slate-900 text-white border-none shadow-2xl">
+                 <CardHeader>
+                   <CardTitle className="text-lg">Distribution Settings</CardTitle>
+                 </CardHeader>
+                 <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] uppercase font-bold tracking-widest opacity-60">Method</Label>
+                      <Select value={distributionMethod} onValueChange={distributionMethod => setDistributionMethod(distributionMethod)}>
+                         <SelectTrigger className="bg-slate-800 border-slate-700 text-white h-10">
+                           <SelectValue />
+                         </SelectTrigger>
+                         <SelectContent>
+                            <SelectItem value="email">Direct Email Distribution</SelectItem>
+                            <SelectItem value="secure-link">Secure External Portal</SelectItem>
+                            <SelectItem value="manual">Manual Local Download</SelectItem>
+                         </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                       <Label className="text-[10px] uppercase font-bold tracking-widest opacity-60">Primary Recipients</Label>
+                       <Input 
+                          placeholder="board@company.com" 
+                          className="bg-slate-800 border-slate-700 text-white h-10 placeholder:opacity-30" 
+                          value={recipients}
+                          onChange={(e) => setRecipients(e.target.value)}
+                       />
+                    </div>
+
+                    <div className="flex items-center justify-between p-4 rounded-xl bg-slate-800/50 border border-slate-700/50 mt-4">
+                       <div className="space-y-1">
+                          <p className="text-xs font-bold">Password Protection</p>
+                          <p className="text-[9px] opacity-40">Encryption enabled for PDF</p>
+                       </div>
+                       <Checkbox checked={passwordProtect} onCheckedChange={(val) => setPasswordProtect(!!val)} className="border-slate-600" />
+                    </div>
+
+                    <Button onClick={handleGenerateReport} disabled={isGenerating} className="w-full mt-6 bg-primary hover:bg-primary/90 h-12 text-base font-bold shadow-xl shadow-primary/40 group">
+                       {isGenerating ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Send className="h-5 w-5 mr-2 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />}
+                       Finalize & Distribute
+                    </Button>
+                 </CardContent>
+              </Card>
+
+              <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-700 flex items-start gap-3">
+                 <ShieldCheck className="h-5 w-5 shrink-0 mt-0.5" />
+                 <div>
+                    <p className="text-xs font-bold mb-1">Institutional Audit Trail</p>
+                    <p className="text-[10px] leading-relaxed opacity-80">This snapshot is hashed and stored in the immutable organizational record.</p>
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
+
 
       <Tabs defaultValue="content" className="space-y-4">
         <div className="overflow-x-auto">
