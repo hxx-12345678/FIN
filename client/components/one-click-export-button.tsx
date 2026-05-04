@@ -178,7 +178,7 @@ export function OneClickExportButton({ orgId, modelRunId, className }: OneClickE
                 if (linkResponse.ok) {
                   const linkResult = await linkResponse.json()
                   if (linkResult.ok && linkResult.shareableLink) {
-                    const shareableUrl = `${window.location.origin}/share/${linkResult.shareableLink.token}`
+                    const shareableUrl = `${window.location.origin}/share/?token=${linkResult.shareableLink.token}`
                     setExportStatus(prev => prev ? {
                       ...prev,
                       status: 'completed',

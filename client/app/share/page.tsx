@@ -23,11 +23,12 @@ import { TrendingUp, TrendingDown, Target, Download, Eye, Loader2, AlertCircle, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { FinancialTermTooltip } from "@/components/financial-term-tooltip"
 import { API_BASE_URL } from "@/lib/api-config"
-import { useParams, useRouter } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation"
+import { Suspense } from "react"
 
-export default function SharedDashboardPage() {
-  const params = useParams()
-  const token = params.token as string
+function SharedDashboardContent() {
+  const searchParams = useSearchParams()
+  const token = searchParams.get("token")
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -35,14 +36,17 @@ export default function SharedDashboardPage() {
 
   useEffect(() => {
     if (token) {
-      fetchSharedData()
+      fetchSharedData(token)
+    } else {
+      setError("No access token provided")
+      setLoading(false)
     }
   }, [token])
 
-  const fetchSharedData = async () => {
+  const fetchSharedData = async (tokenValue: string) => {
     try {
       setLoading(true)
-      const response = await fetch(`${API_BASE_URL}/share/${token}?type=dashboard`)
+      const response = await fetch(`${API_BASE_URL}/share/${tokenValue}?type=dashboard`)
       const result = await response.json()
 
       if (response.ok && result.ok) {
@@ -297,5 +301,18 @@ export default function SharedDashboardPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function SharedDashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center space-y-4">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="text-sm font-medium text-muted-foreground animate-pulse">Initializing secure connection...</p>
+      </div>
+    }>
+      <SharedDashboardContent />
+    </Suspense>
   )
 }

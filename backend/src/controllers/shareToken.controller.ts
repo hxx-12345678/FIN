@@ -33,7 +33,7 @@ export const shareTokenController = {
           token: shareToken.token,
           expiresAt: shareToken.expiresAt,
           scope: shareToken.scope,
-          shareUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/share/${shareToken.token}`,
+          shareUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/share/?token=${shareToken.token}`,
         },
       });
     } catch (error) {

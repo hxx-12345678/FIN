@@ -7,7 +7,7 @@ import fetch from 'node-fetch';
  */
 class LlmService {
     private apiKeys: string[] = [];
-    private model: string; // Declare model here
+    private model: string;
 
     constructor() {
         // Load primary keys
@@ -22,7 +22,7 @@ class LlmService {
         }
 
         // Use model from env or current best default
-        this.model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+        this.model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
         console.info(`[LlmService] Initialized with model: ${this.model} and ${this.apiKeys.length} keys`);
         if (this.apiKeys.length === 0) {
@@ -43,7 +43,8 @@ class LlmService {
         // Try keys in sequence
         for (const key of this.apiKeys) {
             try {
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${key}`;
+                // Using stable v1 API
+                const url = `https://generativelanguage.googleapis.com/v1/models/${this.model}:generateContent?key=${key}`;
                 console.debug(`[LlmService] Calling URL: ${url.replace(key, 'REDACTED')}`);
 
                 const payload = {
@@ -53,10 +54,10 @@ class LlmService {
                         }]
                     }],
                     generationConfig: {
-                        temperature: 0.1, // Lower temperature for consistent financial analysis
+                        temperature: 0.1,
                         topP: 0.95,
                         topK: 40,
-                        maxOutputTokens: 8192, // Increased for deep reports
+                        maxOutputTokens: 8192,
                         responseMimeType: jsonMode ? "application/json" : "text/plain"
                     }
                 };
@@ -77,25 +78,16 @@ class LlmService {
                 const data = await response.json() as any;
                 const candidate = data.candidates?.[0];
                 const content = candidate?.content;
-                const finishReason = candidate?.finishReason;
 
                 if (content && content.parts) {
                     const text = content.parts.map((p: any) => p.text || '').join('');
-                    if (text) {
-                        console.debug(`[LlmService] Gemini returned ${text.length} chars. Finish Reason: ${finishReason}`);
-                        if (text.length < 500) {
-                            console.debug(`[LlmService] Unexpectedly short response. Full data: ${JSON.stringify(data)}`);
-                        }
-                        return text;
-                    }
+                    if (text) return text;
                 }
 
                 if (data) {
-                    console.warn(`Gemini API response missing text content, but data received: ${JSON.stringify(data).substring(0, 200)}`);
                     lastError = `Gemini API response missing text content.`;
                 }
             } catch (error: any) {
-                console.warn(`LlmService error with key: ${error.message}`);
                 lastError = error.message;
             }
         }
@@ -103,45 +95,30 @@ class LlmService {
         throw new Error(`All LLM attempts failed. Last error: ${lastError}`);
     }
 
-    /**
-     * Synthesize multiple agent outputs into a professional CFO report
-     */
-    
     async streamComplete(systemPrompt: string, userPrompt: string, onChunk: (chunk: string) => void): Promise<string> {
         if (this.apiKeys.length === 0) throw new Error('No Gemini API keys');
         let lastError: any = null;
 
         for (const key of this.apiKeys) {
             try {
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:streamGenerateContent?key=${key}`;
+                // Using stable v1 API for streaming
+                const sseUrl = `https://generativelanguage.googleapis.com/v1/models/${this.model}:streamGenerateContent?alt=sse&key=${key}`;
                 const payload = {
                     contents: [{ parts: [{ text: `${systemPrompt}\n\nUser Request: ${userPrompt}` }] }],
                     generationConfig: { temperature: 0.1, topP: 0.95, topK: 40, maxOutputTokens: 8192 }
                 };
 
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if (!response.ok) {
-                    lastError = await response.text();
-                    continue;
-                }
-                
-                // Read streaming response (it's a JSON array, but effectively we can just parse the chunks if we use alt=sse, wait no, without alt=sse it streams chunks as an array)
-                // Let's use alt=sse to get proper SSE stream
-                const sseUrl = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:streamGenerateContent?alt=sse&key=${key}`;
-                
                 const sseResponse = await fetch(sseUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
 
-                if (!sseResponse.ok) continue;
-                
+                if (!sseResponse.ok) {
+                    lastError = await sseResponse.text();
+                    continue;
+                }
+
                 const reader = sseResponse.body!.getReader();
                 const decoder = new TextDecoder("utf-8");
                 let fullText = "";
@@ -150,11 +127,11 @@ class LlmService {
                 while (true) {
                     const { value, done } = await reader.read();
                     if (done) break;
-                    
+
                     buffer += decoder.decode(value, { stream: true });
                     const lines = buffer.split("\n");
                     buffer = lines.pop() || "";
-                    
+
                     for (const line of lines) {
                         if (line.startsWith("data: ") && line.trim() !== "data: [DONE]") {
                             try {
@@ -164,7 +141,7 @@ class LlmService {
                                     fullText += textChunk;
                                     onChunk(textChunk);
                                 }
-                            } catch(e) {}
+                            } catch (e) { }
                         }
                     }
                 }
@@ -182,47 +159,24 @@ class LlmService {
         calculations: Record<string, number>
     ): Promise<string> {
         const currentDate = new Date().toLocaleDateString();
-        const systemPrompt = `You are a world-class strategic CFO at a high-growth company. 
+        const systemPrompt = `You are a world-class strategic CFO. 
 Current Date: ${currentDate}
-
-Your task is to synthesize multiple specialized financial agent reports into a single, cohesive, professional executive report in response to the user's query.
-
-CORE PRINCIPLES:
-1. PROFESSIONAL TONE: Write like a seasoned CFO speaking to a CEO/Founder. Be authoritative yet objective.
-2. INTEGRATION: Don't just list what agents said. Connect the dots. If the Analytics agent reports a variance, explain how that links to the Treasury agent's runway calculations.
-3. STRATEGIC DEPTH: Go beyond the numbers. Provide "Better than CFO" level reasoning. Identify implicit risks and opportunities.
-4. FORMATTING: Use clean Markdown with clear headers (H2, H3), bolding for emphasis, and tables for data where it adds clarity.
-5. DATA CITATION: Explicitly use the provided calculations (Revenue, Burn, Runway, EBITDA) in your narrative.
-6. COMPREHENSIVENESS: A short report is a failed report. Provide deep, thorough analysis of at least 1500 words if necessary to be exhaustive.
-
-Structure your response with:
-- CFO EXECUTIVE SUMMARY (High-level takeaways)
-- FINANCIAL HEALTH ASSESSMENT (Integrated numbers analysis)
-- STRATEGIC INSIGHTS & DRIVERS (The "Why" behind the numbers)
-- ACTIONABLE RECOMMENDATIONS (Prioritized list)
-- RISK & SENSITIVITY ANALYSIS (What could go wrong)`;
+Synthesize agent reports into a cohesive, professional executive report.
+- Tone: Professional, authoritative.
+- Depth: Exhaustive analysis (at least 1500 words if necessary).
+- Format: Clean Markdown with clear headers.`;
 
         const userPrompt = `
 User Query: "${query}"
-
 AGENT OUTPUTS:
 ${agentOutputs.join('\n\n---\n\n')}
-
 FINANCIAL CALCULATIONS:
 ${JSON.stringify(calculations, null, 2)}
-
-Provide a synthesized, integrated CFO report. BE EXHAUSTIVE AND STRATEGIC.`;
+Provide a synthesized CFO report.`;
 
         try {
-            const outputsCombined = agentOutputs.join('\n\n---\n\n');
-            console.info(`[LlmService] Starting synthesis for query: ${query.substring(0, 30)}... Input length: ${outputsCombined.length} chars`);
-            const startTime = Date.now();
-            const result = await this.complete(systemPrompt, userPrompt);
-            console.info(`[LlmService] Synthesis complete in ${Date.now() - startTime}ms. Output length: ${result.length} chars`);
-            return result;
+            return await this.complete(systemPrompt, userPrompt);
         } catch (error: any) {
-            console.warn(`[LlmService] Synthesis error for query "${query.substring(0, 30)}...": ${error.message}`);
-            // Robust Fallback: if LLM fails, use basic synthesis
             return `### 📊 AI CFO Analysis Report (Fallback)\n\n${agentOutputs.join('\n\n---\n\n')}`;
         }
     }
