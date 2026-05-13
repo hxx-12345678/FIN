@@ -258,17 +258,17 @@ class CashFlowAgentService {
 
     // Use defaults if no real data
     if (!hasRealData) {
-      cashBalance = 500000;
-      monthlyBurn = 80000;
-      monthlyRevenue = 60000;
+      cashBalance = 0;
+      monthlyBurn = 0;
+      monthlyRevenue = 0;
 
       dataSources.push({
         type: 'manual_input',
-        id: 'default_estimates',
-        name: 'Industry Estimates',
+        id: 'empty_ledger_state',
+        name: 'Empty Ledger Placeholder',
         timestamp: new Date(),
-        confidence: 0.5,
-        snippet: 'Using standard SaaS benchmarks',
+        confidence: 0.1,
+        snippet: 'Zero-state: No connected financial data found.',
       });
     }
 
@@ -305,18 +305,72 @@ class CashFlowAgentService {
   }
 
   /**
-   * Analyze burn rate trends
+   * Analyze burn rate trends from real transaction history
    */
   private async analyzeBurnTrends(
     orgId: string,
     dataSources: DataSource[]
   ): Promise<{ trend: string; momChange: number }> {
-    // In production, this would analyze historical data
-    // For now, return reasonable defaults
-    return {
-      trend: 'stable',
-      momChange: 0.02, // 2% increase
-    };
+    try {
+      // Get last 3 months of expense transactions to compute real MoM
+      const now = new Date();
+      const threeMonthsAgo = new Date();
+      threeMonthsAgo.setMonth(now.getMonth() - 3);
+
+      const transactions = await prisma.rawTransaction.findMany({
+        where: {
+          orgId,
+          date: { gte: threeMonthsAgo },
+          isDuplicate: false,
+        },
+        select: { amount: true, date: true },
+        orderBy: { date: 'asc' },
+      });
+
+      if (transactions.length < 5) {
+        return { trend: 'insufficient_data', momChange: 0 };
+      }
+
+      // Bucket by month and sum expenses (negative amounts or absolute values)
+      const monthlyBurn = new Map<string, number>();
+      for (const tx of transactions) {
+        const amount = Number(tx.amount);
+        if (amount >= 0) continue; // Only expenses (negative amounts)
+        const monthKey = `${tx.date.getFullYear()}-${String(tx.date.getMonth() + 1).padStart(2, '0')}`;
+        monthlyBurn.set(monthKey, (monthlyBurn.get(monthKey) || 0) + Math.abs(amount));
+      }
+
+      const months = Array.from(monthlyBurn.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+
+      if (months.length < 2) {
+        return { trend: 'insufficient_data', momChange: 0 };
+      }
+
+      dataSources.push({
+        type: 'transaction',
+        id: 'burn_trend_analysis',
+        name: 'Burn Trend Analysis',
+        timestamp: new Date(),
+        confidence: 0.9,
+        snippet: `Computed from ${transactions.length} transactions across ${months.length} months.`,
+      });
+
+      // Compute MoM change from the last two complete months
+      const lastMonth = months[months.length - 1][1];
+      const prevMonth = months[months.length - 2][1];
+      const momChange = prevMonth > 0 ? (lastMonth - prevMonth) / prevMonth : 0;
+
+      // Determine trend
+      let trend: string;
+      if (momChange > 0.05) trend = 'increasing';
+      else if (momChange < -0.05) trend = 'decreasing';
+      else trend = 'stable';
+
+      return { trend, momChange };
+    } catch (error) {
+      console.warn('[TreasuryAgent] Burn trend analysis failed:', error);
+      return { trend: 'unavailable', momChange: 0 };
+    }
   }
 
   /**
@@ -451,7 +505,8 @@ class CashFlowAgentService {
 
     // Q12: Liquidity Stress / Revolver
     if (/liquidity|revolver|auto-draw/i.test(query)) {
-      const threshold = 2000000;
+      const LIQUIDITY_RESERVE_THRESHOLD = 2000000; // Covenant-based reserve
+      const threshold = LIQUIDITY_RESERVE_THRESHOLD;
       const drawAmount = Math.max(0, threshold - data.cashBalance);
       answer += `### 💳 Liquidity Stress & Revolver Analysis\n`;
       answer += `**Trigger Condition:** Cash balance < $${threshold.toLocaleString()}\n`;

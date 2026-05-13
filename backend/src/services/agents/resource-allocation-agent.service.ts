@@ -197,18 +197,35 @@ class ResourceAllocationAgentService {
       }
 
       if (!hasRealData) {
-        // Use industry benchmarks
-        cashBalance = 2000000;
-        investments = 500000;
-        monthlyBurn = 150000;
-
-        dataSources.push({
-          type: 'manual_input',
-          id: 'benchmark',
-          name: 'Industry Benchmarks',
-          timestamp: new Date(),
-          confidence: 0.5,
+        // Fallback to transaction aggregation
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const txs = await prisma.rawTransaction.findMany({
+          where: { orgId, date: { gte: thirtyDaysAgo }, isDuplicate: false },
+          select: { amount: true },
         });
+
+        if (txs.length > 0) {
+          monthlyBurn = txs.filter(t => Number(t.amount) < 0).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+          
+          const allTxs = await prisma.rawTransaction.aggregate({
+            where: { orgId, isDuplicate: false },
+            _sum: { amount: true }
+          });
+          cashBalance = Math.max(Number(allTxs._sum.amount || 0), 0);
+          investments = 0; // Production: Do not estimate investment assets from cash balance.
+          currentYield = 0; // Production: 0% default if no yield data provided.
+          
+          hasRealData = true;
+          dataSources.push({
+            type: 'transaction',
+            id: 'alloc_tx_fallback',
+            name: 'Transaction-Based Capital Estimate',
+            timestamp: new Date(),
+            confidence: 0.8,
+            snippet: `Computed cash and burn from raw ledger.`,
+          });
+        }
       }
     } catch (error) {
       console.error('[CapitalAgent] Error:', error);
@@ -297,27 +314,56 @@ class ResourceAllocationAgentService {
     data: any,
     dataSources: DataSource[]
   ): Promise<any> {
-    // Simulated FX exposure analysis
-    // In production, this would analyze actual transaction currencies
-    const totalExposure = data.totalCapital * 0.15; // Assume 15% FX exposure
+    // Real transaction-based FX exposure analysis
+    const fxTxs = await prisma.rawTransaction.findMany({
+      where: { 
+        orgId, 
+        isDuplicate: false,
+        OR: [
+          { description: { contains: 'EUR', mode: 'insensitive' } },
+          { description: { contains: 'GBP', mode: 'insensitive' } },
+          { description: { contains: 'CAD', mode: 'insensitive' } },
+          { description: { contains: 'wire transfer', mode: 'insensitive' } },
+          { description: { contains: 'foreign', mode: 'insensitive' } }
+        ]
+      },
+      select: { amount: true, description: true }
+    });
+
+    let totalExposure = 0;
+    const currenciesFound = new Set<string>();
+
+    for (const tx of fxTxs) {
+      const amount = Math.abs(Number(tx.amount));
+      totalExposure += amount;
+      const desc = (tx.description || '').toUpperCase();
+      if (desc.includes('EUR')) currenciesFound.add('EUR');
+      else if (desc.includes('GBP')) currenciesFound.add('GBP');
+      else if (desc.includes('CAD')) currenciesFound.add('CAD');
+    }
+
+    if (currenciesFound.size === 0 && totalExposure > 0) currenciesFound.add('International');
+
     const hedgeAmount = totalExposure * 0.5; // Recommend hedging 50% of exposure
     const hedgeCost = hedgeAmount * 0.005; // 0.5% hedging cost
 
-    dataSources.push({
-      type: 'calculation',
-      id: 'fx_analysis',
-      name: 'FX Exposure Analysis',
-      timestamp: new Date(),
-      confidence: 0.75,
-      snippet: `${(totalExposure / data.totalCapital * 100).toFixed(1)}% FX exposure detected`,
-    });
+    if (totalExposure > 0) {
+      dataSources.push({
+        type: 'transaction',
+        id: 'fx_analysis',
+        name: 'FX Ledger Analysis',
+        timestamp: new Date(),
+        confidence: 0.9,
+        snippet: `Detected $${totalExposure.toLocaleString()} in international transactions.`,
+      });
+    }
 
     return {
       totalExposure,
       hedgeAmount,
       hedgeCost,
-      mainCurrencies: ['EUR', 'GBP', 'CAD'],
-      recommendation: totalExposure > data.totalCapital * 0.1 ? 'hedge_recommended' : 'monitor',
+      mainCurrencies: Array.from(currenciesFound),
+      recommendation: totalExposure > (data.totalCapital || 1) * 0.1 ? 'hedge_recommended' : 'monitor',
     };
   }
 

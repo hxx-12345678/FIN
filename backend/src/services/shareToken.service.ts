@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { NotFoundError, ForbiddenError } from '../utils/errors';
 import * as crypto from 'crypto';
 import { auditService } from './audit.service';
+import { investorDashboardService } from './investor-dashboard.service';
 
 export interface CreateShareTokenParams {
   expiresInDays?: number;
@@ -163,17 +164,21 @@ export const shareTokenService = {
 
     // Return read-only data based on type
     if (type === 'dashboard') {
-      const { investorDashboardService } = require('./investor-dashboard.service');
-      const dashboardData = await investorDashboardService.getDashboardData(shareToken.orgId);
-      
-      return {
-        org: {
-          id: org.id,
-          name: org.name,
-          currency: org.currency,
-        },
-        dashboardData,
-      };
+      try {
+        const dashboardData = await investorDashboardService.getDashboardData(shareToken.orgId);
+        
+        return {
+          org: {
+            id: org.id,
+            name: org.name,
+            currency: org.currency,
+          },
+          dashboardData,
+        };
+      } catch (err) {
+        console.error('[ShareTokenService] Error fetching dashboard data:', err);
+        throw new NotFoundError('Dashboard data not available for this organization');
+      }
     }
 
     if (type === 'models') {

@@ -79,29 +79,22 @@ export function CookieManager() {
                 </div>
                 
                 <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
+                  <button
                     onClick={rejectNonEssential}
-                    className="flex-1 text-slate-500 hover:text-white hover:bg-white/5 h-8 rounded-lg font-bold text-[9px] uppercase tracking-wider"
+                    className="flex-1 text-slate-500 hover:text-white transition-colors h-9 rounded-xl font-bold text-[10px] uppercase tracking-wider"
                   >
-                    Required
-                  </Button>
+                    REQUIRED
+                  </button>
                   <Button 
                     size="sm"
                     onClick={acceptAll}
-                    className="flex-1 bg-blue-600 hover:bg-blue-500 text-white h-8 rounded-lg font-bold text-[9px] uppercase tracking-wider shadow-lg shadow-blue-600/20"
+                    className="flex-[2] bg-blue-600 hover:bg-blue-500 text-white h-10 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-[0_0_20px_rgba(37,99,235,0.3)] transition-all active:scale-95"
                   >
-                    Accept All
+                    ACCEPT ALL
                   </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="icon"
-                    onClick={() => setView("settings")}
-                    className="h-8 w-8 rounded-lg text-slate-500 hover:text-white hover:bg-white/5"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                  </Button>
+                  <div className="ml-1">
+                    <Check className="w-4 h-4 text-slate-600" />
+                  </div>
                 </div>
               </div>
             ) : (

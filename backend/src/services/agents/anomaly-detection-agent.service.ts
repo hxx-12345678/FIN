@@ -181,8 +181,8 @@ class AnomalyDetectionAgentService {
     const anomalies: TransactionAnomaly[] = [];
 
     if (transactions.length === 0) {
-      // Generate sample anomalies for demo purposes
-      return this.generateSampleAnomalies();
+      // Production: No transactions, no anomalies. Avoid demo hallucinations.
+      return [];
     }
 
     // Group transactions for analysis
@@ -280,31 +280,7 @@ class AnomalyDetectionAgentService {
     return anomalies;
   }
 
-  /**
-   * Generate sample anomalies for demo
-   */
-  private generateSampleAnomalies(): TransactionAnomaly[] {
-    return [
-      {
-        id: uuidv4(),
-        type: 'duplicate',
-        severity: 'high',
-        description: 'Potential duplicate payment to AWS - $4,250.00 charged twice on consecutive days',
-        amount: 4250,
-        transactions: [],
-        recommendation: 'Review AWS invoices and verify if this is a legitimate charge or duplicate',
-      },
-      {
-        id: uuidv4(),
-        type: 'suspicious_amount',
-        severity: 'medium',
-        description: 'Unusually large software subscription charge: $12,500 (normally $2,500/month)',
-        amount: 12500,
-        transactions: [],
-        recommendation: 'Verify if this is an annual prepayment or billing error',
-      },
-    ];
-  }
+
 
   /**
    * Generate recommendations

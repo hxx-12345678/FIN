@@ -11,6 +11,7 @@ import prisma from '../config/database';
 import { logger } from '../utils/logger';
 import { ValidationError, NotFoundError, ForbiddenError } from '../utils/errors';
 import { workerClient } from '../utils/worker-client';
+import { headcountPlanningService } from './headcount-planning.service';
 
 // ============================================
 // ENTITY MANAGEMENT
@@ -31,6 +32,8 @@ export const consolidationService = {
       ownershipPct?: number;
       country?: string;
       taxRate?: number;
+      intercompanyMap?: any;
+      financialData?: any;
     }
   ) => {
     // Validate org access
@@ -57,6 +60,8 @@ export const consolidationService = {
         ownershipPct,
         country: data.country,
         taxRate: data.taxRate,
+        intercompanyMap: data.intercompanyMap || {},
+        financialData: data.financialData || {},
       },
     });
 
@@ -175,6 +180,9 @@ export const consolidationService = {
       where: { orgId, isActive: true },
     });
 
+    logger.info(`Found ${entities.length} active entities for consolidation`, { orgId });
+    entities.forEach(e => logger.info(`- Entity: ${e.name} (${e.code}), Currency: ${e.currency}, Active: ${e.isActive}`));
+
     if (entities.length === 0) {
       throw new ValidationError('No entities found for consolidation. Create at least one entity first.');
     }
@@ -185,8 +193,10 @@ export const consolidationService = {
       const localization = await prisma.localizationSettings.findUnique({
         where: { orgId },
       });
+      logger.info(`Fetched localization settings for org ${orgId}. Rates present: ${!!localization?.fxRatesJson}`);
       if (localization?.fxRatesJson) {
         fxRates = localization.fxRatesJson as Record<string, number>;
+        logger.info(`FX Rates: ${JSON.stringify(fxRates)}`);
       }
     } catch (e) {
       logger.warn('Could not fetch FX rates, using defaults');
@@ -196,14 +206,28 @@ export const consolidationService = {
     const horizonMonths = params.horizonMonths || 12;
 
     // Build entity data for the worker
-    const entityConfigs = entities.map((entity) => ({
-      entityId: entity.code || entity.id,
-      name: entity.name,
-      currency: entity.currency,
-      ownershipPct: Number(entity.ownershipPct),
-      taxRate: entity.taxRate ? Number(entity.taxRate) : undefined,
-      financialData: entity.financialData || {},
-      intercompanyMap: entity.intercompanyMap || {},
+    const entityConfigs = await Promise.all(entities.map(async (entity) => {
+      // DYNAMICALLY FETCH HEADCOUNT COSTS FOR THIS ENTITY
+      let headcountCosts: Record<string, number> = {};
+      try {
+        const forecast = await headcountPlanningService.getForecast(orgId, userId, horizonMonths);
+        forecast.forEach(f => {
+          headcountCosts[f.month] = f.cost;
+        });
+      } catch (e) {
+        logger.warn(`Could not fetch headcount forecast for entity ${entity.id}`);
+      }
+
+      return {
+        entityId: entity.code || entity.id,
+        name: entity.name,
+        currency: entity.currency,
+        ownershipPct: Number(entity.ownershipPct),
+        taxRate: entity.taxRate ? Number(entity.taxRate) : undefined,
+        financialData: entity.financialData || {},
+        intercompanyMap: entity.intercompanyMap || {},
+        headcountCosts, // Dynamic linkage
+      };
     }));
 
     // Build FX rate maps
@@ -244,12 +268,11 @@ export const consolidationService = {
       });
 
       logger.info(`Consolidation completed for org ${orgId}`, {
-        entityCount: entities.length,
+        status: workerResponse.data.status,
       });
 
       return {
-        consolidated: workerResponse.data.result,
-        entities: entityConfigs,
+        ...workerResponse.data.result,
         metadata: {
           entitiesConsolidated: entities.length,
           startMonth,

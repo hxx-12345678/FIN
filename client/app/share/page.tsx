@@ -22,6 +22,7 @@ import {
 import { TrendingUp, TrendingDown, Target, Download, Eye, Loader2, AlertCircle, Sparkles, BrainCircuit, ShieldCheck, Globe } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { FinancialTermTooltip } from "@/components/financial-term-tooltip"
+import { AgenticResponse } from "@/components/ai-assistant/agentic-response"
 import { API_BASE_URL } from "@/lib/api-config"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Suspense } from "react"
@@ -199,8 +200,8 @@ function SharedDashboardContent() {
                 </CardTitle>
              </CardHeader>
              <CardContent>
-                <div className="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap italic">
-                   {data.aiNarrative}
+                <div className="text-sm leading-relaxed text-slate-700 italic">
+                   <AgenticResponse content={data.aiNarrative} />
                 </div>
              </CardContent>
           </Card>
@@ -214,21 +215,21 @@ function SharedDashboardContent() {
              </CardHeader>
              <CardContent className="h-[350px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={data.monthlyMetrics}>
+                  <AreaChart data={data.monthlyMetrics || []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <defs>
-                      <linearGradient id="colorArr" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1}/>
-                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={(val) => `$${val/1000}k`} />
-                    <Tooltip 
-                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                      formatter={(val: number) => [formatCurrency(val), "ARR"]}
-                    />
-                    <Area type="monotone" dataKey="arr" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorArr)" />
+                    <linearGradient id="colorArr" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={(val) => `$${val/1000}k`} />
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                    formatter={(val: number) => [formatCurrency(val), "ARR"]}
+                  />
+                  <Area type="monotone" dataKey="arr" stroke="#6366f1" strokeWidth={4} fillOpacity={1} fill="url(#colorArr)" />
                   </AreaChart>
                 </ResponsiveContainer>
              </CardContent>
@@ -240,7 +241,7 @@ function SharedDashboardContent() {
              </CardHeader>
              <CardContent className="h-[350px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.monthlyMetrics}>
+                  <BarChart data={data.monthlyMetrics || []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                     <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={(val) => `$${val/1000}k`} />
@@ -248,8 +249,8 @@ function SharedDashboardContent() {
                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                        formatter={(val: number) => formatCurrency(val)}
                     />
-                    <Bar dataKey="revenue" fill="#10b981" radius={[4, 4, 0, 0]} name="Revenue" />
-                    <Bar dataKey="burn" fill="#ef4444" radius={[4, 4, 0, 0]} name="Burn" />
+                    <Bar dataKey="revenue" fill="#10b981" radius={[6, 6, 0, 0]} name="Revenue" />
+                    <Bar dataKey="burn" fill="#ef4444" radius={[6, 6, 0, 0]} name="Burn" />
                   </BarChart>
                 </ResponsiveContainer>
              </CardContent>
@@ -290,19 +291,19 @@ function SharedDashboardContent() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                    <div className="p-3 bg-slate-50 rounded-lg">
                       <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">NRR</p>
-                      <p className="text-lg font-black text-slate-800">{data.saasMetrics.nrr}%</p>
+                      <p className="text-lg font-black text-slate-800">{typeof data.saasMetrics.nrr === 'number' ? data.saasMetrics.nrr.toFixed(1) : data.saasMetrics.nrr}%</p>
                    </div>
                    <div className="p-3 bg-slate-50 rounded-lg">
                       <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">Rule of 40</p>
-                      <p className={`text-lg font-black ${data.saasMetrics.ruleOf40 >= 40 ? 'text-emerald-600' : 'text-slate-800'}`}>{data.saasMetrics.ruleOf40}%</p>
+                      <p className={`text-lg font-black ${data.saasMetrics.ruleOf40 >= 40 ? 'text-emerald-600' : 'text-slate-800'}`}>{typeof data.saasMetrics.ruleOf40 === 'number' ? data.saasMetrics.ruleOf40.toFixed(1) : data.saasMetrics.ruleOf40}%</p>
                    </div>
                    <div className="p-3 bg-slate-50 rounded-lg">
                       <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">Burn Multiple</p>
-                      <p className="text-lg font-black text-slate-800">{data.saasMetrics.burnMultiple}x</p>
+                      <p className="text-lg font-black text-slate-800">{typeof data.saasMetrics.burnMultiple === 'number' ? data.saasMetrics.burnMultiple.toFixed(2) : data.saasMetrics.burnMultiple}x</p>
                    </div>
                    <div className="p-3 bg-slate-50 rounded-lg">
                       <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">Magic Number</p>
-                      <p className="text-lg font-black text-slate-800">{data.saasMetrics.magicNumber}</p>
+                      <p className="text-lg font-black text-slate-800">{typeof data.saasMetrics.magicNumber === 'number' ? data.saasMetrics.magicNumber.toFixed(2) : data.saasMetrics.magicNumber}</p>
                    </div>
                 </div>
              </CardContent>

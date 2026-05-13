@@ -8,6 +8,7 @@ import { ValidationError, NotFoundError } from '../utils/errors';
 
 export interface InvestorDashboardData {
   executiveSummary: {
+    mrr: number;
     arr: number;
     activeCustomers: number;
     monthsRunway: number;
@@ -84,323 +85,139 @@ export const investorDashboardService = {
    * Get investor dashboard data for an organization
    */
   getDashboardData: async (orgId: string, modelId?: string): Promise<InvestorDashboardData> => {
-    // First try to get the latest model run with actual financial data
-    let latestModelRun = await prisma.modelRun.findFirst({
-      where: { 
-        orgId, 
-        modelId: modelId || undefined,
-        status: 'done',
-        summaryJson: {
-          path: ['arr'],
-          not: 0
-        }
-      } as any,
-      orderBy: { createdAt: 'desc' },
-      include: { model: true }
-    });
-
-    // If no run with data, just grab the absolute latest
-    if (!latestModelRun) {
-      latestModelRun = await prisma.modelRun.findFirst({
-        where: { orgId, modelId: modelId || undefined, status: 'done' },
+    try {
+      // First try to get the latest model run with actual financial data
+      let latestModelRun = await prisma.modelRun.findFirst({
+        where: { 
+          orgId, 
+          modelId: modelId || undefined,
+          status: 'done',
+        },
         orderBy: { createdAt: 'desc' },
         include: { model: true }
       });
-    }
 
-    if (!latestModelRun || !latestModelRun.summaryJson) {
-      // Fall back to transaction data if no model run exists
-      return await getDashboardDataFromTransactions(orgId);
-    }
-
-    const summary = latestModelRun.summaryJson as any;
-
-    // Extract financial metrics - be careful with ARR vs MRR
-    const revenue = summary.mrr 
-      ? Number(summary.mrr) * 12 
-      : Number(summary.revenue || summary.arr || 0);
-    const expenses = Number(summary.expenses || 0);
-    const burnRate = Number(summary.burnRate || expenses || 0);
-    const cashBalance = Number(summary.cashBalance || 0);
-
-    // Use standardized runway calculation
-    const { runwayCalculationService } = await import('./runway-calculation.service');
-    const runwayData = await runwayCalculationService.calculateRunway(orgId);
-    const runwayMonths = runwayData.runwayMonths;
-
-    // Calculate ARR from monthly data if available (handling nested structures)
-    let arr = revenue;
-    if (summary.monthly) {
-      // Handle deeply nested summary.monthly[company][entity].monthly structure
-      let monthlyData = summary.monthly;
-      while (monthlyData && !monthlyData["2023-01"] && !monthlyData["2024-01"] && !monthlyData["2025-01"] && !monthlyData["2026-01"]) {
-        const firstKey = Object.keys(monthlyData).find(k => typeof monthlyData[k] === 'object' && monthlyData[k] !== null);
-        if (!firstKey) break;
-        if (monthlyData.monthly) {
-           monthlyData = monthlyData.monthly;
-           break;
-        }
-        monthlyData = monthlyData[firstKey];
+      if (!latestModelRun || !latestModelRun.summaryJson) {
+        // Fall back to transaction data if no model run exists
+        console.log(`[InvestorDashboard] No model run found for org ${orgId}, falling back to transaction data`);
+        return await getDashboardDataFromTransactions(orgId);
       }
 
-      if (monthlyData && typeof monthlyData === 'object') {
-        const sortedMonths = Object.keys(monthlyData).filter(m => /^\d{4}-\d{2}$/.test(m)).sort();
-        const latestMonth = sortedMonths.pop();
-        if (latestMonth && monthlyData[latestMonth]) {
-          const monthlyRevenue = Number(monthlyData[latestMonth].revenue || monthlyData[latestMonth].mrr || 0);
-          arr = monthlyRevenue * 12;
-        }
+      const summary = typeof latestModelRun.summaryJson === 'string' 
+        ? JSON.parse(latestModelRun.summaryJson) 
+        : latestModelRun.summaryJson as any;
+
+      // Extract financial metrics - be careful with ARR vs MRR
+      const revenue = summary.mrr 
+        ? Number(summary.mrr) * 12 
+        : Number(summary.revenue || summary.arr || 0);
+      const expenses = Number(summary.expenses || 0);
+      const burnRate = Number(summary.burnRate || expenses || 0);
+      const cashBalance = Number(summary.cashBalance || 0);
+
+      // Use standardized runway calculation
+      const { runwayCalculationService } = await import('./runway-calculation.service');
+      const runwayData = await runwayCalculationService.calculateRunway(orgId);
+      const runwayMonths = runwayData.runwayMonths;
+
+      // Get active customers from model run, but fallback to CSV import or transaction count
+      let activeCustomers = Number(summary.activeCustomers || summary.customers || summary.customerCount || 0);
+      if (activeCustomers === 0 && summary.kpis) {
+        activeCustomers = Number(summary.kpis.activeCustomers || summary.kpis.customers || summary.kpis.customerCount || 0);
       }
-    }
 
-    // Get active customers from model run, but fallback to CSV import or transaction count
-    // Do this BEFORE extracting monthly metrics so we can use it there
-    let activeCustomers = Number(summary.activeCustomers || summary.customers || summary.customerCount || summary.customer_count || 0);
+      // Extract KPIs from summary if available
+      const nrr = Number(summary.nrr || summary.kpis?.nrr || 100);
+      const arrGrowth = Number(summary.arrGrowth || summary.kpis?.arrGrowth || 0);
+      const customerGrowth = Number(summary.customerGrowth || summary.kpis?.customerGrowth || 0);
 
-    // Check KPIs object if root is 0
-    if (activeCustomers === 0 && summary.kpis) {
-      activeCustomers = Number(summary.kpis.activeCustomers || summary.kpis.customers || summary.kpis.customerCount || 0);
-    }
-
-    // If still 0 or suspiciously high customers, check CSV import first
-    // Model run might have calculated customers incorrectly, so prefer user-provided value
-    if ((activeCustomers === 0 || activeCustomers > 1000) && arr > 0) {
-      // First check data import batch mapping (most reliable - stored when CSV is mapped)
-      const importBatch = await (prisma as any).dataImportBatch.findFirst({
-        where: { orgId, sourceType: 'csv' },
-        orderBy: { createdAt: 'desc' },
-        select: { mappingJson: true },
+      // Calculate health score
+      const healthScore = calculateHealthScore({
+        arr: revenue,
+        burnRate,
+        runwayMonths,
+        arrGrowth,
       });
 
-      if (importBatch && importBatch.mappingJson) {
-        const mapping = importBatch.mappingJson as any;
-        const batchCustomers = mapping.initialCustomers || mapping.startingCustomers;
-        if (batchCustomers && Number(batchCustomers) > 0) {
-          activeCustomers = Number(batchCustomers);
-          console.log(`[InvestorDashboard] Using initialCustomers from import batch: ${activeCustomers}`);
+      // Unit Economics
+      const unitEconomics = {
+        ltv: Number(summary.ltv || summary.kpis?.ltv || 0),
+        cac: Number(summary.cac || summary.kpis?.cac || 0),
+        ltvCacRatio: Number(summary.ltvCacRatio || summary.kpis?.ltvCacRatio || 0),
+        paybackPeriod: Number(summary.paybackPeriod || summary.kpis?.paybackPeriod || 0),
+      };
+
+      // SaaS Metrics
+      const ruleOf40Value = (arrGrowth + (revenue > 0 ? (revenue - expenses) / revenue * 100 : 0));
+      const burnMultipleValue = arrGrowth > 0 ? (expenses - (revenue - expenses)) / (arrGrowth * revenue / 100) : 0;
+      const magicNumberValue = (revenue * (arrGrowth / 100)) / (expenses * 0.1); // Simplified
+
+      // Get monthly metrics (last 6 months)
+      let monthlyMetrics: any[] = [];
+      try {
+        if (summary.incomeStatement?.monthly) {
+          monthlyMetrics = Object.entries(summary.incomeStatement.monthly)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .slice(-6)
+            .map(([month, data]: [string, any]) => ({
+              month,
+              revenue: Math.round(Number(data.revenue || 0)),
+              customers: Math.round(Number(data.activeCustomers || activeCustomers)),
+              burn: Math.round(Math.max(0, Number(data.cogs || 0) + Number(data.operatingExpenses || 0) - Number(data.revenue || 0))),
+              arr: Math.round(Number(data.revenue || 0) * 12)
+            }));
         }
+
+        // FALLBACK: If monthly metrics are still empty but we have a model run, 
+        // try to get them from transactions to ensure charts are populated.
+        if (monthlyMetrics.length === 0) {
+          console.log(`[InvestorDashboard] Model run ${latestModelRun.id} has no monthly metrics. Falling back to transaction aggregation for charts.`);
+          const transactionData = await getDashboardDataFromTransactions(orgId);
+          monthlyMetrics = transactionData.monthlyMetrics;
+        }
+      } catch (e) {
+        console.warn(`[InvestorDashboard] Error processing monthly metrics for org ${orgId}:`, e);
       }
 
-      // Also check CSV import jobs for initialCustomers (fallback)
-      if (activeCustomers === 0 || activeCustomers > 1000) {
-        const csvJob = await prisma.job.findFirst({
-          where: {
-            orgId,
-            jobType: 'csv_import',
-            status: { in: ['done', 'completed'] },
-          },
-          orderBy: { createdAt: 'desc' },
-          select: { logs: true },
-        });
-
-        if (csvJob && csvJob.logs) {
-          const logs = typeof csvJob.logs === 'string' ? JSON.parse(csvJob.logs) : csvJob.logs;
-
-          // Check logs.params directly (job repository stores params here)
-          if (typeof logs === 'object' && logs.params) {
-            const initialCustomers = logs.params.initialCustomers || logs.params.startingCustomers;
-            if (initialCustomers && Number(initialCustomers) > 0) {
-              activeCustomers = Number(initialCustomers);
-              console.log(`[InvestorDashboard] Using initialCustomers from job logs.params: ${activeCustomers}`);
-            }
-          }
-
-          // Also check array format (if params are in log entries)
-          if ((activeCustomers === 0 || activeCustomers > 1000) && Array.isArray(logs)) {
-            for (const entry of logs) {
-              const initialCustomers = entry.meta?.params?.initialCustomers || entry.meta?.params?.startingCustomers || entry.params?.initialCustomers || entry.params?.startingCustomers;
-              if (initialCustomers && Number(initialCustomers) > 0) {
-                activeCustomers = Number(initialCustomers);
-                console.log(`[InvestorDashboard] Using initialCustomers from job log entry: ${activeCustomers}`);
-                break;
-              }
-            }
-          }
-        }
-      }
-    }
-    // If still 0 customers but we have revenue, count from transactions
-    // Do this BEFORE extracting monthly metrics so we can use it there
-    if (activeCustomers === 0 && arr > 0) {
-      const transactions = await prisma.rawTransaction.findMany({
-        where: {
-          orgId,
-          isDuplicate: false,
-          amount: { gt: 0 },
+      return {
+        executiveSummary: {
+          mrr: Math.round(revenue / 12),
+          arr: Math.round(revenue),
+          activeCustomers: activeCustomers,
+          monthsRunway: Math.round(runwayMonths * 10) / 10,
+          healthScore: Math.round(healthScore),
+          arrGrowth: Math.round(arrGrowth * 10) / 10,
+          customerGrowth: Math.round(customerGrowth * 10) / 10,
+          runwayChange: -1, 
         },
-        select: {
-          description: true,
-          rawPayload: true,
+        monthlyMetrics,
+        milestones: getMilestones(revenue, runwayMonths, unitEconomics.ltvCacRatio),
+        keyUpdates: await getKeyUpdates(orgId, latestModelRun.createdAt, (latestModelRun.model as any)?.name || 'Latest Baseline'),
+        unitEconomics,
+        saasMetrics: {
+          nrr: nrr || 100, // Default to 100% (healthy) if missing
+          grr: Number(summary.grr || summary.kpis?.grr || 95),
+          ruleOf40: Math.round(ruleOf40Value * 10) / 10,
+          burnMultiple: Math.round(burnMultipleValue * 100) / 100,
+          magicNumber: Math.round(magicNumberValue * 100) / 100,
         },
-        take: 1000,
-      });
-
-      const uniqueCustomers = new Set<string>();
-      for (const tx of transactions) {
-        let customer = tx.description?.trim() || '';
-        if (customer) {
-          customer = customer.replace(/\b(REF|REF#|REFERENCE|TXN|ID|#)\s*:?\s*[A-Z0-9-]+\b/gi, '').trim();
-          customer = customer.replace(/\$[\d,]+\.?\d*/g, '').trim();
-          customer = customer.replace(/\d{1,2}\/\d{1,2}\/\d{2,4}/g, '').trim();
-          const words = customer.split(/\s+/).filter(w => w.length > 2);
-          if (words.length > 0) {
-            customer = words.slice(0, 3).join(' ').substring(0, 50);
-            if (customer && customer !== 'Unknown') {
-              uniqueCustomers.add(customer);
-            }
-          }
-        }
-      }
-      activeCustomers = uniqueCustomers.size;
-      if (activeCustomers > 0) {
-        console.log(`[InvestorDashboard] Calculated ${activeCustomers} unique customers from transactions (fallback)`);
+        sensitivityAnalysis: summary.sensitivityAnalysis || null,
+        valuationSummary: summary.valuationSummary || null,
+        marketImplications: summary.marketImplications || null,
+        aiNarrative: summary.aiNarrative || null,
+        competitiveBenchmark: summary.competitiveBenchmark || null,
+        headcount: await getHeadcountData(orgId).catch(() => null),
+        variances: await calculateBudgetVariances(orgId, revenue, burnRate).catch(() => null),
+      };
+    } catch (error) {
+      console.error(`[InvestorDashboard] Fatal error in getDashboardData for org ${orgId}:`, error);
+      try {
+        return await getDashboardDataFromTransactions(orgId);
+      } catch (fallbackError) {
+        console.error(`[InvestorDashboard] Even fallback failed for org ${orgId}:`, fallbackError);
+        return getDefaultDashboardData();
       }
     }
-
-    // Extract monthly metrics (after we have activeCustomers)
-    const monthlyMetrics = extractMonthlyMetrics(summary, activeCustomers);
-
-    // Calculate growth rates
-    const arrGrowth = calculateGrowthRate(monthlyMetrics, 'arr');
-    const customerGrowth = calculateGrowthRate(monthlyMetrics, 'customers');
-
-    // Calculate health score (0-100)
-    const healthScore = calculateHealthScore({
-      arr,
-      burnRate,
-      runwayMonths,
-      arrGrowth,
-    });
-
-    // Get milestones and updates (data-driven from actual metrics and audit logs)
-    const milestones = getMilestones(arr, runwayMonths);
-    const keyUpdates = await getKeyUpdates(orgId, latestModelRun.createdAt);
-
-    // Calculate unit economics - try summary first, then model assumptions, then calculate from data
-    let ltv = Number(summary.ltv || summary.customerLTV || summary.kpis?.ltv || 0);
-    let cac = Number(summary.cac || summary.customerCAC || summary.kpis?.cac || 0);
-    let ltvCac = Number(summary.ltvCacRatio || summary.ltvCac || summary.kpis?.ltvCac || summary.kpis?.ltvCacRatio || 0);
-
-    // If not in summary, try to get from model assumptions
-    if ((ltv === 0 || cac === 0) && latestModelRun.modelId) {
-      const model = await prisma.model.findUnique({
-        where: { id: latestModelRun.modelId },
-      });
-
-      if (model && model.modelJson) {
-        const modelJson = typeof model.modelJson === 'string'
-          ? JSON.parse(model.modelJson)
-          : model.modelJson;
-        const assumptions = modelJson.assumptions || {};
-
-        if (ltv === 0) {
-          ltv = Number(assumptions.ltv || assumptions.unitEconomics?.ltv || 0);
-        }
-        if (cac === 0) {
-          cac = Number(assumptions.cac || assumptions.unitEconomics?.cac || 0);
-        }
-      }
-    }
-
-    // If still 0, try to calculate from available data
-    if (ltv === 0 && arr > 0 && activeCustomers > 0) {
-      // LTV = (MRR * 12) / churnRate, capped at 5 years (60 months)
-      const churnRate = Number(summary.churnRate || 0.05);
-      const mrr = arr / 12;
-      const monthlyGp = mrr * Number(summary.grossMargin || 0.8);
-      if (churnRate > 0) {
-        const unboundedLtv = (monthlyGp / churnRate) * 12; // Annualized LTV
-        ltv = Math.min(unboundedLtv, monthlyGp * 60); 
-      }
-    }
-
-    if (cac === 0 && arr > 0 && activeCustomers > 0) {
-      // CAC = Marketing Spend / New Customers, or estimate from ARR
-      // Estimate: CAC = (ARR * 0.1) / (activeCustomers * growthRate)
-      const growthRate = arrGrowth / 100 || 0.08;
-      if (growthRate > 0) {
-        cac = (arr * 0.1) / (activeCustomers * growthRate); // Rough estimate
-      }
-    }
-
-    const unitEconomics = {
-      ltv: Math.round(ltv),
-      cac: Math.round(cac),
-      ltvCacRatio: ltvCac || 0,
-      paybackPeriod: Number(summary.paybackPeriod || summary.kpis?.paybackPeriod || 0),
-    };
-    unitEconomics.ltvCacRatio = unitEconomics.ltv > 0 && unitEconomics.cac > 0
-      ? unitEconomics.ltv / unitEconomics.cac
-      : 0;
-
-    unitEconomics.paybackPeriod = unitEconomics.ltv > 0 && unitEconomics.cac > 0 && arr > 0
-      ? (unitEconomics.cac / (arr / (activeCustomers || 1))) * 12
-      : 0;
-
-    // Calculate SaaS Efficiency Metrics fallbacks if missing
-    let nrr = Number(summary.nrr || summary.kpis?.nrr || 0);
-    let ruleOf40Value = Number(summary.ruleOf40 || summary.kpis?.ruleOf40 || 0);
-    let burnMultipleValue = Number(summary.burnMultiple || summary.kpis?.burnMultiple || 0);
-    let magicNumberValue = Number(summary.magicNumber || summary.kpis?.magicNumber || 0);
-
-    // 1. Rule of 40 = Revenue Growth % + EBITDA Margin %
-    if (ruleOf40Value === 0 && arrGrowth > 0) {
-      const ebitdaMargin = arr > 0 ? ((arr - (burnRate * 12)) / arr) * 100 : 0;
-      ruleOf40Value = arrGrowth + ebitdaMargin;
-    }
-
-    // 2. Burn Multiple = Net Burn / Net New ARR
-    if (burnMultipleValue === 0 && burnRate > 0) {
-      const lastMonth = monthlyMetrics[monthlyMetrics.length - 1];
-      const prevMonth = monthlyMetrics[monthlyMetrics.length - 2];
-      if (lastMonth && prevMonth) {
-        const netNewArr = (lastMonth.arr || 0) - (prevMonth.arr || 0);
-        if (netNewArr > 0) {
-          burnMultipleValue = (burnRate * 1) / netNewArr; // Monthly burn / Monthly net new ARR
-        }
-      }
-    }
-
-    // 3. Magic Number = (Current Q Rev - Prev Q Rev) * 4 / Sales & Marketing Spend
-    if (magicNumberValue === 0 && monthlyMetrics.length >= 6) {
-      const currQRev = monthlyMetrics.slice(-3).reduce((sum, m) => sum + m.revenue, 0);
-      const prevQRev = monthlyMetrics.slice(-6, -3).reduce((sum, m) => sum + m.revenue, 0);
-      const smSpend = burnRate * 0.4; // Rough estimate: 40% of opex is S&M for scaling SaaS
-      if (smSpend > 0) {
-        magicNumberValue = ((currQRev - prevQRev) * 4) / (smSpend * 3);
-      }
-    }
-
-    return {
-      executiveSummary: {
-        arr: Math.round(arr),
-        activeCustomers: activeCustomers,
-        monthsRunway: runwayMonths > 99 ? 99 : Math.round(runwayMonths * 10) / 10,
-        healthScore: Math.round(healthScore),
-        arrGrowth: Math.round(arrGrowth * 10) / 10,
-        customerGrowth: Math.round(customerGrowth * 10) / 10,
-        runwayChange: -1, 
-      },
-      monthlyMetrics,
-      milestones: getMilestones(arr, runwayMonths, unitEconomics.ltvCacRatio),
-      keyUpdates: getKeyUpdates(orgId, latestModelRun.createdAt, (latestModelRun.model as any)?.name || 'Latest Baseline'),
-      unitEconomics,
-      saasMetrics: {
-        nrr: nrr || 100, // Default to 100% (healthy) if missing
-        grr: Number(summary.grr || summary.kpis?.grr || 95),
-        ruleOf40: Math.round(ruleOf40Value * 10) / 10,
-        burnMultiple: Math.round(burnMultipleValue * 100) / 100,
-        magicNumber: Math.round(magicNumberValue * 100) / 100,
-      },
-      // Grounding data for Intelligent Dashboard
-      sensitivityAnalysis: summary.sensitivityAnalysis || null,
-      valuationSummary: summary.valuationSummary || null,
-      marketImplications: summary.marketImplications || null,
-      aiNarrative: summary.aiNarrative || null,
-      competitiveBenchmark: summary.competitiveBenchmark || null,
-      headcount: await getHeadcountData(orgId),
-      variances: await calculateBudgetVariances(orgId, arr, burnRate),
-    };
   },
 };
 
@@ -975,6 +792,7 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
 
   return {
     executiveSummary: {
+      mrr: Math.round(arr / 12),
       arr: Math.round(arr),
       activeCustomers: activeCustomers,
       monthsRunway: Math.round(runwayMonths * 10) / 10,
@@ -1016,6 +834,7 @@ async function getDashboardDataFromTransactions(orgId: string): Promise<Investor
 function getDefaultDashboardData(): InvestorDashboardData {
   return {
     executiveSummary: {
+      mrr: 0,
       arr: 0,
       activeCustomers: 0,
       monthsRunway: 0,

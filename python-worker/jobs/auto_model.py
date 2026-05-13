@@ -212,7 +212,8 @@ def handle_auto_model(job_id: str, org_id: str, object_id: str, logs: dict):
             driver_id = cursor.fetchone()[0]
             
             # Populate values for 36 months starting from start_month
-            val = assumptions.get(d_info['assump_group'], {}).get(d_info['value_key'], d_info.get('default', 0))
+            val_key = str(d_info['value_key'])
+            val = assumptions.get(str(d_info.get('assump_group', '')), {}).get(val_key, d_info.get('default', 0))
             
             # Bulk insert values
             values_to_insert = []
@@ -260,7 +261,7 @@ def handle_auto_model(job_id: str, org_id: str, object_id: str, logs: dict):
                 }
 
             cursor.execute("""
-                INSERT INTO model_runs (id, "modelId", org_id, run_type, params_json, status, created_at)
+                INSERT INTO model_runs (id, model_id, org_id, run_type, params_json, status, created_at)
                 VALUES (gen_random_uuid(), %s, %s, %s, %s::jsonb, 'queued', NOW())
                 RETURNING id
             """, (
@@ -450,7 +451,7 @@ def generate_assumptions(
             'baselineRevenue': float(baseline_revenue or 0),
             'revenueGrowth': float(hist_revenue_growth or 0),
             'growthModel': 'exponential' if business_type in ['saas', 'technology'] else 'linear',
-            'churnRate': float(1 - (float(retention_rate)/100)) if retention_rate is not None else float(bench['churnRate']),
+            'churnRate': (1 - (float(retention_rate)/100)) if retention_rate is not None else bench['churnRate'],
             'customerCount': int(starting_customers) if starting_customers is not None else (int(baseline_revenue / 100) if baseline_revenue > 0 else 100),
             'mrr': float(baseline_revenue or 0),
             'arr': float((baseline_revenue or 0) * 12),
@@ -458,8 +459,8 @@ def generate_assumptions(
         },
         'costs': {
             'baselineExpenses': float(hist_avg_expenses) if hist_avg_expenses > 0 else (baseline_revenue * 0.7),
-            'expenseGrowth': float(bench['expenseGrowth']),
-            'cogsRatio': float(bench['cogsRatio']),
+            'expenseGrowth': bench['expenseGrowth'],
+            'cogsRatio': bench['cogsRatio'],
             'hiringPlan': hiring_plan
         },
         'cash': {
@@ -506,7 +507,7 @@ def generate_assumptions(
     
     assumptions['unitEconomics'] = {
         'cac': float(acquisition_efficiency.get('caac') or cac),
-        'ltv': float(ltv),
+        'ltv': ltv,
         'ltvCacRatio': float(ltv / (acquisition_efficiency.get('caac') or cac)) if (acquisition_efficiency.get('caac') or cac) > 0 else 3.0,
         'paybackPeriod': float(acquisition_efficiency.get('payback') or (cac / arpu)) if arpu > 0 else 12.0,
     }

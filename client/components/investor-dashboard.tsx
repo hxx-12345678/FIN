@@ -20,12 +20,13 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
-import { TrendingUp, TrendingDown, Target, Share, Download, Eye, Loader2, AlertCircle, Sparkles, BrainCircuit } from "lucide-react"
+import { TrendingUp, TrendingDown, Target, Share, Download, Eye, Loader2, AlertCircle, Sparkles, BrainCircuit, Users, Clock } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { FinancialTermTooltip } from "./financial-term-tooltip"
+import { AgenticResponse } from "@/components/ai-assistant/agentic-response"
 import { IntelligentInvestorDashboard } from "./intelligent-investor-dashboard"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
-import { FinancialTermTooltip } from "./financial-term-tooltip"
 import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { useOrg } from "@/lib/org-context"
 import { useModel } from "@/lib/model-context"
@@ -237,12 +238,6 @@ export function InvestorDashboard() {
         </TabsList>
 
         <TabsContent value="standard" className="space-y-6 pt-4">
-          <Alert className="bg-muted/50 border-none">
-            <Target className="h-4 w-4" />
-            <AlertDescription className="text-xs font-medium">
-              Note: The values below reflect the <strong>Operating Plan</strong> (Source of Truth) as approved by the CFO.
-            </AlertDescription>
-          </Alert>
 
           {/* AI Strategic Narrative */}
           {aiNarrative && (
@@ -254,12 +249,8 @@ export function InvestorDashboard() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="prose prose-sm dark:prose-invert max-w-none text-slate-700 dark:text-slate-300">
-                  {aiNarrative.split('\n\n').map((para, i) => (
-                    <p key={i} className="mb-3 leading-relaxed">
-                      {para.startsWith('#') ? <strong className="text-slate-900 dark:text-white text-base block mt-4 mb-2">{para.replace(/#/g, '').trim()}</strong> : para}
-                    </p>
-                  ))}
+                <div className="prose prose-sm dark:prose-invert max-w-none">
+                  <AgenticResponse content={aiNarrative} />
                 </div>
               </CardContent>
             </Card>
@@ -432,27 +423,39 @@ export function InvestorDashboard() {
             <CardTitle>Revenue Growth</CardTitle>
             <CardDescription>Monthly revenue and ARR progression</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="h-[300px]">
             {monthlyMetrics.length > 0 ? (
-              <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
-                <AreaChart data={monthlyMetrics}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => [formatCurrency(value as number), ""]} />
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={monthlyMetrics} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#8884d8" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#8884d8" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.1} />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(val) => `$${(val / 1000).toFixed(0)}k`} />
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                    formatter={(value) => [formatCurrency(value as number), "Revenue"]} 
+                  />
                   <Area
                     type="monotone"
                     dataKey="revenue"
                     stroke="#8884d8"
-                    fill="#8884d8"
-                    fillOpacity={0.6}
+                    strokeWidth={3}
+                    fillOpacity={1}
+                    fill="url(#colorRevenue)"
                     name="Monthly Revenue"
                   />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground text-sm px-4 text-center">
-                No revenue data available
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm px-4 text-center space-y-2">
+                <div className="p-3 bg-muted rounded-full"><TrendingUp className="h-6 w-6 opacity-20" /></div>
+                <p>Waiting for model synchronization...</p>
+                <p className="text-[10px] uppercase tracking-widest opacity-50">Diagnostic: Empty Metric Array</p>
               </div>
             )}
           </CardContent>
@@ -463,20 +466,32 @@ export function InvestorDashboard() {
             <CardTitle>Customer Growth</CardTitle>
             <CardDescription>Customer acquisition and retention trends</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="h-[300px]">
             {monthlyMetrics.length > 0 ? (
-              <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
-                <LineChart data={monthlyMetrics}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="customers" stroke="#82ca9d" strokeWidth={3} name="Active Customers" />
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={monthlyMetrics} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.1} />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="customers" 
+                    stroke="#82ca9d" 
+                    strokeWidth={4} 
+                    dot={{ r: 6, fill: '#82ca9d', strokeWidth: 2, stroke: '#fff' }} 
+                    activeDot={{ r: 8, strokeWidth: 0 }} 
+                    name="Active Customers" 
+                  />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground text-sm px-4 text-center">
-                No customer data available
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm px-4 text-center space-y-2">
+                <div className="p-3 bg-muted rounded-full"><Users className="h-6 w-6 opacity-20" /></div>
+                <p>Establishing customer growth signals...</p>
+                <p className="text-[10px] uppercase tracking-widest opacity-50">Diagnostic: Missing Time-Series Node</p>
               </div>
             )}
           </CardContent>
@@ -489,20 +504,25 @@ export function InvestorDashboard() {
           <CardTitle>Financial Runway</CardTitle>
           <CardDescription>Monthly burn rate and cash runway projection</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="h-[300px]">
           {monthlyMetrics.length > 0 ? (
-            <ResponsiveContainer width="100%" height={250} className="min-h-[250px] sm:min-h-[300px]">
-              <BarChart data={monthlyMetrics}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip formatter={(value) => [formatCurrency(value as number), ""]} />
-                <Bar dataKey="burn" fill="#ff7300" name="Monthly Burn" />
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={monthlyMetrics} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.1} />
+                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} tickFormatter={(val) => `$${(val / 1000).toFixed(0)}k`} />
+                <Tooltip 
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  formatter={(value) => [formatCurrency(value as number), "Burn"]} 
+                />
+                <Bar dataKey="burn" fill="#ff7300" radius={[6, 6, 0, 0]} name="Monthly Burn" />
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex items-center justify-center h-[250px] sm:h-[300px] text-muted-foreground text-sm px-4 text-center">
-              No burn rate data available
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm px-4 text-center space-y-2">
+              <div className="p-3 bg-muted rounded-full"><Clock className="h-6 w-6 opacity-20" /></div>
+              <p>Burn analysis pending ledger reconciliation...</p>
+              <p className="text-[10px] uppercase tracking-widest opacity-50">Diagnostic: Burn Vector Uninitialized</p>
             </div>
           )}
         </CardContent>
@@ -676,7 +696,7 @@ export function InvestorDashboard() {
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900 border">
                 <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">NRR</p>
-                <p className="text-2xl font-bold">{saasMetrics.nrr}%</p>
+                <p className="text-2xl font-bold">{typeof saasMetrics.nrr === 'number' ? saasMetrics.nrr.toFixed(1) : saasMetrics.nrr}%</p>
                 <p className="text-[10px] text-slate-500 mt-1">Net Revenue Retention</p>
               </div>
               <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-900 border">
@@ -752,10 +772,8 @@ export function InvestorDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-6">
-            <p className="text-slate-300 text-sm leading-relaxed mb-4">
-              {competitiveBenchmark.summary}
-            </p>
-            <div className="flex flex-wrap gap-2">
+            <AgenticResponse content={competitiveBenchmark.summary} />
+            <div className="flex flex-wrap gap-2 mt-4">
               <Badge variant="outline" className="text-slate-400 border-slate-700">Top Quartile Growth</Badge>
               <Badge variant="outline" className="text-slate-400 border-slate-700">Efficiency Optimized</Badge>
               <Badge variant="outline" className="text-slate-400 border-slate-700">Series {dashboardData.executiveSummary.arr > 10000000 ? 'C' : dashboardData.executiveSummary.arr > 5000000 ? 'B' : 'A'} Leader</Badge>

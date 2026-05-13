@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { LandingPage } from "@/components/landing-page"
 import { ModelProvider } from "@/lib/model-context"
 import { DashboardLayout } from "@/components/dashboard-layout"
@@ -50,7 +50,9 @@ export default function HomePage() {
   return (
     <OrgProvider>
       <ModelProvider>
-        <HomePageContent />
+        <Suspense fallback={<div className="h-screen w-screen flex items-center justify-center bg-white" />}>
+          <HomePageContent />
+        </Suspense>
       </ModelProvider>
     </OrgProvider>
   )

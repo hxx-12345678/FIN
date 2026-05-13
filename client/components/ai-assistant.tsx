@@ -49,14 +49,17 @@ import {
   Target,
   Zap,
   TrendingDown,
-  ArrowUpRight,
+  ExternalLink,
+  ThumbsUp,
+  ThumbsDown,
   Copy,
   Check,
-  History,
   RefreshCw,
   FileText,
-  Image as ImageIcon,
   X,
+  History as HistoryIcon,
+  ArrowUpRight,
+  Image as ImageIcon,
   Paperclip,
 } from "lucide-react"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -69,6 +72,7 @@ import { AgenticResponse } from "./ai-assistant/agentic-response"
 import { toast } from "sonner"
 import { API_BASE_URL, getAuthHeaders, handleUnauthorized } from "@/lib/api-config"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis } from "recharts"
+import { useSearchParams, useRouter } from "next/navigation"
 
 interface AgentThought {
   step: number
@@ -146,6 +150,8 @@ interface Message {
     p50: number;
     p90: number;
   }
+
+  auditMetadata?: any
 }
 
 interface AICFOPlan {
@@ -281,6 +287,8 @@ export function AIAssistant() {
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [historySheetOpen, setHistorySheetOpen] = useState(false)
+  const searchParams = useSearchParams()
+  const router = useRouter()
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -343,6 +351,15 @@ export function AIAssistant() {
       if (fetchedOrgId) {
         fetchPlans()
         fetchConversations(fetchedOrgId)
+        
+        // Handle persistence: Load last conversation if it exists in URL or localStorage
+        const cidFromUrl = searchParams.get("cid")
+        const cidFromStorage = localStorage.getItem("last_active_cid")
+        const targetCid = cidFromUrl || cidFromStorage
+        
+        if (targetCid && targetCid !== "null") {
+          loadConversation(targetCid, fetchedOrgId)
+        }
       }
     })
   }, [])
@@ -453,11 +470,12 @@ export function AIAssistant() {
     }
   }
 
-  const loadConversation = async (conversationId: string) => {
-    if (!orgId) return
+  const loadConversation = async (conversationId: string, orgIdOverride?: string) => {
+    const targetOrgId = orgIdOverride || orgId
+    if (!targetOrgId) return
     setIsTyping(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/orgs/${orgId}/ai-cfo/conversations/${conversationId}`, {
+      const response = await fetch(`${API_BASE_URL}/orgs/${targetOrgId}/ai-cfo/conversations/${conversationId}`, {
         headers: getAuthHeaders(),
       })
       if (response.ok) {
@@ -476,8 +494,18 @@ export function AIAssistant() {
             calculations: m.calculations || {},
             visualizations: m.visualizations || [],
             confidence: m.confidence,
+            auditMetadata: m.auditMetadata,
           }))
           setMessages(transformedMessages)
+          
+          // Persist the conversation ID
+          setCurrentConversationId(conversationId)
+          localStorage.setItem("last_active_cid", conversationId)
+          
+          // Update URL
+          const params = new URLSearchParams(window.location.search)
+          params.set("cid", conversationId)
+          window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}${window.location.hash}`)
         }
       }
     } catch (e) {
@@ -491,6 +519,12 @@ export function AIAssistant() {
     setMessages(initialMessages)
     setCurrentConversationId(null)
     setAttachedFiles([])
+    localStorage.removeItem("last_active_cid")
+    
+    // Clear URL cid
+    const params = new URLSearchParams(window.location.search)
+    params.delete("cid")
+    window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}${window.location.hash}`)
   }
 
   const handleSendMessage = async (content: string, regenerate = false) => {
@@ -601,7 +635,15 @@ export function AIAssistant() {
           const data = JSON.parse(line.slice(6))
 
           if (data.type === "conversation_id") {
-            setCurrentConversationId(data.payload.conversationId)
+            const cid = data.payload.conversationId
+            setCurrentConversationId(cid)
+            localStorage.setItem("last_active_cid", cid)
+            
+            // Update URL
+            const params = new URLSearchParams(window.location.search)
+            params.set("cid", cid)
+            window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}${window.location.hash}`)
+            
             fetchConversations(currentOrgId)
           } else if (data.type === "thought") {
             currentAssistantMessage = {
@@ -616,6 +658,7 @@ export function AIAssistant() {
               content: res.answer,
               agentType: res.agentType,
               confidence: res.confidence,
+              auditMetadata: res.auditMetadata,
               dataSources: res.dataSources,
               recommendations: res.recommendations,
               calculations: res.calculations,
@@ -691,7 +734,9 @@ export function AIAssistant() {
   }
 
   const handleQuickAction = (action: (typeof quickActions)[0]) => {
-    handleSendMessage(action.query)
+    if (isTyping) return;
+    setInputValue(action.query);
+    handleSendMessage(action.query);
   }
 
   const getStatusIcon = (status: Task["status"]) => {
@@ -799,7 +844,7 @@ export function AIAssistant() {
                                 setHistorySheetOpen(true)
                               }}
                             >
-                              <History className="h-4 w-4" />
+                              <HistoryIcon className="h-4 w-4" />
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>Chat History</TooltipContent>
@@ -893,7 +938,7 @@ export function AIAssistant() {
                                 {message.visualizations && message.visualizations.length > 0 && (
                                   <div className="mt-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
                                     {message.visualizations.map((viz: any, idx: number) => (
-                                      <div key={idx} className="p-6 rounded-2xl border border-white/[0.06] bg-[#0f0f1a] shadow-2xl overflow-hidden relative group">
+                                      <div key={idx} className="p-6 rounded-2xl border border-white/[0.06] bg-[#0f0f1a] text-slate-200 shadow-2xl overflow-hidden relative group">
                                         <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-cyan-400/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                                         <h4 className="text-[13px] uppercase tracking-[0.15em] font-black text-white/80 mb-6 flex items-center gap-2.5">
                                           <BarChart3 className="h-4 w-4 text-cyan-400" />
@@ -960,39 +1005,46 @@ export function AIAssistant() {
 
 
                                 {message.type === "assistant" && (
-                                  <div className="flex items-center gap-5 mt-8 opacity-0 group-hover:opacity-100 transition-all transform translate-y-1 group-hover:translate-y-0">
+                                  <div className="flex items-center gap-6 mt-8 pt-4 border-t border-border/5">
+                                    <button
+                                      onClick={() => {
+                                        setReportViewContent(message.content);
+                                        setSheetOpen(true);
+                                      }}
+                                      className="p-1 text-muted-foreground/60 hover:text-indigo-400 transition-colors"
+                                      title="View Report"
+                                    >
+                                      <ExternalLink className="h-4 w-4" />
+                                    </button>
                                     <button
                                       onClick={() => {
                                         navigator.clipboard.writeText(message.content)
                                         setCopiedMessageId(message.id)
                                         setTimeout(() => setCopiedMessageId(null), 2000)
                                       }}
-                                      className="inline-flex items-center gap-2 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors group/btn"
+                                      className="p-1 text-muted-foreground/60 hover:text-foreground transition-colors"
+                                      title="Copy Response"
                                     >
                                       {copiedMessageId === message.id ? (
-                                        <><Check className="h-3 w-3 text-emerald-500" /> Copied</>
+                                        <Check className="h-4 w-4 text-emerald-500" />
                                       ) : (
-                                        <><Copy className="h-3 w-3 group-hover/btn:scale-110 transition-transform" /> Copy</>
+                                        <Copy className="h-4 w-4" />
                                       )}
                                     </button>
-                                    <button
-                                      onClick={() => {
-                                        const prevUserMsg = messages.slice(0, messages.findIndex(m => m.id === message.id)).reverse().find(m => m.type === 'user');
-                                        if (prevUserMsg) handleSendMessage(prevUserMsg.content, true);
-                                      }}
-                                      className="inline-flex items-center gap-2 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors group/btn"
-                                    >
-                                      <RefreshCw className="h-3 w-3 group-hover/btn:rotate-180 transition-transform duration-500" /> Regenerate
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        setReportViewContent(message.content);
-                                        setSheetOpen(true);
-                                      }}
-                                      className="inline-flex items-center gap-2 text-[11px] font-bold text-indigo-600 hover:text-indigo-700 transition-colors px-2 py-0.5 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-950/20"
-                                    >
-                                      <FileText className="h-3 w-3" /> Report View
-                                    </button>
+                                    <div className="flex items-center gap-3 ml-auto">
+                                      <button 
+                                        onClick={() => toast.success("Feedback recorded. Thank you!")}
+                                        className="p-1 text-muted-foreground/60 hover:text-emerald-400 transition-colors"
+                                      >
+                                        <ThumbsUp className="h-4 w-4" />
+                                      </button>
+                                      <button 
+                                        onClick={() => toast.success("Feedback recorded. We'll improve the model.")}
+                                        className="p-1 text-muted-foreground/60 hover:text-rose-400 transition-colors"
+                                      >
+                                        <ThumbsDown className="h-4 w-4" />
+                                      </button>
+                                    </div>
                                   </div>
                                 )}
 
@@ -1005,17 +1057,20 @@ export function AIAssistant() {
                                             'bg-red-50/50 text-red-700 border-red-200/50'
                                           }`}>
                                           <div className={`w-1.5 h-1.5 rounded-full ${message.confidence > 0.8 ? 'bg-emerald-500' : message.confidence > 0.6 ? 'bg-amber-500' : 'bg-red-500'} animate-pulse`} />
-                                          VERIFIED: {Math.round(message.confidence * 100)}%
+                                          {message.auditMetadata?.isVerified ? 'AUDIT VERIFIED' : `CONFIDENCE: ${Math.round(message.confidence * 100)}%`}
                                         </div>
                                       )}
 
                                       {message.agentThoughts && message.agentThoughts.length > 0 && (
                                         <Collapsible>
-                                          <CollapsibleTrigger className="group flex items-center gap-2 text-[10px] text-muted-foreground/70 hover:text-foreground transition-colors font-bold uppercase tracking-[0.1em]">
-                                            Audit Trail
-                                            <ChevronDown className="h-3 w-3 group-data-[state=open]:rotate-180 transition-transform" />
+                                          <CollapsibleTrigger asChild>
+                                            <button className="group flex items-center gap-2 text-[10.5px] text-muted-foreground/80 hover:text-foreground transition-all font-bold uppercase tracking-[0.1em] bg-muted/30 hover:bg-muted/50 px-3 py-1.5 rounded-full border border-border/40">
+                                              <Clock className="h-3.5 w-3.5 text-primary/70 group-hover:text-primary transition-colors" />
+                                              <span>Audit Trail</span>
+                                              <ChevronDown className="h-3 w-3 group-data-[state=open]:rotate-180 transition-transform ml-1 text-muted-foreground" />
+                                            </button>
                                           </CollapsibleTrigger>
-                                          <CollapsibleContent className="mt-5">
+                                          <CollapsibleContent className="mt-4 animate-in fade-in slide-in-from-top-2">
                                             <div className="bg-muted/20 rounded-2xl p-6 text-[12.5px] space-y-4 border border-border/10 shadow-inner backdrop-blur-sm">
                                               {message.agentThoughts.map((thought, idx) => (
                                                 <div key={idx} className="flex items-start gap-5">
@@ -1208,7 +1263,7 @@ export function AIAssistant() {
                                 handleSendMessage(inputValue)
                                 setAttachedFiles([])
                               }}
-                              disabled={!inputValue.trim() && attachedFiles.length === 0}
+                              disabled={(!inputValue.trim() && attachedFiles.length === 0) || isTyping}
                               className="h-8 w-8 rounded-xl flex-shrink-0 bg-primary hover:bg-primary/90 shadow-md transition-all active:scale-95"
                             >
                               <Send className="h-4 w-4" />

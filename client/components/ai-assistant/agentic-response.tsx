@@ -3,6 +3,7 @@
 import * as React from 'react'
 import { useState, Fragment } from 'react'
 import Markdown, { Components } from 'react-markdown'
+import { AlertTriangle, AlertCircle, Lightbulb, Info, Brain } from 'lucide-react'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
@@ -30,12 +31,7 @@ const customSchema = {
   ],
 }
 
-interface AgenticResponseProps {
-  content: string
-  isUser?: boolean
-}
-
-export function AgenticResponse({ content, isUser = false }: AgenticResponseProps) {
+export function AgenticResponse({ content, isUser = false, auditMetadata }: { content: string, isUser?: boolean, auditMetadata?: any }) {
   if (isUser) {
     return (
       <span className="whitespace-pre-wrap text-[14.5px] leading-relaxed text-foreground/90 font-medium font-sans antialiased">
@@ -44,7 +40,79 @@ export function AgenticResponse({ content, isUser = false }: AgenticResponseProp
     )
   }
 
+  const extractText = (node: unknown): string => {
+    if (node == null) return ''
+    if (typeof node === 'string' || typeof node === 'number') return String(node)
+    if (Array.isArray(node)) return node.map(extractText).join('')
+    if (React.isValidElement(node)) return extractText((node.props as any)?.children)
+    return ''
+  }
+
   const markdownComponents: Components = {
+    // Blockquotes — Enhanced to handle GitHub-style alerts [!NOTE], [!CAUTION], etc.
+    blockquote: ({ children, ...props }) => {
+      const childrenArray = React.Children.toArray(children)
+      const firstChild = childrenArray[0]
+      
+      if (React.isValidElement(firstChild)) {
+        const textContent = extractText(firstChild.props.children)
+        const isAlert = textContent.includes('[!')
+        
+        if (isAlert) {
+          const type = textContent.match(/\[!(.*?)\]/)?.[1] || 'NOTE'
+          const cleanChildren = [
+            React.cloneElement(firstChild, {
+              ...firstChild.props,
+              children: textContent.replace(/\[!.*?\]/, '').trim()
+            }),
+            ...childrenArray.slice(1)
+          ]
+          
+          let alertStyles = "border-l-4 p-6 my-8 rounded-r-2xl shadow-lg relative overflow-hidden"
+          let icon = null
+          
+          switch (type.toUpperCase()) {
+            case 'CAUTION':
+            case 'WARNING':
+              alertStyles += " border-red-500/50 bg-red-500/5 text-red-200"
+              icon = <AlertTriangle className="w-5 h-5 text-red-500 mb-2" />
+              break
+            case 'IMPORTANT':
+              alertStyles += " border-amber-500/50 bg-amber-500/5 text-amber-200"
+              icon = <AlertCircle className="w-5 h-5 text-amber-500 mb-2" />
+              break
+            case 'TIP':
+              alertStyles += " border-emerald-500/50 bg-emerald-500/5 text-emerald-200"
+              icon = <Lightbulb className="w-5 h-5 text-emerald-500 mb-2" />
+              break
+            default:
+              alertStyles += " border-indigo-500/50 bg-indigo-500/5 text-indigo-200"
+              icon = <Info className="w-5 h-5 text-indigo-500 mb-2" />
+          }
+          
+          return (
+            <div className={alertStyles}>
+              <div className="absolute top-0 right-0 p-4 opacity-10 select-none pointer-events-none">
+                <Brain className="w-16 h-16" />
+              </div>
+              <div className="relative z-10 font-sans">
+                <div className="flex items-center gap-2 font-black uppercase tracking-widest text-[11px] mb-3 opacity-80">
+                  {type} — AUDIT-PROTECTED
+                </div>
+                {cleanChildren}
+              </div>
+            </div>
+          )
+        }
+      }
+
+      return (
+        <blockquote className="my-8 pl-8 border-l-4 border-indigo-500/40 bg-indigo-500/5 rounded-r-3xl py-6 text-foreground/95 italic text-[15.5px] shadow-sm leading-relaxed" {...props}>
+          {children}
+        </blockquote>
+      )
+    },
+
     // High-fidelity layout containers derived from className
     div: ({ className, children, ...props }) => {
       if (className === 'metric-grid') {
@@ -198,12 +266,6 @@ export function AgenticResponse({ content, isUser = false }: AgenticResponseProp
       </td>
     ),
 
-    // Blockquotes — Insightful callouts
-    blockquote: ({ children, ...props }) => (
-      <blockquote className="my-8 pl-8 border-l-4 border-indigo-500/40 bg-indigo-500/5 rounded-r-3xl py-6 text-foreground/95 italic text-[15.5px] shadow-sm leading-relaxed" {...props}>
-        {children}
-      </blockquote>
-    ),
 
     // Horizontal rule
     hr: (props) => (

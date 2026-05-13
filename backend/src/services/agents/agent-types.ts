@@ -19,6 +19,7 @@ export type AgentType =
   | 'circular_logic'      // Circular Logic Agent: Resolves 3-statement circular references
   | 'audit_provenance'    // Audit & Provenance Agent: Logs cell updates and provenance
   | 'anomaly_detection'   // Anomaly Detection Agent: Spots unusual spending patterns
+  | 'spend_control'       // Spend Control Agent: Manages renewals, vendor negotiations, cost-saving
   | 'orchestrator';       // Coordinates other agents
 
 // Agent execution status
@@ -106,6 +107,11 @@ export interface AgentResponse {
     inputVersions: Record<string, string>;
     datasetHash?: string;
     processingPlanId?: string;
+    isVerified?: boolean;
+    verifier?: string;
+    notes?: string;
+    confidenceScore?: number;
+    hallucinations?: string[];
   };
 
   // Institutional Grade Extensions
@@ -403,8 +409,14 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
       /monthly\s*burn/i,
       /spending.*month/i,
       /how\s*much.*spending/i,
+      /cost\s*saving/i,
+      /vendor\s*negotiation/i,
+      /renewal/i,
+      /subscription/i,
+      /multiple.*charges/i,
+      /meta.*facebook/i,
     ],
-    agents: ['cash_flow'],
+    agents: ['cash_flow', 'spend_control'],
     complexity: 'simple',
   },
   'variance_analysis': {
@@ -572,6 +584,19 @@ export const QUERY_PATTERNS: Record<string, { patterns: RegExp[]; agents: AgentT
     ],
     agents: ['data_cleaning', 'variance_analysis', 'risk_compliance'],
     complexity: 'moderate',
+  },
+  'benchmarks': {
+    patterns: [
+      /\brule\s*of\s*40\b/i,
+      /\bindustry\s+benchmarks?\b/i,
+      /\bbenchmark(?:ing)?\b/i,
+      /\bcompare\b/i,
+      /\bpeer\s+(?:comparison|compare|group|set|benchmarks?)\b/i,
+      /\bindustry\s+peers\b/i,
+      /\bsaas\s+benchmarks?\b/i,
+    ],
+    agents: ['market_monitoring', 'variance_analysis'],
+    complexity: 'complex'
   },
   'web_search': {
     patterns: [

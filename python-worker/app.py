@@ -9,10 +9,29 @@ from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 import os
 import uuid
-import threading
 import time
+import threading
+from contextlib import asynccontextmanager
 
-app = FastAPI(title="FinaPilot Worker API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifecycle management for background threads"""
+    global polling_active, polling_thread
+    polling_active = True
+    polling_thread = threading.Thread(target=polling_loop, daemon=True)
+    polling_thread.start()
+    
+    keep_alive_thread = threading.Thread(target=keep_alive_loop, daemon=True)
+    keep_alive_thread.start()
+    
+    yield
+    
+    # Shutdown logic
+    polling_active = False
+    if polling_thread:
+        polling_thread.join(timeout=5)
+
+app = FastAPI(title="FinaPilot Worker API", lifespan=lifespan)
 
 # Security: Shared Secret Logic (SOC 2 CC7.1)
 def verify_worker_secret(x_worker_secret: Optional[str] = Header(None)):
@@ -148,17 +167,17 @@ def _run_reserved_job_sync(queue: str = 'default'):
 
 
 @app.post("/run_next", dependencies=[Depends(verify_worker_secret)])
-def run_next(queue: Optional[str] = 'default', background: Optional[bool] = False, background_tasks: BackgroundTasks = None):
+def run_next(background_tasks: BackgroundTasks, queue: str = 'default', background: bool = False):
     """Reserve the next job from the given queue and process it.
     If `background=true` the job will be processed in background and the endpoint returns immediately.
     """
     try:
         if background:
             # Run in a background thread to keep request fast
-            background_tasks.add_task(_run_reserved_job_sync, str(queue) if queue else 'default')
+            background_tasks.add_task(_run_reserved_job_sync, queue if queue else 'default')
             return JSONResponse({"status": "scheduled"}, status_code=202)
         else:
-            job = _run_reserved_job_sync(str(queue) if queue else 'default')
+            job = _run_reserved_job_sync(queue if queue else 'default')
             if job is None:
                 return JSONResponse({"status": "no_job"}, status_code=204)
             return {"status": "processed", "job_id": job.get('id')}
@@ -169,12 +188,13 @@ def run_next(queue: Optional[str] = 'default', background: Optional[bool] = Fals
 
 
 @app.post("/run_job_direct", dependencies=[Depends(verify_worker_secret)])
-def run_job_direct(req: RunJobDirectRequest, background: Optional[bool] = False, background_tasks: BackgroundTasks = None):
+def run_job_direct(req: RunJobDirectRequest, background_tasks: BackgroundTasks, background: bool = False):
     """Directly invoke a handler for immediate execution without inserting into DB.
     Note: Many handlers expect DB S3 etc. and may raise errors if environment not configured.
     """
     # Build a fake job dict compatible with run_job_with_retry
     job_id = f"manual-{uuid.uuid4()}"
+    file_path = f"manual-{uuid.uuid4()}.json"
     logs = {'params': req.params or {}}
     job = {
         'id': job_id,
@@ -387,7 +407,7 @@ def compute_forecast(req: ForecastRequest):
             "metrics": backtest
         }
     except Exception as e:
-        logger.error(f"❌ Forecast failed: {str(e)}", exc_info=True)
+        logger.error(f"❌ Forecast failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/compute/forecast/backtest", dependencies=[Depends(verify_worker_secret)])
@@ -418,7 +438,7 @@ def compute_risk(req: RiskRequest):
             "results": results
         }
     except Exception as e:
-        logger.error(f"Risk analysis failed: {str(e)}")
+        logger.error(f"Risk analysis failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 class ReasoningRequest(BaseModel):
@@ -461,7 +481,7 @@ def compute_reasoning(req: ReasoningRequest):
             "varianceAnalysis": variance_analysis
         }
     except Exception as e:
-        logger.error(f"Reasoning failed: {str(e)}")
+        logger.error(f"Reasoning failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 class ScenarioRequest(BaseModel):
@@ -479,7 +499,7 @@ def compute_scenario(req: ScenarioRequest):
         result = engine.simulate_scenario(req.target, req.overrides)
         return { "status": "success", "result": result }
     except Exception as e:
-        logger.error(f"Scenario simulation failed: {str(e)}")
+        logger.error(f"Scenario simulation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -528,8 +548,9 @@ def compute_consolidation(req: ConsolidationRequest):
                 'revenueGrowth': 0.08,
                 'cogsPercentage': 0.30,
                 'opexPercentage': 0.40,
-                'taxRate': float(entity_config.get('taxRate', 0.25) or 0.25),
+                'taxRate': (entity_config.get('taxRate') or 0.25),
             })
+
 
             # Compute 3-statement model for this entity
             statements = compute_three_statements(
@@ -537,6 +558,7 @@ def compute_consolidation(req: ConsolidationRequest):
                 horizon_months=req.horizonMonths,
                 initial_values=initial_values,
                 growth_assumptions=growth_assumptions,
+                headcount_costs=entity_config.get('headcountCosts'), # Dynamic linkage
             )
 
             # Add entity metadata
@@ -557,15 +579,15 @@ def compute_consolidation(req: ConsolidationRequest):
                 minority_interests=req.minorityInterests or {},
             )
 
-            # Build intercompany map from entity configs
+            # Build intercompany map from entity configs (Nested by Entity for discrepancy detection)
             ic_map = {}
             for entity_config in req.entities:
+                entity_code = entity_config.get('entityId', 'UNKNOWN')
                 ic_data = entity_config.get('intercompanyMap', {})
                 for month_key, ic_values in ic_data.items():
                     if month_key not in ic_map:
                         ic_map[month_key] = {}
-                    for k, v in ic_values.items():
-                        ic_map[month_key][k] = ic_map[month_key].get(k, 0) + v
+                    ic_map[month_key][entity_code] = ic_values
 
             consolidated = consolidation_engine.consolidate(
                 intercompany_map=ic_map if ic_map else None
@@ -607,7 +629,7 @@ def compute_consolidation(req: ConsolidationRequest):
             return {"status": "error", "detail": "No entities provided"}
 
     except Exception as e:
-        logger.error(f"Consolidation failed: {str(e)}", exc_info=True)
+        logger.error(f"Consolidation failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -663,7 +685,7 @@ def compute_financial_controls(req: FinancialControlsRequest):
         )
         return {"status": "success", "result": result}
     except Exception as e:
-        logger.error(f"Financial controls failed: {str(e)}", exc_info=True)
+        logger.error(f"Financial controls failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -691,7 +713,7 @@ def compute_enterprise_forecast(req: EnterpriseForecastRequest):
             benchmarks = {}
             for k, v in req.industryBenchmarks.items():
                 if v is not None:
-                    benchmarks[str(k)] = tuple(v)
+                    benchmarks[k] = tuple(v)
 
         result = run_enterprise_forecast(
             history=req.history,
@@ -705,7 +727,7 @@ def compute_enterprise_forecast(req: EnterpriseForecastRequest):
         )
         return {"status": "success", "result": result}
     except Exception as e:
-        logger.error(f"Enterprise forecast failed: {str(e)}", exc_info=True)
+        logger.error(f"Enterprise forecast failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -741,7 +763,7 @@ def compute_model_confidence(req: ConfidenceRequest):
             benchmarks = {}
             for k, v in req.industryBenchmarks.items():
                 if v is not None:
-                    benchmarks[str(k)] = tuple(v)
+                    benchmarks[k] = tuple(v)
 
         result = ModelConfidenceEngine.compute_confidence(
             history=req.history,
@@ -816,7 +838,7 @@ def compute_ai_pipeline(req: AIPipelineRequest):
         )
         return {"status": "success", "result": result}
     except Exception as e:
-        logger.error(f"AI pipeline failed: {str(e)}", exc_info=True)
+        logger.error(f"AI pipeline failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -878,7 +900,7 @@ def compute_parameter_mode(req: ParameterModeRequest):
         )
         return {"status": "success", "result": result}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=e)
 
 
 # Background polling
@@ -921,7 +943,7 @@ def polling_loop():
                 logger.debug("No jobs in any queue")
                 time.sleep(0.5)  # No jobs, wait
         except Exception as e:
-            logger.error(f"❌ Polling error: {str(e)}", exc_info=True)
+            logger.error(f"❌ Polling error: {e}", exc_info=True)
             time.sleep(0.5)
 
 def keep_alive_loop():
@@ -934,22 +956,3 @@ def keep_alive_loop():
         except Exception as e:
             logger.warning(f"Failed to ping backend: {e}")
         time.sleep(300) # Sleep for 5 minutes
-
-@app.on_event("startup")
-def startup_event():
-    """Start background polling on app startup"""
-    global polling_active, polling_thread
-    polling_active = True
-    polling_thread = threading.Thread(target=polling_loop, daemon=True)
-    polling_thread.start()
-    
-    keep_alive_thread = threading.Thread(target=keep_alive_loop, daemon=True)
-    keep_alive_thread.start()
-
-@app.on_event("shutdown")
-def shutdown_event():
-    """Stop background polling on shutdown"""
-    global polling_active
-    polling_active = False
-    if polling_thread:
-        polling_thread.join(timeout=5)

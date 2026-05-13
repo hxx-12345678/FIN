@@ -56,11 +56,12 @@ export const intelligentInvestorDashboardService = {
       }
     }
 
-    // 3. Generate AI Narrative (McKinsey-Style Strategic Analysis)
-    let aiNarrative = (baseData as any).aiNarrative || "AI narrative generation requires an active model with monthly metrics.";
-    if (!aiNarrative || aiNarrative.includes("requires an active model")) {
-      if (baseData.monthlyMetrics.length > 0) {
-        try {
+    // 3. Parallel Synthesis of Strategic Insights
+    const [aiNarrativeResult, benchmarkResult] = await Promise.allSettled([
+      // Generate AI Narrative if missing
+      (async () => {
+        let narrative = (baseData as any).aiNarrative || "AI narrative generation requires an active model with monthly metrics.";
+        if ((!narrative || narrative.includes("requires an active model")) && baseData.monthlyMetrics.length > 0) {
           const prompt = `Act as a McKinsey Senior Partner advising a Tier-1 VC Board. 
           Analyze these financial metrics and provide a 2-paragraph "Executive Narrative".
           
@@ -78,39 +79,29 @@ export const intelligentInvestorDashboardService = {
           TONE:
           Coldly objective, institutional grade, high-stakes, strategic. No fluff. Focus on "Durable Growth" and "Unit Economic Defensibility".`;
           
-          const response = await agentOrchestrator.processQueryStream(
-              orgId,
-              userId,
-              prompt,
-              {}
-          );
-          aiNarrative = response.answer;
-        } catch (e) {
-          console.error("AI Narrative Generation Failed", e);
-          aiNarrative = "Failed to generate AI narrative due to service timeout.";
+          const response = await agentOrchestrator.processQueryStream(orgId, userId, prompt, {});
+          return response.answer;
         }
-      }
-    }
+        return narrative;
+      })(),
 
-    // 4. Web-Grounded Competitive Benchmarking
-    let competitiveBenchmark = (baseData as any).competitiveBenchmark;
-    if (!competitiveBenchmark) {
-        try {
-            const benchmarkPrompt = `What is the current BVP Nasdaq Emerging Cloud Index average growth rate and rule of 40 for this year? Be concise. Give me the numbers.`;
-            const benchmarkResponse = await agentOrchestrator.processQueryStream(
-                orgId,
-                userId,
-                benchmarkPrompt,
-                {}
-            );
-            competitiveBenchmark = {
-                summary: benchmarkResponse.answer,
-                dataSources: benchmarkResponse.dataSources
-            };
-        } catch (e) {
-            console.error("Benchmark Generation Failed", e);
+      // Generate Competitive Benchmark if missing
+      (async () => {
+        let benchmark = (baseData as any).competitiveBenchmark;
+        if (!benchmark) {
+          const benchmarkPrompt = `What is the current BVP Nasdaq Emerging Cloud Index average growth rate and rule of 40 for this year? Be concise. Give me the numbers.`;
+          const benchmarkResponse = await agentOrchestrator.processQueryStream(orgId, userId, benchmarkPrompt, {});
+          return {
+            summary: benchmarkResponse.answer,
+            dataSources: benchmarkResponse.dataSources
+          };
         }
-    }
+        return benchmark;
+      })()
+    ]);
+
+    const aiNarrative = aiNarrativeResult.status === 'fulfilled' ? aiNarrativeResult.value : "Failed to generate AI narrative.";
+    const competitiveBenchmark = benchmarkResult.status === 'fulfilled' ? benchmarkResult.value : null;
 
     const intelligentInsights = {
         aiNarrative,

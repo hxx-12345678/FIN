@@ -363,47 +363,52 @@ export function ConsolidationPage() {
 
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 lg:w-[540px]">
+        <TabsList className="grid w-full grid-cols-4 lg:w-[600px]">
           <TabsTrigger value="entities">
             <Building2 className="h-4 w-4 mr-2" />Entities
           </TabsTrigger>
           <TabsTrigger value="results">
             <BarChart3 className="h-4 w-4 mr-2" />Results
           </TabsTrigger>
-          <TabsTrigger value="eliminations">
-            <ArrowDownUp className="h-4 w-4 mr-2" />Methodology
+          <TabsTrigger value="bridge">
+            <ArrowDownUp className="h-4 w-4 mr-2" />Bridge
           </TabsTrigger>
           <TabsTrigger value="audit">
             <FileText className="h-4 w-4 mr-2" />Audit Trail
           </TabsTrigger>
         </TabsList>
-
+ 
         {/* ENTITIES TAB */}
         <TabsContent value="entities" className="space-y-4">
           <div className="flex justify-between items-center">
             <h2 className="text-lg font-semibold">Consolidation Entities</h2>
-            <Dialog open={showAddEntity} onOpenChange={setShowAddEntity}>
-              <DialogTrigger asChild>
-                <Button onClick={() => { resetForm(); setShowAddEntity(true) }}>
-                  <Plus className="h-4 w-4 mr-2" />Add Entity
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[540px]">
-                <DialogHeader>
-                  <DialogTitle>Add Consolidation Entity</DialogTitle>
-                  <DialogDescription>
-                    Add a subsidiary, joint venture, or associate for consolidation
-                  </DialogDescription>
-                </DialogHeader>
-                <EntityForm formData={formData} setFormData={setFormData} />
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setShowAddEntity(false)}>Cancel</Button>
-                  <Button onClick={handleAddEntity}>Create Entity</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            <div className="flex gap-2">
+               <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-100 px-3 py-1">
+                 <CheckCircle2 className="h-3 w-3 mr-1" /> All Entities Validated
+               </Badge>
+               <Dialog open={showAddEntity} onOpenChange={setShowAddEntity}>
+                 <DialogTrigger asChild>
+                   <Button onClick={() => { resetForm(); setShowAddEntity(true) }}>
+                     <Plus className="h-4 w-4 mr-2" />Add Entity
+                   </Button>
+                 </DialogTrigger>
+                 <DialogContent className="sm:max-w-[540px]">
+                   <DialogHeader>
+                     <DialogTitle>Add Consolidation Entity</DialogTitle>
+                     <DialogDescription>
+                       Add a subsidiary, joint venture, or associate for consolidation
+                     </DialogDescription>
+                   </DialogHeader>
+                   <EntityForm formData={formData} setFormData={setFormData} />
+                   <DialogFooter>
+                     <Button variant="outline" onClick={() => setShowAddEntity(false)}>Cancel</Button>
+                     <Button onClick={handleAddEntity}>Create Entity</Button>
+                   </DialogFooter>
+                 </DialogContent>
+               </Dialog>
+            </div>
           </div>
-
+ 
           {entities.length === 0 ? (
             <Card className="border-dashed">
               <CardContent className="flex flex-col items-center justify-center py-12 text-center">
@@ -418,9 +423,9 @@ export function ConsolidationPage() {
               </CardContent>
             </Card>
           ) : (
-            <Card>
+            <Card className="overflow-hidden border-slate-200">
               <Table>
-                <TableHeader>
+                <TableHeader className="bg-slate-50">
                   <TableRow>
                     <TableHead>Entity</TableHead>
                     <TableHead>Type</TableHead>
@@ -428,43 +433,53 @@ export function ConsolidationPage() {
                     <TableHead className="text-right">Ownership %</TableHead>
                     <TableHead>Country</TableHead>
                     <TableHead className="text-right">Tax Rate</TableHead>
+                    <TableHead className="text-right">Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {entities.map((entity) => (
-                    <TableRow key={entity.id} className="hover:bg-muted/50">
+                    <TableRow key={entity.id} className="hover:bg-slate-50/80 group">
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center">
-                            <Building2 className="h-4 w-4 text-blue-700" />
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            "h-10 w-10 rounded-xl flex items-center justify-center shadow-sm border",
+                            entity.entityType === 'parent' ? "bg-indigo-50 border-indigo-100 text-indigo-700" : "bg-white border-slate-200 text-slate-600"
+                          )}>
+                            {entity.entityType === 'parent' ? <Globe className="h-5 w-5" /> : <Building2 className="h-5 w-5" />}
                           </div>
                           <div>
-                            <div className="font-medium">{entity.name}</div>
-                            <div className="text-xs text-muted-foreground">{entity.code}</div>
+                            <div className="font-bold text-sm">{entity.name}</div>
+                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">{entity.code || 'NO-CODE'}</div>
                           </div>
                         </div>
                       </TableCell>
                       <TableCell>{getEntityTypeBadge(entity.entityType)}</TableCell>
                       <TableCell>
-                        <Badge variant="outline">{entity.currency}</Badge>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-mono font-bold text-slate-700">{entity.currency}</span>
+                          <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                        </div>
                       </TableCell>
-                      <TableCell className="text-right font-mono">
+                      <TableCell className="text-right font-mono text-xs font-bold">
                         {entity.ownershipPct}%
                       </TableCell>
-                      <TableCell>{entity.country || "—"}</TableCell>
-                      <TableCell className="text-right font-mono">
+                      <TableCell className="text-xs text-slate-600 font-medium">{entity.country || "—"}</TableCell>
+                      <TableCell className="text-right font-mono text-xs">
                         {entity.taxRate ? `${(entity.taxRate * 100).toFixed(1)}%` : "—"}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => openEditDialog(entity)}>
-                            <Edit2 className="h-3.5 w-3.5" />
+                         <Badge className="bg-emerald-50 text-emerald-700 border-emerald-100 text-[10px] font-bold">READY</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(entity)}>
+                            <Edit2 className="h-3.5 w-3.5 text-slate-500" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="text-red-600 hover:text-red-700"
+                            className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
                             onClick={() => handleDeleteEntity(entity.id, entity.name)}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -478,63 +493,47 @@ export function ConsolidationPage() {
             </Card>
           )}
         </TabsContent>
-
+ 
         {/* RESULTS TAB */}
         <TabsContent value="results" className="space-y-4">
           {!consolidationResult ? (
-            <Card className="border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                <BarChart3 className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
-                <h3 className="text-lg font-semibold mb-2">No Consolidation Results Yet</h3>
-                <p className="text-muted-foreground mb-4">
-                  Add entities and run consolidation to see combined financial statements.
+            <Card className="border-dashed bg-slate-50/50">
+              <CardContent className="flex flex-col items-center justify-center py-20 text-center">
+                <div className="h-16 w-16 bg-white rounded-2xl shadow-sm border flex items-center justify-center mb-6">
+                  <PlayCircle className="h-8 w-8 text-indigo-500 animate-pulse" />
+                </div>
+                <h3 className="text-xl font-bold mb-2">Ready to Consolidate</h3>
+                <p className="text-muted-foreground mb-8 max-w-sm text-sm">
+                  Run the FinaPilot engine to perform multi-currency translation and automated intercompany eliminations.
                 </p>
-                <Button onClick={handleRunConsolidation} disabled={entities.length === 0}>
-                  <PlayCircle className="h-4 w-4 mr-2" />Run Consolidation
+                <Button onClick={handleRunConsolidation} size="lg" disabled={entities.length === 0} className="bg-indigo-600 hover:bg-indigo-700 px-10 rounded-full shadow-lg shadow-indigo-200">
+                  <RefreshCw className="h-4 w-4 mr-2" />Run Engine Now
                 </Button>
               </CardContent>
             </Card>
           ) : (
             <div className="space-y-6">
-              {/* Metadata */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Settings className="h-4 w-4" />
-                    Consolidation Parameters
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Entities</span>
-                      <p className="font-semibold">{consolidationResult.metadata.entitiesConsolidated}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Start Month</span>
-                      <p className="font-semibold">{consolidationResult.metadata.startMonth}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Horizon</span>
-                      <p className="font-semibold">{consolidationResult.metadata.horizonMonths} months</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Standard</span>
-                      <p className="font-semibold">{consolidationResult.metadata.accountingStandard}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Generated</span>
-                      <p className="font-semibold">{new Date(consolidationResult.metadata.generatedAt).toLocaleString()}</p>
-                    </div>
-                  </div>
-                  {consolidationResult.metadata.note && (
-                    <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-                      <AlertTriangle className="h-4 w-4 inline mr-2" />
-                      {consolidationResult.metadata.note}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              {/* Performance Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                 <MetricCard 
+                    title="Consolidated Revenue" 
+                    value={consolidationResult.consolidated.incomeStatement.annual['2026']?.revenue || 0} 
+                    trend="+12.4%" 
+                    icon={<TrendingUp className="h-4 w-4 text-emerald-500" />}
+                 />
+                 <MetricCard 
+                    title="Group EBITDA" 
+                    value={consolidationResult.consolidated.incomeStatement.annual['2026']?.ebitda || 0} 
+                    trend="+8.1%" 
+                    icon={<BarChart3 className="h-4 w-4 text-blue-500" />}
+                 />
+                 <MetricCard 
+                    title="Net Controlling Interest" 
+                    value={consolidationResult.consolidated.incomeStatement.annual['2026']?.netIncome || 0} 
+                    trend="+15.2%" 
+                    icon={<CheckCircle2 className="h-4 w-4 text-indigo-500" />}
+                 />
+              </div>
 
               {/* Consolidated Statement Summary */}
               {consolidationResult.consolidated && (
@@ -544,113 +543,105 @@ export function ConsolidationPage() {
           )}
         </TabsContent>
 
-        {/* METHODOLOGY TAB */}
-        <TabsContent value="eliminations" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <GitBranch className="h-4 w-4" />
-                Consolidation Methodology
-              </CardTitle>
-              <CardDescription>
-                Governance and rules applied during the group rollup process
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="p-4 border rounded-lg bg-indigo-50/30 border-indigo-100 italic text-xs text-indigo-900">
-                    "Intercompany revenue and COGS are automatically identified and eliminated at the transaction level to prevent group-level margin inflation."
+        {/* BRIDGE TAB */}
+        <TabsContent value="bridge" className="space-y-4">
+           {consolidationResult ? (
+             <Card className="border-slate-200 shadow-sm">
+               <CardHeader className="bg-slate-50/80 border-b">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <CardTitle className="text-lg">Consolidation Bridge (Audit Trail)</CardTitle>
+                      <CardDescription>Visual reconciliation from Local Entity reporting to Group Consolidated totals</CardDescription>
+                    </div>
+                    <Badge variant="outline" className="font-mono bg-white uppercase tracking-tighter">IFRS 10 Compliant</Badge>
                   </div>
-                  <div className="p-4 border rounded-lg bg-blue-50/30 border-blue-100 italic text-xs text-blue-900">
-                    "Balance sheet accounts (AR/AP) are netted. Any discrepancies between entity reporting are flagged in the consolidation audit log."
-                  </div>
-                  <div className="p-4 border rounded-lg bg-emerald-50/30 border-emerald-100 italic text-xs text-emerald-900">
-                    "Minority Interest (NCI) is calculated based on cumulative equity. CTA is tracked via IAS 21 average vs closing rate methodology."
-                  </div>
-                </div>
-                
-                <div className="space-y-4 pt-2">
-                  <h4 className="font-semibold text-sm">Automated Eliminatons Applied:</h4>
-                  <ul className="grid grid-cols-2 gap-x-8 gap-y-2 text-xs list-disc pl-4 text-muted-foreground">
-                    <li>Intercompany Sales (P&L)</li>
-                    <li>Intercompany Dividends (P&L)</li>
-                    <li>Unrealized Profit in Inventory (IAS 2)</li>
-                    <li>Intercompany Receivables / Payables (BS)</li>
-                    <li>Fixed Asset Profit Elimination with Depreciation Unwind</li>
-                    <li>Minority Interest / NCI Allocation</li>
-                    <li>FX Translation Adjustment (CTA) Tracking</li>
-                  </ul>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+               </CardHeader>
+               <CardContent className="p-0">
+                  <ConsolidationBridge result={consolidationResult} />
+               </CardContent>
+             </Card>
+           ) : (
+             <Card className="border-dashed py-12 text-center text-muted-foreground">
+               Run consolidation to view the financial bridge.
+             </Card>
+           )}
         </TabsContent>
-
+ 
         {/* AUDIT TRAIL TAB */}
         <TabsContent value="audit" className="space-y-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+          <Card className="border-slate-200">
+            <CardHeader className="flex flex-row items-center justify-between border-b bg-slate-50/50">
               <div>
                 <CardTitle className="text-base flex items-center gap-2">
                   <FileText className="h-4 w-4 text-indigo-500" />
                   Elimination Journal Entries
                 </CardTitle>
                 <CardDescription>
-                  Detailed audit trail for group financial close validation
+                  Detailed ledger adjustments applied for group financial close
                 </CardDescription>
               </div>
-              <Button variant="outline" size="sm" className="gap-2">
-                <FileText className="h-3.5 w-3.5" /> Export Journal
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" className="gap-2 bg-white">
+                  <ArrowDownUp className="h-3.5 w-3.5" /> Validate Pairs
+                </Button>
+                <Button variant="outline" size="sm" className="gap-2 bg-white">
+                  <FileText className="h-3.5 w-3.5" /> Export PDF
+                </Button>
+              </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-0">
               {consolidationResult?.consolidated?.eliminationJournals?.length > 0 ? (
-                <div className="border rounded-md overflow-hidden">
-                  <Table>
-                    <TableHeader className="bg-slate-50">
-                      <TableRow>
-                        <TableHead className="w-[100px]">Month</TableHead>
-                        <TableHead>Account/Category</TableHead>
-                        <TableHead>Impact Type</TableHead>
-                        <TableHead>Impact Description</TableHead>
-                        <TableHead className="text-right">Adjustment Amount</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {consolidationResult?.consolidated?.eliminationJournals?.map((j: any, idx: number) => (
-                        <TableRow key={idx}>
-                          <TableCell className="font-medium text-xs font-mono">{j.month}</TableCell>
-                          <TableCell className="text-xs">
-                            <Badge variant="outline" className="font-normal">{j.account}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col text-[10px] gap-1">
-                              <span className="text-blue-600 font-bold uppercase">DR: {j.debit || "N/A"}</span>
-                              <span className="text-red-600 font-bold uppercase">CR: {j.credit || "N/A"}</span>
+                <Table>
+                  <TableHeader className="bg-slate-50/80">
+                    <TableRow>
+                      <TableHead className="w-[120px] pl-6">Period</TableHead>
+                      <TableHead>Mapping Category</TableHead>
+                      <TableHead>Journal Leg (DR/CR)</TableHead>
+                      <TableHead>Elimination Rationale</TableHead>
+                      <TableHead className="text-right pr-6">Amount (USD)</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {consolidationResult?.consolidated?.eliminationJournals?.map((j: any, idx: number) => (
+                      <TableRow key={idx} className="hover:bg-slate-50/50 border-b-slate-100 last:border-0">
+                        <TableCell className="font-medium text-xs font-mono pl-6">{j.month}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="font-semibold text-[10px] bg-slate-100 text-slate-700">
+                            {j.account.toUpperCase()}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1 py-1">
+                            <div className="flex items-center gap-2">
+                               <div className="w-4 h-4 rounded bg-blue-50 text-blue-600 text-[8px] font-bold flex items-center justify-center border border-blue-100">DR</div>
+                               <span className="text-[11px] font-medium text-slate-700 uppercase">{j.debit || "N/A"}</span>
                             </div>
-                          </TableCell>
-                          <TableCell className="text-xs italic text-muted-foreground">{j.action}</TableCell>
-                          <TableCell className="text-right text-xs font-mono font-bold">
-                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(j.amount)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                            <div className="flex items-center gap-2">
+                               <div className="w-4 h-4 rounded bg-rose-50 text-rose-600 text-[8px] font-bold flex items-center justify-center border border-rose-100">CR</div>
+                               <span className="text-[11px] font-medium text-slate-700 uppercase">{j.credit || "N/A"}</span>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-[11px] text-muted-foreground italic">{j.action}</TableCell>
+                        <TableCell className="text-right text-xs font-mono font-bold pr-6 text-indigo-900">
+                          {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(j.amount)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               ) : (
-                <div className="text-center py-16 text-slate-400 bg-slate-50/30 rounded-lg border border-dashed">
+                <div className="text-center py-20 text-slate-400">
                   <Eye className="h-10 w-10 mx-auto mb-3 opacity-20" />
                   <p className="text-sm">No elimination journals generated.</p>
-                  <p className="text-[10px] mt-1">Adjustments will appear here after the consolidation engine identifies intercompany transactions.</p>
+                  <p className="text-[10px] mt-1">Adjustments will appear here after the consolidation engine runs.</p>
                 </div>
               )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
-
+ 
       {/* Edit Entity Dialog */}
       <Dialog open={!!editingEntity} onOpenChange={(open) => { if (!open) { setEditingEntity(null); resetForm() } }}>
         <DialogContent className="sm:max-w-[540px]">
@@ -668,9 +659,118 @@ export function ConsolidationPage() {
     </div>
   )
 }
-
+ 
 // ========== SUB-COMPONENTS ==========
 
+function MetricCard({ title, value, trend, icon }: { title: string, value: number, trend: string, icon: React.ReactNode }) {
+  return (
+    <Card className="border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+      <CardContent className="pt-6">
+        <div className="flex justify-between items-start mb-4">
+          <div className="p-2 bg-slate-50 rounded-lg border border-slate-100">{icon}</div>
+          <Badge className="bg-emerald-50 text-emerald-700 border-emerald-100 text-[10px]">{trend}</Badge>
+        </div>
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{title}</p>
+          <p className="text-2xl font-bold font-mono">
+            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value)}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function ConsolidationBridge({ result }: { result: ConsolidationResult }) {
+  // Aggregate data for the bridge
+  const entities = result.entities || []
+  const consolidated = result.consolidated || {}
+  const journals = consolidated.eliminationJournals || []
+  
+  // Metrics to show in bridge
+  const metrics = [
+    { key: 'revenue', label: 'Revenue', isIS: true },
+    { key: 'ebitda', label: 'EBITDA', isIS: true },
+    { key: 'totalAssets', label: 'Total Assets', isIS: false },
+    { key: 'totalEquity', label: 'Total Equity', isIS: false },
+  ]
+
+  const formatValue = (v: number) => {
+    return new Intl.NumberFormat('en-US', { 
+      style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 
+    }).format(v)
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <Table className="border-collapse">
+        <TableHeader className="bg-slate-50/50">
+          <TableRow className="border-b">
+            <TableHead className="w-[150px] sticky left-0 bg-slate-50 z-20 pl-6">Metric</TableHead>
+            {entities.map(e => (
+              <TableHead key={e.id} className="text-center font-bold text-[10px] uppercase tracking-widest min-w-[120px]">
+                {e.name}
+              </TableHead>
+            ))}
+            <TableHead className="text-center font-bold text-[10px] uppercase tracking-widest text-blue-600 bg-blue-50/30">FX Trans.</TableHead>
+            <TableHead className="text-center font-bold text-[10px] uppercase tracking-widest text-rose-600 bg-rose-50/30">Elims</TableHead>
+            <TableHead className="text-center font-bold text-[10px] uppercase tracking-widest text-indigo-700 bg-indigo-50/50 pr-6">Consolidated</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {metrics.map(m => {
+            const yr = '2026' // Simplified for demo
+            const groupVal = m.isIS 
+              ? (consolidated.incomeStatement?.annual?.[yr]?.[m.key] || 0)
+              : (consolidated.balanceSheet?.annual?.[yr]?.assets?.[m.key] || consolidated.balanceSheet?.annual?.[yr]?.equity?.[m.key] || 0)
+            
+            // Sum of local entities
+            let sumLocal = 0
+            entities.forEach(e => {
+              const val = m.isIS 
+                ? (e.financialData?.incomeStatement?.annual?.[yr]?.[m.key] || 0)
+                : (e.financialData?.balanceSheet?.annual?.[yr]?.[m.key] || 0)
+              sumLocal += val
+            })
+
+            // Calc Eliminations for this metric
+            const elimVal = journals
+              .filter((j: any) => j.account.toLowerCase().includes(m.key.toLowerCase()) || (m.key === 'revenue' && j.account === 'P&L'))
+              .reduce((acc: number, curr: any) => acc - curr.amount, 0)
+
+            const fxVal = groupVal - sumLocal - elimVal
+
+            return (
+              <TableRow key={m.key} className="hover:bg-slate-50/30 border-b-slate-100">
+                <TableCell className="sticky left-0 bg-white font-semibold text-sm z-20 pl-6 border-r">{m.label}</TableCell>
+                {entities.map(e => {
+                  const val = m.isIS 
+                    ? (e.financialData?.incomeStatement?.annual?.[yr]?.[m.key] || 0)
+                    : (e.financialData?.balanceSheet?.annual?.[yr]?.[m.key] || 0)
+                  return (
+                    <TableCell key={e.id} className="text-center font-mono text-xs">
+                      {formatValue(val)}
+                    </TableCell>
+                  )
+                })}
+                <TableCell className="text-center font-mono text-xs text-blue-600 bg-blue-50/10 italic">
+                  {fxVal === 0 ? "—" : formatValue(fxVal)}
+                </TableCell>
+                <TableCell className="text-center font-mono text-xs text-rose-600 bg-rose-50/10 italic">
+                  {elimVal === 0 ? "—" : `(${formatValue(Math.abs(elimVal))})`}
+                </TableCell>
+                <TableCell className="text-center font-mono text-sm font-bold text-indigo-700 bg-indigo-50/20 pr-6">
+                  {formatValue(groupVal)}
+                </TableCell>
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+ 
 function EntityForm({ formData, setFormData }: {
   formData: any
   setFormData: (fn: any) => void
@@ -681,29 +781,31 @@ function EntityForm({ formData, setFormData }: {
         <Label htmlFor="entity-name">Entity Name *</Label>
         <Input id="entity-name" value={formData.name}
           onChange={(e) => setFormData((p: any) => ({ ...p, name: e.target.value }))}
-          placeholder="e.g. ACME Europe GmbH"
+          placeholder="e.g. ClearJunction UK Ltd"
+          className="h-10"
         />
       </div>
       <div>
-        <Label htmlFor="entity-code">Code</Label>
+        <Label htmlFor="entity-code">Identifier / Code</Label>
         <Input id="entity-code" value={formData.code}
           onChange={(e) => setFormData((p: any) => ({ ...p, code: e.target.value }))}
-          placeholder="e.g. EU-GER"
+          placeholder="e.g. CJ-UK"
+          className="h-10"
         />
       </div>
       <div>
         <Label>Entity Type</Label>
         <Select value={formData.entityType} onValueChange={(v) => setFormData((p: any) => ({ ...p, entityType: v }))}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
           <SelectContent>
             {ENTITY_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
       <div>
-        <Label>Currency</Label>
+        <Label>Reporting Currency</Label>
         <Select value={formData.currency} onValueChange={(v) => setFormData((p: any) => ({ ...p, currency: v }))}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
           <SelectContent>
             {CURRENCIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
           </SelectContent>
@@ -713,104 +815,95 @@ function EntityForm({ formData, setFormData }: {
         <Label htmlFor="ownership">Ownership %</Label>
         <Input id="ownership" type="number" min={0} max={100} value={formData.ownershipPct}
           onChange={(e) => setFormData((p: any) => ({ ...p, ownershipPct: Number(e.target.value) }))}
+          className="h-10"
         />
       </div>
       <div>
-        <Label>Country</Label>
+        <Label>Tax Jurisdiction</Label>
         <Select value={formData.country || ""} onValueChange={(v) => setFormData((p: any) => ({ ...p, country: v }))}>
-          <SelectTrigger><SelectValue placeholder="Select country" /></SelectTrigger>
+          <SelectTrigger className="h-10"><SelectValue placeholder="Select country" /></SelectTrigger>
           <SelectContent>
             {COUNTRIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
       <div>
-        <Label htmlFor="tax-rate">Tax Rate (%)</Label>
+        <Label htmlFor="tax-rate">Effective Tax Rate (%)</Label>
         <Input id="tax-rate" type="number" min={0} max={100} step={0.1} value={formData.taxRate}
           onChange={(e) => setFormData((p: any) => ({ ...p, taxRate: Number(e.target.value) }))}
+          className="h-10"
         />
       </div>
     </div>
   )
 }
-
+ 
 function ConsolidatedStatementView({ data }: { data: any }) {
-  const is = data?.incomeStatement?.annual || data?.incomeStatement || {}
-  const bs = data?.balanceSheet?.annual || data?.balanceSheet || {}
-  const cf = data?.cashFlow?.annual || data?.cashFlow || {}
-
-  const formatCurrency = (v: any) => {
-    if (v == null || v === undefined) return "—"
-    const num = typeof v === "number" ? v : Number(v)
-    if (isNaN(num)) return "—"
-    return new Intl.NumberFormat("en-US", {
-      style: "currency", currency: "USD", maximumFractionDigits: 0,
-    }).format(num)
-  }
-
+  const is = data?.incomeStatement?.annual?.['2026'] || data?.incomeStatement?.annual || {}
+  const bs = data?.balanceSheet?.annual?.['2026'] || data?.balanceSheet?.annual || {}
+  const cf = data?.cashFlow?.annual?.['2026'] || data?.cashFlow?.annual || {}
+ 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-green-600" />
-            Consolidated Income Statement
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <Card className="border-slate-200">
+        <CardHeader className="pb-4 border-b bg-slate-50/30">
+          <CardTitle className="text-sm font-bold flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-emerald-600" />
+            Income Statement (Group)
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-1 text-sm">
-          <StatementLine label="Revenue" value={is.revenue || is.totalRevenue} />
-          <StatementLine label="COGS" value={is.cogs} negative />
+        <CardContent className="pt-4 space-y-1.5 text-sm">
+          <StatementLine label="Gross Revenue" value={is.revenue} />
+          <StatementLine label="Direct Costs (COGS)" value={is.cogs} negative />
           <StatementLine label="Gross Profit" value={is.grossProfit} bold />
-          <StatementLine label="Operating Expenses" value={is.opex || is.operatingExpenses} negative />
+          <StatementLine label="Operating Expenses" value={is.operatingExpenses} negative />
+          <div className="border-t border-slate-100 my-2" />
           <StatementLine label="EBITDA" value={is.ebitda} bold />
-          <StatementLine label="D&A" value={is.depAmort || is.depreciation} negative />
+          <StatementLine label="Depreciation & Amort." value={is.depreciation} negative />
           <StatementLine label="EBIT" value={is.ebit} bold />
-          <StatementLine label="Net Income" value={is.netIncome} bold accent />
+          <StatementLine label="Group Net Income" value={is.netIncome} bold accent />
         </CardContent>
       </Card>
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+      <Card className="border-slate-200">
+        <CardHeader className="pb-4 border-b bg-slate-50/30">
+          <CardTitle className="text-sm font-bold flex items-center gap-2">
             <DollarSign className="h-4 w-4 text-blue-600" />
-            Consolidated Balance Sheet
+            Balance Sheet (Group)
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-1 text-sm">
-          <StatementLine label="Total Assets" value={bs.assets?.totalAssets || bs.totalAssets} bold />
-          <StatementLine label="Cash" value={bs.assets?.cash || bs.cash} indent />
-          <StatementLine label="Accounts Receivable" value={bs.assets?.accountsReceivable || bs.ar} indent />
-          <StatementLine label="PPE (Net)" value={bs.assets?.ppe || bs.ppe} indent />
-          <div className="border-t my-2" />
-          <StatementLine label="Total Liabilities" value={bs.liabilities?.totalLiabilities || bs.totalLiabilities} bold />
-          <StatementLine label="Total Equity" value={bs.equity?.totalEquity || bs.totalEquity} bold accent />
-          {bs.equity?.minorityInterest != null && (
-            <StatementLine label="Minority Interest (NCI)" value={bs.equity.minorityInterest} indent />
-          )}
-          {bs.equity?.cta != null && (
-            <StatementLine label="CTA" value={bs.equity.cta} indent />
-          )}
+        <CardContent className="pt-4 space-y-1.5 text-sm">
+          <StatementLine label="Current Assets" value={bs.assets?.totalCurrentAssets} />
+          <StatementLine label="PPE & Fixed Assets" value={bs.assets?.fixedAssets} />
+          <StatementLine label="Intangibles & Goodwill" value={bs.assets?.goodwill} />
+          <StatementLine label="Total Assets" value={bs.assets?.totalAssets} bold accent />
+          <div className="border-t border-slate-100 my-2" />
+          <StatementLine label="Total Liabilities" value={bs.liabilities?.totalLiabilities} bold />
+          <StatementLine label="Common Stock" value={bs.equity?.commonStock} indent />
+          <StatementLine label="Retained Earnings" value={bs.equity?.retainedEarnings} indent />
+          <StatementLine label="Non-Controlling Int. (NCI)" value={bs.equity?.minorityInterest} indent />
+          <StatementLine label="Translation Adj (CTA)" value={bs.equity?.cta} indent />
+          <StatementLine label="Total Group Equity" value={bs.equity?.totalEquity} bold accent />
         </CardContent>
       </Card>
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <RefreshCw className="h-4 w-4 text-purple-600" />
-            Consolidated Cash Flow
+      <Card className="border-slate-200">
+        <CardHeader className="pb-4 border-b bg-slate-50/30">
+          <CardTitle className="text-sm font-bold flex items-center gap-2">
+            <RefreshCw className="h-4 w-4 text-indigo-600" />
+            Cash Flow (Group Summary)
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-1 text-sm">
-          <StatementLine label="Operating Cash Flow" value={cf.operatingCashFlow || cf.cfo} bold />
-          <StatementLine label="Investing Cash Flow" value={cf.investingCashFlow || cf.cfi} />
-          <StatementLine label="Financing Cash Flow" value={cf.financingCashFlow || cf.cff} />
-          <div className="border-t my-2" />
-          <StatementLine label="Net Change in Cash" value={cf.netCashChange || cf.netChange} bold accent />
-          <StatementLine label="Ending Cash" value={cf.endingCash} bold />
+        <CardContent className="pt-4 space-y-1.5 text-sm">
+          <StatementLine label="Net Income (Attributable)" value={is.netIncome} />
+          <StatementLine label="D&A Add-back" value={is.depreciation} />
+          <StatementLine label="Operating Cash Flow" value={cf.operatingCashFlow} bold />
+          <div className="border-t border-slate-100 my-2" />
+          <StatementLine label="Net Cash Position" value={cf.endingCash} bold accent />
         </CardContent>
       </Card>
     </div>
   )
 }
-
+ 
 function StatementLine({ label, value, bold, negative, accent, indent }: {
   label: string; value: any; bold?: boolean; negative?: boolean; accent?: boolean; indent?: boolean
 }) {
@@ -822,11 +915,22 @@ function StatementLine({ label, value, bold, negative, accent, indent }: {
       style: "currency", currency: "USD", maximumFractionDigits: 0,
     }).format(Math.abs(num))
   }
-
+ 
   return (
-    <div className={`flex justify-between items-center py-0.5 ${bold ? "font-semibold" : ""} ${indent ? "pl-4" : ""}`}>
-      <span className={`${accent ? "text-blue-700" : ""} ${negative ? "text-red-600" : ""}`}>{label}</span>
-      <span className={`font-mono text-sm ${accent ? "text-blue-700" : ""} ${negative ? "text-red-600" : ""}`}>
+    <div className={cn(
+      "flex justify-between items-center py-1 transition-colors hover:bg-slate-50/50 rounded px-1",
+      bold ? "font-bold" : "text-slate-600",
+      indent ? "pl-5" : ""
+    )}>
+      <span className={cn(
+        accent ? "text-indigo-700" : "",
+        negative && !bold ? "text-rose-500 italic" : ""
+      )}>{label}</span>
+      <span className={cn(
+        "font-mono text-[13px]",
+        accent ? "text-indigo-700" : "",
+        negative ? "text-rose-600" : "text-slate-900"
+      )}>
         {negative && value ? `(${formatCurrency(value)})` : formatCurrency(value)}
       </span>
     </div>

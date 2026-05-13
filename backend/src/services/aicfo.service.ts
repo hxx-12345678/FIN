@@ -428,12 +428,12 @@ export const aicfoService = {
 
     const sanitizedQuery = sanitizeString(query.trim(), 500);
     const startTime = Date.now();
-    const threadId = context?.threadId || context?.conversationId;
+    const threadId = context?.conversationId || context?.threadId;
 
     try {
       // 1. Manage Conversation Persistence
       let conversation;
-      if (threadId && /^[0-9a-f]{8}-[0-9a-f]{4}-[12345][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(threadId)) {
+      if (threadId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(threadId)) {
         conversation = await prisma.aICFOConversation.findUnique({
           where: { id: threadId },
         });
@@ -631,12 +631,12 @@ export const aicfoService = {
   ) => {
     const sanitizedQuery = sanitizeString(query.trim(), 500);
     const startTime = Date.now();
-    const threadId = context?.threadId || context?.conversationId;
+    const threadId = context?.conversationId || context?.threadId;
 
     try {
       // 1. Manage Conversation Persistence
       let conversation;
-      if (threadId && /^[0-9a-f]{8}-[0-9a-f]{4}-[12345][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(threadId)) {
+      if (threadId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(threadId)) {
         conversation = await prisma.aICFOConversation.findUnique({
           where: { id: threadId },
         });

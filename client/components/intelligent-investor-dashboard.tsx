@@ -10,12 +10,13 @@ import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
-import { CheckCircle2, AlertTriangle, Sparkles, ShieldCheck, Globe, Activity, TrendingUp, TrendingDown, RefreshCw, Layers, Search, ArrowRight, ExternalLink, Scale, Target, Info } from "lucide-react"
+import { CheckCircle2, AlertTriangle, Sparkles, ShieldCheck, Globe, Activity, TrendingUp, TrendingDown, RefreshCw, Layers, Search, ArrowRight, ExternalLink, Scale, Target, Info, BrainCircuit } from "lucide-react"
 import { API_BASE_URL, getAuthHeaders } from "@/lib/api-config"
 import { useOrg } from "@/lib/org-context"
 import { useModel } from "@/lib/model-context"
 import { toast } from "sonner"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { AgenticResponse } from "@/components/ai-assistant/agentic-response"
 
 interface IntelligentDashboardData {
   executiveSummary: {
@@ -227,23 +228,58 @@ export function IntelligentInvestorDashboard() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-            <Skeleton className="h-10 w-64" />
-            <Skeleton className="h-10 w-32" />
+      <div className="space-y-8 animate-pulse p-4">
+        <div className="flex flex-col gap-4">
+          <Skeleton className="h-10 w-3/4" />
+          <Skeleton className="h-6 w-1/2" />
         </div>
-        <div className="grid gap-4 md:grid-cols-4">
-            {[1,2,3,4].map(i => <Skeleton key={i} className="h-24 w-full" />)}
+        
+        <div className="flex items-center gap-4 p-6 bg-primary/5 rounded-2xl border border-primary/10">
+          <RefreshCw className="h-8 w-8 text-primary animate-spin" />
+          <div>
+            <h3 className="text-lg font-bold text-primary">Orchestrating AI Agents...</h3>
+            <p className="text-sm text-muted-foreground italic">Synthesizing McKinsey-style strategic narratives and market benchmarks. This institutional analysis typically takes 10-15s.</p>
+          </div>
         </div>
-        <div className="grid gap-6 md:grid-cols-2">
-            <Skeleton className="h-[400px] w-full" />
-            <Skeleton className="h-[400px] w-full" />
+
+        <div className="grid gap-6 md:grid-cols-4">
+            {[1,2,3,4].map(i => (
+              <div key={i} className="p-6 rounded-2xl border bg-card">
+                <Skeleton className="h-4 w-20 mb-4" />
+                <Skeleton className="h-8 w-32" />
+              </div>
+            ))}
+        </div>
+        <div className="grid gap-8 md:grid-cols-2">
+            <div className="p-6 rounded-2xl border bg-card h-[400px]">
+              <Skeleton className="h-6 w-48 mb-6" />
+              <Skeleton className="h-full w-full" />
+            </div>
+            <div className="p-6 rounded-2xl border bg-card h-[400px]">
+              <Skeleton className="h-6 w-48 mb-6" />
+              <Skeleton className="h-full w-full" />
+            </div>
         </div>
       </div>
     )
   }
 
-  if (!data) return null
+  if (!data) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 text-center bg-muted/30 rounded-3xl border-2 border-dashed">
+        <BrainCircuit className="h-12 w-12 text-muted-foreground/30 mb-4" />
+        <h3 className="text-xl font-bold">Strategic Insights Pending</h3>
+        <p className="text-muted-foreground max-w-md mx-auto mt-2">
+          The intelligence engine requires an active Operating Plan or historical transaction data to generate narratives. 
+          Connect your ledger or complete a scenario run to enable.
+        </p>
+        <Button variant="outline" className="mt-6" onClick={fetchDashboardData}>
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Attempt Re-synthesis
+        </Button>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -463,9 +499,7 @@ export function IntelligentInvestorDashboard() {
           </CardHeader>
           <CardContent className="pt-6">
             <div className="prose prose-sm dark:prose-invert max-w-none">
-              <p className="whitespace-pre-wrap leading-relaxed text-sm font-medium text-slate-700 dark:text-slate-300">
-                  {data.intelligentInsights.aiNarrative}
-              </p>
+              <AgenticResponse content={data.intelligentInsights.aiNarrative} />
             </div>
             <div className="mt-8 grid grid-cols-2 gap-4">
                 <div className="p-3 bg-green-50 rounded-lg border border-green-100 flex items-center gap-2">
@@ -513,7 +547,7 @@ export function IntelligentInvestorDashboard() {
             {data.intelligentInsights.competitiveBenchmark ? (
               <div className="space-y-4 animate-in slide-in-from-right-4 duration-500">
                 <div className="p-4 bg-white/80 rounded-xl border border-blue-100 shadow-sm">
-                    <p className="text-sm leading-relaxed text-slate-700 font-medium">{data.intelligentInsights.competitiveBenchmark.summary}</p>
+                    <AgenticResponse content={data.intelligentInsights.competitiveBenchmark.summary} />
                 </div>
                 
                 {data.intelligentInsights.competitiveBenchmark.dataSources && data.intelligentInsights.competitiveBenchmark.dataSources.length > 0 && (

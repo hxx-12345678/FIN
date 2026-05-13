@@ -297,13 +297,63 @@ class RiskComplianceAgentService {
   }
 
   private async getFinancialData(orgId: string, dataSources: DataSource[]): Promise<any> {
-    return {
-      revenue: 250000,
-      opex: 180000,
-      cash: 1200000,
-      debt: 1000000,
-      churn: 0.04
-    };
+    let revenue = 0;
+    let opex = 0;
+    let cash = 0;
+    let debt = 0;
+    let churn = 0.04;
+
+    try {
+      const latestRun = await prisma.modelRun.findFirst({
+        where: { orgId, status: { in: ['done', 'completed'] } },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (latestRun?.summaryJson) {
+        const s = latestRun.summaryJson as any;
+        revenue = Number(s.revenue || s.mrr || 0);
+        opex = Number(s.expenses || s.opex || s.monthlyBurn || 0);
+        cash = Number(s.cashBalance || s.initialCash || 0);
+        debt = Number(s.debt || s.totalDebt || 0);
+        churn = Number(s.churnRate || 0.04);
+
+        if (revenue > 0 || opex > 0) {
+          dataSources.push({
+            type: 'model_run',
+            id: latestRun.id,
+            name: 'Financial Model',
+            timestamp: latestRun.createdAt,
+            confidence: 0.95,
+          });
+          return { revenue, opex, cash, debt, churn };
+        }
+      }
+
+      // Fallback to transaction aggregation
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const txs = await prisma.rawTransaction.findMany({
+        where: { orgId, date: { gte: thirtyDaysAgo }, isDuplicate: false },
+        select: { amount: true },
+      });
+
+      if (txs.length > 0) {
+        revenue = txs.filter(t => Number(t.amount) > 0).reduce((s, t) => s + Number(t.amount), 0);
+        opex = txs.filter(t => Number(t.amount) < 0).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+        dataSources.push({
+          type: 'transaction',
+          id: 'risk_tx_fallback',
+          name: 'Transaction-Based Estimate',
+          timestamp: new Date(),
+          confidence: 0.75,
+          snippet: `Computed from ${txs.length} transactions (30-day window).`,
+        });
+      }
+    } catch (e) {
+      console.warn('[RiskComplianceAgent] Data retrieval error:', e);
+    }
+
+    return { revenue, opex, cash, debt, churn };
   }
 }
 
