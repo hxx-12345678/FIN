@@ -279,6 +279,8 @@ def generate_summary_json(result: Dict[str, Any], model_json: Dict, params_json:
             'activeCustomers': int(result.get('activeCustomers', result.get('metrics', {}).get('activeCustomers', 0))),
             'ebitda': float(total_revenue - total_expenses),
             'ebitdaMargin': float(((total_revenue - total_expenses) / total_revenue) if total_revenue > 0 else 0),
+             'currentPrice': float(result.get('currentPrice', 0)),
+            'assumptions': model_json.get('assumptions', {}) if isinstance(model_json, dict) else {},
             'generatedAt': datetime.now(timezone.utc).isoformat(),
             'modelVersion': model_json.get('version', 1) if isinstance(model_json, dict) else 1,
             'metadata': {
@@ -961,26 +963,22 @@ def handle_model_run(job_id: str, org_id: str, object_id: str, logs: dict):
 
 
 def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: str, org_id: str, cursor, model_id: Optional[str] = None, job_id: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Compute deterministic model results using industry-standard 3-statement financial model.
-    Uses actual transaction data from raw_transactions as baseline.
+    # Initialize result dictionary early to avoid UnboundLocalError in SaaS metrics and consolidation logic
+    result = {
+        'revenue': 0,
+        'expenses': 0,
+        'netIncome': 0,
+        'runway': 0,
+        'cash': 0,
+        'burnRate': 0,
+        'arr': 0,
+        'metrics': {},
+        'monthly': {},
+        'incomeStatement': {'annual': {}, 'monthly': {}},
+        'balanceSheet': {'annual': {}, 'monthly': {}},
+        'cashFlow': {'annual': {}, 'monthly': {}}
+    }
     
-    Industry Standards:
-    - 3-Statement Model: Income Statement, Balance Sheet, Cash Flow
-    - 12-36 month forward projections
-    - Unit Economics: CAC, LTV, Payback Period
-    - Key Metrics: ARR, MRR, Burn Rate, Runway, Gross Margin
-    
-    Args:
-        model_json: Model definition with assumptions
-        params_json: Run parameters with overrides
-        run_type: Type of run (baseline, scenario, adhoc)
-        org_id: Organization ID to fetch transaction data
-        cursor: Database cursor
-    
-    Returns:
-        Dictionary with computed results including monthly projections
-    """
     try:
         # Extract assumptions from model_json
         assumptions = model_json.get('assumptions', {}) if isinstance(model_json, dict) else {}
@@ -1921,7 +1919,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
         runway_months = float(ending_cash / monthly_burn) if monthly_burn > 0 else 999.0
         
         # Construction of the result dictionary
-        result = {
+        result.update({
             'revenue': float(annual_revenue),
             'expenses': float(annual_expenses),
             'netIncome': float(annual_net_income),
@@ -1957,7 +1955,16 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             'driverResults': driver_results,
             'dag': engine.get_dag_metadata() if has_drivers else None,
             'statements': three_statement_model
-        }
+        })
+
+        # Define years and summary data for institutional modules
+        pl_annual = three_statement_model.get('incomeStatement', {}).get('annual', {})
+        years = sorted(pl_annual.keys())
+        pl_summary = pl_annual.get(years[0], {}) if years else {}
+        
+        annual_revenue = float(pl_summary.get('revenue', annual_revenue))
+        annual_expenses = float(pl_summary.get('expenses', annual_expenses))
+        annual_net_income = float(pl_summary.get('netIncome', annual_revenue - annual_expenses))
 
         # --- INSTITUTIONAL MODULES (DCF / LBO / M&A) ---
         if model_type == 'dcf':
@@ -2057,18 +2064,31 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                 
                 # 5. Sensitivity Analysis (Institutional 5x5 Matrix)
                 wacc_steps = [wacc - 0.01, wacc - 0.005, wacc, wacc + 0.005, wacc + 0.01]
-                growth_steps = [g - 0.01, g - 0.005, g, g + 0.005, g + 0.01] if terminal_method != 'multiple' else [1.0, 1.0, 1.0, 1.0, 1.0]
+                
+                # If using multiples, sensitivity is on multiples, otherwise on growth
+                if terminal_method == 'multiple':
+                    exit_mult = float(final_assumptions.get('exitMultiple', 10.0))
+                    growth_steps = [exit_mult * 0.8, exit_mult * 0.9, exit_mult, exit_mult * 1.1, exit_mult * 1.2]
+                else:
+                    growth_steps = [g - 0.01, g - 0.005, g, g + 0.005, g + 0.01]
                 
                 sensitivity_matrix = []
                 for w_step in wacc_steps:
                     row = []
-                    for g_step in growth_steps:
-                        if w_step <= g_step: # Mathematical impossibility check
-                            row.append(0)
-                            continue
+                    for g_val in growth_steps:
                         # Recalculate implied price for this cell
                         cell_pv_flows = sum([f / ((1 + w_step) ** (i + 0.5)) for i, f in enumerate(ufcfs)])
-                        cell_term_val = (ufcfs[-1] * (1 + g_step)) / (w_step - g_step)
+                        
+                        if terminal_method == 'multiple':
+                            # In multiple mode, g_val is the exit multiple
+                            cell_term_val = float(final_is.get('ebitda', annual_revenue * 0.2)) * g_val
+                        else:
+                            # In growth mode, g_val is terminal growth rate
+                            if w_step <= g_val:
+                                row.append(0)
+                                continue
+                            cell_term_val = (ufcfs[-1] * (1 + g_val)) / (w_step - g_val)
+                            
                         cell_pv_term = cell_term_val / ((1 + w_step) ** len(ufcfs))
                         cell_price = (cell_pv_flows + cell_pv_term - net_debt) / shares if shares > 0 else 0
                         row.append(round(float(cell_price), 2))
@@ -2085,7 +2105,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                     'terminalMethodUsed': method_used,
                     'sensitivityMatrix': {
                         'waccSteps': [round(w * 100, 1) for w in wacc_steps],
-                        'growthSteps': [round(g * 100, 1) for g in growth_steps],
+                        'growthSteps': [round(gv * 100, 1) if terminal_method != 'multiple' else round(gv, 1) for gv in growth_steps],
                         'matrix': sensitivity_matrix
                     }
                 }
@@ -2374,29 +2394,51 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             logger.warning(f"Sensitivity ranking skipped: {e}")
 
         # --- CONSOLIDATED VALUATION SUMMARY (For Football Field) ---
+        # INSTITUTIONAL PRECISION V2: Multi-methodology range comparison
         try:
             val_summary = []
             a_shares = float(final_assumptions.get('sharesOutstanding', 1000000))
             a_price = float(final_assumptions.get('sharePrice', 50.0))
-            a_eps = float(result.get('accretionDilution', {}).get('acquirerEPS', annual_net_income / a_shares if a_shares > 0 else 0))
-
-            # methodology 1: DCF
-            dcf_upside = 0
+            
+            # Forward metrics (Next 12 Months)
+            # If we have multiple years, use the second year (projection) if first is history, 
+            # or just the first projection year.
+            fwd_year = years[1] if len(years) > 1 else (years[0] if years else None)
+            fwd_is = pl_annual.get(fwd_year, {}) if fwd_year else {}
+            
+            fwd_rev = float(fwd_is.get('revenue', annual_revenue))
+            fwd_ebitda = float(fwd_is.get('ebitda', annual_revenue * 0.2))
+            fwd_ni = float(fwd_is.get('netIncome', annual_net_income))
+            
+            a_eps = fwd_ni / a_shares if a_shares > 0 else 0
+            
+            # methodology 1: Intrinsics (DCF)
             if 'valuation' in result:
                 dcf_price = result['valuation'].get('impliedSharePrice', 0)
-                dcf_upside = (dcf_price / a_price - 1) if a_price > 0 else 0
                 val_summary.append({
                     'name': 'Intrinsics (DCF)',
                     'low': round(float(dcf_price * 0.92), 2),
                     'high': round(float(dcf_price * 1.08), 2),
                     'color': '#3b82f6'
                 })
+            elif three_statement_model:
+                # Quick DCF Fallback for Football Field
+                # Using 10% WACC and 2% Terminal Growth
+                q_wacc = 0.10
+                q_g = 0.02
+                q_fcf = fwd_ebitda * 0.7 # Simple proxy for FCF
+                q_term_val = (q_fcf * 1.02) / (q_wacc - q_g)
+                q_ev = (q_fcf / (1 + q_wacc)) + (q_term_val / (1 + q_wacc))
+                q_price = q_ev / a_shares if a_shares > 0 else 0
+                val_summary.append({
+                    'name': 'DCF (Mid-Year)',
+                    'low': round(float(q_price * 0.85), 2),
+                    'high': round(float(q_price * 1.15), 2),
+                    'color': '#3b82f6'
+                })
 
-            # methodology 2: LBO
-            lbo_irr = 0
+            # methodology 2: LBO Analysis
             if 'lbo' in result:
-                lbo_irr = result['lbo'].get('irr', 0)
-                # Use exit equity value per share
                 lbo_price = result['lbo'].get('exitEquity', 0) / a_shares if a_shares > 0 else 0
                 val_summary.append({
                     'name': 'LBO Analysis',
@@ -2404,21 +2446,58 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                     'high': round(float(lbo_price * 1.1), 2),
                     'color': '#8b5cf6'
                 })
-
-            # methodology 3: Trading Comps (P/E)
-            val_summary.append({
-                'name': 'Trading Comps',
-                'low': round(float(a_eps * 15.0), 2),
-                'high': round(float(a_eps * 25.0), 2),
-                'color': '#10b981'
-            })
+            
+            # methodology 3: Trading Comps (Revenue or EBITDA Multiples)
+            # Use Revenue multiples for SaaS/Growth, EBITDA for Mature
+            is_saas = (model_json.get('profile') == 'saas' if isinstance(model_json, dict) else False)
+            
+            if is_saas or fwd_ebitda <= 0:
+                # Revenue Multiple methodology
+                rev_mult_low = 5.0
+                rev_mult_high = 12.0
+                val_summary.append({
+                    'name': 'Trading Comps (Rev)',
+                    'low': round(float(fwd_rev * rev_mult_low / a_shares), 2) if a_shares > 0 else 0,
+                    'high': round(float(fwd_rev * rev_mult_high / a_shares), 2) if a_shares > 0 else 0,
+                    'color': '#10b981'
+                })
+            else:
+                # EBITDA Multiple methodology
+                ebitda_mult_low = 8.0
+                ebitda_mult_high = 15.0
+                val_summary.append({
+                    'name': 'Trading Comps (EBITDA)',
+                    'low': round(float(fwd_ebitda * ebitda_mult_low / a_shares), 2) if a_shares > 0 else 0,
+                    'high': round(float(fwd_ebitda * ebitda_mult_high / a_shares), 2) if a_shares > 0 else 0,
+                    'color': '#10b981'
+                })
 
             # methodology 4: Precedent Transactions
+            if fwd_ebitda > 0:
+                p_mult_low = 10.0
+                p_mult_high = 18.0
+                val_summary.append({
+                    'name': 'Precedent Trans',
+                    'low': round(float(fwd_ebitda * p_mult_low / a_shares), 2) if a_shares > 0 else 0,
+                    'high': round(float(fwd_ebitda * p_mult_high / a_shares), 2) if a_shares > 0 else 0,
+                    'color': '#f59e0b'
+                })
+            else:
+                p_mult_low = 7.0
+                p_mult_high = 15.0
+                val_summary.append({
+                    'name': 'Precedent Trans (Rev)',
+                    'low': round(float(fwd_rev * p_mult_low / a_shares), 2) if a_shares > 0 else 0,
+                    'high': round(float(fwd_rev * p_mult_high / a_shares), 2) if a_shares > 0 else 0,
+                    'color': '#f59e0b'
+                })
+
+            # methodology 5: 52-Week Range (Fallback/Context)
             val_summary.append({
-                'name': 'Precedent Trans',
-                'low': round(float(a_eps * 18.0), 2),
-                'high': round(float(a_eps * 32.0), 2),
-                'color': '#f59e0b'
+                'name': '52-Week High/Low',
+                'low': round(float(a_price * 0.7), 2),
+                'high': round(float(a_price * 1.3), 2),
+                'color': '#64748b'
             })
 
             result['valuationSummary'] = val_summary
@@ -2426,11 +2505,15 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
 
             # --- MARKET IMPLICATIONS ENGINE ---
             implications = []
+            dcf_price = result.get('valuation', {}).get('impliedSharePrice', 0)
+            dcf_upside = (dcf_price / a_price - 1) if a_price > 0 else 0
+            
             if dcf_upside > 0.15:
                 implications.append(f"Significant intrinsic upside ({dcf_upside*100:.1f}%) detected relative to current price. Recommend accumulation.")
             elif dcf_upside < -0.15:
                 implications.append(f"Model suggests the asset is overvalued ({abs(dcf_upside)*100:.1f}%) on a DCF basis. High scrutiny required.")
             
+            lbo_irr = result.get('lbo', {}).get('irr', 0)
             if lbo_irr > 0.20:
                 implications.append(f"Institutional LBO returns are attractive ({lbo_irr*100:.1f}% IRR). Strong candidate for private equity strategy.")
             
@@ -2443,6 +2526,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             result['marketImplications'] = implications
         except Exception as val_sum_err:
             logger.warning(f"Valuation summary/implications failed: {val_sum_err}")
+
 
         # ======================================================================
         # STEP 7: Write results to metric_cubes table
@@ -2534,6 +2618,16 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
 
     except Exception as e:
         logger.error(f"Error computing model: {str(e)}", exc_info=True)
+        
+        # CRITICAL: If this was a database error, the transaction is now aborted.
+        # We must rollback so subsequent queries (like marking the job as failed) can succeed.
+        try:
+            if cursor and cursor.connection:
+                cursor.connection.rollback()
+                logger.info("Database transaction rolled back after error in compute_model_deterministic")
+        except:
+            pass
+            
         # Return default values on error
         return {
             'revenue': 100000,

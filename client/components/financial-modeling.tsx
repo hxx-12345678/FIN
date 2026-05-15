@@ -629,7 +629,14 @@ export function FinancialModeling() {
 
     try {
       setRunningModel(true)
+      setIsGlobalRecomputing(true) // Show global overlay
       setDataStale(false) // Clear stale flag — user is recomputing
+      
+      // OPTIMISTIC UI: Update status to 'running' locally
+      if (currentRun) {
+        setCurrentRun({ ...currentRun, status: 'running' })
+      }
+
       const res = await fetch(`${API_BASE_URL}/models/${targetModelId}/run`, {
         method: "POST",
         headers: getAuthHeaders(),
@@ -653,10 +660,14 @@ export function FinancialModeling() {
         await pollModelRunStatus(orgId, targetModelId, data.jobId, data.modelRun?.id)
       } else {
         toast.error(data.message || "Failed to start model run")
+        setIsGlobalRecomputing(false)
+        if (currentRun) setCurrentRun({ ...currentRun, status: 'failed' })
       }
     } catch (error) {
       console.error(error)
       toast.error("Error running model. Please check the engine status.")
+      setIsGlobalRecomputing(false)
+      if (currentRun) setCurrentRun({ ...currentRun, status: 'failed' })
     } finally {
       setRunningModel(false)
     }
@@ -666,51 +677,60 @@ export function FinancialModeling() {
     const maxAttempts = 60 // Increased for chained jobs
     let attempts = 0
 
-    const poll = async (currentJobId: string) => {
-      if (attempts >= maxAttempts) {
-        toast.warning("Institutional pipeline is taking longer than expected. Please check the Audit Trace later.")
-        return
-      }
-
-      try {
-        const res = await fetch(`${API_BASE_URL}/jobs/${currentJobId}`, {
-          headers: getAuthHeaders(),
-          credentials: "include",
-        })
-
-        if (res.ok) {
-          const data = await res.json()
-          const status = data.job?.status
-          const progress = data.job?.progress || {}
-
-          if (status === "done" || status === "completed") {
-            // Check for chained job (e.g. auto_model -> model_run)
-            if (progress.modelRunJobId && currentJobId !== progress.modelRunJobId) {
-              toast.info("Ingestion complete. Starting financial computation...")
-              attempts = 0 // Reset attempts for the next phase
-              setTimeout(() => poll(progress.modelRunJobId), 1000)
-              return
-            }
-
-            toast.success("Financial model and projections are ready!")
-            await fetchModelRuns(targetOrgId, modelId)
-            return
-          } else if (status === "failed") {
-            toast.error("Process failed: " + (data.job?.lastError || "Check audit logs for details."))
-            return
-          }
+    return new Promise<void>((resolve) => {
+      const poll = async (currentJobId: string) => {
+        if (attempts >= maxAttempts) {
+          toast.warning("Institutional pipeline is taking longer than expected. Please check the Audit Trace later.")
+          setIsGlobalRecomputing(false)
+          resolve()
+          return
         }
 
-        attempts++
-        setTimeout(() => poll(currentJobId), 2000)
-      } catch (error) {
-        console.error("Polling error:", error)
-        attempts++
-        setTimeout(() => poll(currentJobId), 2000)
-      }
-    }
+        try {
+          const res = await fetch(`${API_BASE_URL}/jobs/${currentJobId}`, {
+            headers: getAuthHeaders(),
+            credentials: "include",
+          })
 
-    poll(jobId)
+          if (res.ok) {
+            const data = await res.json()
+            const status = data.job?.status
+            const progress = data.job?.progress || {}
+
+            if (status === "done" || status === "completed") {
+              // Check for chained job (e.g. auto_model -> model_run)
+              if (progress.modelRunJobId && currentJobId !== progress.modelRunJobId) {
+                toast.info("Ingestion complete. Starting financial computation...")
+                attempts = 0 // Reset attempts for the next phase
+                setTimeout(() => poll(progress.modelRunJobId), 1000)
+                return
+              }
+
+              toast.success("Financial model and projections are ready!")
+              await fetchModelRuns(targetOrgId, modelId)
+              setIsGlobalRecomputing(false)
+              resolve()
+              return
+            } else if (status === "failed") {
+              toast.error("Process failed: " + (data.job?.lastError || "Check audit logs for details."))
+              setIsGlobalRecomputing(false)
+              await fetchModelRuns(targetOrgId, modelId) // Sync failed status to UI
+              resolve()
+              return
+            }
+          }
+
+          attempts++
+          setTimeout(() => poll(currentJobId), 2000)
+        } catch (error) {
+          console.error("Polling error:", error)
+          attempts++
+          setTimeout(() => poll(currentJobId), 2000)
+        }
+      }
+
+      poll(jobId)
+    })
   }
 
   const handleCreateModel = async (data: any) => {
@@ -718,6 +738,7 @@ export function FinancialModeling() {
 
     try {
       setCreatingModel(true)
+      setIsGlobalRecomputing(true) // Block UI during creation/initial run
 
       // ═══════════════════════════════════════════════════════════
       //  ENTERPRISE MODEL CREATION WITH GOVERNANCE
@@ -795,13 +816,17 @@ export function FinancialModeling() {
         if (result.jobId) {
           toast.info("Data ingestion pipeline started...")
           await pollModelRunStatus(orgId, result.model.id, result.jobId)
+        } else {
+          setIsGlobalRecomputing(false) // No job, safe to unblock
         }
       } else {
         toast.error(result.message || result.error?.message || "Failed to create model")
+        setIsGlobalRecomputing(false)
       }
     } catch (error) {
       toast.error("Error creating model")
       console.error(error)
+      setIsGlobalRecomputing(false)
     } finally {
       setCreatingModel(false)
     }
