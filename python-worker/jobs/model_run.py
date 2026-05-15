@@ -2094,11 +2094,13 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                         row.append(round(float(cell_price), 2))
                     sensitivity_matrix.append(row)
 
-                result['valuation'] = {
+                result['dcf'] = {
                     'enterpriseValue': round(float(implied_ev), 2),
                     'equityValue': round(float(implied_equity_val), 2),
+                    'impliedEquityValue': round(float(implied_equity_val), 2), # Frontend compat
                     'impliedSharePrice': round(float(implied_price), 2),
                     'wacc': round(float(wacc), 4),
+                    'terminalGrowthRate': round(float(g), 4), # Added for frontend
                     'pvOfFreeCashFlows': round(float(pv_flows), 2),
                     'pvOfTerminalValue': round(float(pv_term_val), 2),
                     'terminalValue': round(float(term_val), 2),
@@ -2109,6 +2111,8 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                         'matrix': sensitivity_matrix
                     }
                 }
+                # Keep 'valuation' for backward compat or other services
+                result['valuation'] = result['dcf']
             except Exception as e:
                 logger.error(f"Institutional DCF failed: {e}")
 
@@ -2413,8 +2417,9 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             a_eps = fwd_ni / a_shares if a_shares > 0 else 0
             
             # methodology 1: Intrinsics (DCF)
-            if 'valuation' in result:
-                dcf_price = result['valuation'].get('impliedSharePrice', 0)
+            dcf_price = 0
+            if 'dcf' in result:
+                dcf_price = result['dcf'].get('impliedSharePrice', 0)
                 val_summary.append({
                     'name': 'Intrinsics (DCF)',
                     'low': round(float(dcf_price * 0.92), 2),
@@ -2430,6 +2435,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                 q_term_val = (q_fcf * 1.02) / (q_wacc - q_g)
                 q_ev = (q_fcf / (1 + q_wacc)) + (q_term_val / (1 + q_wacc))
                 q_price = q_ev / a_shares if a_shares > 0 else 0
+                dcf_price = q_price
                 val_summary.append({
                     'name': 'DCF (Mid-Year)',
                     'low': round(float(q_price * 0.85), 2),
@@ -2438,6 +2444,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                 })
 
             # methodology 2: LBO Analysis
+            lbo_price = 0
             if 'lbo' in result:
                 lbo_price = result['lbo'].get('exitEquity', 0) / a_shares if a_shares > 0 else 0
                 val_summary.append({
@@ -2451,44 +2458,58 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             # Use Revenue multiples for SaaS/Growth, EBITDA for Mature
             is_saas = (model_json.get('profile') == 'saas' if isinstance(model_json, dict) else False)
             
+            comps_price = 0
             if is_saas or fwd_ebitda <= 0:
                 # Revenue Multiple methodology
                 rev_mult_low = 5.0
                 rev_mult_high = 12.0
+                low = round(float(fwd_rev * rev_mult_low / a_shares), 2) if a_shares > 0 else 0
+                high = round(float(fwd_rev * rev_mult_high / a_shares), 2) if a_shares > 0 else 0
+                comps_price = (low + high) / 2
                 val_summary.append({
                     'name': 'Trading Comps (Rev)',
-                    'low': round(float(fwd_rev * rev_mult_low / a_shares), 2) if a_shares > 0 else 0,
-                    'high': round(float(fwd_rev * rev_mult_high / a_shares), 2) if a_shares > 0 else 0,
+                    'low': low,
+                    'high': high,
                     'color': '#10b981'
                 })
             else:
                 # EBITDA Multiple methodology
                 ebitda_mult_low = 8.0
                 ebitda_mult_high = 15.0
+                low = round(float(fwd_ebitda * ebitda_mult_low / a_shares), 2) if a_shares > 0 else 0
+                high = round(float(fwd_ebitda * ebitda_mult_high / a_shares), 2) if a_shares > 0 else 0
+                comps_price = (low + high) / 2
                 val_summary.append({
                     'name': 'Trading Comps (EBITDA)',
-                    'low': round(float(fwd_ebitda * ebitda_mult_low / a_shares), 2) if a_shares > 0 else 0,
-                    'high': round(float(fwd_ebitda * ebitda_mult_high / a_shares), 2) if a_shares > 0 else 0,
+                    'low': low,
+                    'high': high,
                     'color': '#10b981'
                 })
 
             # methodology 4: Precedent Transactions
+            prec_price = 0
             if fwd_ebitda > 0:
                 p_mult_low = 10.0
                 p_mult_high = 18.0
+                low = round(float(fwd_ebitda * p_mult_low / a_shares), 2) if a_shares > 0 else 0
+                high = round(float(fwd_ebitda * p_mult_high / a_shares), 2) if a_shares > 0 else 0
+                prec_price = (low + high) / 2
                 val_summary.append({
                     'name': 'Precedent Trans',
-                    'low': round(float(fwd_ebitda * p_mult_low / a_shares), 2) if a_shares > 0 else 0,
-                    'high': round(float(fwd_ebitda * p_mult_high / a_shares), 2) if a_shares > 0 else 0,
+                    'low': low,
+                    'high': high,
                     'color': '#f59e0b'
                 })
             else:
                 p_mult_low = 7.0
                 p_mult_high = 15.0
+                low = round(float(fwd_rev * p_mult_low / a_shares), 2) if a_shares > 0 else 0
+                high = round(float(fwd_rev * p_mult_high / a_shares), 2) if a_shares > 0 else 0
+                prec_price = (low + high) / 2
                 val_summary.append({
                     'name': 'Precedent Trans (Rev)',
-                    'low': round(float(fwd_rev * p_mult_low / a_shares), 2) if a_shares > 0 else 0,
-                    'high': round(float(fwd_rev * p_mult_high / a_shares), 2) if a_shares > 0 else 0,
+                    'low': low,
+                    'high': high,
                     'color': '#f59e0b'
                 })
 
@@ -2500,12 +2521,27 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
                 'color': '#64748b'
             })
 
+            # --- BLENDED TARGET PRICE CALCULATION ---
+            # Weights: DCF (40%), Comps (30%), Precedents (20%), LBO (10% if exists, else redistribute)
+            weights = {'dcf': 0.4, 'comps': 0.3, 'prec': 0.2, 'lbo': 0.1 if lbo_price > 0 else 0}
+            
+            # Redistribute LBO weight if it doesn't exist
+            if weights['lbo'] == 0:
+                weights['dcf'] += 0.05
+                weights['comps'] += 0.03
+                weights['prec'] += 0.02
+            
+            blended_price = (dcf_price * weights['dcf']) + \
+                            (comps_price * weights['comps']) + \
+                            (prec_price * weights['prec']) + \
+                            (lbo_price * weights['lbo'])
+            
             result['valuationSummary'] = val_summary
             result['currentPrice'] = a_price
+            result['blendedTargetPrice'] = round(float(blended_price), 2)
 
             # --- MARKET IMPLICATIONS ENGINE ---
             implications = []
-            dcf_price = result.get('valuation', {}).get('impliedSharePrice', 0)
             dcf_upside = (dcf_price / a_price - 1) if a_price > 0 else 0
             
             if dcf_upside > 0.15:
