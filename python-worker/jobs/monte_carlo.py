@@ -789,7 +789,7 @@ def run_vectorized_simulations_enhanced(
     cursor,
     conn,
     logs: dict,
-    model_data: Dict = None
+    model_data: Optional[Dict] = None
 ) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
     """
     Run vectorized simulations using NumPy with enhanced distribution support.
@@ -1017,7 +1017,7 @@ def run_chunked_simulations_enhanced(
     cursor,
     conn,
     logs: dict,
-    model_data: Dict = None
+    model_data: Optional[Dict] = None
 ) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
     """Run simulations in chunks to manage memory efficiently"""
     try:
@@ -1290,7 +1290,7 @@ def record_billing_usage(org_id: str, cpu_seconds: float, cursor, estimated_cost
             INSERT INTO billing_usage (org_id, metric, value, bucket_time)
             VALUES (%s, %s, %s, %s)
             ON CONFLICT DO NOTHING
-        """, (org_id, 'monte_carlo_cpu_seconds', float(cpu_seconds), bucket_time))
+        """, (org_id, 'monte_carlo_cpu_seconds', cpu_seconds, bucket_time))
         
         # Record estimated cost if provided
         if estimated_cost > 0:
@@ -1298,7 +1298,7 @@ def record_billing_usage(org_id: str, cpu_seconds: float, cursor, estimated_cost
                 INSERT INTO billing_usage (org_id, metric, value, bucket_time)
                 VALUES (%s, %s, %s, %s)
                 ON CONFLICT DO NOTHING
-            """, (org_id, 'monte_carlo_compute_cost', float(estimated_cost), bucket_time))
+            """, (org_id, 'monte_carlo_compute_cost', estimated_cost, bucket_time))
     except Exception as e:
         logger.error(f"Error recording billing usage: {str(e)}", exc_info=True)
         # Don't raise - billing is non-critical

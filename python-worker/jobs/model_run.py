@@ -1200,7 +1200,7 @@ def compute_model_deterministic(model_json: Dict, params_json: Dict, run_type: s
             scenario_row = cursor.fetchone()
             if scenario_row:
                 scenario_id = scenario_row[0]
-                cursor.execute('SELECT "driverId", month, value FROM driver_values WHERE "scenarioId" = %s', (scenario_id,))
+                cursor.execute('SELECT driver_id, month, value FROM driver_values WHERE scenario_id = %s', (scenario_id,))
                 values = cursor.fetchall()
                 # Group values by driver
                 d_values = {}
