@@ -98,15 +98,17 @@ def handle_aicfo_chat(job_id: str, org_id: str, object_id: str, logs: dict):
     
     conn = None
     cursor = None
+    plan_id = object_id
+    query = ""
+    calculations = {}
     
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
         params = logs.get('params', {})
-        query = params.get('query')
+        query = params.get('query', '')
         model_run_id = params.get('modelRunId')
-        plan_id = object_id
         
         if not query:
             raise ValueError("Query is required for AI CFO chat")
@@ -118,7 +120,7 @@ def handle_aicfo_chat(job_id: str, org_id: str, object_id: str, logs: dict):
         model_state = {}
         model_id = None
         if model_run_id:
-            cursor.execute('SELECT "modelId", summary_json FROM model_runs WHERE id = %s', (model_run_id,))
+            cursor.execute('SELECT model_id, summary_json FROM model_runs WHERE id = %s', (model_run_id,))
             row = cursor.fetchone()
             if row:
                 model_id = str(row[0])

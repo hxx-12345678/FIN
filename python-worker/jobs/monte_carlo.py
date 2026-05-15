@@ -740,7 +740,7 @@ def load_model_snapshot(model_run_id: str, cursor) -> dict:
         cursor.execute("""
             SELECT mr.result_s3, m.model_json, mr.run_type
             FROM model_runs mr
-            JOIN models m ON mr."modelId" = m.id
+            JOIN models m ON mr.model_id = m.id
             WHERE mr.id = %s
         """, (model_run_id,))
         

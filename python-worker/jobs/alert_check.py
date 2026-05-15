@@ -64,7 +64,7 @@ def handle_alert_check(job_id: str, org_id: str, object_id: str, params: Dict[st
         cursor.execute("""
             SELECT percentiles_json 
             FROM monte_carlo_jobs 
-            WHERE "modelRunId" = %s AND status = 'done' 
+            WHERE model_run_id = %s AND status = 'done' 
             ORDER BY created_at DESC LIMIT 1
         """, (model_run_id,))
         
@@ -191,7 +191,7 @@ def deliver_alert(conn, cursor, org_id, alert_id, metric, value, threshold, oper
     try:
         cursor.execute("""
             INSERT INTO notifications (
-                id, "orgId", "userId", type, title, message, category, priority, read, created_at
+                id, org_id, user_id, type, title, message, category, priority, read, created_at
             ) VALUES (
                 gen_random_uuid(), %s, %s, %s, %s, %s, %s, %s, %s, NOW()
             )
